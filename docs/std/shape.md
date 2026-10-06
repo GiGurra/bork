@@ -111,14 +111,18 @@ as context. Unsupported staged computations also produce compile-time diagnostic
 
 | Field operation | Result and guarantee |
 | --- | --- |
-| `field.read(value)` | Checked field read from its owner; retains independent facts. |
-| `field.default()` | Declared stored default with checked type and lexical references. |
-| `field.validate(value)` | Checked field value or `ValidationError`. |
-| `field.check(value)` | `Ok \| ValidationError`; also handles a field head equal to the failure type. |
+| `field.read(value: T): field.Type` | Checked field read from its owner; retains independent facts. |
+| `field.default(): field.Type` | Declared stored default with checked type and lexical references. |
+| `field.validate(value: field.RawType): field.Type \| ValidationError` | Checked field value or `ValidationError`. |
+| `field.check(value: field.RawType): Ok \| ValidationError` | `Ok \| ValidationError`; also handles a field head equal to the failure type. |
 
 Test `hasDefault` before calling `default`, and exclude computed fields. Reading
 metadata does not execute a default; calling its provider runs at runtime.
 Computed fields require the complete owner and are read through `read`.
+`validate` requires a field head disjoint from `ValidationError`. Heads that
+overlap it, including unconstrained root type parameters, are rejected; use
+`check` for those fields.
+
 Sibling-dependent constraints require a complete owner; a field-level check
 cannot establish them independently.
 
@@ -160,7 +164,7 @@ See the [labels example](../../examples/derive_labels/README.md) for generic tar
 | `positional: Bool` | Whether the payload is positional. |
 | `fields: List[Field[T]]`, `facts: List[Fact[T]]` | Payload fields and resolved obligations. |
 | `variant.Type` | Read-only payload view type supplied by expansion. |
-| `variant.project(value)` | Check the tag and return an Option payload view. |
+| `variant.project(value: T): Option[variant.Type]` | Check the tag and return an Option payload view. |
 | `variant.builder()` | Create private immutable storage for this payload. |
 
 Each projection evaluates its input once. A payload field's `read` requires the
@@ -210,7 +214,7 @@ result allows a complete encoder without an invented fallback.
 | --- | --- |
 | `state.Type` | Ordinary private storage type for annotations and helper arguments. |
 | `state.set(field, value)` | Return a new state containing one typed input. |
-| `state.finish()` | Return the complete owner or `ValidationError`. |
+| `state.finish(): T \| ValidationError` | Return the complete owner or `ValidationError`. |
 
 Storage holds optional typed inputs; it is not a completed owner. `set` checks
 owner and payload identity, rejects erased field types and computed fields, and
@@ -278,6 +282,8 @@ operations. See [Go interop](../language/go-interop.md) and
 | `ForeignOption` | `Pointer \| Reject` |
 
 `slot` selects a stored field index; `name` supplies its exported Go field name.
+A layout must include every stored field exactly once and use distinct exported
+Go identifiers; the compiler rejects missing/duplicate slots and invalid names.
 Pointer maps `Option[A]` to `*A`, or to A when its Go type is already nillable.
 Reject refuses fields containing Option, including list elements and map entries.
 ```bork

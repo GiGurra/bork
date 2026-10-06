@@ -108,6 +108,13 @@ fn main() {
 }
 ```
 
+```text
+Option.Some(["first", "second"])
+https://example.com/changed%20path?q=first&q=second
+one%2Ftwo
+Ok
+```
+
 ## Decode query components
 
 ```bork
