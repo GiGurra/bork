@@ -21,11 +21,16 @@ fn native(): A unsafe go { return A_B_C{E0: "native"} }
 
 fn importedNative(): api.A unsafe go { return api.A_B_C{E0: "qualified native"} }
 
+type Ambient = sealed { Variant_Name }
+ambient Ambient_Variant_Name: Int
+fn ambientValue() needs Ambient_Variant_Name: Int unsafe go { return Ambient_Variant_Name }
+
 fn shadowed(): Int unsafe go { A_B_C := int64(7); return A_B_C }
 fn parameter(A_B_C: Int): Int unsafe go { return A_B_C }
 fn localType(): Int unsafe go { type A_B_C = int64; return A_B_C(9) }
 
 fn main() {
+  println(with (Ambient_Variant_Name: 10) { ambientValue() })
   println(shadowed(), parameter(8), localType())
   println(fmt.A, fmt__A {})
   println(native(), api.Native(), importedNative())

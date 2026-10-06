@@ -766,6 +766,9 @@ func (g *gen) packageAliases(fd *syntax.FuncDecl) string {
 	for _, param := range fd.Params {
 		seen[param.Name] = true
 	}
+	for _, variable := range fn.NeedVars {
+		seen[varIdent(variable).Name] = true
+	}
 	var sc goscanner.Scanner
 	src := []byte(fd.GoBody.Body)
 	sc.Init(token.NewFileSet().AddFile("", -1, len(src)), src, nil, 0)
