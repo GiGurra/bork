@@ -17,8 +17,8 @@ import (
 )
 
 // rewriteExecutable corrupts path in place, keeping its inode. Linux can
-// briefly report ETXTBSY after a program that just ran from path has exited,
-// so retry the open until the kernel releases it.
+// briefly report ETXTBSY when opening a recently executed program for
+// writing, even after it has exited, so retry until the kernel releases it.
 func rewriteExecutable(path string, data []byte) error {
 	for attempt := 0; ; attempt++ {
 		err := os.WriteFile(path, data, 0700)
