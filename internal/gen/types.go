@@ -1070,6 +1070,24 @@ func (r *_ownerReg) release() {
 	}
 }
 
+// releaseIn releases a registration of the resource with s, if it has
+// one, and reports whether s still has another.
+func (o *_Owner) releaseIn(s *_Scope) bool {
+	o.mu.Lock()
+	i := slices.IndexFunc(o.regs, func(r *_ownerReg) bool { return r.scope == s })
+	if i < 0 {
+		o.mu.Unlock()
+		return false
+	}
+	r := o.regs[i]
+	o.mu.Unlock()
+	r.release()
+	s.compact()
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return slices.ContainsFunc(o.regs, func(r *_ownerReg) bool { return r.scope == s })
+}
+
 // _moveResource moves the resource r from scope from to scope to (what
 // move compiles to): to now keeps it open, from no longer does, and its
 // cancellation follows to instead of from.

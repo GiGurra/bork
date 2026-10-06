@@ -835,6 +835,22 @@ func varIdent(v *check.Var) *ast.Ident {
 	return name(v.Name)
 }
 
+// moveSource is the scope a move takes a resource from, given x, the
+// value of from: a scope, or a Handoff the resource was received from,
+// whose scope it belongs to.
+func moveSource(from check.Expr, x ast.Expr) ast.Expr {
+	if from.Type() == check.Scope {
+		return x
+	}
+	return &ast.SelectorExpr{X: handoffChan(x), Sel: ast.NewIdent("scope")}
+}
+
+// handoffChan is the runtime channel of the Handoff x.
+func handoffChan(x ast.Expr) ast.Expr {
+	native := &ast.SelectorExpr{X: &ast.SelectorExpr{X: x, Sel: ast.NewIdent("native")}, Sel: ast.NewIdent("handle")}
+	return &ast.TypeAssertExpr{X: native, Type: &ast.StarExpr{X: ast.NewIdent("_borkChan")}}
+}
+
 // funcName is the Go name of a function. A prelude function the package
 // replaced (but the prelude still uses) gets a name of its own.
 func (g *gen) funcName(fn *check.Func) *ast.Ident {
@@ -1362,7 +1378,24 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 			if e.ArgOrder != nil && e.ArgOrder[0] == 1 {
 				r, to = to, r
 			}
-			return stmts, &ast.CallExpr{Fun: ast.NewIdent("_moveResource"), Args: []ast.Expr{r, xs[2], to}}
+			return stmts, &ast.CallExpr{Fun: ast.NewIdent("_moveResource"), Args: []ast.Expr{r, moveSource(e.MoveFrom, xs[2]), to}}
+		}
+		if e.MoveFrom != nil && e.Func.Prelude && e.Func.Decl.IsMethod && e.Func.Decl.Name == "handOver" {
+			// h.handOver(s, r) moves r's registration from the scope the
+			// lifetimes found (MoveFrom) to the handoff's, and sends it.
+			stmts, xs := g.values(slices.Concat(e.EvaluationArgs(), []check.Expr{e.MoveFrom}))
+			if xs == nil {
+				return stmts, nil
+			}
+			args := make([]ast.Expr, 3)
+			order := e.ArgOrder
+			if order == nil {
+				order = []int{0, 1, 2}
+			}
+			for i, param := range order {
+				args[param] = xs[i]
+			}
+			return stmts, &ast.CallExpr{Fun: ast.NewIdent("_borkHandOver"), Args: []ast.Expr{args[1], handoffChan(args[0]), args[2], moveSource(e.MoveFrom, xs[3])}}
 		}
 		if e.Func.Prelude && e.Func.Decl.Name == "scopeOf" {
 			// b.scope borrows the owner's scope, leaving b armed.

@@ -1,0 +1,27 @@
+0
+open a
+a: in session
+close a
+session ended
+open b
+b: in session
+close b
+session ended
+workers done
+open c
+src ended
+c: served
+close c
+open d
+close d
+Closed {}
+after the failed hand-over
+open e
+open f
+2
+f: still attached
+e: received, not moved
+outer ended
+close f
+close e
+app ended

@@ -651,6 +651,11 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		if x.Items != nil {
 			l.env[x.Var] = l.use(x.Items, l.expr(x.Items))
 			l.frame[x.Var] = l.cur
+			// Each resource a handoff's values give is the body's own.
+			if h := l.handoffValues(x); h != nil {
+				l.env[x.Var] = l.env[x.Var].union(lifetime{h})
+				l.origins[x.Var] = resOrigin{hs: []*handle{h}, known: true}
+			}
 		}
 		l.loopForm(x)
 		return nil
@@ -1103,9 +1108,9 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 			}
 		}
 	}
-	// A channel's methods only wait in the scope they are given: what
-	// they give is a value of the channel's lifetime.
-	if channelMethod(fn) {
+	// A channel's (or a handoff's) methods only wait in the scope they
+	// are given: what they give is a value of the channel's lifetime.
+	if channelMethod(fn) || handoffMethod(fn) {
 		switch fn.Decl.Name {
 		case "send", "receive", "trySend", "tryReceive", "close", "length", "capacity", "toList":
 			return args[0]
@@ -1221,11 +1226,11 @@ params:
 	}
 }
 
-// storesData reports whether t is a channel or an atom of values built
+// storesData reports whether t is a channel (or a handoff) or an atom of values built
 // from the type parameters can holds (see builtFrom).
 func storesData(t Type, can map[*TypeParam]bool) bool {
 	r, ok := t.(*Record)
-	return ok && r.Prelude && (r.Name == "Channel" || r.Name == "Atom") && len(r.Args) == 1 && builtFrom(r.Args[0], can, map[Type]bool{})
+	return ok && r.Prelude && (r.Name == "Channel" || r.Name == "Handoff" || r.Name == "Atom") && len(r.Args) == 1 && builtFrom(r.Args[0], can, map[Type]bool{})
 }
 
 // builtFrom reports whether a value of type t can only carry a lifetime

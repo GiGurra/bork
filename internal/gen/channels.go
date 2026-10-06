@@ -37,6 +37,9 @@ type _borkChan struct {
  head, n int
  closed bool
  owner context.Context
+ // scope is the scope the channel belongs to: a Handoff's values are
+ // registered with it.
+ scope *_Scope
  recvq, sendq []*_borkWaiter
  // onClose runs once, when the channel closes (stopping a timer, say).
  onClose func()
@@ -69,7 +72,7 @@ type _borkWaiter struct {
 }
 
 func _borkNewChan(owner *_Scope, limit int) *_borkChan {
- return &_borkChan{id: _borkChanIDs.Add(1), limit: limit, owner: owner.ctx}
+ return &_borkChan{id: _borkChanIDs.Add(1), limit: limit, owner: owner.ctx, scope: owner}
 }
 
 // push buffers v. The buffer grows as needed, up to a fixed capacity, so a
@@ -351,6 +354,26 @@ func _borkChanSend(scope *_Scope, c *_borkChan, x any) any {
   return value
  }
  return _borkOk()
+}
+
+// _borkHandOver hands the resource r over through c (what a Handoff's
+// handOver compiles to). It moves r's registration from scope from to the
+// channel's scope before r can be received, so that a receiver may move it
+// on at once, and then sends it, waiting in scope. If the send fails,
+// nobody received r and the sender can no longer use it, so the channel's
+// scope releases it: it closes, unless other scopes keep it open.
+func _borkHandOver(scope *_Scope, c *_borkChan, r any, from *_Scope) any {
+ _moveResource(r, from, c.scope)
+ result := _borkChanSend(scope, c, r)
+ if _, ok := result.(_Ok); !ok {
+  o := any(r).(interface{ _ownerOf() *_Owner })._ownerOf()
+  if !o.releaseIn(c.scope) {
+   if h, ok := any(r).(interface{ _borkUnbind(*_Scope) }); ok {
+    h._borkUnbind(c.scope)
+   }
+  }
+ }
+ return result
 }
 
 // _borkChanReceive receives from c, waiting in scope: the value, Closed,

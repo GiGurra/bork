@@ -1,0 +1,96 @@
+// A connection that says when it opens and closes.
+type Conn = resource
+
+fn connect(name: String, s: Scope) uses io: Conn unsafe go {
+  import "fmt"
+  fmt.Println("open " + name)
+  return Conn{handle: name, owner: s.Own(func() { fmt.Println("close " + name) })}
+}
+
+fn query(c: Conn, q: String): String unsafe go {
+  return c.handle.(string) + ": " + q
+}
+
+// serveNext takes the next connection from a handoff it was given, and
+// owns it for one session.
+fn serveNext(s: Scope, conns: Handoff[Conn]) uses io + state {
+  match (conns.receive(s)) {
+    c: Conn => scope session {
+      owned = move(c, session)
+      println(query(owned, "served"))
+    }
+    _: Closed => println("no more")
+    _: Cancelled => println("cancelled")
+  }
+}
+
+fn main() {
+  scope app {
+    // A worker owns each connection it receives for one session: it
+    // closes when the session ends, not when app does.
+    conns = handoff[Conn](app)
+    println(conns.capacity())
+    worker = fork(app, () => {
+      for (c in conns.values(app)) {
+        scope session {
+          owned = move(c, session)
+          println(query(owned, "in session"))
+        }
+        println("session ended")
+      }
+    })
+    for (name in ["a", "b"]) {
+      conn = connect(name, app)
+      _ = conns.handOver(app, conn)
+    }
+    conns.close()
+    await(worker)
+    println("workers done")
+
+    // Through a function that receives, and relayed through a second
+    // handoff (the receiver hands it over again).
+    first = handoff[Conn](app)
+    second = handoff[Conn](app, 1)
+    fork(app, () => {
+      c = first.receive(app)
+      match (c) {
+        relayed: Conn => { _ = second.handOver(app, relayed) }
+        _ => {}
+      }
+    })
+    scope src {
+      _ = first.handOver(src, connect("c", src))
+    }
+    println("src ended")
+    serveNext(app, second)
+
+    // A failed hand-over releases it at once.
+    closed = handoff[Conn](app, 1)
+    closed.close()
+    scope src {
+      d = connect("d", src)
+      println(closed.handOver(src, d))
+      println("after the failed hand-over")
+    }
+
+    // Already in the handoff's scope, and attached elsewhere: the
+    // attached value stays usable.
+    scope outer {
+      buffered = handoff[Conn](app, 2)
+      e = connect("e", app)
+      _ = buffered.handOver(app, e)
+      f = connect("f", app)
+      kept = attach(f, outer)
+      _ = buffered.handOver(app, f)
+      println(buffered.length())
+      println(query(kept, "still attached"))
+      buffered.close()
+      match (buffered.tryReceive()) {
+        Option.Some(x) => println(query(x, "received, not moved"))
+        _ => {}
+      }
+    }
+    println("outer ended")
+  }
+  println("app ended")
+}

@@ -1,0 +1,93 @@
+// A connection.
+type Conn = resource
+
+fn connect(name: String, s: Scope) uses io: Conn unsafe go {
+  return Conn{handle: name, owner: s.Own(func() {})}
+}
+
+fn query(c: Conn, q: String): String unsafe go {
+  return c.handle.(string) + ": " + q
+}
+
+type Holder = { conn: Conn }
+
+// What a type parameter is, is not known here.
+fn relay[R](s: Scope, from: Handoff[R], to: Handoff[R]) uses state {
+  match (from.receive(s)) {
+    r: R => { _ = to.handOver(s, r) }
+    _ => {}
+  }
+}
+
+// A parameter is borrowed: the caller still has it.
+fn pass(s: Scope, conns: Handoff[Conn], c: Conn) uses state {
+  _ = conns.handOver(s, c)
+}
+
+fn main() {
+  scope app {
+    conns = handoff[Conn](app, 4)
+    // Only resources.
+    _ = handoff[Int](app)
+    // Using it after the hand-over.
+    a = connect("a", app)
+    holder = Holder { conn: a }
+    _ = conns.handOver(app, a)
+    println(query(a, "after"))
+    println(query(holder.conn, "held"))
+    // On one path only.
+    b = connect("b", app)
+    if (query(b, "x") != "") {
+      _ = conns.handOver(app, b)
+    }
+    println(query(b, "after"))
+    // Kept by a task.
+    c = connect("c", app)
+    fork(app, () => println(query(c, "in a task")))
+    _ = conns.handOver(app, c)
+    // Acquired outside the loop.
+    d = connect("d", app)
+    for (_ in [1, 2]) {
+      _ = conns.handOver(app, d)
+    }
+    // From a lambda.
+    e = connect("e", app)
+    later = () => conns.handOver(app, e)
+    println(later())
+    // Sent on a channel: the channel keeps it.
+    plain = channel[Conn](app, 1)
+    f = connect("f", app)
+    _ = plain.send(app, f)
+    _ = conns.handOver(app, f)
+    // What a channel gives is borrowed; so is what tryReceive gives.
+    match (plain.receive(app)) {
+      g: Conn => { _ = conns.handOver(app, g) }
+      _ => {}
+    }
+    match (conns.tryReceive()) {
+      Option.Some(h) => { _ = move(h, app) }
+      _ => {}
+    }
+    // Received once: moved on, then used.
+    match (conns.receive(app)) {
+      r: Conn => {
+        scope w {
+          _ = move(r, w)
+          println(query(r, "after the move"))
+        }
+      }
+      _ => {}
+    }
+    // A loop's resource is its body's own, but not a nested loop's.
+    for (x in conns.values(app)) {
+      for (_ in [1, 2]) {
+        _ = move(x, app)
+      }
+    }
+    // Received from a handoff that is not named by a variable.
+    match (handoff[Conn](app).receive(app)) {
+      y: Conn => { _ = move(y, app) }
+      _ => {}
+    }
+  }
+}

@@ -1,0 +1,15 @@
+main.bork:17:34: r cannot be handed over: only a resource of a known type can be (not a type parameter)
+main.bork:24:25: c cannot be handed over: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; send it on a Channel instead, which leaves it where it is
+main.bork:31:9: a handoff passes resources only, not Int; use a channel
+main.bork:36:19: a was handed over to handoff conns at line 35, which ends its use here
+main.bork:37:19: holder may be released: it holds a resource that was handed over to handoff conns at line 35
+main.bork:43:19: b may have been handed over to handoff conns at line 41, which ends its use here
+main.bork:47:29: c cannot be handed over: the task of app started at line 46 may still use it; hand it over before that
+main.bork:51:31: a loop cannot hand over d, which was acquired outside its body
+main.bork:55:39: e cannot be handed over here: it was acquired outside this lambda (or lazy, async or comptime body), which may run later or more than once; hand it over before
+main.bork:61:29: f cannot be handed over: the channel plain given it at line 60 may still use it; hand it over before that
+main.bork:64:44: g cannot be handed over: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; send it on a Channel instead, which leaves it where it is
+main.bork:68:36: h cannot be moved: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; attach it instead to keep it open until app closes too
+main.bork:76:25: r was moved to scope w at line 75; to keep using it here, attach it instead of moving it
+main.bork:84:18: a loop cannot move x, which was acquired outside its body
+main.bork:89:29: y cannot be moved: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; attach it instead to keep it open until app closes too

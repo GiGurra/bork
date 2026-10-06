@@ -118,8 +118,9 @@ func keepsValuesSeen(t Type, seen map[Type]bool, typeParams bool) bool {
 	case *Basic:
 		return t == Scope || t == OwnedScope
 	case *Record:
-		// A channel keeps what is sent to it, in its native handle.
-		if b, ok := genericBaseOrSelf(t).(*Record); ok && b.Prelude && b.Name == "Channel" {
+		// A channel (or a handoff) keeps what is sent to it, in its
+		// native handle.
+		if b, ok := genericBaseOrSelf(t).(*Record); ok && b.Prelude && (b.Name == "Channel" || b.Name == "Handoff") {
 			return true
 		}
 		for _, f := range t.Fields {
@@ -166,7 +167,7 @@ func keepsKeepersSeen(t Type, seen map[Type]bool) bool {
 	case *Opaque, *FuncType, *TypeParam:
 		return true
 	case *Record:
-		if b, ok := genericBaseOrSelf(t).(*Record); ok && b.Prelude && (b.Name == "Channel" || b.Name == "Atom") {
+		if b, ok := genericBaseOrSelf(t).(*Record); ok && b.Prelude && (b.Name == "Channel" || b.Name == "Handoff" || b.Name == "Atom") {
 			return keepsValues(storedType(t))
 		}
 		for _, f := range t.Fields {
@@ -358,6 +359,14 @@ func (l *lifeChecker) callLife(x *Call) lifetime {
 	if x.Func.Prelude && x.Func.Decl.Name == "move" && len(x.Args) == 2 {
 		return l.moveCall(x)
 	}
+	if handoffMethod(x.Func) && x.Func.Decl.Name == "handOver" && len(x.Args) == 3 {
+		return l.handOverCall(x)
+	}
+	if x.Func.Prelude && x.Func.Decl.Name == "handoff" {
+		if _, ok := storedType(x.Type()).(*Resource); !ok {
+			l.errorf(x.Pos(), "a handoff passes resources only, not %s; use a channel", TypeText(storedType(x.Type()), nil))
+		}
+	}
 	// Policies are given where a scope starts (with, or openScope's), so
 	// that moves can tell whether its tasks may outlive it.
 	if x.Func.Prelude && x.Func.Decl.Name == "setScopePolicy" {
@@ -390,7 +399,7 @@ func (l *lifeChecker) callLife(x *Call) lifetime {
 		if r, ok := x.Args[0].Type().(*Resource); ok {
 			h = l.newHandle(r, x.Args[1], x.Pos())
 		}
-	} else {
+	} else if h = l.received(x); h == nil {
 		h = l.acquisition(x)
 	}
 	if h != nil {
@@ -638,7 +647,7 @@ func (c *checker) storeFields(pos diag.Pos, rec *Record) bool {
 		return false
 	}
 	base := genericBaseOrSelf(rec)
-	for _, name := range []string{"Channel", "Atom"} {
+	for _, name := range []string{"Channel", "Handoff", "Atom"} {
 		if base == genericBaseOrSelf(c.preludePkg.TypeNamed(name)) {
 			c.errorf(pos, "the fields of %s are internal; use its functions (send, receive, update, current, ...)", name)
 			return true

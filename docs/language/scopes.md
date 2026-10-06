@@ -214,6 +214,7 @@ Two tools cover the cases where a block does not fit:
 
 - `attach(resource, s)` keeps a resource open until another scope `s` ends as well. A function can open something in its own scope and hand it to its caller's.
 - `move(resource, s)` hands a resource over to scope `s`: the scope it was opened in lets go of it, and `s` closes it. The compiler then rejects any further use of the original, or of anything holding it. Only a resource acquired right there can be moved, and not while a task or a channel may still use it.
+- A `Handoff` passes a resource to whichever task receives it, which may then move it on. See [handing resources over](channels.md#handing-resources-over).
 - `openScope(parent)` opens a child scope with an explicit end, `closeScope(owner)`. The compiler checks that it is closed exactly once on every path. This is for lifetimes that overlap without nesting, such as replacing a connection with a new one before releasing the old one.
 
 ```bork

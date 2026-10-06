@@ -1,7 +1,8 @@
 # Handing resources over through a channel
 
 Design for bork-u9vlg7, a follow-up of [move](move.md) and the
-[channels redesign](channels.md). Nothing here is implemented yet.
+[channels redesign](channels.md). Implemented as described here (the
+lead approved the API on 2026-10-06).
 
 ## The problem
 
@@ -37,7 +38,7 @@ fn (h: Handoff[R]) tryReceive[R]() uses state: Option[R] | Closed
 fn (h: Handoff[R]) values[R](s: Scope): Seq[R] uses state
 fn (h: Handoff[R]) close[R]() uses state
 fn (h: Handoff[R]) length[R]() uses state: Int
-fn (h: Handoff[R]) capacity[R](): Option[Int]
+fn (h: Handoff[R]) capacity[R](): Int
 ```
 
 `R` must be a resource type, as for `move`: `handoff[Int](s)` is a
@@ -70,9 +71,10 @@ scope app {
 `h.handOver(s, r)` checks `r` exactly as `move(r, <the channel's scope>)`:
 owned here, one source, same frame and loop, not pinned, a direct call. It
 ends `r`'s handles, so `r` and every value holding it are unusable after
-it ("conn was handed over to channel conns at line 14"). It does not pin
-anything, since the sender no longer has it. The `move` → `attach` fix
-becomes a fix to `send` on a plain channel (when the source keeps using it).
+it ("conn was handed over to handoff conns at line 14, which ends its use
+here"). It does not pin anything, since the sender no longer has it.
+There is no quick fix, unlike `move` → `attach`: a handoff has no `send`,
+and switching to a `Channel` changes what the receiver may do.
 
 Unlike `move`, a resource that already belongs to the channel's scope can
 be handed over: the registration stays, and only the sender's handle ends.
@@ -88,12 +90,14 @@ Rust's `SendError` dropped. Nothing waits for the channel's scope to end.
 ### Receiver: a handle in the channel's scope
 
 Every value in a `Handoff` was handed over, so each is registered in the
-channel's scope and held by no one else. `receive(s)` and `tryReceive()`
-give it with a **fresh handle** in the channel's scope, created in the
+channel's scope and held by no one else. `receive(s)`
+gives it with a **fresh handle** in the channel's scope, created in the
 receiving frame, as an acquisition does. The receiver can use it (it
 stays open until the channel's scope ends), `move` it, `attach` it, or
 hand it over again. Received through a pattern (`c: Conn => ...`) or `?`,
-the origin flows as for any acquisition.
+the origin flows as for any acquisition. `tryReceive()` gives an
+`Option[R]`, and a variant's payload has no tracked origin, so what it
+gives is borrowed.
 
 `for (c in h.values(s)) { ... }` gives `c` a fresh handle per iteration,
 created inside the loop body, so the body may move it. `values` used any
@@ -159,9 +163,9 @@ Alternatives considered:
 
 One PR, after the lead's OK on this note: the type and methods in the
 prelude (`internal/prelude/concurrency.bork`), the checker (handOver as a
-move, fresh handles at receive and in `values` loops, the `send` fix), the
+move, fresh handles at receive and in `values` loops), the
 runtime, golden cases `handoff` and `handoff_fail`, runtime tests for the
 failure release and a receiver moving while the sender waits, and docs:
 `docs/language/channels.md`, `scopes.md`, `requirements.md`, and the
-Interactions section of `move.md`. LSP hover gets "handed over to channel
+Interactions section of `move.md`. LSP hover gets "handed over to handoff
 conns at line N" from the existing ownership text.

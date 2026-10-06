@@ -417,6 +417,8 @@ library registers every resource with `Own`.
   handle, give the receiver a handle in the channel's scope, which it may move
   again) is a follow-up, after the channels runtime rewrite. Each
   value is received once, so the receiver's handle is unique.
+  Implemented as `Handoff[R]` and `h.handOver(s, r)`; see
+  [handover.md](handover.md).
 - **Server handlers.** `net.Listen` gives its handler a borrowed connection (a
   lambda parameter), which cannot be moved. The handler's scope closes when it
   returns, so `attach(conn, worker)` already has the effect of a move there. An
