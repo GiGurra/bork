@@ -2859,3 +2859,74 @@ derive instance probe[T]: Probe[T] { fn probe(n: Int): String {
 type Row = { n: Int where positive } derive(Probe)
 fn main() {}`, "which does not promise it")
 }
+
+func TestSourceCodecRecordDecodeBuilderProtocol(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+import "bork/codec"
+use codec.Defaults
+class ReadRecord[T] { fn readRecord(fields: List[codec.Field]): T | codec.DecodeError }
+fn lookup(fields: List[codec.Field], name: String): Option[codec.Value] {
+ fields.find(field => field.name == name).map(field => field.value)
+}
+derive instance readRecord[T]: ReadRecord[T] {
+ fn readRecord(fields: List[codec.Field]): T | codec.DecodeError {
+  initial = shape.builder[T]()
+  steps: List[(initial.Type) => initial.Type | codec.DecodeError] = [comptime for (field in shape.fields[T]())
+   (state: initial.Type) => {
+    comptime if (field.computed) {
+     if (lookup(fields, field.name).isSome()) {
+      codec.DecodeError { path: s".${field.name}", message: "computed field is read-only" }
+     } else {
+      state
+     }
+    } else {
+     match (lookup(fields, field.name)) {
+      Option.None => state
+      Option.Some(input) => match (codec.decode[field.RawType](input)) {
+       error: codec.DecodeError => codec.DecodeError { path: s".${field.name}" + error.path, message: error.message }
+       value: field.RawType => state.set(field, value)
+      }
+     }
+    }
+   }]
+  start: initial.Type | codec.DecodeError = initial
+  assembled = steps.fold(start, (state, step) => match (state) {
+   error: codec.DecodeError => error
+   pending: initial.Type => step(pending)
+  })
+  match (assembled) {
+   error: codec.DecodeError => error
+   pending: initial.Type => match (pending.finish()) {
+    error: shape.ValidationError => codec.DecodeError { path: error.path, message: error.message }
+    value: T => value
+   }
+  }
+ }
+}
+pred positive(n: Int) { n > 0 }
+pred atLeast(n: Int, minimum: Int) { n >= minimum }
+type Row = { minimum: Int = 2, value: Int where positive and atLeast(minimum), lazy next: Int = value + 1 } derive(ReadRecord)
+fn number(n: Int): codec.Value { codec.Value.Number { text: toString(n) } }
+fn main() {
+ println(readRecord[Row]([codec.Field { name: "value", value: number(3) }]))
+ println(readRecord[Row]([codec.Field { name: "value", value: number(-1) }]))
+ println(readRecord[Row]([codec.Field { name: "value", value: number(1) }]))
+ println(readRecord[Row]([]))
+ println(readRecord[Row]([codec.Field { name: "next", value: number(4) }]))
+ println(readRecord[Row]([codec.Field { name: "value", value: codec.Value.Array { items: [] } }]))
+}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatalf("record decoder: %s, %v", output, err)
+	}
+	for _, expected := range []string{`Row { minimum: 2, value: 3 }`, `positive`, `atLeast`, `path: ".value"`, `is missing`, `computed field is read-only`, `expected a whole number, found an array`} {
+		if !strings.Contains(string(output), expected) {
+			t.Fatalf("want %q in %s", expected, output)
+		}
+	}
+}
