@@ -501,7 +501,6 @@ type gen struct {
 	usesParallel     bool
 	usesFanIn        bool
 	usesChannels     bool
-	usesDerive       bool
 	usesEqual        bool
 	usesHash         bool
 	usesOk           bool

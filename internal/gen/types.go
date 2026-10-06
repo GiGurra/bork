@@ -1601,7 +1601,6 @@ func _seqfirst[T any](source _Seq[T]) Option[T] {
 `)
 	}
 	if g.usesForeign {
-		src = append(src, g.codecRuntime(decodeSchemaHelpers))
 		src = append(src, strings.ReplaceAll(foreignSchemaHelpers, "@strconv@", g.goImport("strconv")))
 	}
 	if g.usesAssert {
@@ -1677,9 +1676,6 @@ func _seqfirst[T any](source _Seq[T]) Option[T] {
 	}
 	if g.usesEqual {
 		src = append(src, equalRuntime)
-	}
-	if g.usesDerive {
-		src = append(src, g.codecRuntime(deriveRuntime))
 	}
 	if g.usesIs {
 		src = append(src, isRuntime)

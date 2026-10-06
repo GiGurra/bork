@@ -355,14 +355,10 @@ func (a *executionAuditor) dict(dict *Dict, depth int) {
 		a.dict(arg, depth+1)
 	}
 	a.constraints(dict.Inst.Constraints, depth+1)
-	// These are slices in declared method/field order, not maps.
+	// Methods are a slice in declared order, not a map.
 	for _, method := range dict.Inst.Methods {
 		a.function(method, depth+1)
 	}
-	for _, decoder := range dict.Inst.ForeignDecoders {
-		a.dict(decoder, depth+1)
-	}
-
 }
 func (a *executionAuditor) constraints(constraints []*Constraint, depth int) {
 	for _, constraint := range constraints {

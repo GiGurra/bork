@@ -14,7 +14,13 @@ const foreignSchemaHelpers = `package main
 
 type _borkGoTag struct { Name, Value string }
 type _borkGoStructField struct {
- _borkDecodeField
+ Name string
+ Type string
+ Constraints []string
+ Doc string
+ HasDefault bool
+ Default func() any
+ Optional bool
  GoName string
  Tags []_borkGoTag
 }
@@ -105,17 +111,8 @@ func (g *gen) foreignDictionary(ci *check.ClassInstance) *ast.CompositeLit {
 		if f.Default != nil {
 			def = "func() any { return " + g.fieldDefault(f) + " }"
 		}
-		decoder := "nil"
-		if i < len(ci.ForeignDecoders) && ci.ForeignDecoders[i] != nil {
-			g.usesDerive = true
-			g.goType(g.codecType("Value"))
-			g.goType(g.codecType("Field"))
-			d := ci.ForeignDecoders[i]
-			body := g.decodeFields([]*check.Field{independentField(f)}, []*check.Dict{d}, bt)
-			decoder = fmt.Sprintf("func(value %s) any { _result := func() any { _obj := %s{fields: []%s{{name:%q,value:value}}}; %s }(); if err,ok:=_result.(%s); ok { return err }; return _result.(%s).%s }", g.typeText(g.codecType("Value")), g.text(g.variantType(g.codecType("Value").(*check.Sealed).Variant("Object"))), g.typeText(g.codecType("Field")), f.Name, body, g.typeText(g.codecType("DecodeError")), bt, g.fieldReadSuffix(f))
-		}
 		tagExpr := "_borkGoTags(" + strconv.Quote(r.GoFields[i].Tag) + ")"
-		fmt.Fprintf(&fields, "{_borkDecodeField: _borkDecodeField{Name:%q,Type:%q,Doc:%q,Constraints:[]string{%s},Kind:%s,Optional:%t,HasDefault:%t,Default:%s,Decode:%s},GoName:%q,Tags:%s},\n", f.Name, f.Type.String(), f.Doc, strings.Join(cons, ","), g.decodeKind(f.Type), check.IsOption(f.Type), f.Default != nil, def, decoder, strings.Join(r.GoFields[i].Path, "."), tagExpr)
+		fmt.Fprintf(&fields, "{Name:%q,Type:%q,Doc:%q,Constraints:[]string{%s},Optional:%t,HasDefault:%t,Default:%s,GoName:%q,Tags:%s},\n", f.Name, f.Type.String(), f.Doc, strings.Join(cons, ","), check.IsOption(f.Type), f.Default != nil, def, strings.Join(r.GoFields[i].Path, "."), tagExpr)
 	}
 	fields.WriteString("} }")
 	add("Fields", fields.String())

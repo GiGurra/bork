@@ -43,16 +43,3 @@ func (g *gen) fieldDefault(field *check.Field) string {
 	setup = append(setup, &ast.ReturnStmt{Results: []ast.Expr{value}})
 	return g.text(&ast.CallExpr{Fun: &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: g.goType(field.Type)}}}}, Body: &ast.BlockStmt{List: setup}}})
 }
-
-// A schema field decoder has only one field; relational checks belong to the
-// complete record decoder, once its sibling values have been decoded.
-func independentField(f *check.Field) *check.Field {
-	cp := *f
-	cp.Constraints = nil
-	for _, con := range f.Constraints {
-		if !con.HasSiblingArgs() {
-			cp.Constraints = append(cp.Constraints, con)
-		}
-	}
-	return &cp
-}

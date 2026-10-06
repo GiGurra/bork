@@ -20,8 +20,8 @@ primitive/container instances. `bork/json` parses and renders text.
 `bork/encoding` supplies CSV, while cli, env, sql and http consume the tree or
 codec dictionaries. CLI, env, CSV and HTTP access `_borkDecodeFields`, a hidden
 schema on derived Decode dictionaries; it includes independent field decoders,
-default providers, descriptions, scalar kinds and optionality. GoStruct also
-uses those decoders for field metadata. Removing compiler codec generation
+default providers, descriptions, scalar kinds and optionality. GoStruct then
+also used those decoders for field metadata. Removing compiler codec generation
 without replacing this schema would break more than JSON round trips.
 
 GoStruct is currently an empty prelude class. The checker prepares Go mirror
@@ -394,9 +394,10 @@ dictionary gets the generated New/FromGo/ToGo/Fields bridge, built on the
 checked mirror conversion backend. FromGo keeps accumulated GoValueError
 paths, nil/cycle checks, defaults and owner facts. Existing concrete-record
 restrictions remain. Mirrors keep their declared Go layout: the template must
-agree on field names (ignoring case) and add no tags. Fields() still looks up
-optional field decoders through the bork/codec package identity; moving that
-schema to source metadata is follow-up work.
+agree on field names (ignoring case) and add no tags. Fields() projects only
+the layout and declaration; field decoders and kinds come from the source
+`codec.Schema` metadata of a separately derived Decode instance, so the
+generator no longer refers to bork/codec.
 
 ## Codec protocol and migration
 

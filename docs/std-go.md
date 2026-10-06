@@ -312,13 +312,16 @@ another foreign-record class `C`, `_d_T_C` has the same members):
   `(T, []GoValueError)`. It collects conversion and fact errors. A nil pointer or
   wrong Go type returns an error. Use the value only when the error list is empty.
 - `Fields()` returns `[]_borkGoStructField` in the layout's order (declaration
-  order for a mirror). Each entry exposes the Decode schema
-  metadata (`Name`, `Type`, `Constraints`, `Kind`, `Optional`, `Doc`, `HasDefault`,
-  `Default`, `Decode`), plus `GoName` and ordered `Tags` (`Name`, `Value`).
-  `Decode` is nil when no decoder is available in the declaring package.
+  order for a mirror). Each entry projects the declaration and the checked
+  layout: `Name`, `Type`, `Constraints`, `Optional`, `Doc`, `HasDefault`,
+  `Default`, `GoName` and ordered `Tags` (`Name`, `Value`). It carries no codec
+  information.
 
 `GoStruct` does not require deriving `Decode`. Its instances are created by
-`derive` and imported with `use`, like other derived instances. `_borkToGo` and
+`derive` and imported with `use`, like other derived instances. Field decoders
+and kinds come from the selected Decode instance's [schema](#decode-schema):
+derive `codec.Decode` too and pass `codec.Schema[T]()` to the adapter. Earlier
+versions put `Kind` and an optional `Decode` callback in `Fields()`. `_borkToGo` and
 `_borkFromGo[T]` also work for these generated records as they do for mirrors.
 
 ## User Go dependencies

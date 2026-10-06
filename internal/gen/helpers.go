@@ -152,23 +152,6 @@ func _borkOptionGet[T any](option Option[T]) (T, bool) {
 }
 `
 
-// Derived record schemas expose declared field types and their proven decoders.
-const decodeSchemaHelpers = `package main
-
-type _borkDecodeField struct {
- Name string
- Type string
- Constraints []string
- Kind string
- Doc string
- HasDefault bool
- Default func() any
- Optional bool
- Decode func(Json) any
-}
-
-`
-
 // bytesRuntime keeps binary values distinct from lists in unions and printing.
 const bytesRuntime = `package main
 

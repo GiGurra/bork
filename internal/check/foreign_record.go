@@ -389,38 +389,3 @@ func (c *checker) generatedGoType(t Type) types.Type {
 	}
 	return nil
 }
-
-// Decoders are optional: opaque Go fields cannot have one. They are found by
-// the bork/codec package identity, never by the requesting class's name.
-func (c *checker) resolveForeignDecoders(ci *ClassInstance) {
-	r, ok := ci.Type.(*Record)
-	if !ok {
-		return
-	}
-	c.pkg, c.inPrelude = ci.Pkg, ci.Prelude
-	c.typeParams = map[string]*TypeParam{}
-	for _, p := range ci.TypeParams {
-		c.typeParams[p.Name] = p
-	}
-	for _, f := range r.Fields {
-		if f.Computed {
-			ci.ForeignDecoders = append(ci.ForeignDecoders, nil)
-			continue
-		}
-		saved := c.diags
-		c.diags = &diag.List{}
-		c.have = nil
-		for _, con := range f.Constraints {
-			if con.Path == "" {
-				c.have = append(c.have, con)
-			}
-		}
-		var d *Dict
-		if codec := c.info.PackageNamed("bork/codec"); codec != nil {
-			d = c.dict(codec.ClassNamed("Decode"), f.Type, ci.Decl.Pos, 0)
-		}
-		c.diags = saved
-		c.have = nil
-		ci.ForeignDecoders = append(ci.ForeignDecoders, d)
-	}
-}
