@@ -1397,6 +1397,34 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 			}
 			return stmts, &ast.CallExpr{Fun: ast.NewIdent("_borkHandOver"), Args: []ast.Expr{args[1], handoffChan(args[0]), args[2], moveSource(e.MoveFrom, xs[3])}}
 		}
+		if e.MoveFrom != nil && e.Func.Prelude && e.Func.Decl.Name == "compilerSelectHandOver" {
+			// A select's arm h.handOver(s, r) moves r's registration from
+			// the scope the lifetimes found (MoveFrom) only if it is the
+			// arm completed (_borkChanSelect).
+			stmts, xs := g.values(slices.Concat(e.EvaluationArgs(), []check.Expr{e.MoveFrom}))
+			if xs == nil {
+				return stmts, nil
+			}
+			args := make([]ast.Expr, 3)
+			order := e.ArgOrder
+			if order == nil {
+				order = []int{0, 1, 2}
+			}
+			for i, param := range order {
+				args[param] = xs[i]
+			}
+			field := func(key string, value ast.Expr) ast.Expr {
+				return &ast.KeyValueExpr{Key: ast.NewIdent(key), Value: value}
+			}
+			arm := &ast.CompositeLit{Type: ast.NewIdent("_borkChanArm"), Elts: []ast.Expr{
+				field("ch", handoffChan(args[0])),
+				field("send", ast.NewIdent("true")),
+				field("value", args[2]),
+				field("scope", &ast.SelectorExpr{X: args[1], Sel: ast.NewIdent("ctx")}),
+				field("from", moveSource(e.MoveFrom, xs[3])),
+			}}
+			return stmts, &ast.CompositeLit{Type: g.goType(e.Type()), Elts: []ast.Expr{field("handle", arm)}}
+		}
 		if e.Func.Prelude && e.Func.Decl.Name == "scopeOf" {
 			// b.scope borrows the owner's scope, leaving b armed.
 			if v, ok := e.Args[0].(*check.VarRef); ok {

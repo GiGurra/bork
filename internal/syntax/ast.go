@@ -766,8 +766,9 @@ type Select struct {
 }
 
 // SelectArm is one arm of a select: `[name =] op => body`, where op is a
-// channel's receive or send call, or `_ => body` (Op nil), which runs when
-// no operation is ready, so the select does not wait.
+// channel's receive or send call, or a handoff's receive or handOver
+// call, or `_ => body` (Op nil), which runs when no operation is ready,
+// so the select does not wait.
 type SelectArm struct {
 	Pos     diag.Pos
 	Name    string // the binding of the operation's result, or ""

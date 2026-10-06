@@ -1,0 +1,68 @@
+// A connection.
+type Conn = resource
+
+fn connect(name: String, s: Scope) uses io: Conn unsafe go {
+  return Conn{handle: name, owner: s.Own(func() {})}
+}
+
+fn query(c: Conn, q: String): String unsafe go {
+  return c.handle.(string) + ": " + q
+}
+
+// What a type parameter is, is not known here.
+fn relay[R](s: Scope, to: Handoff[R], r: R) uses state {
+  _ = select {
+    to.handOver(s, r) => {}
+    _ => {}
+  }
+}
+
+// A parameter is borrowed: the caller still has it.
+fn pass(s: Scope, conns: Handoff[Conn], c: Conn) uses state {
+  _ = select {
+    conns.handOver(s, c) => {}
+  }
+}
+
+fn main() {
+  scope app {
+    conns = handoff[Conn](app, 1)
+    numbers = channel[Int](app, 1)
+
+    // The arm that hands a over ends its use where its body starts.
+    a = connect("a", app)
+    _ = select {
+      conns.handOver(app, a) => println(query(a, "after"))
+      _ => println(query(a, "kept"))
+    }
+    // After the select, it may have been handed over.
+    println(query(a, "later"))
+
+    // A resource acquired outside a loop, or kept by a task.
+    b = connect("b", app)
+    for (i in [1, 2]) {
+      _ = select {
+        conns.handOver(app, b) => println(i)
+        _ => {}
+      }
+    }
+    c = connect("c", app)
+    fork(app, () => println(query(c, "task")))
+    _ = select {
+      conns.handOver(app, c) => {}
+      _ => {}
+    }
+
+    // What a handoff's receive arm gives is the arm's own.
+    _ = select {
+      next = conns.receive(app) => match (next) {
+        d: Conn => {
+          _ = conns.handOver(app, d)
+          println(query(d, "again"))
+        }
+        _ => {}
+      }
+      n = numbers.receive(app) => println(n)
+    }
+  }
+}

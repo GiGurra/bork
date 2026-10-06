@@ -23,6 +23,9 @@ const (
  _borkChanClosed
  _borkChanCancelled
  _borkChanNotReady // a non-blocking select found nothing ready
+ // A hand-over arm's resource could not be moved to the channel's scope
+ // (its own scope has finished, say); the value is why.
+ _borkChanFailed
 )
 
 var _borkChanIDs atomic.Uint64
@@ -69,6 +72,9 @@ type _borkWaiter struct {
  arm int
  // value is what a waiting sender sends.
  value any
+ // from is set for a hand-over: the scope value's registration moves from
+ // when the send completes (see adopt).
+ from *_Scope
 }
 
 func _borkNewChan(owner *_Scope, limit int) *_borkChan {
@@ -140,13 +146,13 @@ func (c *_borkChan) tryRecv() (int, any, bool) {
  if c.n > 0 {
   v := c.pop()
   // A slot is free: the first waiting sender fills it.
-  if w := _borkDequeue(&c.sendq); w != nil {
+  if w := c.dequeueSender(); w != nil {
    c.push(w.value)
    w.sel.complete(w.arm, _borkChanValue, nil)
   }
   return _borkChanValue, v, true
  }
- if w := _borkDequeue(&c.sendq); w != nil {
+ if w := c.dequeueSender(); w != nil {
   w.sel.complete(w.arm, _borkChanValue, nil)
   return _borkChanValue, w.value, true
  }
@@ -156,20 +162,64 @@ func (c *_borkChan) tryRecv() (int, any, bool) {
  return 0, nil, false
 }
 
-// trySend sends without waiting, with c locked.
-func (c *_borkChan) trySend(v any) (int, bool) {
+// dequeueSender claims the first waiting sender whose value can be sent:
+// a hand-over's resource moves to c's scope first. A sender whose move
+// fails gets Failed, and the next one is tried.
+func (c *_borkChan) dequeueSender() *_borkWaiter {
+ for {
+  w := _borkDequeue(&c.sendq)
+  if w == nil {
+   return nil
+  }
+  if why := c.adopt(w.value, w.from); why != "" {
+   w.sel.complete(w.arm, _borkChanFailed, why)
+   continue
+  }
+  return w
+ }
+}
+
+// adopt moves v's registration from scope from to c's (when from is set:
+// v is handed over), with c locked, so that a receiver can move it on at
+// once. c is open, so its scope has not finished: what can fail is the
+// sender's side (its scope finished while it was an orphaned task).
+func (c *_borkChan) adopt(v any, from *_Scope) string {
+ if from == nil {
+  return ""
+ }
+ return _tryMoveResource(v, from, c.scope)
+}
+
+// trySend sends without waiting, with c locked, and gives the outcome,
+// why when it is Failed, and whether it sent (or found c closed). A
+// hand-over (from set) moves v to c's scope before anyone can receive it,
+// and back if no receiver takes it after all.
+func (c *_borkChan) trySend(v any, from *_Scope) (int, any, bool) {
  if c.closed {
-  return _borkChanClosed, true
+  return _borkChanClosed, nil, true
+ }
+ room := c.limit < 0 || c.n < c.limit
+ if !room && len(c.recvq) == 0 {
+  return 0, nil, false
+ }
+ if why := c.adopt(v, from); why != "" {
+  return _borkChanFailed, why, true
  }
  if w := _borkDequeue(&c.recvq); w != nil {
   w.sel.complete(w.arm, _borkChanValue, v)
-  return _borkChanValue, true
+  return _borkChanValue, nil, true
  }
- if c.limit < 0 || c.n < c.limit {
+ if room {
   c.push(v)
-  return _borkChanValue, true
+  return _borkChanValue, nil, true
  }
- return 0, false
+ // Every waiting receiver was cancelled: v stays the sender's.
+ if from != nil {
+  if why := _tryMoveResource(v, c.scope, from); why != "" {
+   return _borkChanFailed, why, true
+  }
+ }
+ return 0, nil, false
 }
 
 // close makes every later send give Closed, and receives give what is
@@ -212,7 +262,7 @@ func (c *_borkChan) release() {
 func (c *_borkChan) offer(v any) bool {
  c.mu.Lock()
  defer c.mu.Unlock()
- status, ok := c.trySend(v)
+ status, _, ok := c.trySend(v, nil)
  return ok && status == _borkChanValue
 }
 
@@ -229,6 +279,9 @@ type _borkChanArm struct {
  send bool
  value any
  scope context.Context
+ // from is set for a hand-over arm: the scope value's registration moves
+ // from, to the channel's scope, only if this arm's send completes.
+ from *_Scope
 }
 
 // _borkCancelledIn gives the first of ctxs that is cancelled, or nil.
@@ -247,7 +300,9 @@ func _borkCancelledBy(ctx context.Context) Cancelled {
 
 // _borkChanSelect completes exactly one of arms, chosen at random among
 // those ready, waiting until one is unless block is false. It gives the
-// arm, an outcome, and the value received (or the Cancelled). A cancelled
+// arm, an outcome, and the value received (or the Cancelled, or why a
+// hand-over failed). A hand-over arm moves its resource only if it is the
+// arm completed: the resource of every other arm stays put. A cancelled
 // scope of an arm, or of a channel's owner, completes no operation: the
 // select gives Cancelled, even when an operation is ready.
 func _borkChanSelect(arms []_borkChanArm, block bool) (int, int, any) {
@@ -292,9 +347,9 @@ func _borkChanSelect(arms []_borkChanArm, block bool) (int, int, any) {
  for _, i := range order {
   a := arms[i]
   if a.send {
-   if status, ok := a.ch.trySend(a.value); ok {
+   if status, why, ok := a.ch.trySend(a.value, a.from); ok {
     unlock()
-    return i, status, nil
+    return i, status, why
    }
   } else if status, v, ok := a.ch.tryRecv(); ok {
    unlock()
@@ -307,7 +362,7 @@ func _borkChanSelect(arms []_borkChanArm, block bool) (int, int, any) {
  }
  sel := &_borkSel{wake: make(chan struct{}, 1), ctxs: ctxs}
  for i, a := range arms {
-  w := &_borkWaiter{sel: sel, arm: i, value: a.value}
+  w := &_borkWaiter{sel: sel, arm: i, value: a.value, from: a.from}
   if a.send {
    a.ch.sendq = append(a.ch.sendq, w)
   } else {

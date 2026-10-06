@@ -14,6 +14,18 @@ fn compilerSelectSend[T](ch: Channel[T], s: Scope, x: T): SelectHandle unsafe go
   return SelectHandle{handle: _borkChanArm{ch: ch.native.handle.(*_borkChan), send: true, value: x, scope: s.ctx}}
 }
 
+// A Handoff's arms: a receive, and a hand-over, which moves the resource
+// to the handoff's scope only if it is the arm completed.
+fn compilerSelectHandoffReceive[R](ch: Handoff[R], s: Scope): SelectHandle unsafe go {
+  return SelectHandle{handle: _borkChanArm{ch: ch.native.handle.(*_borkChan), scope: s.ctx}}
+}
+
+fn compilerSelectHandOver[R](ch: Handoff[R], s: Scope, r: R): SelectHandle unsafe go {
+  // Compiled to a _borkChanArm given the scope r moves from.
+  _ = ch.native.handle.(*_borkChan)
+  panic("bork: a select's handOver is compiled by the compiler")
+}
+
 // compilerSelect completes one of the arms, waiting unless wait is false,
 // and gives an outcome whose index is the arm's, the number of arms when
 // none was ready, and one more when a scope was cancelled.
@@ -24,6 +36,14 @@ fn compilerSelect(arms: List[SelectHandle], wait: Bool) uses state: SelectHandle
   }
   index, status, value := _borkChanSelect(native, wait)
   switch status {
+  case _borkChanFailed:
+    panic("bork: select handOver: " + value.(string))
+  case _borkChanClosed:
+    // A hand-over to a closed handoff: nobody received the resource, and
+    // the sender can no longer use it, so it is released.
+    if arm := native[index]; arm.from != nil {
+      _releaseResource(arm.value, arm.from)
+    }
   case _borkChanNotReady:
     index = len(arms)
   case _borkChanCancelled:
@@ -42,6 +62,22 @@ fn compilerSelectReceived[T](outcome: SelectHandle, ch: Channel[T]): T | Closed 
     return Closed{}
   }
   return selected.value
+}
+
+fn compilerSelectHandoffReceived[R](outcome: SelectHandle, ch: Handoff[R]): R | Closed unsafe go {
+  selected := outcome.handle.(*_borkChanSelected)
+  if selected.status == _borkChanClosed {
+    return Closed{}
+  }
+  return selected.value
+}
+
+// compilerSelectHandedOver ends r's use, in a hand-over arm's body.
+fn compilerSelectHandedOver[R](outcome: SelectHandle, ch: Handoff[R], r: R): Ok | Closed unsafe go {
+  if outcome.handle.(*_borkChanSelected).status == _borkChanClosed {
+    return Closed{}
+  }
+  return _borkOk()
 }
 
 fn compilerSelectSent(outcome: SelectHandle): Ok | Closed unsafe go {

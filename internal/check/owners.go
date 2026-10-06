@@ -362,6 +362,12 @@ func (l *lifeChecker) callLife(x *Call) lifetime {
 	if handoffMethod(x.Func) && x.Func.Decl.Name == "handOver" && len(x.Args) == 3 {
 		return l.handOverCall(x)
 	}
+	if x.Func.Prelude && x.Func.Decl.Name == "compilerSelectHandOver" && len(x.Args) == 3 {
+		return l.selectHandOverArm(x)
+	}
+	if x.Func.Prelude && x.Func.Decl.Name == "compilerSelectHandedOver" && len(x.Args) == 3 {
+		return l.selectHandedOver(x)
+	}
 	if x.Func.Prelude && x.Func.Decl.Name == "handoff" {
 		if _, ok := storedType(x.Type()).(*Resource); !ok {
 			l.errorf(x.Pos(), "a handoff passes resources only, not %s; use a channel", TypeText(storedType(x.Type()), nil))

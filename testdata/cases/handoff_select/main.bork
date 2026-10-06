@@ -1,0 +1,80 @@
+// A connection that says when it opens and closes.
+type Conn = resource
+
+fn connect(name: String, s: Scope) uses io: Conn unsafe go {
+  import "fmt"
+  fmt.Println("open " + name)
+  return Conn{handle: name, owner: s.Own(func() { fmt.Println("close " + name) })}
+}
+
+fn query(c: Conn, q: String): String unsafe go {
+  return c.handle.(string) + ": " + q
+}
+
+// serve takes the next connection in a select, and owns it for one
+// session.
+fn serve(s: Scope, conns: Handoff[Conn]) uses io + state: Ok | Cancelled {
+  select {
+    next = conns.receive(s) => match (next) {
+      c: Conn => scope session {
+        owned = move(c, session)
+        println(query(owned, "served"))
+      }
+      _: Closed => println("no more")
+    }
+  }?
+  Ok
+}
+
+fn demo(app: Scope) uses io + state: Ok | Closed | Cancelled {
+  conns = handoff[Conn](app, 1)
+  // A hand-over arm that completes: a moves to the handoff.
+  a = connect("a", app)
+  select {
+    conns.handOver(app, a) => println("handed a over")
+    _ => println("full")
+  }?
+  serve(app, conns)?
+
+  // One that does not: b stays app's, and the arm that ran may use it.
+  blocker = connect("blocker", app)
+  conns.handOver(app, blocker)?
+  b = connect("b", app)
+  select {
+    conns.handOver(app, b) => println("handed b over")
+    _ => println(query(b, "kept"))
+  }?
+  serve(app, conns)?
+
+  // Channel and handoff arms mixed: with the handoff full, the channel's
+  // arm wins, and its body may still use c.
+  filler = connect("filler", app)
+  conns.handOver(app, filler)?
+  numbers = channel[Int](app, 1)
+  numbers.send(app, 7)?
+  c = connect("c", app)
+  select {
+    n = numbers.receive(app) => println(query(c, s"number $n"))
+    conns.handOver(app, c) => println("handed c over")
+  }?
+
+  // A hand-over to a closed handoff gives Closed, and releases what
+  // nobody received.
+  closed = handoff[Conn](app)
+  closed.close()
+  d = connect("d", app)
+  select {
+    r = closed.handOver(app, d) => match (r) {
+      _: Ok => println("handed d over")
+      _: Closed => println("d was not received")
+    }
+  }?
+  serve(app, closed)
+}
+
+fn main() {
+  scope app {
+    _ = demo(app)
+    println("app ends")
+  }
+}
