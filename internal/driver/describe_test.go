@@ -1012,3 +1012,14 @@ fn main(){println(Pair[Int].Pair(1,"x"),Option.Some(3))}`
 		}
 	}
 }
+
+func TestDescribeGoTaggedField(t *testing.T) {
+	t.Parallel()
+	source := `type Row = { value: Int go { json: "wire_value" } } derive (GoStruct)
+fn read(row: Row): Int { row.value }
+`
+	result := describeAt(t, source, "value }", "")
+	if result.typ != "Int" || !result.defined {
+		t.Fatalf("tagged field query: %+v", result)
+	}
+}

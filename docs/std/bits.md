@@ -1,6 +1,6 @@
-# Integer bits
+# bork/bits
 
-Import `bork/bits` to use these methods on `Int8`, `Int16`, `Int32`, `Int` (`Int64`), `Byte` (`Uint8`), `Uint16`, `Uint32`, and `Uint64`. Operations are pure. Signed values use their fixed-width two's-complement bit patterns. Bit zero is the least significant bit.
+`bork/bits` counts, rearranges, and edits bits in fixed-width integers.
 
 ```bork
 import "bork/bits"
@@ -8,24 +8,63 @@ import "bork/bits"
 fn main() {
   flags: Byte = 240
   println(flags.OnesCount(), flags.LeadingZeros(), flags.TrailingZeros())
-  println(flags.RotateLeft(2), flags.Reverse(), flags.ReverseBytes())
-  println(flags.TestBit(7), flags.ClearBit(7), flags.SetBit(0))
-  println(flags.Extract(4, 4), flags.Insert(0, 4, 5))
+  println(flags.Extract(4, 4))
+  match (flags.TestBit(8)) {
+    _: OutOfRange => println("bit index outside byte")
+    value: Bool => println(value)
+  }
 }
 ```
 
-| Method | Result and behavior |
+```text
+4 0 4
+15
+bit index outside byte
+```
+
+## API
+
+All methods are pure. They exist for each concrete receiver type `I`: `Int8`,
+`Int16`, `Int32`, `Int` (`Int64`), `Byte` (`Uint8`), `Uint16`, `Uint32`, and
+`Uint64`. In this table `I` denotes that receiver type. `CountN` is `Count8`,
+`Count16`, `Count32`, or `Count64` according to its width.
+
+| Signature | Meaning |
 | --- | --- |
-| `OnesCount()` | `Int`: number of one bits |
-| `LeadingZeros()` | `Int`: zero bits before the highest one bit; the full width for zero |
-| `TrailingZeros()` | `Int`: zero bits after the lowest one bit; the full width for zero |
-| `RotateLeft(count)` | Same integer type: rotate left; a negative count rotates right; counts wrap modulo the width |
-| `Reverse()` | Same integer type: reverse the order of every bit |
-| `ReverseBytes()` | Same integer type: reverse byte order; an 8-bit value stays the same |
-| `TestBit(index)` | `Bool | OutOfRange`: test a bit |
-| `SetBit(index)`, `ClearBit(index)` | Same integer type or `OutOfRange`: return a value with that bit set or cleared |
-| `Extract(offset, width)` | Same integer type or `OutOfRange`: move the field to the lowest bits and clear the others |
-| `Insert(offset, width, field)` | Same integer type or `OutOfRange`: replace the field, preserving the other bits |
+| `(value: I) OnesCount(): Int where CountN` | Count one bits. |
+| `(value: I) LeadingZeros(): Int where CountN` | Count zeros before the highest one bit; full width for zero. |
+| `(value: I) TrailingZeros(): Int where CountN` | Count zeros after the lowest one bit; full width for zero. |
+| `(value: I) RotateLeft(count: Int): I` | Rotate left; negative rotates right; counts wrap modulo width. |
+| `(value: I) Reverse(): I` | Reverse all bits. |
+| `(value: I) ReverseBytes(): I` | Reverse byte order; unchanged for 8-bit values. |
+| `(value: I) TestBit(index: Int): Bool \| OutOfRange` | Inspect one bit. |
+| `(value: I) SetBit(index: Int): I \| OutOfRange` | Return a value with one bit set. |
+| `(value: I) ClearBit(index: Int): I \| OutOfRange` | Return a value with one bit cleared. |
+| `(value: I) Extract(offset: Int, width: Int): I \| OutOfRange` | Move a field to the lowest bits and clear the rest. |
+| `(value: I) Insert(offset: Int, width: Int, field: I): I \| OutOfRange` | Replace a field without truncating its value. |
+
+Signed values use their fixed-width two's-complement patterns. Bit zero is the
+least significant bit. `Count8`, `Count16`, `Count32`, and `Count64` are predicates
+on Int, each proving a count from zero through that width inclusive.
+
+## Replace a bit field
+
+```bork
+import "bork/bits"
+
+fn main() {
+  original: Byte = 240
+  println(original.Insert(0, 4, 5))
+  println(original)
+}
+```
+
+```text
+245
+240
+```
+
+Every result is a new value; the receiver is unchanged.
 
 Indices are `Int` values in `[0, integer width)`. Fields require nonnegative offset and width and must fit within the integer. A zero-width field is allowed, including at an offset equal to the integer width: extraction returns zero and inserting zero returns the original value. Bounds checks handle even the largest `Int` values without overflow.
 
@@ -42,3 +81,8 @@ fn population(value: Byte): Int where bits.Count8 {
 ```
 
 [Integer operators](../language/basics.md) provide AND, OR, XOR, complement, and shifts. [bork/encoding](encoding.md) handles hex and base64 representations of Bytes.
+
+
+Run `bork doc bork/bits` for the generated reference.
+
+[All standard packages](README.md)

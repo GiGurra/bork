@@ -5,3 +5,5 @@
 ["}" ")" "]"] @indent.end @indent.branch
 (comment) @indent.ignore
 (go_content) @indent.ignore
+
+(tag_group) @indent.begin

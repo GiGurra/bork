@@ -1,4 +1,4 @@
-type User = { name: String }
+type User = { name: String codec { name: "user_name" } }
 fn describe(user: User): String {
   result = match (user) {
     User { name } => s"hello $name"

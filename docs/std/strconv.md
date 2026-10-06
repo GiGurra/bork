@@ -1,21 +1,54 @@
 # bork/strconv
 
-Import `bork/strconv` to format integers and parse strings in bases 2 through 36.
-The methods cover `Int` (`Int64`), `Int8`, `Int16`, `Int32`, `Uint8` (`Byte`),
-`Uint16`, `Uint32`, and `Uint64`. They are pure and need no effects.
+`bork/strconv` formats and parses fixed-width integers in bases 2 through 36.
 
-## Formatting
+```bork
+import "bork/strconv"
 
-Every integer type has these methods:
+fn main() {
+  println(255.Hex(width: 4, uppercase: true, prefix: true))
+  println("-0x_80".ParseInt8(base: 0))
+  match ("256".ParseByte()) {
+    _: ParseError => println("outside byte range")
+    value: Byte => println(value)
+  }
+}
+```
 
-| Method | Result |
+```text
+0X00FF
+-128
+outside byte range
+```
+
+## API
+
+These pure methods exist for each integer receiver type `I`: `Int8`, `Int16`,
+`Int32`, `Int` (`Int64`), `Byte` (`Uint8`), `Uint16`, `Uint32`, and `Uint64`.
+Here `I` denotes one of those concrete receiver types, not a type to import.
+
+| Signature | Meaning |
 | --- | --- |
-| `Hex(width = 0, uppercase = false, prefix = false)` | Hexadecimal digits, optionally prefixed with `0x` |
-| `Binary(width = 0, uppercase = false, prefix = false)` | Binary digits, optionally prefixed with `0b` |
-| `Octal(width = 0, uppercase = false, prefix = false)` | Octal digits, optionally prefixed with `0o` |
-| `Format(base, width = 0, uppercase = false)` | Digits in any base from 2 through 36, without a prefix |
+| `(value: I) Hex(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String` | Format hexadecimal digits with optional 0x. |
+| `(value: I) Binary(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String` | Format binary digits with optional 0b. |
+| `(value: I) Octal(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String` | Format octal digits with optional 0o. |
+| `(value: I) Format(base: Int where ValidBase, width: Int where ValidWidth = 0, uppercase: Bool = false): String` | Format digits without a prefix. |
+| `(text: String) ParseInt(base: Int where ValidBaseOrZero = 10): Int \| ParseError` | Parse Int/Int64. |
+| `(text: String) ParseInt8(base: Int where ValidBaseOrZero = 10): Int8 \| ParseError` | Parse Int8. |
+| `(text: String) ParseInt16(base: Int where ValidBaseOrZero = 10): Int16 \| ParseError` | Parse Int16. |
+| `(text: String) ParseInt32(base: Int where ValidBaseOrZero = 10): Int32 \| ParseError` | Parse Int32. |
+| `(text: String) ParseUint8(base: Int where ValidBaseOrZero = 10): Uint8 \| ParseError` | Parse Uint8. |
+| `(text: String) ParseByte(base: Int where ValidBaseOrZero = 10): Byte \| ParseError` | Alias of ParseUint8. |
+| `(text: String) ParseUint16(base: Int where ValidBaseOrZero = 10): Uint16 \| ParseError` | Parse Uint16. |
+| `(text: String) ParseUint32(base: Int where ValidBaseOrZero = 10): Uint32 \| ParseError` | Parse Uint32. |
+| `(text: String) ParseUint64(base: Int where ValidBaseOrZero = 10): Uint64 \| ParseError` | Parse Uint64. |
+| `ValidBase(base: Int): Bool` | Prove base is 2–36. |
+| `ValidBaseOrZero(base: Int): Bool` | Prove base is 0 or 2–36. |
+| `ValidWidth(width: Int): Bool` | Prove width is 0–4096. |
 
-All return `String`. `base: Int where strconv.ValidBase` requires a proof that
+## Format integers
+
+`base: Int where strconv.ValidBase` requires a proof that
 `2 <= base <= 36`. `width: Int where strconv.ValidWidth` requires a proof that
 `0 <= width <= 4096`. Constants are checked at compile time; guard dynamic values
 with these predicates. Invalid options are compile errors unless guarded.
@@ -56,8 +89,8 @@ Signed parsing accepts `+` or `-`. Unsigned parsing accepts `+`, rejects `-`
 insensitive. An underscore may separate digits, or occur once immediately
 after a recognized prefix. Leading, trailing, and repeated separators, missing
 digits, whitespace, invalid digits, and overflow return `ParseError`; its
-`input` is the original string. The prelude's `parseInt(text)` remains a
-strict decimal parser without separator support.
+`input` is the original string. Use `encoding.ParseInt(text)` for strict decimal parsing without separator
+support.
 
 ```bork
 import "bork/strconv"
@@ -83,3 +116,8 @@ Integer formatting prints a number's magnitude. For a byte sequence use
 digits per byte, and `encoding.ParseHex(text): Bytes | ParseError` accepts either
 case and requires complete pairs. Bytes hex has no sign, prefix, or separators;
 leading zero bytes are preserved.
+
+
+Run `bork doc bork/strconv` for the generated reference.
+
+[All standard packages](README.md)

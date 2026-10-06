@@ -1,5 +1,6 @@
 #include "tree_sitter/parser.h"
 #include <stdlib.h>
+#include <string.h>
 
 static void skip_space_comments(TSLexer *lexer) {
   for (;;) {
@@ -58,22 +59,29 @@ static bool context_arm(TSLexer *lexer) {
   return lexer->lookahead == '>';
 }
 
-void *tree_sitter_bork_external_scanner_create(void) { return NULL; }
-void tree_sitter_bork_external_scanner_destroy(void *payload) { (void)payload; }
+typedef struct { bool comment_newline; } Scanner;
+
+void *tree_sitter_bork_external_scanner_create(void) { return calloc(1, sizeof(Scanner)); }
+void tree_sitter_bork_external_scanner_destroy(void *payload) { free(payload); }
 unsigned tree_sitter_bork_external_scanner_serialize(void *payload, char *buffer) {
-  (void)payload; (void)buffer; return 0;
+  buffer[0] = ((Scanner *)payload)->comment_newline;
+  return 1;
 }
 void tree_sitter_bork_external_scanner_deserialize(void *payload, const char *buffer, unsigned length) {
-  (void)payload; (void)buffer; (void)length;
+  ((Scanner *)payload)->comment_newline = length > 0 && buffer[0];
 }
 
 // Go is opaque to the bork parser. Count braces outside Go literals/comments;
 // the Go injection parses the resulting content separately.
 bool tree_sitter_bork_external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid) {
-  (void)payload;
+  Scanner *scanner = payload;
   if (valid[2]) return false;
+  if (!valid[0]) {
+    while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r') lexer->advance(lexer, true);
+  }
   if (valid[1]) {
-    bool newline = false;
+    bool newline = scanner->comment_newline;
+    scanner->comment_newline = false;
     while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r' || lexer->lookahead == '\n') {
       if (lexer->lookahead == '\n') newline = true;
       lexer->advance(lexer, true);
@@ -109,6 +117,74 @@ bool tree_sitter_bork_external_scanner_scan(void *payload, TSLexer *lexer, const
       if (!continuation) { lexer->result_symbol = 1; return true; }
       return false;
     }
+  }
+  if (!valid[0] && valid[6] && valid[7] && lexer->lookahead == '/') {
+    lexer->advance(lexer, false);
+    if (lexer->lookahead == '/') {
+      while (!lexer->eof(lexer) && lexer->lookahead != '\n') lexer->advance(lexer, false);
+    } else if (lexer->lookahead == '*') {
+      lexer->advance(lexer, false);
+      int previous = 0;
+      bool newline = false;
+      while (!lexer->eof(lexer)) {
+        int c = lexer->lookahead;
+        if (c == '\n') newline = true;
+        lexer->advance(lexer, false);
+        if (previous == '*' && c == '/') break;
+        previous = c;
+      }
+      // Preserve the comment node, then emit a separator when it crosses
+      // a line at a position where the grammar can end a declaration.
+      scanner->comment_newline = newline && valid[6];
+    } else return false;
+    lexer->mark_end(lexer);
+    lexer->result_symbol = 7;
+    return true;
+  }
+  if (valid[6]) {
+    // Only a same-line name followed by '{' starts a tag group. Look ahead
+    // without consuming the brace, so where/derive and new variants keep
+    // their ordinary tokens. Newlines are handled above as separators.
+    while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r') lexer->advance(lexer, true);
+    int first = lexer->lookahead;
+    if (!((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || first >= 0x80)) return false;
+    char name[16];
+    unsigned length = 0;
+    do {
+      if (length < sizeof(name) - 1) name[length] = lexer->lookahead < 0x80 ? (char)lexer->lookahead : '?';
+      length++;
+      lexer->advance(lexer, false);
+    } while ((lexer->lookahead >= 'a' && lexer->lookahead <= 'z') ||
+             (lexer->lookahead >= 'A' && lexer->lookahead <= 'Z') ||
+             (lexer->lookahead >= '0' && lexer->lookahead <= '9') ||
+             lexer->lookahead == '_' || lexer->lookahead >= 0x80);
+    if (length < sizeof(name)) {
+      name[length] = 0;
+      const char *keywords[] = {"fn", "pred", "type", "sealed", "where", "and", "or", "trust", "rule", "return", "if", "else", "match", "generate", "yield", "for", "break", "continue", "true", "false"};
+      for (unsigned i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
+        if (strcmp(name, keywords[i]) == 0) return false;
+      }
+    }
+    lexer->mark_end(lexer);
+    while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r') lexer->advance(lexer, false);
+    // Inline block comments may separate the qualifier from its brace.
+    while (lexer->lookahead == '/') {
+      lexer->advance(lexer, false);
+      if (lexer->lookahead != '*') return false;
+      lexer->advance(lexer, false);
+      int previous = 0;
+      while (!lexer->eof(lexer)) {
+        int c = lexer->lookahead;
+        if (c == '\n') return false;
+        lexer->advance(lexer, false);
+        if (previous == '*' && c == '/') break;
+        previous = c;
+      }
+      while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r') lexer->advance(lexer, false);
+    }
+    if (lexer->lookahead != '{') return false;
+    lexer->result_symbol = 6;
+    return true;
   }
   if (valid[3] || valid[4] || valid[5]) {
     while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r' || lexer->lookahead == '\n') lexer->advance(lexer, true);

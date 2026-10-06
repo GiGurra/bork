@@ -1,0 +1,12 @@
+type Label = { text: String }
+instance LabelShow: Show[Label] {
+  fn show(label: Label): String { label.text }
+}
+fn emit[T](value: T) uses io { eprintln(value) }
+fn next(n: Int) uses io: Int { println(n); n }
+fn main() uses io {
+  eprintln()
+  eprintln("values", 42, true, [1, 2], Option.Some("yes"))
+  emit(Label { text: "custom" })
+  eprintln(next(1), next(2))
+}

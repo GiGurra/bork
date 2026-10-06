@@ -239,3 +239,13 @@ test('positional variant payloads and specialized owner patterns', () => {
   const ls = tokenize('type Reply[T] = sealed { Found(T, String), Missing }\nmatch (x) { .Found(value, _) => value, Reply[Int].Missing => 0 }\nresult = Option[Int].Some(3)');
   for (const [row, word] of [[0,'Reply'],[0,'Found'],[0,'String'],[1,'Found'],[1,'Reply'],[1,'Int'],[1,'Missing'],[2,'Option'],[2,'Int'],[2,'Some']]) has(ls,row,word,'entity.name.type.bork');
 });
+
+test('package tag group qualifiers and expression values', () => {
+  const ls = tokenize('type Row = { name: String = "Ada" codec { name: Option.Some("login"), aliases: ["user"] } go { json: "login" } } codec { naming: codec.Naming.Snake }\ntype Mode = sealed { Plain codec { fallback: true } }\nif true { println("ok") }');
+  has(ls, 0, 'codec {', 'entity.name.namespace.bork');
+  has(ls, 0, 'go {', 'entity.name.namespace.bork');
+  has(ls, 0, '"login"', 'string.quoted.double.bork');
+  has(ls, 1, 'codec {', 'entity.name.namespace.bork');
+  has(ls, 1, 'true', 'constant.language.boolean.bork');
+  assert.ok(!scopes(ls, 2, 'true').includes('entity.name.namespace.bork'));
+});

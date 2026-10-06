@@ -190,12 +190,18 @@ func (a *EditorAnalysis) EditorSymbols(pos diag.Pos) []EditorCompletion {
 		})
 	}
 	for _, fn := range a.program.info.Funcs {
+		if fn.Prelude && !check.PreludeVisible(fn.Decl.Name) {
+			continue
+		}
 		if fn.TemplatePkg != nil && fn.Decl.Instance == nil {
 			continue
 		}
 		if !fn.Decl.ScriptMain && !fn.Decl.IsMethod {
 			add(fn.Decl.Name, check.TypeText(&check.FuncType{Params: fn.Params, Result: fn.Result, Effects: fn.Effects}, from), "function", 1, nil)
 		}
+	}
+	for _, builtin := range check.CompilerBuiltinDeclarations() {
+		add(builtin.Name, builtin.Signature, "function", 1, nil)
 	}
 	for name, typ := range check.EditorVisibleTypes(a.program.info, from) {
 		add(name, check.TypeText(typ, from), "type", 1, typ)

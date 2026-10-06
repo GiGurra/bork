@@ -1,75 +1,75 @@
 # bork/embed
 
-## Compile-time embedded assets
+`bork/embed` captures files and directories at compile time so a program can read immutable assets without runtime filesystem access.
 
-`bork/embed` embeds regular files as immutable Bytes or validated UTF-8 Strings,
-and directories as immutable `FS` snapshots. ReadBytes/ReadString/Directory are
-pure compiler intrinsics with a compile-time constant String path, resolved
-relative to the source package of the call (including imported packages).
-Only direct calls are allowed; function references and dynamic paths fail at
-checking. There is no new syntax or filesystem effect. Directory snapshots
-include dotfiles recursively, expose lexical `Paths()` and pure `Read(name)`,
-and return IoError for a missing snapshot name. Empty directories are supported;
-only files appear in Paths. Globs and directory metadata are not included.
+This example embeds its own source. Save it as `main.bork` before running `bork run main.bork`:
 
-Missing or unreadable assets, wrong file/directory types, invalid UTF-8 text,
-symlinks and special files produce compile diagnostics at the call. Paths must
-stay within the source package: absolute paths, parent segments, backslashes,
-colons and NULs are rejected. The driver captures each request once during
-checking before evaluating facts. Evaluators, normal builds and test builds
-stage captured bytes in the generated module and use `go:embed`, preserving
-assets even if their source files disappear after capture. Large assets do not
-inflate generated Go source. `bork emit` lists staged file names and their source
-paths in a comment beside the embed directives; consumers must stage the listed
-assets themselves. The emitted source by itself is not a complete build artifact.
-
-## Convention-based lookups
-
-Only the argument of `Directory` must be a constant: it tells the compiler what
-to embed. Paths read from the snapshot can be computed at runtime, so a whole
-directory can be embedded once and its files found by naming convention. This
-fragment assumes an `assets/` directory beside the source file:
-
-```bork fragment
+```bork
 import "bork/embed"
 
-Assets = embed.Directory("assets")
-
-fn template(page: String): Bytes | IoError {
-  Assets.Read(s"templates/$page.html")
-}
-
-fn main() uses io {
-  println(Assets.Paths())
-  println(template("home"))
+fn main() {
+  source = embed.ReadString("main.bork")
+  println(source.contains("fn main"))
 }
 ```
 
-Every file under `assets/` is embedded, so adding one needs no code change. A
-name that was not embedded is an `IoError` at runtime, since the compiler cannot
-know which names will be requested. `Paths()` lists what was embedded, for
-discovery. See [examples/embed_templates](../../examples/embed_templates/main.bork).
+Output:
 
-## Embedded asset API
+```text
+true
+```
 
-- **Embedded assets:** `bork/embed` provides pure compiler intrinsics
-  `ReadBytes("assets/file.bin"): Bytes`, `ReadString("assets/page.html"): String`
-  and `Directory("assets"): embed.FS`. Paths must be compile-time constant
-  Strings, relative to the calling source package. Missing/unreadable assets,
-  wrong file types, invalid UTF-8 for ReadString, symlinks, absolute/parent paths,
-  backslashes, colons and NULs are compiler errors at the call. Intrinsics cannot
-  be used as function values; wrap a direct constant call in a lambda instead.
-  A directory snapshot recursively includes regular files and dotfiles;
-  `snapshot.Paths()` returns file names in lexical order and `snapshot.Read(name)`
-  returns `Bytes | IoError` without I/O. Empty directories have no file entries.
-  There are no glob patterns and no runtime filesystem reads. Builds stage the
-  captured bytes into the generated Go module and use Go's embed directives;
-  `bork emit` prints source with those directives and a comment listing files
-  that must be staged beside it. Its output alone does not contain asset data.
-  See [examples/embed](../../examples/embed/main.bork).
+For an application asset, replace the path with a regular file within the source package, such as `"assets/page.html"`. The compiled binary needs no source asset at runtime.
 
-## Examples
+## API
 
-Import `bork/embed` to capture files as Bytes or UTF-8 Strings and directories as
-immutable snapshots at compile time. Missing assets are compiler errors; binaries
-need no source files at runtime. See [examples/embed](../../examples/embed/main.bork).
+Every API here is pure. Paths passed to the three compiler intrinsics must be compile-time constant Strings, relative to the calling source package, including calls inside imported packages.
+
+| Signature | Meaning |
+| --- | --- |
+| `ReadBytes(path: String): Bytes` | Capture a regular file as immutable bytes. |
+| `ReadString(path: String): String` | Capture and validate a UTF-8 text file. |
+| `Directory(path: String): FS` | Capture an immutable recursive directory snapshot. |
+| `(snapshot: FS).Paths(): List[String]` | List embedded file names in lexical order. |
+| `(snapshot: FS).Read(name: String): Bytes \| IoError` | Read a snapshot entry by runtime name. |
+
+`embed.FS` has `{ files: Map[String, Bytes] }`.
+
+Directories include regular files and dotfiles recursively. Empty directories work; only files appear in Paths. There are no glob patterns or directory metadata. Snapshot names can be computed at runtime, unlike the constant Directory path.
+
+## Compiler errors and missing entries
+
+Missing/unreadable assets, incorrect file/directory types, invalid UTF-8 in ReadString, symlinks and special files are compile errors at the call. Paths must stay inside the source package: absolute paths, parent segments, backslashes, colons and NULs are rejected.
+
+```bork fails
+import "bork/embed"
+
+fn main() {
+  println(embed.ReadString("../outside.txt"))
+}
+```
+
+```text
+path must be relative to the source package, without parent segments, backslashes, colons or NULs
+```
+
+The intrinsics permit direct calls only. Dynamic paths and function references are check errors; wrap a direct constant call in a lambda when you need a callback. A missing *snapshot entry* is instead `IoError` at runtime, because its name can be computed dynamically.
+
+## Read by naming convention
+
+Embed a directory once and look up files by convention. The [embed_templates example](../../examples/embed_templates/main.bork) has a complete `assets/` fixture and uses names such as `templates/home.html`. Add an asset under that directory and rebuild to include it; Paths lists what the binary actually contains. Check Read's result before decoding the returned Bytes. For example, this helper
+looks up a template while keeping a missing entry explicit:
+
+```bork
+import "bork/embed"
+
+fn readAsset(snapshot: embed.FS, name: String): Bytes | IoError {
+  snapshot.Read(s"templates/$name.html")
+}
+```
+
+## Builds and emitted source
+
+The compiler captures each request once during checking, before evaluating facts. Normal and test builds stage the captured bytes in the generated Go module and use Go embed directives; large assets do not expand the generated Go source. Captured files remain available even if their source disappears after capture.
+
+`bork emit` lists staged filenames and source paths in a comment beside the embed directives. Consumers of emitted source must stage those assets themselves: source alone is not a complete build artifact. See [the embedded-files example](../../examples/embed/main.bork).

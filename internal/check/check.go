@@ -159,6 +159,7 @@ type Builtin int
 const (
 	BuiltinNone Builtin = iota
 	BuiltinPrintln
+	BuiltinEprintln
 	BuiltinToString
 	BuiltinConvert // toInt8(x), toFloat(x), ...
 	BuiltinPanic
@@ -177,6 +178,7 @@ const (
 
 var builtins = map[string]Builtin{
 	"println":                BuiltinPrintln,
+	"eprintln":               BuiltinEprintln,
 	"toString":               BuiltinToString,
 	"panic":                  BuiltinPanic,
 	"dbg":                    BuiltinDbg,
@@ -2031,14 +2033,14 @@ func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin, want Type
 		}
 		return Ok
 	}
-	if b != BuiltinPrintln && len(e.Args) != 1 {
+	if b != BuiltinPrintln && b != BuiltinEprintln && len(e.Args) != 1 {
 		c.errorf(e.Pos, "%s takes 1 argument, but %d were given", fname, len(e.Args))
 		for _, a := range e.Args {
 			c.expr(a)
 		}
 		return Invalid
 	}
-	if b == BuiltinPrintln || b == BuiltinAssertSnapshot {
+	if b == BuiltinPrintln || b == BuiltinEprintln || b == BuiltinAssertSnapshot {
 		c.used |= EffIO
 	}
 	switch b {
@@ -2072,11 +2074,11 @@ func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin, want Type
 		return Ok
 	case BuiltinConvert:
 		return c.conversion(e, fname)
-	case BuiltinPrintln:
+	case BuiltinPrintln, BuiltinEprintln:
 		for _, a := range e.Args {
 			t := c.expr(a)
 			if t != Invalid && !isValue(t) {
-				c.errorf(a.Position(), "println cannot print a value of type %s", t)
+				c.errorf(a.Position(), "%s cannot print a value of type %s", fname, t)
 			}
 		}
 		return Ok

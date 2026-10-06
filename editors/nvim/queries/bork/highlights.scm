@@ -23,6 +23,7 @@
 (record_literal name: (identifier) @variable.member)
 (selector_expression field: (identifier) @variable.member)
 (call_expression function: (qualified_name (identifier) @function.call))
+(call_expression function: (selector_expression field: (identifier) @function.call))
 (interpolated_string prefix: (qualified_name (identifier) @function.call))
 ["fn" "pred" "type" "sealed" "unsafe" "where" "and" "or" "trust" "rule"
  "generate" "yield" "for" "break" "continue" "if" "else" "return" "match"
@@ -42,3 +43,6 @@
 (specialized_variant_pattern name: (identifier) @type.enum.variant)
 (specialized_variant_pattern (qualified_name (identifier) @type))
 (list_comprehension name: (identifier) @variable)
+
+(tag_group package: (identifier) @module)
+(tag_entry name: (identifier) @variable.member)

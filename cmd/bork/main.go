@@ -107,7 +107,7 @@ type describeParams struct {
 }
 
 type docParams struct {
-	Path string `positional:"true" optional:"true" default:"." descr:"package directory, source file, standard package or pinned library package"`
+	Path string `positional:"true" optional:"true" default:"." descr:"builtin, package directory, source file, standard package or pinned library package"`
 	All  bool   `optional:"true" descr:"document every package below the target in its module"`
 	HTML bool   `optional:"true" descr:"write one standalone HTML page instead of Markdown"`
 }

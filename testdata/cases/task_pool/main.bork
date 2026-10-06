@@ -66,10 +66,12 @@ fn main() {
     pool = tasks.Open(app, 1)
     gate = channel[Bool](app, 0)
     scope request {
-      task = mustTask(tasks.TryFork(pool, request, () => { _ = gate.receive(request); 11 }))
+      // The callback ignores request cancellation: only the parent-scoped
+      // gate releases it, so it must retain its slot until the explicit send.
+      task = mustTask(tasks.TryFork(pool, request, () => { _ = gate.receive(app); 11 }))
       cancel(request)
       println("cancelled task holds slot", tasks.TryFork(pool, app, () => {}))
-      _ = gate.send(request, true)
+      _ = gate.send(app, true)
       println("uncooperative task joined", await(task))
     }
     println("slot after cancellation", await(mustTask(tasks.TryFork(pool, app, () => 12))))

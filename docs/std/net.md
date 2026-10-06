@@ -1,55 +1,145 @@
 # bork/net
 
-## TCP and UDP sockets
+`bork/net` provides scope-owned TCP connections and UDP sockets with binary data and per-call deadlines.
 
-`bork/net` uses Bytes for binary TCP and UDP data and scope-owned Connection,
-Server and Socket resources. Dial opens TCP with scope cancellation and an
-optional opening timeout. Listen serves each connection on a task in its own
-scope; server cleanup cancels active connections and waits for handlers.
-Handler errors/panics are logged and isolated. Connections support bounded byte
-reads, validated UTF-8 lines, writes, address inspection and per-call deadlines.
-Line timeouts preserve consumed prefixes for retry or byte reads. Eof marks
-clean stream closure; cancellation is Cancelled and transport/timeouts IoError.
-Failed writes can be partial. One reader and one writer may run concurrently.
+```bork
+import "bork/encoding"
+import "bork/net"
 
-UDP Bind and Send use numeric IP:port addresses; Receive returns a complete
-datagram with its sender, including zero-length data. Resources follow their
-owners' cancellation: attachment adds an owner, and a resource is cancelled once
-all its owners are. Pure host/port helpers parse and join addresses;
-scope-aware Resolve returns sorted
-IP strings. Timeouts and buffer sizes have checked facts; there is no new syntax.
-TLS can be added later alongside HTTP.
+fn demo(s: Scope) uses io + net + state + clock: Ok | IoError | Cancelled {
+  receiver = net.Bind("127.0.0.1:0", s)?
+  sender = net.Bind("127.0.0.1:0", s)?
+  _ = net.Send(sender, net.SocketAddress(receiver), encoding.Utf8("hello"), 1000)?
+  packet = net.Receive(receiver, 1000)?
+  println(encoding.ParseUtf8(packet.data))
+  match (net.SplitAddress("missing-port")) {
+    _: ParseError => println("invalid address")
+    endpoint: net.Endpoint => println(endpoint)
+  }
+}
 
-## Network API
+fn main() {
+  println(scope app { demo(app) })
+}
+```
 
-`bork/net` provides TCP `Dial(address, scope, timeoutMs = 0)` and
-`Listen(address, scope, handler)`. Listen returns a Server; `Address(server)`
-reports its selected address and `Wait(server)` waits for shutdown. Each handler
-receives a Connection and its own scope and returns `Ok | IoError | Cancelled`.
-Handler errors and panics are logged; other connections continue. Server cleanup
-cancels connections and waits for their handlers. `LocalAddress`/`RemoteAddress`
-inspect a Connection. `Read(conn, size = 4096, timeoutMs = 0)` reads up to size
-Bytes, returning `net.Eof` for a clean closed stream. Read sizes must be 1 through
-16777216. `ReadLine` validates UTF-8, removes LF/CRLF, preserves final bare CR,
-and returns a final unterminated line before Eof. A timed-out line prefix is
-retained for a subsequent ReadLine or Read. `Write`/`WriteLine` return the number
-of bytes sent. A failed write may have sent a prefix; do not blindly retry it.
+```text
+hello
+invalid address
+Ok
+```
 
-UDP `Bind(address, scope)` requires a numeric IP:port (port 0 selects a free
-port), and `SocketAddress(socket)` reports it. `Send(socket, numericAddress,
-bytes, timeoutMs = 0)` sends a datagram; `Receive(socket, timeoutMs = 0)` returns
-Packet with Bytes data and sender address, including empty datagrams. All socket
-resources close once every owner is cancelled; attachment adds an owner. At
-most one reader and one writer may operate concurrently on a resource.
-Timeouts are nonnegative milliseconds up to 9223372036854; zero clears the call's
-deadline and relies on owner cancellation. Socket operations declare net/state
-and calls with timeout support also declare clock. Cancellation is Cancelled;
-transport and timeout errors are IoError, and invalid UTF-8 is ParseError.
-`SplitAddress`/`JoinAddress` are pure host/port helpers; `Resolve(host, scope)`
-resolves IP addresses with scope cancellation and sorts them. TLS is future work.
-See [the network example](../../examples/net/main.bork).
+Port zero chooses an available local port. This example uses only loopback and
+needs no external service.
 
-## Examples
+## API
 
-Import `bork/net` for scope-owned TCP/UDP sockets, binary data and UTF-8 lines,
-per-call timeouts, and address helpers. See [examples/net](../../examples/net/main.bork).
+| Signature | Meaning |
+| --- | --- |
+| `Dial(address: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net + state + clock: Connection \| IoError \| Cancelled` | Open TCP with scope cancellation and an opening timeout. |
+| `Listen(address: String, s: Scope, handler: (Connection, Scope) => Ok \| IoError \| Cancelled) uses net + state: Server \| IoError \| Cancelled` | Serve TCP connections in separate handler scopes. |
+| `Address(server: Server): String` | Read the server address, including its selected port. |
+| `Wait(server: Server) uses net + state: Ok` | Wait for server shutdown. |
+| `LocalAddress(conn: Connection): String` | Read a connection’s local address. |
+| `RemoteAddress(conn: Connection): String` | Read a connection’s peer address. |
+| `Read(conn: Connection, size: ReadSize = 4096, timeoutMs: TimeoutMs = 0) uses net + state + clock: Bytes \| Eof \| IoError \| Cancelled` | Read up to size bytes; Eof means clean stream closure. |
+| `ReadLine(conn: Connection, timeoutMs: TimeoutMs = 0) uses net + state + clock: String \| Eof \| IoError \| Cancelled \| ParseError` | Read and validate a UTF-8 line. |
+| `Write(conn: Connection, data: Bytes, timeoutMs: TimeoutMs = 0) uses net + state + clock: Int \| IoError \| Cancelled` | Write bytes; return the byte count. |
+| `WriteLine(conn: Connection, line: String, timeoutMs: TimeoutMs = 0) uses net + state + clock: Int \| IoError \| Cancelled` | Write text followed by LF. |
+| `Bind(address: String, s: Scope) uses net + state: Socket \| IoError \| Cancelled` | Open a UDP socket on a numeric IP:port. |
+| `SocketAddress(socket: Socket): String` | Read the bound UDP address. |
+| `Receive(socket: Socket, timeoutMs: TimeoutMs = 0) uses net + state + clock: Packet \| IoError \| Cancelled` | Receive a complete datagram and sender address. |
+| `Send(socket: Socket, address: String, data: Bytes, timeoutMs: TimeoutMs = 0) uses net + state + clock: Int \| IoError \| Cancelled` | Send a datagram to a numeric IP:port. |
+| `SplitAddress(address: String): Endpoint \| ParseError` | Parse host and port; reject a missing port. |
+| `JoinAddress(host: String, port: String): String` | Join host and port, including IPv6 brackets. |
+| `Resolve(host: String, s: Scope) uses net + state: List[String] \| IoError \| Cancelled` | Resolve a host to sorted IP strings. |
+
+| Type or fact | Fields or constraint |
+| --- | --- |
+| `Connection`, `Server`, `Socket` | Scope-owned resources. |
+| `Packet` | `data: Bytes`, `address: String` |
+| `Endpoint` | `host: String`, `port: String` |
+| `Eof` | Empty record marking clean TCP stream closure. |
+| `TimeoutMs = Int where ValidTimeout` | 0 through 9223372036854 milliseconds. |
+| `ReadSize = Int where ValidReadSize` | 1 through 16777216 bytes. |
+| `ValidTimeout(n: Int): Bool` | Prove a timeout fits its range. |
+| `ValidReadSize(n: Int): Bool` | Prove a read buffer size fits its range. |
+
+A zero timeout clears the call's deadline and relies on owner cancellation.
+Transport and timeout failures are `IoError`; cancellation is `Cancelled`, and
+invalid UTF-8 is `ParseError`. Socket operations charge `net + state`; timeout
+operations also charge `clock`. A Listen handler also contributes its effects.
+
+## Serve and read TCP
+
+```bork
+import "bork/net"
+
+fn echo(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError | Cancelled {
+  match (net.ReadLine(conn, 1000)) {
+    line: String => { _ = net.WriteLine(conn, line, 1000)?; checkpoint(s) }
+    _: net.Eof => checkpoint(s)
+    error: IoError => error
+    error: ParseError => IoError { path: net.RemoteAddress(conn), message: error.message }
+    stopped: Cancelled => stopped
+  }
+}
+
+fn demo(s: Scope) uses io + net + state + clock: Ok | IoError | Cancelled {
+  server = net.Listen("127.0.0.1:0", s, echo)?
+  client = net.Dial(net.Address(server), s, 1000)?
+  _ = net.WriteLine(client, "hello", 1000)?
+  println(net.ReadLine(client, 1000))
+}
+
+fn main() {
+  println(scope app { demo(app) })
+}
+```
+
+```text
+hello
+Ok
+```
+
+Each connection runs as a task in its own scope. Server cleanup cancels active
+connections and waits for handlers. Handler errors and panics are logged and
+isolated from other connections. `Wait` waits for shutdown; it does not request
+shutdown itself.
+
+`Read` returns up to its requested size, which can be fewer bytes than a complete
+application message. `ReadLine` removes LF or CRLF, preserves a final bare CR,
+and returns a final unterminated line before `Eof`. A line timeout retains the
+consumed prefix for the next `ReadLine` or `Read`.
+
+One reader and one writer can operate concurrently on a resource. Failed writes
+can be partial; retrying the complete payload can duplicate a prefix. Resources
+follow their owners' cancellation; attachment extends ownership, so cancellation
+occurs once every owner is cancelled. See [scopes](../language/scopes.md).
+
+## Address helpers and UDP
+
+```bork
+import "bork/net"
+
+fn main() {
+  address = net.JoinAddress("::1", "8080")
+  println(address)
+  println(net.SplitAddress(address))
+}
+```
+
+```text
+[::1]:8080
+Endpoint { host: "::1", port: "8080" }
+```
+
+`Bind` and `Send` require numeric IP:port addresses; resolve names with
+`Resolve(host, s)` when necessary. `Receive` returns a whole datagram, including
+zero-length data. Datagram boundaries are retained, unlike TCP stream reads.
+
+See the [network example](../../examples/net/main.bork).
+
+Run `bork doc bork/net` for the generated reference.
+
+[All standard packages](README.md)

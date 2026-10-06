@@ -24,6 +24,15 @@
     (while (search-forward "Found" nil t)
       (should (eq (get-text-property (- (point) 5) 'face) 'font-lock-type-face)))))
 
+(ert-deftest bork-tag-group-highlighting ()
+  (with-temp-buffer
+    (insert "type Row = { value: Int codec { name: \"v\" } }\n")
+    (bork-mode)
+    (font-lock-ensure)
+    (goto-char (point-min))
+    (search-forward "codec")
+    (should (eq (get-text-property (- (point) 5) 'face) 'font-lock-preprocessor-face))))
+
 (ert-deftest bork-shebang ()
   (with-temp-buffer
     (insert "#!/usr/bin/env -S bork script\nprintln(1)\n")

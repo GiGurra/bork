@@ -1,29 +1,88 @@
 # bork/compress
 
-## Compression
+`bork/compress` encodes gzip bytes and streams compression between scoped files.
 
-`bork/compress` supplies gzip Bytes codecs, suitable for HTTP bodies, and
-streaming `GzipTo` / `GunzipTo` transfers between scope-owned `bork/fs.File`
-handles. Codecs are pure; file operations declare `uses io`. All failures are
-IoError union results. Files remain owned by their original scopes. Transfers
-start at the current offsets and return the uncompressed byte count.
+```bork
+import "bork/compress"
+import "bork/encoding"
 
-## Compression API
+fn demo() uses io: Ok | IoError | ParseError {
+  packed = compress.Gzip(encoding.Utf8("hello"))?
+  println(encoding.ParseUtf8(compress.Gunzip(packed)?)?)
+  match (compress.Gunzip(packed, maxBytes: 4)) {
+    _: IoError => println("uncompressed data exceeds limit")
+    _: Bytes => println("decompressed")
+  }
+}
 
-- **Compression and archives:** `bork/compress` provides `Gzip(Bytes)` and
-  `Gunzip(Bytes, maxBytes = 67108864)` returning `Bytes | IoError`.
-  `GzipTo(source: fs.File, target: fs.File)` and `GunzipTo(source, target,
-  maxBytes = 67108864)` stream between scoped files and return `Int | IoError`
-  (uncompressed byte count).
+fn main() {
+  println(demo())
+}
+```
 
-## Shared archive limits
+```text
+hello
+uncompressed data exceeds limit
+Ok
+```
 
-See [archive operations and shared limits](archive.md#archives).
+## API
 
-## Examples
+| Signature | Meaning |
+| --- | --- |
+| `Gzip(data: Bytes): Bytes \| IoError` | Encode bytes as gzip. |
+| `Gunzip(data: Bytes, maxBytes: Int = 67108864): Bytes \| IoError` | Decode gzip with a cumulative uncompressed byte limit. |
+| `GzipTo(source: fs.File, target: fs.File) uses io: Int \| IoError` | Compress from source’s current offset to target’s current offset. |
+| `GunzipTo(source: fs.File, target: fs.File, maxBytes: Int = 67108864) uses io: Int \| IoError` | Decompress files within the byte limit. |
 
-Import `bork/compress` for gzip Bytes codecs and streaming transfers between
-`bork/fs.File` handles. `bork/archive` reads and writes ZIP/TAR file and directory
-members, with Bytes codecs and file iteration/writing. Readers default to a
-64 MiB cumulative decompression limit and reject unsafe archive names and links;
-errors are `IoError` values. See [examples/compress_archive](../../examples/compress_archive/main.bork).
+All failures are `IoError` values. Codecs are pure; streaming operations use
+`io`, retain file ownership, begin at current offsets, and return the number
+of uncompressed bytes transferred.
+
+## Stream between files
+
+```bork
+import "bork/compress"
+import "bork/fs"
+
+fn demo(s: Scope) uses io: Ok | fs.Error | IoError {
+  original = fs.TempFile(s)?
+  _ = fs.WriteText(original, "hello")?
+  source = fs.Open(fs.Path(original), s)?
+  packed = fs.TempFile(s)?
+  println(compress.GzipTo(source, packed))
+  input = fs.Open(fs.Path(packed), s)?
+  output = fs.TempFile(s)?
+  println(compress.GunzipTo(input, output))
+}
+
+fn main() {
+  println(scope app { demo(app) })
+}
+```
+
+```text
+5
+5
+Ok
+```
+
+## Bound decompression
+
+The default `maxBytes` is 67108864 (64 MiB), counting total uncompressed bytes
+across concatenated gzip members. Zero accepts only empty decompressed data;
+negative limits return `IoError`. Checksums are verified. Invalid headers,
+truncated input, checksum failures, and an exceeded limit also return `IoError`.
+
+The limit does not bound compressed input, metadata, or CPU time. Pure `Gunzip`
+returns no partial output on error; `GunzipTo` may have written a prefix before
+failing, but never writes past the configured uncompressed byte limit. Temporary
+output followed by a successful rename can keep an existing destination intact.
+
+See [archive format limits](archive.md#formats-and-shared-limits) and the
+[compression and archive example](../../examples/compress_archive/main.bork).
+
+
+Run `bork doc bork/compress` for the generated reference.
+
+[All standard packages](README.md)
