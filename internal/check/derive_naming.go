@@ -11,7 +11,7 @@ import (
 // code. Recognize their resolved package/function identity during expansion.
 func (p *deriveExpansion) namingCall(call *syntax.Call) (any, bool) {
 	id, ok := call.Fun.(*syntax.Ident)
-	if !ok || len(call.TypeArgs) != 0 {
+	if !ok {
 		return nil, false
 	}
 	alias, member, qualified := strings.Cut(id.Name, ".")
@@ -22,6 +22,48 @@ func (p *deriveExpansion) namingCall(call *syntax.Call) (any, bool) {
 		member = id.Name
 	}
 	if pkg == nil || pkg.Path != "bork/codec" {
+		return nil, false
+	}
+	if member == "omitAllowed" {
+		if len(call.TypeArgs) != 1 || len(call.Args) != 2 {
+			return nil, false
+		}
+		value, known := p.eval(call.Args[0])
+		descriptor, fieldOK := value.(shapeField)
+		policy, policyKnown := p.eval(call.Args[1])
+		variant, policyOK := policy.(metadataVariant)
+		if !known || !fieldOK || !policyKnown || !policyOK || variant.typ.Pkg == nil || variant.typ.Pkg.Path != "bork/codec" || variant.typ.Name != "Omit" {
+			return nil, false
+		}
+		if variant.name == "Never" {
+			return true, true
+		}
+		field := descriptor.field
+		if field.Computed || field.Lazy || descriptor.positional() {
+			return false, true
+		}
+		if variant.name == "Default" || variant.name == "NoneOrDefault" {
+			if field.Decl == nil || field.Decl.Default == nil || !comparable(field.Type) {
+				return false, true
+			}
+		}
+		if variant.name == "None" || variant.name == "NoneOrDefault" {
+			option, ok := field.Type.(*Sealed)
+			if !ok || option.Base != p.c.preludePkg.TypeNamed("Option") {
+				return false, true
+			}
+			if field.Decl != nil && field.Decl.Default != nil {
+				p.c.ensureFieldDefault(field)
+				value, known := p.checkedTagValue(p.c.info.fieldDefaults[field])
+				defaultVariant, ok := value.(metadataVariant)
+				if !known || !ok || defaultVariant.name != "None" || defaultVariant.typ.Base != option.Base {
+					return false, true
+				}
+			}
+		}
+		return true, true
+	}
+	if len(call.TypeArgs) != 0 {
 		return nil, false
 	}
 	switch member {

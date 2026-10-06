@@ -30,7 +30,7 @@ Import [bork/codec](codec.md) for the value tree and Encode/Decode classes, and 
 
 ## Derived wire names
 
-Derived record keys and sealed names follow the [codec naming policies and typed tags](codec.md#wire-names). Payload-free sealed types encode as canonical bare strings: `SiteAdmin` becomes `"SITE_ADMIN"` by default. Decoding accepts `"SITE_ADMIN"` or `{"type":"SITE_ADMIN"}`; the old source name `"SiteAdmin"` needs an explicit `Verbatim` policy. Mixed sealed types keep their discriminator objects. Naming also applies to decode error paths. Declared aliases read old spellings but always encode the canonical name. A second spelling for one field is an error. Set `unknown: codec.Unknown.Reject` on the type to reject unrecognized object keys.
+Derived record keys and sealed names follow the [codec naming policies and typed tags](codec.md#wire-names). Payload-free sealed types encode as canonical bare strings: `SiteAdmin` becomes `"SITE_ADMIN"` by default. Decoding accepts `"SITE_ADMIN"` or `{"type":"SITE_ADMIN"}`; the old source name `"SiteAdmin"` needs an explicit `Verbatim` policy. Mixed sealed types keep their discriminator objects. Naming also applies to decode error paths. Declared aliases read old spellings but always encode the canonical name. A second spelling for one field is an error. Set `unknown: codec.Unknown.Reject` on the type to reject unrecognized object keys. A field's `omit` policy can skip None or default values only when derived decoding can restore the same value.
 
 ## Text API
 

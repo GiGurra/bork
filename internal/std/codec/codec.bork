@@ -312,11 +312,14 @@ derive instance encodeShape[T]: Encode[T] {
           Value.Array { items: values }
         } else {
           CheckWireNames[T]()
-          fields: List[Field] = [comptime for (field in shape.fields[T]())
+          fieldChunks: List[List[Field]] = [comptime for (field in shape.fields[T]())
             comptime if (!field.computed) {
-              Field { name: FieldWireName[T](field), value: encode[field.Type](field.read(x)) }
+              if (ShouldOmit[T](field, field.read(x))) {
+                empty: List[Field] = []
+                empty
+              } else { [Field { name: FieldWireName[T](field), value: encode[field.Type](field.read(x)) }] }
           }]
-          Value.Object { fields: fields }
+          Value.Object { fields: fieldChunks.flatMap(chunk => chunk) }
         }
       }
       shape.Sealed => {
@@ -348,12 +351,15 @@ derive instance encodeShape[T]: Encode[T] {
                       Field { name: "values", value: Value.Array { items: values } }
                     ] }
                   } else {
-                    fields: List[Field] = [comptime for (field in variant.fields)
+                    fieldChunks: List[List[Field]] = [comptime for (field in variant.fields)
                       comptime if (!field.computed) {
-                        Field { name: FieldWireName[T](field), value: encode[field.Type](field.read(payload)) }
+                        if (ShouldOmit[T](field, field.read(payload))) {
+                          empty: List[Field] = []
+                          empty
+                        } else { [Field { name: FieldWireName[T](field), value: encode[field.Type](field.read(payload)) }] }
                     }]
                     return Value.Object { fields: prepend(
-                      Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } }, fields) }
+                      Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } }, fieldChunks.flatMap(chunk => chunk)) }
                   }
                 }
               }

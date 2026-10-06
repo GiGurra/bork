@@ -1,0 +1,24 @@
+{"included":null}
+Row { optionalValue: Option.None, count: 3, optionalDefault: Option.None, included: Option.None }
+Row { optionalValue: Option.None, count: 3, optionalDefault: Option.None, included: Option.None }
+{"optionalValue":1,"count":5,"optionalDefault":2,"included":null}
+Row { optionalValue: Option.Some(1), count: 5, optionalDefault: Option.Some(2), included: Option.None }
+Row { optionalValue: Option.Some(1), count: 5, optionalDefault: Option.Some(2), included: Option.None }
+{}
+DefaultSome { value: Option.Some(4) }
+DefaultSome { value: Option.Some(4) }
+{"value":null}
+DefaultSome { value: Option.None }
+DefaultSome { value: Option.None }
+{"type":"Item"}
+Mixed.Item { value: 4 }
+Mixed.Item { value: 4 }
+{}
+AliasOption { value: Option.None }
+AliasOption { value: Option.None }
+{}
+ListDefault { numbers: [] }
+ListDefault { numbers: [] }
+{"numbers":[1,2]}
+ListDefault { numbers: [1, 2] }
+ListDefault { numbers: [1, 2] }

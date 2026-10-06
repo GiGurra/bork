@@ -4,7 +4,8 @@ import "bork/shape"
 type Naming = sealed { Verbatim, Camel, Pascal, Snake, Kebab, ScreamingSnake }
 type Unknown = sealed { Ignore, Reject }
 type TypeTags = { naming: Option[Naming] = Option.None, unknown: Unknown = Unknown.Ignore }
-type FieldTags = { name: Option[String] = Option.None, aliases: List[String] = [] }
+type Omit = sealed { Never, None, Default, NoneOrDefault }
+type FieldTags = { name: Option[String] = Option.None, aliases: List[String] = [], omit: Omit = Omit.Never }
 type VariantTags = { name: Option[String] = Option.None, aliases: List[String] = [], fallback: Bool = false }
 
 // Words splits separators and transitions in names, retaining digits within
@@ -80,9 +81,12 @@ derive fn CheckPositionalNames[T](fields: List[shape.Field[T]]): Ok {
 }
 derive fn CheckWireNames[T](): Ok {
   comptime match (shape.kind[T]()) {
-    shape.Record => { comptime if (!shape.positional[T]()) { CheckFieldNames[T](shape.fields[T]()) } else { CheckPositionalNames[T](shape.fields[T]()) } }
+    shape.Record => {
+      CheckFieldOmit[T](shape.fields[T]())
+      comptime if (!shape.positional[T]()) { CheckFieldNames[T](shape.fields[T]()) } else { CheckPositionalNames[T](shape.fields[T]()) } }
     shape.Sealed => {
       comptime for (variant in shape.variants[T]()) {
+        CheckFieldOmit[T](variant.fields)
         comptime if (!VariantFallback[T](variant)) {
           comptime if (!wireAliasesAllowed(VariantAliases[T](variant), true)) { shape.fail("codec variant '" + variant.name + "' has an invalid YAML alias") }
           comptime if (!variantNameAllowed(VariantWireName[T](variant))) { shape.fail("codec variant '" + variant.name + "' has invalid YAML wire name '" + VariantWireName[T](variant) + "'") }
@@ -147,4 +151,26 @@ fn wireNamesHave(names: List[String], name: String): Bool { names.includes(name)
 // Fallback behavior and its shape restrictions are supplied by enum support.
 derive fn VariantFallback[T](variant: shape.Variant[T]): Bool {
   variant.tagged[VariantTags]().getOr(VariantTags {}).fallback
+}
+
+derive fn FieldOmit[T](field: shape.Field[T]): Omit {
+  field.tagged[FieldTags]().getOr(FieldTags {}).omit
+}
+fn omitAllowed[T](field: shape.Field[T], omit: Omit): Bool unsafe go { panic("omitAllowed requires derive expansion") }
+derive fn CheckFieldOmit[T](fields: List[shape.Field[T]]): Ok {
+  comptime for (field in fields) {
+    comptime if (!omitAllowed[T](field, FieldOmit[T](field))) {
+      shape.fail("codec omit on field '" + field.name + "' is not round-trip safe: None requires Option with no default or a None default; Default requires an eager equality-capable default; computed and positional fields cannot omit")
+    }
+  }
+  Ok
+}
+derive fn ShouldOmit[T](field: shape.Field[T], value: field.Type): Bool {
+  comptime if (FieldOmit[T](field) == Omit.Never) { false } else {
+    comptime if (FieldOmit[T](field) == Omit.None) { value.isNone() } else {
+      comptime if (FieldOmit[T](field) == Omit.Default) { value == field.default() } else {
+        value.isNone() || value == field.default()
+      }
+    }
+  }
 }
