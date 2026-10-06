@@ -50,6 +50,12 @@ fn parseInput(name: String, description: String, args: List[String], specs: List
   }
 }
 fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schema: List[inputField], configFiles: List[String], parse: (String) => codec.Value | codecs.JsonError, makeName: (String) => String, completions: List[Completion], invoke: (Completion, CompletionRequest) uses io + net + clock + random + state => Suggestions | Error, s: Scope): adapter | Error unsafe go {
+  return buildCommandAdapter(name, description, specs, schema, configFiles, parse, makeName, completions, invoke, false, s)
+}
+fn buildRootAdapter(name: String, description: String, specs: List[FieldSpec], schema: List[inputField], configFiles: List[String], parse: (String) => codec.Value | codecs.JsonError, makeName: (String) => String, completions: List[Completion], invoke: (Completion, CompletionRequest) uses io + net + clock + random + state => Suggestions | Error, s: Scope): adapter | Error unsafe go {
+  return buildCommandAdapter(name, description, specs, schema, configFiles, parse, makeName, completions, invoke, true, s)
+}
+fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec], schema: List[inputField], configFiles: List[String], parse: (String) => codec.Value | codecs.JsonError, makeName: (String) => String, completions: List[Completion], invoke: (Completion, CompletionRequest) uses io + net + clock + random + state => Suggestions | Error, persistent: Bool, s: Scope): adapter | Error unsafe go {
   import "fmt"
   import "reflect"
   import "sort"
@@ -101,6 +107,7 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
     doc := flag.description
     if field.hasDefault { doc += " (default " + field.defaultText + ")" } else if !field.optional { doc += " (required)" }
     tag := "optional:\"true\" descr:" + strconv.Quote(strings.TrimSpace(doc))
+    if persistent { tag += " persistent:\"true\"" }
     if list { tag += " collection:\"array\"" }
     if short := mappingName(flag.short); short != "" { tag += " short:" + strconv.Quote(short) }
     policies := []string{}
@@ -217,6 +224,9 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
   }
   cmd, err := command.ToCobraE()
   if err != nil { return Error{errors: []codec.DecodeError{{path: name, message: err.Error()}}} }
+  declaring := cmd
+  configuredFlags := cmd.Flags()
+  if persistent { configuredFlags = cmd.PersistentFlags() }
   positionalCompletions := map[int]func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective){}
   listPosition := -1
   for _, spec := range specs {
@@ -241,8 +251,10 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
         }
         // Reuse boa's ordinary positional/env binding pipeline on optional
         // raw pointers. It has no user hooks or complete-record decoder.
-        if err := cmd.ValidateArgs(args); err != nil { return fail([]codec.DecodeError{{path: cmd.CommandPath(), message: err.Error()}}) }
-        if err := cmd.PreRunE(cmd, args); err != nil { return fail([]codec.DecodeError{{path: cmd.CommandPath(), message: err.Error()}}) }
+        if !persistent { if err := declaring.ValidateArgs(args); err != nil { return fail([]codec.DecodeError{{path: cmd.CommandPath(), message: err.Error()}}) } }
+        bind := declaring.PreRunE
+        if persistent { bind = declaring.PersistentPreRunE }
+        if bind != nil { if err := bind(cmd, args); err != nil { return fail([]codec.DecodeError{{path: cmd.CommandPath(), message: err.Error()}}) } }
         collected := collect(args, true)
         if failure, bad := collected.(Error); bad { return fail(failure.errors) }
         input := collected.(inputCollection)
@@ -303,8 +315,8 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
     if long == "" { continue }
     if err := cmd.RegisterFlagCompletionFunc(long, complete); err != nil { return Error{errors: []codec.DecodeError{{path: spec.field, message: err.Error()}}} }
 
-    if spec.hidden { if err := cmd.Flags().MarkHidden(long); err != nil { return Error{errors: []codec.DecodeError{{path: spec.field, message: err.Error()}}} } }
-    if spec.deprecated != "" { if err := cmd.Flags().MarkDeprecated(long, spec.deprecated); err != nil { return Error{errors: []codec.DecodeError{{path: spec.field, message: err.Error()}}} } }
+    if spec.hidden { if err := configuredFlags.MarkHidden(long); err != nil { return Error{errors: []codec.DecodeError{{path: spec.field, message: err.Error()}}} } }
+    if spec.deprecated != "" { if err := configuredFlags.MarkDeprecated(long, spec.deprecated); err != nil { return Error{errors: []codec.DecodeError{{path: spec.field, message: err.Error()}}} } }
   }
   if len(positionalCompletions) != 0 {
     cmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {

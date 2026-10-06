@@ -40,7 +40,14 @@ fn resolve[T: codec.Decode](flags: List[Flag], settings: Settings, name: String)
 fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: String, makeName: (String) => String): List[FieldSpec] | Error {
   resolveFieldsWithSchema[T](codec.Schema[T](), flags, settings, name, makeName)
 }
-fn resolveFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchema], flags: List[Flag], settings: Settings, name: String, makeName: (String) => String): List[FieldSpec] | Error unsafe go {
+type resolvedFields = { fields: List[FieldSpec], automaticShorts: List[String] }
+fn resolveFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchema], flags: List[Flag], settings: Settings, name: String, makeName: (String) => String): List[FieldSpec] | Error {
+  match (resolveMetadataWithSchema[T](recordSchema, flags, settings, name, makeName)) {
+    error: Error => error
+    resolved: resolvedFields => resolved.fields
+  }
+}
+fn resolveMetadataWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchema], flags: List[Flag], settings: Settings, name: String, makeName: (String) => String): resolvedFields | Error unsafe go {
   import "fmt"
   import "strings"
   import "unicode"
@@ -94,6 +101,7 @@ fn resolveFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSch
   occupied := map[string]bool{"h": true}
   for _, flag := range metadata { if short := nameOf(flag.shortName); short != "" { occupied[short] = true } }
   specs := []FieldSpec{}
+  automaticShorts := []string{}
   names, shorts, envs := map[string]string{}, map[string]string{}, map[string]string{}
   positional, configField := "", ""
   positions := map[int64]string{}
@@ -115,6 +123,7 @@ fn resolveFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSch
     doc := field.doc
     if description, ok := flag.description.(Option_Some[string]); ok { doc = description.E0 }
     spec := FieldSpec{field: field.name, long: flag.long, short: flag.shortName, env: flag.envName, description: doc, positional: flag.positional, position: flag.position, configFile: flag.configFile, config: flag.config, hidden: flag.hidden, deprecated: flag.deprecated, choices: flag.choices, strictChoices: flag.strictChoices, files: flag.files, directories: flag.directories, keepOrder: flag.keepOrder}
+    automaticShort := false
     derive := func(spec FieldSpec) FieldSpec {
       if _, auto := spec.long.(Mapping_Auto); auto {
         spec.long = Mapping_Disabled{}
@@ -125,6 +134,7 @@ fn resolveFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSch
         spec.short = Mapping_Disabled{}
         if settings.autoShort && long != "" && !isPositional(spec) && long[0] < 128 && unicode.IsLetter(rune(long[0])) && !occupied[long[:1]] {
           spec.short = Mapping_Named{name: long[:1]}
+          automaticShort = true
         }
       }
       if _, auto := spec.env.(Mapping_Auto); auto {
@@ -138,7 +148,11 @@ fn resolveFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSch
       return spec
     }
     spec = derive(spec)
-    for _, enrich := range settings.enrichers { spec = enrich(append([]FieldSpec{}, specs...), spec) }
+    for _, enrich := range settings.enrichers {
+      before := spec.short
+      spec = enrich(append([]FieldSpec{}, specs...), spec)
+      if spec.short != before { automaticShort = false }
+    }
     if spec.field != field.name { fail(field.name, "enricher must preserve field identity") }
     spec = derive(spec)
     long, short, env := nameOf(spec.long), nameOf(spec.short), nameOf(spec.env)
@@ -199,6 +213,7 @@ fn resolveFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSch
       }
     }
     specs = append(specs, spec)
+    if automaticShort && short != "" { automaticShorts = append(automaticShorts, long) }
   }
   if len(positions) != 0 {
     if positional != "" { fail(positional, "cannot mix positional shorthand with indexed positions") }
@@ -214,5 +229,5 @@ fn resolveFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSch
     }
   }
   if len(errors) != 0 { return Error{errors: errors} }
-  return specs
+  return resolvedFields{fields: specs, automaticShorts: automaticShorts}
 }
