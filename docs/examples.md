@@ -129,6 +129,7 @@ These examples build on [bork/cli](std/cli.md). Configuration and catalog paths 
 | [cli_fleet](../examples/cli_fleet/main.bork) | A complete nested CLI with config files and dynamic choices | `(cd examples/cli_fleet && bork run . -- k r d --config settings.json --catalog catalog.json --namespace team -r 2 apply web worker)` |
 | [cli_mapping](../examples/cli_mapping/main.bork) | Explicit long and short flag mappings | `(cd examples/cli_mapping && bork run . -- -s api.example -p 443)` |
 | [cli_positionals](../examples/cli_positionals/main.bork) | Ordered positional arguments and a trailing list | `(cd examples/cli_positionals && bork run . -- copy 2 first.txt second.txt)` |
+| [cli_root](../examples/cli_root/main.bork) | Typed root options inherited by nested subcommands | `bork run examples/cli_root -- --region east services deploy --service api --replicas 3 --verbose` |
 | [cli_tree](../examples/cli_tree/main.bork) | Nested typed subcommands | `(cd examples/cli_tree && bork run . -- k d -n prod web worker)` |
 | [cli_names_auto](../examples/cli_names_auto/main.bork) | Derived flag, short and environment names | `NAMES_HTTP_PORT=9090 bork run examples/cli_names_auto -- -s api.example -v` |
 | [cli_names_manual](../examples/cli_names_manual/main.bork) | Explicit flag, short and environment names | `MANUAL_PORT=5433 MANUAL_TOKEN=secret bork run examples/cli_names_manual -- --addr db.internal` |

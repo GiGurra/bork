@@ -1,0 +1,97 @@
+import "bork/codec"
+import codecs "bork/json"
+import "bork/process"
+use codec.Defaults
+
+// RootCommand binds descendant handlers to the same validated root option type.
+// The existing Command metadata is available through command.copy.
+type RootCommand[R] = { command: Command }
+
+type rootPlan = {
+  prepared: adapter
+  automaticShorts: List[String]
+  hasHandler: Bool
+  apply: (parsedInput, Scope) uses io + net + clock + random + state => Ok | Error
+}
+
+// RootSubcommand receives root and leaf options only after both are valid.
+fn RootSubcommand[R: codec.Decode, T: codec.Decode](name: String, description: String, run: (R, T, Scope) uses io + net + clock + random + state => Ok, flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}, completions: List[Completion] = []): RootCommand[R] {
+  leaf = makeSubcommand[T](name, description, (options, s) => {}, configFiles, resolve[T](flags, settings, name), inputFields[T](name), settings.completion, completions)
+  RootCommand[R] { command: leaf.copy(rootApply: Option.Some((root, child, s) => applyRootChild[R, T](root, child, s, run))) }
+}
+
+fn applyRootChild[R: codec.Decode, T: codec.Decode](root: parsedInput, child: parsedInput, s: Scope, run: (R, T, Scope) uses io + net + clock + random + state => Ok) uses io + net + clock + random + state: Ok | Error {
+  rootResult = codec.decode[R](root.value)
+  childResult = codec.decode[T](child.value)
+  rootErrors = match (rootResult) {
+    error: codec.DecodeError => [error.copy(path: s".root${error.path}")]
+    _: R => []
+  }
+  childErrors = match (childResult) {
+    error: codec.DecodeError => [error]
+    _: T => []
+  }
+  failures = rootErrors.concat(childErrors)
+  if (!failures.isEmpty()) { return withWarnings(Error { errors: failures }, child.warnings, child.path) }
+  match (rootResult) {
+    options: R => match (childResult) {
+      childOptions: T => {
+        for (warning in child.warnings) { printError(s"${warning}\n") }
+        run(options, childOptions, s)
+      }
+      error: codec.DecodeError => Error { errors: [error] }
+    }
+    error: codec.DecodeError => Error { errors: [error.copy(path: s".root${error.path}")] }
+  }
+}
+
+// RootGroup routes root-bound leaves without declaring another options record.
+fn RootGroup[R](name: String, description: String, children: List[RootCommand[R]]): RootCommand[R] {
+  RootCommand[R] { command: Group(name, description, children.map(child => child.command)) }
+}
+
+// DispatchRoot accepts arguments explicitly. Every enabled root flag is
+// inherited by descendants; root positionals are not supported. Root/leaf
+// config chains are separate and retain their usual source precedence.
+fn DispatchRoot[R: codec.Decode](name: String, description: String, arguments: List[String], commands: List[RootCommand[R]], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}, completions: List[Completion] = [], run: Option[(R, Scope) uses io + net + clock + random + state => Ok] = Option.None) uses io + net + clock + random + state: Ok | Error | Help {
+  scope s {
+    match (prepareRoot[R](name, description, flags, configFiles, settings, completions, run, s)) {
+      error: Error => error
+      root: rootPlan => dispatch(name, description, arguments, commands.map(command => command.command), s, settings.completion, configureCompletion, printError, Option.Some(root))
+    }
+  }
+}
+
+// RunRoot reads process arguments and prints help/completion output. When no
+// child is selected, run handles the root invocation; omitting it shows help.
+fn RunRoot[R: codec.Decode](name: String, description: String, commands: List[RootCommand[R]], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}, completions: List[Completion] = [], run: Option[(R, Scope) uses io + net + clock + random + state => Ok] = Option.None) uses io + net + clock + random + state: Ok | Error {
+  match (DispatchRoot[R](name, description, process.Args(), commands, flags, configFiles, settings, completions, run)) {
+    help: Help => { print(help.text); printError(help.diagnostics) }
+    error: Error => error
+    Ok => {}
+  }
+}
+
+fn prepareRoot[R: codec.Decode](name: String, description: String, flags: List[Flag], configFiles: List[String], settings: Settings, completions: List[Completion], run: Option[(R, Scope) uses io + net + clock + random + state => Ok], s: Scope): rootPlan | Error {
+  resolved = resolveMetadataWithSchema[R](codec.Schema[R](), flags, settings, name, flagName)?
+  schema = inputFields[R](name)?
+  errors = resolved.fields.filter(field => field.positional).map(field => codec.DecodeError { path: s".root.${field.field}", message: "root fields cannot be positional" })
+  if (!errors.isEmpty()) { return Error { errors: errors } }
+  factory = nativeFactory(description, configFiles, resolved.fields, schema, completions, codecs.Parse, flagName, invokeCompletion, buildRootAdapter)
+  prepared = factory(name, s)?
+  rootPlan {
+    prepared: prepared
+    automaticShorts: resolved.automaticShorts
+    hasHandler: run.isSome()
+    apply: (input, owner) => match (codec.decode[R](input.value)) {
+      error: codec.DecodeError => withWarnings(Error { errors: [error.copy(path: s".root${error.path}")] }, input.warnings, input.path)
+      options: R => {
+        for (warning in input.warnings) { printError(s"${warning}\n") }
+        match (run) {
+          Option.Some(handle) => handle(options, owner)
+          Option.None => {}
+        }
+      }
+    }
+  }
+}

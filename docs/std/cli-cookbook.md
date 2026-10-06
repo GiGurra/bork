@@ -235,11 +235,12 @@ embedded tests.
 | Environment naming and precedence | [cli_env](../../examples/cli_env/main.bork) |
 | Composed pure enrichers | [cli_enrichers](../../examples/cli_enrichers/main.bork) |
 | Static choices and shell scripts | [cli_completion](../../examples/cli_completion/main.bork) |
+| Shared root options across nested commands | [cli_root](../../examples/cli_root/main.bork) |
 | Nested groups, aliases, and handler scopes | [cli_tree](../../examples/cli_tree/main.bork) |
 | Partial options and dynamic suggestions | [cli_dynamic](../../examples/cli_dynamic/main.bork) |
 | Indexed positionals and command deprecation | [cli_positionals](../../examples/cli_positionals/main.bork) |
 
 The [API guide](cli.md) describes diagnostics, completion directives, and the
-current limits: JSON config, flat option records, no persistent root flags, and
+current limits: JSON config, flat option records and
 no user lifecycle hooks. Native Cobra completion syntax/routing errors retain
 Cobra's protocol behavior; application callback errors use `:1`.

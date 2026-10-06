@@ -62,6 +62,14 @@ fn configureHelp(native: nativeCommand, specs: List[FieldSpec], fields: List[inp
     if field.hasDefault { doc += " (default " + defaultLabel(field) + ")" } else if !field.optional { doc += " (required)" }
     envLines = append(envLines, fmt.Sprintf("  %s %s  %s", env.name, typeLabel(field), strings.TrimSpace(doc)))
   }
+  for name, label := range labels {
+    if flag := cmd.Flag(name); flag != nil {
+      if flag.Annotations == nil { flag.Annotations = map[string][]string{} }
+      flag.Annotations["bork.inputType"] = []string{label}
+    }
+  }
+  if cmd.Annotations == nil { cmd.Annotations = map[string]string{} }
+  cmd.Annotations["bork.envHelp"] = strings.Join(envLines, "\n")
   usage := cmd.UsageFunc()
   cmd.SetUsageFunc(func(current *cobra.Command) error {
     out, errOut := current.OutOrStdout(), current.ErrOrStderr()
@@ -72,33 +80,41 @@ fn configureHelp(native: nativeCommand, specs: List[FieldSpec], fields: List[inp
     current.SetOut(out)
     current.SetErr(errOut)
     if err != nil { return err }
-    flagRows := current.LocalFlags().FlagUsages()
-    lines := strings.Split(flagRows, "\n")
-    // Preserve Cobra's command/positional layout and pflag's wrapping. Change
-    // only value labels at the start of known flag rows, never descriptions.
-    current.LocalFlags().VisitAll(func(flag *pflag.Flag) {
-      label, known := labels[flag.Name]
-      previous, _ := pflag.UnquoteUsage(flag)
-      if !known || previous == "" { return }
-      prefix := "      --"+flag.Name+" "
-      if flag.Shorthand != "" { prefix = "  -"+flag.Shorthand+", --"+flag.Name+" " }
-      replacement := label
-      if len(label) < len(previous) { replacement += strings.Repeat(" ", len(previous)-len(label)) }
-      for i, line := range lines {
-        if !strings.HasPrefix(line, prefix+previous+" ") { continue }
-        suffix := strings.TrimPrefix(line, prefix+previous)
-        // Longer labels consume padding while retaining a word separator.
-        for extra := len(label)-len(previous); extra > 0 && strings.HasPrefix(suffix, "  "); extra-- { suffix = suffix[1:] }
-        lines[i] = prefix+replacement+suffix
-      }
-    })
-    // Cobra also prints user examples verbatim. Replace its actual flag block,
-    // which follows examples, rather than rewriting similar example lines.
     text := captured.String()
-    before := strings.TrimRight(flagRows, " \t\r\n")
-    after := strings.TrimRight(strings.Join(lines, "\n"), " \t\r\n")
-    if before != "" { if index := strings.LastIndex(text, before); index >= 0 { text = text[:index]+after+text[index+len(before):] } }
-    if len(envLines) != 0 { text = strings.TrimRight(text, "\n")+"\n\nEnvironment variables:\n"+strings.Join(envLines, "\n")+"\n" }
+    // Inherited flag pointers carry their declaring record's input labels.
+    for _, flags := range []*pflag.FlagSet{current.LocalFlags(), current.InheritedFlags()} {
+      flagRows := flags.FlagUsages()
+      lines := strings.Split(flagRows, "\n")
+      // Preserve Cobra's command/positional layout and pflag's wrapping. Change
+      // only value labels at the start of known flag rows, never descriptions.
+      flags.VisitAll(func(flag *pflag.Flag) {
+        label, known := labels[flag.Name]
+        if declared := flag.Annotations["bork.inputType"]; len(declared) != 0 { label, known = declared[0], true }
+        previous, _ := pflag.UnquoteUsage(flag)
+        if !known || previous == "" { return }
+        prefix := "      --"+flag.Name+" "
+        if flag.Shorthand != "" { prefix = "  -"+flag.Shorthand+", --"+flag.Name+" " }
+        replacement := label
+        if len(label) < len(previous) { replacement += strings.Repeat(" ", len(previous)-len(label)) }
+        for i, line := range lines {
+          if !strings.HasPrefix(line, prefix+previous+" ") { continue }
+          suffix := strings.TrimPrefix(line, prefix+previous)
+          // Longer labels consume padding while retaining a word separator.
+          for extra := len(label)-len(previous); extra > 0 && strings.HasPrefix(suffix, "  "); extra-- { suffix = suffix[1:] }
+          lines[i] = prefix+replacement+suffix
+        }
+      })
+      // Cobra also prints user examples verbatim. Replace its actual flag block,
+      // which follows examples, rather than rewriting similar example lines.
+      before := strings.TrimRight(flagRows, " \t\r\n")
+      after := strings.TrimRight(strings.Join(lines, "\n"), " \t\r\n")
+      if before != "" { if index := strings.LastIndex(text, before); index >= 0 { text = text[:index]+after+text[index+len(before):] } }
+    }
+    environment := []string{}
+    for owner := current; owner != nil; owner = owner.Parent() {
+      if lines := owner.Annotations["bork.envHelp"]; lines != "" { environment = append(environment, lines) }
+    }
+    if len(environment) != 0 { text = strings.TrimRight(text, "\n")+"\n\nEnvironment variables:\n"+strings.Join(environment, "\n")+"\n" }
     _, err = fmt.Fprint(out, text)
     return err
   })

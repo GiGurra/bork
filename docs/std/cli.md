@@ -351,6 +351,52 @@ prints warnings the same way. Failed parses retain warnings in their error list.
 Help contains text for stdout and diagnostics for stderr; explicit-argument APIs
 return both without printing. Run and RunCommands print the corresponding streams.
 
+## Persistent root flags
+
+Use `RootCommand[R]`, `RootSubcommand[R, T]` and `RootGroup[R]` when descendants
+share a root options record. The leaf handler receives `(root, leaf, scope)`;
+both records are validated before it runs. `RunRoot[R]` reads process arguments
+and prints help; `DispatchRoot[R]` accepts explicit arguments and returns
+`Ok | cli.Error | cli.Help`.
+
+```bork
+import "bork/cli"
+import "bork/codec"
+import "bork/process"
+use codec.Defaults
+
+type Global = { region: String = "west", verbose: Bool } derive (codec.Decode)
+type Deploy = { service: String } derive (codec.Decode)
+fn main() {
+  commands = [cli.RootSubcommand[Global, Deploy]("deploy", "Deploy a service", (global, deploy, s) => {
+    println(s"${global.region}/${deploy.service}/${global.verbose}")
+  })]
+  match (cli.RunRoot[Global]("fleet", "Shared flags", commands)) {
+    error: cli.Error => { eprintln(error.Render("fleet")); process.Exit(2) }
+    Ok => {}
+  }
+}
+```
+
+`fleet --region east deploy --service api` and
+`fleet deploy --service api --region east` use the same root value. Nested
+`RootGroup[R]` branches inherit these flags too. Each record has its own `flags`,
+`configFiles`, `settings` and `completions`; their configuration chains retain the
+usual precedence independently. Root env-only fields appear in descendant help.
+Root validation errors have paths beginning with `.root`.
+
+Without a `run` callback, invoking the root displays help. Set
+`run: Option.Some((global, s) => { println(global.region) })` on `RunRoot` or
+`DispatchRoot` to handle a standalone root invocation; it does not run when a
+child is selected. Both functions accept `flags`, `configFiles`, `settings` and
+`completions` before the optional `run` argument.
+
+Root fields cannot be positional. Root and descendant long-name collisions and
+explicit shorthand collisions are metadata errors. An automatically assigned
+root shorthand is dropped when a descendant uses it. Dynamic completers see
+only their declaring record's partial options; omitted defaults remain Missing.
+See [cli_root](../../examples/cli_root/main.bork) for a nested runnable example.
+
 ## Command-line schema adapter
 
 The options type needs a derived codec.Decode record schema, without a GoStruct
