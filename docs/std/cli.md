@@ -216,6 +216,7 @@ There is no process-global registry.
 | Setting | Behavior |
 | --- | --- |
 | `version: String = ""` | Enable command-local --version output when nonempty |
+| `helpGroups: List[cli.HelpGroup] = []` | Headings for immediate child commands at a tree/root entrypoint |
 | `completion: Bool = true` | Expose completion shell generators and hidden protocol endpoints |
 | `autoLong: Bool = true` | Derive kebab-case long flags: httpPort becomes --http-port |
 | `autoShort: Bool = false` | Derive the first ASCII letter of the canonical long name |
@@ -479,6 +480,8 @@ metadata without changing the leaf's typed options record.
 | --- | --- |
 | `name: String, description: String` | Required name and one-line help. |
 | `version: String = ""` | Command-local version text; empty disables version output. |
+| `helpGroup: String = ""` | Heading ID used by this command's parent. |
+| `helpGroups: List[cli.HelpGroup] = []` | Heading definitions for this command's children. |
 | `aliases: List[String] = []` | Alternate sibling names. |
 | `longDescription: String = "", examples: String = ""` | Detailed help and usage examples. |
 | `hidden: Bool = false, deprecated: String = ""` | Hide without rejecting; deprecation also warns. |
@@ -566,6 +569,27 @@ bork run examples/subcommands -- serve --host localhost -p 443
 bork run examples/subcommands -- echo one two
 bork run examples/subcommands -- help serve
 ```
+
+### Command help headings
+
+Set `command.copy(helpGroup: "operations")` to categorize a command in its
+parent's help. Define titles with `cli.HelpGroup { id: "operations", title:
+"Operations:" }`: pass `settings.helpGroups` for a tree/root entrypoint, or
+`group.copy(helpGroups: [...])` for a nested routing branch. RootCommand exposes
+this metadata through its `command` field.
+
+Configured headings appear in list order. Referenced IDs without a definition
+get a heading `<id>:` in command declaration order. With no heading metadata,
+help keeps its ordinary Available Commands list; otherwise ungrouped commands,
+including generated help/completion commands, appear under Additional Commands.
+Command names within each heading retain Cobra's alphabetical order. Hidden
+and deprecated commands remain omitted from the visible command list.
+
+IDs follow command-name character rules and must be nonempty; definition IDs
+must be unique within their parent. Titles must be nonempty and contain no
+newlines. Metadata errors are returned before source reads or handlers. Headings
+change help presentation only; aliases, routing and completion keep their usual
+behavior. See [cli_help_groups](../../examples/cli_help_groups/main.bork).
 
 ## Shell completion and static choices
 

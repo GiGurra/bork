@@ -57,7 +57,7 @@ fn DispatchRoot[R: codec.Decode](name: String, description: String, arguments: L
   scope s {
     match (prepareRoot[R](name, description, flags, configFiles, settings, completions, run, s)) {
       error: Error => error
-      root: rootPlan => dispatch(name, description, arguments, commands.map(command => command.command), s, settings.completion, configureCompletion, printError, Option.Some(root))
+      root: rootPlan => dispatch(name, description, arguments, commands.map(command => command.command), s, settings.completion, configureCompletion, printError, Option.Some(root), helpGroups: settings.helpGroups)
     }
   }
 }

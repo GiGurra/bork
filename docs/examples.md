@@ -108,6 +108,7 @@ Choose one service at a time if they share port 8080. See [HTTP](std/http.md) fo
 | [regex](../examples/regex/main.bork) | Regular expressions with [bork/regex](std/regex.md) | `bork run examples/regex` |
 | [cli_time](../examples/cli_time/main.bork) | Duration and RFC3339 flags with opt-in [bork/time](std/time.md) codecs | `bork run examples/cli_time -- --timeout 1m30s --since 1970-01-01T00:00:00Z --retries 500ms` |
 | [cli_version](../examples/cli_version/main.bork) | Command-local version output before reading sources or running handlers | `bork run examples/cli_version -- --version` |
+| [cli_help_groups](../examples/cli_help_groups/main.bork) | Native command help headings | `bork run examples/cli_help_groups -- --help` |
 | [time_env](../examples/time_env/main.bork) | Configuration from the environment and an injectable clock with [bork/env](std/env.md) and [bork/time](std/time.md) | `bork run examples/time_env` |
 | [url](../examples/url/main.bork) | Parsing and building URLs with [bork/url](std/url.md) | `bork run examples/url` |
 | [uuid](../examples/uuid/main.bork) | UUIDs with [bork/uuid](std/uuid.md) | `bork run examples/uuid` |
