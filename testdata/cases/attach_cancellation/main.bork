@@ -1,0 +1,76 @@
+import "bork/net"
+import "bork/signal"
+
+// A resource is cancelled only once every scope it is attached to is
+// cancelled, not when the latest attachment's scope ends.
+
+fn echo(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError | Cancelled {
+  match (net.ReadLine(conn, 1000)) {
+    line: String => { _ = net.WriteLine(conn, line, 1000)?; echo(conn, s) }
+    _: net.Eof => checkpoint(s)
+    stopped: Cancelled => stopped
+    error: IoError | ParseError => IoError { path: "echo", message: toString(error) }
+  }
+}
+
+fn roundTrip(conn: net.Connection, text: String) uses net + state + clock: String {
+  match (net.WriteLine(conn, text, 1000)) {
+    _: Int => match (net.ReadLine(conn, 1000)) {
+      line: String => line
+      _ => "read failed"
+    }
+    _ => "write failed"
+  }
+}
+
+fn run(app: Scope) uses io + net + state + clock: Ok | IoError | Cancelled {
+  server = net.Listen("127.0.0.1:0", app, echo)?
+  conn = net.Dial(net.Address(server), app, 1000)?
+  // A shorter scope attaches it and ends: app still owns it.
+  scope short {
+    shared = attach(conn, short)
+    println(roundTrip(shared, "in short"))
+  }
+  println(roundTrip(conn, "after short"))
+  // Not a regression check (the old latest-attachment rule agrees): opened in
+  // a scope that is cancelled while an attachment's scope is not.
+  scope outer {
+    kept = scope inner {
+      opened = net.Dial(net.Address(server), inner, 1000)?
+      a = attach(opened, outer)
+      cancel(inner)
+      println(roundTrip(opened, "inner cancelled"))
+      a
+    }
+    println(roundTrip(kept, "after inner"))
+    // Every owner cancelled: the connection is cancelled.
+    cancel(outer)
+    println(roundTrip(kept, "all cancelled"))
+  }
+  checkpoint(app)
+}
+
+// The cause is that of the owner cancelled last, not of a shorter scope that
+// ended earlier; attaching after every owner is cancelled does not revive it.
+fn causes() uses io + state {
+  scope app {
+    sub = signal.MockSubscription(app)
+    scope w { _ = attach(sub, w) }
+    cancel(app)
+    println(sub.Next())
+    scope later {
+      revived = attach(sub, later)
+      println(revived.Next())
+    }
+  }
+}
+
+fn main() {
+  causes()
+  scope app {
+    match (run(app)) {
+      e: IoError | Cancelled => println(e)
+      _ => {}
+    }
+  }
+}

@@ -247,7 +247,7 @@ fn server(s: Scope) uses io + state: Ok | IoError | Cancelled {
 ```
 
 Closing or cancelling the owning scope kills and reaps the child even if Wait
-was never called. `attach` moves cancellation to the destination scope.
+was never called. `attach` adds an owner: the child is cancelled once every owner is.
 Process operations declare `io + state`; Pid reads a stored value without
 effects. `Args` and `Exit` declare `io`.
 

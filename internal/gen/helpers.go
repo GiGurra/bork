@@ -6,8 +6,8 @@ package gen
 // Maps are persistent; iteration follows the map's order and stops when the
 // callback returns false. Scope contexts carry cancellation and effective deadlines; closing a scope
 // waits for tasks and runs finalizers, while deferred abort also handles panic.
-// Resource handles keep a stable cancellation context, rebind its source on
-// attachment, and close on final release. Cancellation remains terminal.
+// Resource handles keep a stable cancellation context, which follows every
+// owning scope (attachment adds one), and close on final release. Cancellation remains terminal.
 // Option constructors return the prelude's Option, regardless of package names.
 const okHelpers = `package main
 
@@ -33,47 +33,81 @@ func _borkTryScopeTask(s *_Scope, work func() any) (func() any, bool) {
  return task.Await,true
 }
 
-// A stable cancellation context whose source follows resource attachment.
+// A stable cancellation context that follows every scope owning the resource:
+// it is cancelled once all of them are cancelled, with the cause of the last
+// one (of the earliest owner, when several are found cancelled at once).
+// Attachment adds a source; cancelled sources are dropped, so a handle
+// attached to many short scopes keeps only the live ones.
 // Value is immutable after construction. Close must run with final release.
 type _borkResourceHandle struct {
  Value any
  mu sync.Mutex
- source context.Context
+ live []_borkHandleSource
+ cause error
  ctx context.Context
  cancel context.CancelCauseFunc
- generation uint64
 }
+type _borkHandleSource struct { ctx context.Context; stop func() bool }
 func _borkNewResourceHandle(value any, s *_Scope) *_borkResourceHandle {
  ctx, cancel := context.WithCancelCause(context.Background())
  h := &_borkResourceHandle{Value: value, ctx: ctx, cancel: cancel}
  h._borkRebind(s)
  return h
 }
+// _borkRebind adds s as a source. A handle whose sources are all cancelled
+// is cancelled for good: attaching it does not revive it.
 func (h *_borkResourceHandle) _borkRebind(s *_Scope) {
  h.mu.Lock()
- if h.source != nil && h.source.Err() != nil { h.cancel(context.Cause(h.source)) }
- h.source = s.ctx
- h.generation++
- generation := h.generation
- if s.ctx.Err() != nil { h.cancel(context.Cause(s.ctx)) }
- h.mu.Unlock()
- go func() {
-  select {
-  case <-s.ctx.Done():
-   h.mu.Lock()
-   if h.generation == generation { h.cancel(context.Cause(s.ctx)) }
-   h.mu.Unlock()
-  case <-h.ctx.Done():
+ defer h.mu.Unlock()
+ h.pruneLocked()
+ if h.ctx.Err() != nil { return }
+ for _, source := range h.live {
+  if source.ctx == s.ctx { return }
+ }
+ if s.ctx.Err() != nil {
+  if len(h.live) == 0 { h.cause = context.Cause(s.ctx); h.cancel(h.cause) }
+  return
+ }
+ source := s.ctx
+ stop := context.AfterFunc(source, func() {
+  h.mu.Lock()
+  defer h.mu.Unlock()
+  h.pruneLocked()
+ })
+ h.live = append(h.live, _borkHandleSource{source, stop})
+}
+// pruneLocked drops the sources that are cancelled (their AfterFunc may not
+// have run yet), and cancels the handle once none is left.
+func (h *_borkResourceHandle) pruneLocked() {
+ kept := h.live[:0]
+ var cause error
+ for _, source := range h.live {
+  if source.ctx.Err() == nil {
+   kept = append(kept, source)
+   continue
   }
- }()
+  source.stop()
+  if cause == nil { cause = context.Cause(source.ctx) }
+ }
+ clear(h.live[len(kept):])
+ h.live = kept
+ if cause != nil { h.cause = cause }
+ if len(h.live) == 0 && h.cause != nil && h.ctx.Err() == nil { h.cancel(h.cause) }
 }
 func (h *_borkResourceHandle) Context() context.Context {
  h.mu.Lock()
- if h.source.Err() != nil { h.cancel(context.Cause(h.source)) }
+ h.pruneLocked()
  h.mu.Unlock()
  return h.ctx
 }
-func (h *_borkResourceHandle) Close() { h.cancel(context.Canceled) }
+func (h *_borkResourceHandle) Close() {
+ h.mu.Lock()
+ defer h.mu.Unlock()
+ for _, source := range h.live { source.stop() }
+ h.live = nil
+ h.cancel(context.Canceled)
+}
+
 
 `
 
