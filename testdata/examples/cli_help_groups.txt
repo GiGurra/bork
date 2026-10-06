@@ -1,0 +1,19 @@
+Commands with help headings
+
+Usage:
+  fleet [command]
+
+Operations:
+  deploy      Deploy a service
+
+Inspection:
+  inspect     Inspect a service
+
+Additional Commands:
+  completion  Generate the autocompletion script for the specified shell
+  help        Help about any command
+
+Flags:
+  -h, --help   help for fleet
+
+Use "fleet [command] --help" for more information about a command.

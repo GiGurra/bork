@@ -9,6 +9,8 @@ type Command = {
   description: String
   execute: (String, List[String], Scope) uses io + net + clock + random + state => Ok | Error | Help
   version: String = ""
+  helpGroup: String = ""
+  helpGroups: List[HelpGroup] = []
   aliases: List[String] = []
   longDescription: String = ""
   examples: String = ""
@@ -79,10 +81,10 @@ fn Group(name: String, description: String, children: List[Command]): Command {
 // Dispatch accepts explicit arguments without the executable name. Completion
 // settings belong to this entrypoint, and apply to the entire command tree.
 fn Dispatch(name: String, description: String, arguments: List[String], commands: List[Command], settings: Settings = .{}) uses io + net + clock + random + state: Ok | Error | Help {
-  scope s { dispatch(name, description, arguments, commands, s, settings.completion, configureCompletion, printError, version: settings.version) }
+  scope s { dispatch(name, description, arguments, commands, s, settings.completion, configureCompletion, printError, version: settings.version, helpGroups: settings.helpGroups) }
 }
 
-fn dispatch(name: String, description: String, arguments: List[String], commands: List[Command], s: Scope, completion: Bool, configure: (nativeCommand, List[String], Bool) => Error | Ok, warn: (String) uses io => Ok, rootOptions: Option[rootPlan] = Option.None, version: String = "") uses io + net + clock + random + state: Ok | Error | Help unsafe go {
+fn dispatch(name: String, description: String, arguments: List[String], commands: List[Command], s: Scope, completion: Bool, configure: (nativeCommand, List[String], Bool) => Error | Ok, warn: (String) uses io => Ok, rootOptions: Option[rootPlan] = Option.None, version: String = "", helpGroups: List[HelpGroup] = []) uses io + net + clock + random + state: Ok | Error | Help unsafe go {
   import "bytes"
   import "fmt"
   import "strings"
@@ -223,6 +225,7 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
           if help, ok := value.(Help); ok { _, _ = fmt.Fprint(cmd.OutOrStdout(), help.text); _, _ = fmt.Fprint(cmd.ErrOrStderr(), help.diagnostics) } else { ran = true; result = value }
         })
       }
+      if failure, bad := configureHelpGroups(nativeCommand{handle: child, owner: s.Own(func() {})}, command.helpGroups, command.children).(Error); bad { result = failure; return fmt.Errorf("invalid help groups for %s", command.name) }
       if failure, bad := configureVersion(nativeCommand{handle: child, owner: s.Own(func() {})}, command.version).(Error); bad { result = failure; return fmt.Errorf("invalid version for %s", command.name) }
       if rooted {
         child.Flags().VisitAll(func(flag *pflag.Flag) {
@@ -239,6 +242,7 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
         if len(failures) != 0 { result = Error{errors: failures}; return fmt.Errorf("root flag conflict") }
       }
       child.Short, child.Long, child.Example = command.description, command.longDescription, command.examples
+      child.GroupID = command.helpGroup
       child.Aliases, child.Hidden = append([]string{}, command.aliases...), command.hidden
       child.Deprecated = command.deprecated
       child.SilenceUsage, child.SilenceErrors = true, true
@@ -251,6 +255,7 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
     if failure, ok := result.(Error); ok { return failure }
     return Error{errors: []codec.DecodeError{{path: name, message: err.Error()}}}
   }
+  if failure, bad := configureHelpGroups(nativeCommand{handle: root, owner: s.Own(func() {})}, helpGroups, commands).(Error); bad { return failure }
   if rooted && rootInput.hasHandler {
     root.RunE = func(cmd *cobra.Command, args []string) error {
       if err := rootCollect(cmd, args); err != nil { return err }

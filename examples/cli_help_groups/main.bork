@@ -1,0 +1,28 @@
+import "bork/cli"
+import "bork/codec"
+import "bork/process"
+import "bork/test"
+use codec.Defaults
+
+type Options = { name: String } derive (codec.Decode)
+fn commands(): List[cli.Command] {
+  [
+    cli.Subcommand[Options]("deploy", "Deploy a service", (options, s) => println(options.name)).copy(helpGroup: "operations"),
+    cli.Subcommand[Options]("inspect", "Inspect a service", (options, s) => println(options.name)).copy(helpGroup: "inspection")
+  ]
+}
+fn settings(): cli.Settings {
+  .{ helpGroups: [.{ id: "operations", title: "Operations:" }, .{ id: "inspection", title: "Inspection:" }] }
+}
+fn main() {
+  match (cli.RunCommands("fleet", "Commands with help headings", commands(), settings: settings())) {
+    Ok => {}
+    error: cli.Error => { eprintln(error.Render("fleet")); process.Exit(2) }
+  }
+}
+
+test "headings preserve command routing and skip required inputs" {
+  help = test.AssertIs[cli.Help](cli.Dispatch("fleet", "", ["--help"], commands(), settings: settings()))
+  assert(help.text.contains("Operations:"))
+  assert(help.text.contains("Inspection:"))
+}

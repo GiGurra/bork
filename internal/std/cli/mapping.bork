@@ -6,6 +6,7 @@ type Mapping = sealed { Auto, Disabled, Named { name: String } }
 type Choice = { value: String, description: String = "" }
 type Settings = {
   version: String = ""
+  helpGroups: List[HelpGroup] = []
   completion: Bool = true
   autoLong: Bool = true
   autoShort: Bool = false
