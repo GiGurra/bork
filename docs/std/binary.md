@@ -57,7 +57,7 @@ need 4 bytes; have 2
 | `(value: Writer) Length(): Int` | Read accumulated byte count. |
 | `(value: Writer) WriteBytes(data: Bytes): Writer \| BinaryError` | Append an immutable chunk. |
 | `(value: Writer) Bytes(): Bytes` | Materialize a snapshot of all chunks. |
-| `(value: Writer) WriteByte(number: Byte): Writer \| BinaryError` | Replace one byte in a copied buffer. |
+| `(value: Writer) WriteByte(number: Byte): Writer \| BinaryError` | Append one byte. |
 | `(value: Writer) WriteInt8(number: Int8): Writer \| BinaryError` | Write a signed byte. |
 | `(value: Writer) WriteUint16(number: Uint16): Writer \| BinaryError` | Write an unsigned 16-bit integer. |
 | `(value: Writer) WriteUint32(number: Uint32): Writer \| BinaryError` | Write an unsigned 32-bit integer. |

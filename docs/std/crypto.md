@@ -54,7 +54,7 @@ expected an Argon2id v=19 PHC string
 
 `PasswordParams` is a checked record:
 
-| Field | Fact | Default |
+| Field | Fact | DefaultPasswordParams value |
 | --- | --- | --- |
 | `memoryKiB: Int` | `ValidMemory`: 1024–262144 | 19456 |
 | `iterations: Int` | `ValidIterations`: 1–16 | 2 |

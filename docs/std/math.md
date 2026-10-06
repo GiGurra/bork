@@ -27,6 +27,8 @@ Ok
 
 ## API
 
+### Decimal
+
 | Signature | Meaning |
 | --- | --- |
 | `(value: Decimal) Coefficient(): BigInt` | Read the integer coefficient. |
@@ -45,6 +47,11 @@ Ok
 | `(value: Decimal) ToRational(): BigRat` | Convert a decimal exactly to a rational. |
 | `(value: BigRat) ToDecimal(scale: Int, rounding: Rounding): Decimal \| OutOfRange` | Convert a rational with explicit scale and rounding. |
 | `(value: Decimal) SameValue(other: Decimal): Bool` | Compare decimal numeric values without scale. |
+
+### BigInt
+
+| Signature | Meaning |
+| --- | --- |
 | `Integer(value: Int): BigInt` | Construct a BigInt from an Int. |
 | `ParseInteger(text: String): BigInt \| ParseError` | Parse signed base-10 digits. |
 | `(value: BigInt) ToString(): String` | Format canonical text. |
@@ -60,6 +67,11 @@ Ok
 | `(value: BigInt) Neg(): BigInt` | Negate without mutating the input. |
 | `(value: BigInt) Pow(exponent: Int): BigInt \| MathError` | Raise to a nonnegative integer exponent. |
 | `(value: BigInt) Sqrt(): BigInt \| MathError` | Return the square root, rounded down for BigInt. |
+
+### Float
+
+| Signature | Meaning |
+| --- | --- |
 | `Abs(value: Float): Float` | Return the absolute value. |
 | `Sqrt(value: Float): Float` | Compute the floating-point square root. |
 | `Floor(value: Float): Float` | Round toward negative infinity. |
@@ -88,6 +100,11 @@ Ok
 | `Inf(sign: Int = 1): Float` | Return infinity with the requested sign. |
 | `IsNaN(value: Float): Bool` | Detect NaN. |
 | `IsInf(value: Float): Bool` | Detect either infinity. |
+
+### BigRat
+
+| Signature | Meaning |
+| --- | --- |
 | `ParseRational(text: String): BigRat \| ParseError` | Parse rational text. |
 | `Rational(numerator: BigInt, denominator: BigInt): BigRat \| MathError` | Construct a reduced rational; reject a zero denominator. |
 | `(value: BigRat) ToString(): String` | Format canonical text. |
@@ -212,6 +229,25 @@ operations allocate fresh Go big numbers rather than changing their inputs.
 The [benchmark fixture](../../testdata/benchmarks/math/README.md) measures
 parsing, formatting and allocation overhead.
 
+```bork
+import "bork/math"
+
+fn demo() uses io: Ok | math.MathError | ParseError {
+  half = math.Rational(math.Integer(1), math.Integer(2))?
+  third = math.ParseRational("1/3")?
+  println(half.Add(third).ToString())
+}
+
+fn main() {
+  println(demo())
+}
+```
+
+```text
+5/6
+Ok
+```
+
 ## JSON
 
 `use math.Codecs` imports string codecs for all three exact types. Individual
@@ -220,6 +256,34 @@ instances are `EncodeBigInt`, `DecodeBigInt`, `EncodeBigRat`, `DecodeBigRat`,
 consumers that would otherwise parse a JSON number as a binary float. Decimal
 encoding preserves scale; decoding invokes the same checked parsers. JSON number
 values and malformed strings return `codec.DecodeError`.
+
+```bork
+import "bork/codec"
+import "bork/json"
+import "bork/math"
+use math.Codecs
+
+fn demo() uses io: Ok | ParseError {
+  amount = math.ParseDecimal("123.4500")?
+  encoded = json.Encode(amount)
+  println(encoded)
+  match (json.Decode[math.Decimal](encoded)) {
+    decoded: math.Decimal => println(decoded.ToString())
+    error: codec.DecodeError => eprintln(error.message)
+    error: json.JsonError => eprintln(error.message)
+  }
+}
+
+fn main() {
+  println(demo())
+}
+```
+
+```text
+"123.4500"
+123.4500
+Ok
+```
 
 See [examples/math](../../examples/math/main.bork) for invoice arithmetic.
 

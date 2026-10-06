@@ -94,6 +94,10 @@ fn main() {
 }
 ```
 
+```text
+OutOfRange { value: "2", target: "upper bound above lower bound" }
+```
+
 The predicate `Above(value: Int, lower: Int): Bool` proves `value > lower`.
 A constant invalid range is rejected at compile time. See the
 [random example](../../examples/rand/main.bork).
