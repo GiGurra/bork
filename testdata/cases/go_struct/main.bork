@@ -33,7 +33,6 @@ fn Fields[T: GoStruct](): List[String] unsafe go {
     out = append(out, f.Name + ":" + f.GoName + ":" + f.Doc)
     for _, tag := range f.Tags { out=append(out,tag.Name+"="+tag.Value) }
     if f.HasDefault { out=append(out,_show(f.Default())) }
-    if f.Decode==nil { out=append(out,"no decoder") }
   }
   return out
 }

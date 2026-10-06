@@ -9,6 +9,14 @@ import (
 	"github.com/GiGurra/bork/internal/check"
 )
 
+// constructionInvariant is a whole-owner obligation checked after fields.
+type constructionInvariant struct {
+	fieldPath   func(*check.Field) string
+	positional  bool
+	typ         check.Type
+	constraints []*check.Constraint
+}
+
 // constructionChecks validates completed stored inputs before exposing a value
 // with its promised facts. Computed cells are initialized between validation
 // phases, then variant and whole-value invariants are checked.

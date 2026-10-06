@@ -1,7 +1,7 @@
 import codec "bork/codec"
 use codec.Defaults
 
-type Node = { value: Int = 1, next: Option[Node] = Option.None } derive (GoStruct)
+type Node = { value: Int = 1, next: Option[Node] = Option.None } derive (GoStruct, codec.Decode)
 fn Cycle[T: GoStruct](): List[GoValueError] unsafe go {
  import "reflect"
  p:=_d_T_GoStruct.New()
@@ -20,9 +20,12 @@ fn Wrong[T: GoStruct](): List[GoValueError] unsafe go {
  _, errors:=_d_T_GoStruct.FromGo(42)
  return errors
 }
-fn DecodeField[T: GoStruct](): String unsafe go {
- fields:=_d_T_GoStruct.Fields()
- return _show(fields[0].Decode(codec.Value_Number{text:"3"}))
+// Field decoders come from the selected Decode instance's source schema.
+fn DecodeField[T: codec.Decode](): String {
+  match (codec.Schema[T]()) {
+    Option.Some(schema) => schema.fields.map(field => field.name + ":" + field.kind + ":" + toString(field.validate(codec.Value.Number { text: "3" }))).join(",")
+    Option.None => "no schema"
+  }
 }
 type Keywords = { map: Int = 2, func: String = "keyword" } derive (GoStruct)
 fn Round[T: GoStruct](value: T): T | GoValueError unsafe go {

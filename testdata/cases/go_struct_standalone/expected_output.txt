@@ -2,4 +2,4 @@ Keywords { map: 2, func: "keyword" }
 [GoValueError { path: "result.next.next", message: "cyclic Go value" }]
 [GoValueError { path: "result", message: "is nil" }]
 [GoValueError { path: "result", message: "has the wrong Go type" }]
-3
+value:number:Ok,next:json:DecodeError { path: ".next", message: "expected an object, found a number" }

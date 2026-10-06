@@ -50,16 +50,15 @@ type DeriveCapture struct {
 }
 
 type ClassInstance struct {
-	Captures        []DeriveCapture
-	Derived         string // target name requested by derive; empty for written instances
-	ForeignDecoders []*Dict
-	Name            string
-	Decl            *syntax.InstanceDecl
-	Pkg             *Package
-	Prelude         bool
-	Class           *Class
-	TypeParams      []*TypeParam
-	Type            Type
+	Captures   []DeriveCapture
+	Derived    string // target name requested by derive; empty for written instances
+	Name       string
+	Decl       *syntax.InstanceDecl
+	Pkg        *Package
+	Prelude    bool
+	Class      *Class
+	TypeParams []*TypeParam
+	Type       Type
 	// Methods holds the implementations, in the class's method order.
 	Methods  []*Func
 	Metadata []*Func
@@ -1089,7 +1088,6 @@ func (c *checker) resolveDerived() {
 			continue
 		}
 		if foreign {
-			c.resolveForeignDecoders(ci)
 			continue
 		}
 		if len(ci.Methods) == 0 || ci.Methods[0].Derived == nil {

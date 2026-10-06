@@ -359,9 +359,6 @@ func (a *executionAuditor) dict(dict *Dict, depth int) {
 	for _, method := range dict.Inst.Methods {
 		a.function(method, depth+1)
 	}
-	for _, decoder := range dict.Inst.ForeignDecoders {
-		a.dict(decoder, depth+1)
-	}
 
 }
 func (a *executionAuditor) constraints(constraints []*Constraint, depth int) {
