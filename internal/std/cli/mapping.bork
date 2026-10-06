@@ -15,9 +15,12 @@ type Settings = {
   envPrefix: String = ""
   enrichers: List[Enricher] = []
 }
+// FieldAliases contains alternative derived names, visible to enrichers.
+type FieldAliases = { long: List[String] = [], env: List[String] = [] }
 // FieldSpec is the immutable metadata passed through each enricher.
 type FieldSpec = {
   field: String
+  aliases: FieldAliases = FieldAliases {}
   long: Mapping
   short: Mapping
   env: Mapping
@@ -120,6 +123,11 @@ fn resolveMetadataWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordS
     return true
   }
   for _, field := range schema {
+    key := field.wireName
+    if key == "" { key = field.name }
+    words := field.words
+    if len(words) == 0 { words = _borkCodecWords(key) }
+    basis := strings.Join(words, "-")
     flag, exists := metadata[field.name]
     if !exists { flag = Flag{field: field.name, long: Mapping_Auto{}, shortName: Mapping_Auto{}, envName: Mapping_Auto{}, description: Option_None[string]{}, config: true, position: Option_None[int64]{}} }
     doc := field.doc
@@ -129,7 +137,7 @@ fn resolveMetadataWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordS
     derive := func(spec FieldSpec) FieldSpec {
       if _, auto := spec.long.(Mapping_Auto); auto {
         spec.long = Mapping_Disabled{}
-        if settings.autoLong && !isPositional(spec) { spec.long = Mapping_Named{name: prefix(settings.flagPrefix, "-", makeName(spec.field))} }
+        if settings.autoLong && !isPositional(spec) { spec.long = Mapping_Named{name: prefix(settings.flagPrefix, "-", makeName(basis))} }
       }
       long := nameOf(spec.long)
       if _, auto := spec.short.(Mapping_Auto); auto {
@@ -143,13 +151,20 @@ fn resolveMetadataWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordS
         spec.env = Mapping_Disabled{}
         if settings.autoEnv && !isPositional(spec) {
           base := long
-          if base == "" { base = makeName(spec.field) }
+          if base == "" { base = makeName(basis) }
           spec.env = Mapping_Named{name: prefix(settings.envPrefix, "_", strings.ToUpper(strings.ReplaceAll(base, "-", "_")))}
         }
       }
       return spec
     }
     spec = derive(spec)
+    for _, alias := range field.aliases {
+      aliasLong := makeName(alias)
+      if nameOf(spec.long) != "" { aliasLong = prefix(settings.flagPrefix, "-", aliasLong); spec.aliases.long = append(spec.aliases.long, aliasLong) }
+      if settings.envPrefix != "" && nameOf(spec.env) != "" {
+        spec.aliases.env = append(spec.aliases.env, prefix(settings.envPrefix, "_", strings.ToUpper(strings.ReplaceAll(aliasLong, "-", "_"))))
+      }
+    }
     for _, enrich := range settings.enrichers {
       before := spec.short
       spec = enrich(append([]FieldSpec{}, specs...), spec)
@@ -158,12 +173,19 @@ fn resolveMetadataWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordS
     if spec.field != field.name { fail(field.name, "enricher must preserve field identity") }
     spec = derive(spec)
     long, short, env := nameOf(spec.long), nameOf(spec.short), nameOf(spec.env)
+    if long == "" || isPositional(spec) { spec.aliases.long = nil }
+    if env == "" || isPositional(spec) { spec.aliases.env = nil }
     if _, named := spec.long.(Mapping_Named); named {
       if !validLong(long) { fail(field.name, "long flag must contain letters, digits, hyphens, or underscores and not start with a hyphen") }
       if long == "help" { fail(field.name, "flag name is reserved for help") }
       if isPositional(spec) { fail(field.name, "positional field cannot have a long flag") }
       if previous, duplicate := names[long]; duplicate { fail(field.name, "flag name duplicates " + previous) }
       names[long] = field.name
+    }
+    for _, alias := range spec.aliases.long {
+      if !validLong(alias) || alias == "help" { fail(field.name, "invalid or reserved alias flag name") }
+      if previous, duplicate := names[alias]; duplicate { fail(field.name, "alias flag name duplicates " + previous) }
+      names[alias] = field.name
     }
     if _, named := spec.short.(Mapping_Named); named {
       if len(short) != 1 || short[0] > 127 { fail(field.name, "short flag must be one ASCII character") }
@@ -178,8 +200,14 @@ fn resolveMetadataWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordS
       if previous, duplicate := envs[env]; duplicate { fail(field.name, "environment variable duplicates " + previous) }
       envs[env] = field.name
     }
+    for _, alias := range spec.aliases.env {
+      if !validEnv(alias) { fail(field.name, "alias environment variable must be an identifier") }
+      if previous, duplicate := envs[alias]; duplicate { fail(field.name, "alias environment variable duplicates " + previous) }
+      envs[alias] = field.name
+    }
     if isPositional(spec) {
-      display := makeName(field.name)
+      display := makeName(basis)
+      if !validLong(display) { fail(field.name, "positional name must contain letters, digits, hyphens, or underscores") }
       if previous, duplicate := positionalNames[display]; duplicate { fail(field.name, "positional name duplicates " + previous) }
       positionalNames[display] = field.name
     }
