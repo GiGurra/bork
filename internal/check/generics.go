@@ -579,6 +579,15 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 	s := c.session
 	finish := func() {
 		reported := errs > 0 || cs.blamed
+		if okTypeArgs(fn) {
+			// Work that never returns (() => panic(...)) gives no value:
+			// its task is a Task[Ok].
+			for _, u := range unknowns {
+				if c.unbound(u) {
+					c.bindUnknown(c.resolve(u).(*TypeParam), Ok)
+				}
+			}
+		}
 		for i := range types {
 			types[i] = c.zonk(types[i])
 		}
@@ -640,11 +649,9 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 				fail()
 				return
 			}
-			if ta == Ok && !reported {
+			if ta == Ok && !reported && !okTypeArgs(fn) {
 				hint := ""
-				if fn.Prelude && fn.Decl.Name == "spawn" {
-					hint = " (to run work that gives no value, use launch)"
-				} else if fn.Prelude && fn.Decl.Name == "withTimeout" {
+				if fn.Prelude && fn.Decl.Name == "withTimeout" {
 					hint = " (for an Ok callback, use withTimeoutDo)"
 				}
 				c.errorf(e.Pos, "%s of %s cannot be %s: a type argument must be a type of values%s", fn.TypeParams[i].Name, name, ta, hint)

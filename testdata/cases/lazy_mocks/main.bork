@@ -5,7 +5,7 @@ test "first forcing goroutine determines cached mocked result" {
   calls.expect(times: 1)
   reader = () => value
   scope s {
-    tasks = [1, 2, 3].map(n => spawn(s, () => reader()))
+    tasks = [1, 2, 3].map(n => fork(s, () => reader()))
     assertEqual(tasks.map(t => await(t)), [11, 11, 11])
   }
   assertEqual(value, 11)

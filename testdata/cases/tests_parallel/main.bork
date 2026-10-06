@@ -21,7 +21,7 @@ test "a slow test's mock and snapshots are its own" {
   calls = mock Fetch(url) { s"slow $url" }
   pause(150)
   scope s {
-    t = spawn(s, () => {
+    t = fork(s, () => {
       assertSnapshot(Fetch("from a task"))
       Fetch("a")
     })

@@ -59,7 +59,7 @@ test "a mock that must not be called" {
 test "waitFor waits for calls from other tasks" {
   calls = mock Fetch(url, n) { url }
   scope s {
-    _ = spawn(s, () => {
+    _ = fork(s, () => {
       pause(50)
       Fetch("late", 0)
     })
@@ -73,11 +73,11 @@ test "a mock in a scope is checked after the scope's tasks" {
   scope s {
     calls = mock Fetch(url, n) { url }
     calls.expect(times: 2)
-    _ = spawn(s, () => {
+    _ = fork(s, () => {
       pause(30)
       Fetch("a", 0)
     })
-    _ = spawn(s, () => {
+    _ = fork(s, () => {
       pause(10)
       Fetch("b", 0)
     })

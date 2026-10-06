@@ -96,7 +96,7 @@ test "reload receives a notification" {
   scope app {
     calls = mock signal.Subscribe(s, signals) {
       events = signal.MockSubscription(s)
-      launch(s, () => { _ = events.Emit(.Hangup) })
+      fork(s, () => { _ = events.Emit(.Hangup) })
       events
     }
     assertEqual(reload(app), signal.Signal.Hangup)

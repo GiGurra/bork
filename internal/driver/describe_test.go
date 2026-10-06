@@ -483,7 +483,7 @@ func TestDescribeOwnedScopeLifetimes(t *testing.T) {
 	t.Parallel()
 	source := `fn roll(prev: OwnedScope in app, task: Task[Int] in prev, app: Scope) uses state {
   next = openScope(app)
-  fresh = spawn(next.scope, () => 1); _ = fresh
+  fresh = fork(next.scope, () => 1); _ = fresh
   closeScope(prev)
   closeScope(next)
 }
@@ -805,7 +805,7 @@ fn main() {
     println(query(a))
     scope w { _ = move(a, w) }
     b = connect(s)
-    launch(s, () => println(query(b)))
+    fork(s, () => println(query(b)))
     d = connect(s)
     f = () => query(d)
     println(f())
@@ -821,10 +821,10 @@ fn more(s: Scope, w: Scope, v: Scope, flag: Bool) uses io: String {
   e = connect(s)
   for (x in [e]) { c = e; println(query(c)); println(query(x)) }
   k = connect(s)
-  launch(s, () => println(query(k)))
+  fork(s, () => println(query(k)))
   k2 = k; println(query(k2))
   t = connect(s)
-  scope u { launch(u, () => println(query(t))) }
+  scope u { fork(u, () => println(query(t))) }
   query(t)
 }
 `,

@@ -101,7 +101,7 @@ fn main() {
         reason: String => println(reason)
       }
       gt = move(g, t)
-      launch(t, () => println(query(gt, "in a task")))
+      fork(t, () => println(query(gt, "in a task")))
     }
     println("t ended")
     // A lambda, a task and a generator may move what they acquire.
@@ -117,7 +117,7 @@ fn main() {
       }
       println(lines.toList())
       // Launched last, so that its output follows the generator's.
-      launch(w, () => {
+      fork(w, () => {
         own = connect("task", app)
         _ = move(own, w)
       })
@@ -126,7 +126,7 @@ fn main() {
     scope s {
       p = connect("p", s)
       scope inner with logFailures() {
-        launch(inner, () => println(query(p, "in a task")))
+        fork(inner, () => println(query(p, "in a task")))
       }
       _ = move(p, app)
     }

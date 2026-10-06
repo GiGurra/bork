@@ -14,7 +14,7 @@ fn ticker(s: Scope, name: String, n: Int) uses io + clock + state: Int {
 fn main() {
   // An explicit cancel; the scope still waits for its tasks.
   r = scope s {
-    t = spawn(s, () => ticker(s, "a", 0))
+    t = fork(s, () => ticker(s, "a", 0))
     _ = time.Sleep(s, time.Nanoseconds((20) * 1000000))
     cancel(s)
     await(t) >= 1
@@ -23,9 +23,9 @@ fn main() {
   // When a scope ends, it cancels itself and waits for its tasks: how
   // each one stops is its own business. This worker stops at once...
   scope s {
-    b = spawn(s, () => ticker(s, "b", 0))
+    b = fork(s, () => ticker(s, "b", 0))
     // ...and this one observes b finishing before completing its work.
-    launch(s, () => {
+    fork(s, () => {
       _ = await(b)
       _ = time.Sleep(s, time.Nanoseconds((10) * 1000000))
       println("d finished its work")

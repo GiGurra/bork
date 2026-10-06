@@ -23,7 +23,7 @@ fn drainTest() uses io + net + clock + state {
       })) {
         server: http.Server => {
           address = "http://" + http.Address(server)
-          launch(app, () => { _ = http.Get(address, app, 2000) })
+          fork(app, () => { _ = http.Get(address, app, 2000) })
           waitMark(started)
         }
         error: IoError => println("unexpected", error.message)
@@ -52,7 +52,7 @@ fn forcedDrain(policy: Int) uses io + net + clock + state {
         }, 10)) {
         server: http.Server => {
           address = "http://" + http.Address(server)
-          launch(app, () => {
+          fork(app, () => {
             failure = match (http.Get(address, app, 2000)) { _: IoError => true; _ => false }
             _ = update(failed, old => failure)
             mark(clientDone)

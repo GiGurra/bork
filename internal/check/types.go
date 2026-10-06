@@ -959,3 +959,35 @@ func IsOption(t Type) bool {
 	s, ok := t.(*Sealed)
 	return ok && s.Prelude && s.Name == "Option" && s.Base != nil
 }
+
+// isTask reports whether t is the prelude's Task (generic or an instance).
+// Its T may be Ok: fork(s, () => ...) gives a Task[Ok] for work with no
+// value, which await(task) waits for.
+func isTask(t Type) bool {
+	r, ok := t.(*Record)
+	return ok && r.Prelude && r.Name == "Task"
+}
+
+// okTypeArgs reports whether fn's type arguments may be Ok: the task
+// functions, whose T is only ever a task's result.
+func okTypeArgs(fn *Func) bool {
+	if fn.Decl.IsMethod {
+		return false
+	}
+	switch {
+	case fn.Prelude:
+		return fn.Decl.Name == "fork" || fn.Decl.Name == "await"
+	case fn.Pkg != nil && fn.Pkg.Path == "bork/tasks":
+		return fn.Decl.Name == "TryFork"
+	}
+	return false
+}
+
+// isOkTask reports whether t is exactly Task[Ok]: a task with no value,
+// which may be dropped like an Ok (the scope still joins it).
+func isOkTask(t Type) bool {
+	return isTask(t) && len(t.(*Record).Args) == 1 && t.(*Record).Args[0] == Ok
+}
+
+// IsOkTask reports whether t is exactly Task[Ok] (see isOkTask).
+func IsOkTask(t Type) bool { return isOkTask(t) }

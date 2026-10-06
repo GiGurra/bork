@@ -53,7 +53,7 @@ fn check(fail: Bool): Ok | Failed {
 // opened returns a new owned scope to its caller, with a task started.
 fn opened(app: Scope) uses io: OwnedScope {
   b = openScope(app)
-  launch(b.scope, () => println("a task of the returned scope"))
+  fork(b.scope, () => println("a task of the returned scope"))
   b
 }
 
@@ -81,7 +81,7 @@ fn main() uses io + clock + state {
     b = openScope(app)
     // A task of b can use old once it is attached to b too.
     shared = attach(old, b.scope)
-    launch(b.scope, () => {
+    fork(b.scope, () => {
       _ = time.Sleep(b.scope, time.Nanoseconds((20) * 1000000))
       println(s"task of b uses ${nameOf(shared)}")
     })
@@ -101,7 +101,7 @@ fn main() uses io + clock + state {
     closeScope(p)
     // closeScope cancels the child's tasks before it waits for them.
     w = openScope(app)
-    launch(w.scope, () => {
+    fork(w.scope, () => {
       match (delay(w.scope, 60000)) {
         stop: Cancelled => println(s"worker stopped: ${stop.reason}")
         _ => println("worker slept")
@@ -111,7 +111,7 @@ fn main() uses io + clock + state {
     // So does cancelling its parent.
     v = openScope(app)
     u = openScope(v.scope)
-    t = spawn(u.scope, () => delay(u.scope, 60000))
+    t = fork(u.scope, () => delay(u.scope, 60000))
     cancel(v.scope)
     match (await(t)) {
       stop: Cancelled => println(s"child task: ${stop.reason}")
@@ -145,7 +145,7 @@ fn main() uses io + clock + state {
     }
     closeScope(bound)
     println("-- a task opens and closes its own owned scope")
-    own = spawn(app, () => {
+    own = fork(app, () => {
       mine = openScope(app)
       oc = connect("task's own", mine.scope)
       println(s"task uses ${nameOf(oc)}")
@@ -168,7 +168,7 @@ fn main() uses io + clock + state {
 fn siblingTask() uses io + clock + state: Ok | Failed {
   scope app {
     x = openScope(app)
-    launch(x.scope, () => worker(app))
+    fork(x.scope, () => worker(app))
     _ = time.Sleep(app, time.Nanoseconds((20) * 1000000))
     check(true)?
     closeScope(x)
@@ -211,7 +211,7 @@ fn consumeBlock(app: Scope) uses io + state: Ok | Failed {
 }
 
 fn withTask(b: OwnedScope, f: () uses io => Ok in b) uses io: OwnedScope {
-  launch(b.scope, f)
+  fork(b.scope, f)
   b
 }
 
@@ -230,7 +230,7 @@ fn nestedStep() uses io + state: Ok | Failed {
     base = connect("base", s)
     child = openScope(s)
     c = connect("child", child.scope)
-    launch(child.scope, () => println(s"child task uses ${nameOf(base)} and ${nameOf(c)}"))
+    fork(child.scope, () => println(s"child task uses ${nameOf(base)} and ${nameOf(c)}"))
     check(true)?
     closeScope(child)
   }

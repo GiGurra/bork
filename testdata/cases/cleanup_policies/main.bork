@@ -13,6 +13,6 @@ test "every finalizer runs, and failures are raised together" {
 test "a task's failure is raised with the finalizers'" {
   scope s {
     onClose(s, () => panic("the finalizer failed"))
-    launch(s, () => panic("the task failed"))
+    fork(s, () => panic("the task failed"))
   }
 }

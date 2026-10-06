@@ -13,7 +13,7 @@ fn escapedSelection(wait: Scope) uses state: Channel[Int] | Closed | Cancelled {
 fn escapedTaskResult(wait: Scope) uses state: Option[Channel[Int]] | Cancelled {
   scope source {
     ch = channel[Int](source, 1)
-    task = spawn(source, () => ch)
+    task = fork(source, () => ch)
     [task].awaitFirst(wait)
   }
 }

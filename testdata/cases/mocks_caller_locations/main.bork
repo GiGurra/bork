@@ -13,7 +13,7 @@ test "saved helper captures its reference" {
 test "task expectation keeps the task call site" {
   scope s {
     calls = mock Fetch(url) { url }
-    task = spawn(s, () => { calls.expect(times: 1); 0 })
+    task = fork(s, () => { calls.expect(times: 1); 0 })
     _ = await(task)
   }
 }

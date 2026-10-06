@@ -42,7 +42,7 @@ fn main() {
   println(lazy)
   println(generic("generic"))
   scope s {
-    tasks = [1, 2, 3].map(n => spawn(s, () => reader()))
+    tasks = [1, 2, 3].map(n => fork(s, () => reader()))
     println(tasks.map(t => await(t)))
   }
   for (n in [1, 2]) {

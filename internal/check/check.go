@@ -1075,7 +1075,7 @@ func (c *checker) checkFunc(fn *Func) {
 	if isOpen(fn.Result) && c.used&EffOpen != 0 {
 		c.diags.AddCode(fn.Decl.Pos, "effect.open-result", "%s returns an open function, so it cannot call its open parameters itself (its callers are not charged for them); give them effects, or only return them", fn.Decl.Name)
 	}
-	if fn.Result == Ok && isValue(bodyType) {
+	if fn.Result == Ok && isValue(bodyType) && !isOkTask(bodyType) {
 		if fn.Test != nil {
 			c.errorf(fn.Decl.Body.Tail.Position(), "value of type %s is not used (a test returns no value)", bodyType)
 		} else {
@@ -1353,7 +1353,7 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 		return Ok
 	case *syntax.ExprStmt:
 		t := c.expr(s.X)
-		if isValue(t) {
+		if isValue(t) && !isOkTask(t) {
 			c.errorf(s.X.Position(), "value of type %s is not used", t)
 		}
 		return t
@@ -1797,6 +1797,10 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 		return c.builtinCall(e, id.Name, b, want)
 	}
 	fn, ok := c.funcNamed(id.Name)
+	if !ok && c.removedTaskCall(id) {
+		fn, _ = c.funcNamed("fork")
+		return c.callFunc(e, fn.Decl.Name, fn, e.Args, nil, e.TypeArgs, want)
+	}
 	if !ok {
 		if c.removedChannelCall(e, id) {
 			for _, arg := range e.Args {
@@ -1964,7 +1968,7 @@ func (c *checker) ifExpr(e *syntax.If, want Type) Type {
 	thenT := c.joinBranch(j, 0, func() Type { return c.branchBlock(j, e.Then, want) })
 	if e.Else == nil {
 		// Without else, the if is only run for its effect.
-		if isValue(thenT) {
+		if isValue(thenT) && !isOkTask(thenT) {
 			c.errorf(e.Then.Pos, "if without else cannot produce a value (found %s); add an else branch or drop the value", thenT)
 		}
 		if j != nil {
@@ -2053,6 +2057,18 @@ func (c *checker) unify(pos diag.Pos, what string, ts []Type, want Type) Type {
 			return wide
 		}
 	}
+	// A Task[Ok] joins Ok: the branch's task is dropped like an Ok.
+	okJoin := false
+	for _, t := range vals {
+		if t != Ok && !isOkTask(t) {
+			okJoin = false
+			break
+		}
+		okJoin = okJoin || t == Ok
+	}
+	if okJoin {
+		return Ok
+	}
 	// Functions that differ only in their effects join: the value may
 	// use what any of them uses.
 	if joined, ok := vals[0].(*FuncType); ok {
@@ -2116,7 +2132,7 @@ func (c *checker) returnExpr(e *syntax.Return) {
 		return
 	}
 	if want == Ok {
-		if t := c.expr(e.Value); isValue(t) {
+		if t := c.expr(e.Value); isValue(t) && !isOkTask(t) {
 			c.errorf(e.Value.Position(), "function %s does not return a value", c.fn.Decl.Name)
 		}
 		return

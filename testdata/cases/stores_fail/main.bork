@@ -64,7 +64,7 @@ fn callsPutIn() uses state {
 fn fromTask() uses state {
   scope app {
     ch = channel[Conn](app, 1)
-    launch(app, () => {
+    fork(app, () => {
       scope t {
         _ = ch.send(t, connect(t))
       }

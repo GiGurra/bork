@@ -247,6 +247,9 @@ func (l *lifeChecker) function(fn *Func) {
 // result checks that a function's or lambda's result does not belong to
 // a scope opened inside it.
 func (l *lifeChecker) result(x Expr, life lifetime, what string) {
+	if l.dropped(x) {
+		return
+	}
 	for _, s := range life {
 		s = unhandle(s)
 		if s, ok := s.(*ScopeBlock); ok && l.within(s, l.cur) {
@@ -773,6 +776,22 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 }
 
 // what names the current frame, for messages.
+// dropped reports whether x is a Task[Ok] that the current function or
+// lambda drops, as it gives no value: the task's scope joins it.
+func (l *lifeChecker) dropped(x Expr) bool {
+	if !isOkTask(x.Type()) {
+		return false
+	}
+	switch f := l.cur.(type) {
+	case *Func:
+		return f.Result == Ok
+	case *Lambda:
+		ft, ok := f.Type().(*FuncType)
+		return ok && ft.Result == Ok
+	}
+	return false
+}
+
 func (l *lifeChecker) what() string {
 	if fn, ok := l.cur.(*Func); ok {
 		if fn.Test != nil {
@@ -837,7 +856,11 @@ func (l *lifeChecker) stmt(s Stmt) {
 			l.info.VarLifetimes[s.Var] = l.lifeText(l.env[s.Var])
 		}
 	case *ExprStmt:
-		l.use(s.X, l.expr(s.X))
+		life := l.expr(s.X)
+		if !isOkTask(s.X.Type()) {
+			// A dropped Task[Ok] is not used: its scope joins it.
+			l.use(s.X, life)
+		}
 	case *Trust:
 		l.use(s.Call, l.expr(s.Call))
 	case *Mock:
@@ -1107,7 +1130,7 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 			keeper := "the function given scope " + scopeName(a)
 			if fn != nil {
 				keeper = fn.Decl.Name + ", given scope " + scopeName(a) + ","
-				if fn.Prelude && (fn.Decl.Name == "launch" || fn.Decl.Name == "spawn") {
+				if fn.Prelude && fn.Decl.Name == "fork" {
 					keeper = "the task of " + scopeName(a) + " started"
 				}
 			}
@@ -1118,7 +1141,7 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 					callee = fn.Decl.Name
 				}
 				hint := ""
-				if fn != nil && fn.Prelude && (callee == "launch" || callee == "spawn") {
+				if fn != nil && fn.Prelude && callee == "fork" {
 					hint = fmt.Sprintf("; to give a task of %s a resource of a shorter scope, attach it first: r2 = attach(r, %s)", scopeName(a), scopeName(a))
 				}
 				l.errorf(b.Pos(), "%s may not live as long as scope %s (it depends on %s), but %s may keep it until %s closes%s", describe(b), scopeName(a), l.scopeText(short), callee, scopeName(a), hint)

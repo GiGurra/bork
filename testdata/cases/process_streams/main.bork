@@ -142,7 +142,7 @@ fn robustness(s: Scope, directory: String) uses io + state + clock: Ok | IoError
   // Cancel only once the child ignores SIGTERM, so SIGKILL is what ends it.
   deaf = fs.Join([directory, "deaf"])
   escalated = scope patient {
-    launch(patient, () => {
+    fork(patient, () => {
       waitReady(deaf)
       cancelAfter(patient, 0)
     })
@@ -200,7 +200,7 @@ fn cancellation(directory: String) uses io + state + clock: Ok | IoError | Cance
   // Cancel only once the child's TERM trap is installed.
   trapping = fs.Join([directory, "trapping"])
   graced = scope patient {
-    launch(patient, () => {
+    fork(patient, () => {
       waitReady(trapping)
       cancelAfter(patient, 0)
     })

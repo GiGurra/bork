@@ -61,7 +61,7 @@ fn main() {
     process.Exit(2)
   }
   counts = scope s {
-    tasks = paths.map(path => spawn(s, () => FileCount { path: path, result: countFile(path) }))
+    tasks = paths.map(path => fork(s, () => FileCount { path: path, result: countFile(path) }))
     tasks.map(t => await(t))
   }
   if (!report(counts)) {

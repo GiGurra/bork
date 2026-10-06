@@ -136,7 +136,7 @@ fn main() {
     // Loops over a select.
     feed = channel[Int](s)
     stop = channel[Bool](s)
-    launch(s, () => {
+    fork(s, () => {
       for (i in Seq.range(1, 5)) {
         _ = feed.send(s, i)
       }

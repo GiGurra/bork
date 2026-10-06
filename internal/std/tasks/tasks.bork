@@ -1,5 +1,5 @@
 // Package tasks shares an explicit task capacity across scopes. Ordinary
-// spawn/launch remain unlimited; select a Pool to get typed admission failures.
+// fork remains unlimited; select a Pool to get typed admission failures.
 pred ValidLimit(limit: Int) { limit > 0 }
 type Limit = Int where ValidLimit
 type TaskLimitReached = { limit: Int }
@@ -25,9 +25,11 @@ fn reserve(pool: Pool) uses state: permit | TaskLimitReached | Cancelled unsafe 
   return func(){state.mu.Lock();state.active--;state.mu.Unlock()}
 }
 
-// TrySpawn never waits for capacity. The explicit scope owns the task; pool
+// TryFork never waits for capacity. The explicit scope owns the task; pool
 // and callback captures must live as long as that scope. Failure runs no work.
-fn TrySpawn[T](pool: Pool, s: Scope, work: () => T) uses state: Task[T] | TaskLimitReached | Cancelled unsafe go {
+// For work with no value it gives a Task[Ok], which may be dropped; scope
+// cleanup waits for admitted work and reports panics just as fork does.
+fn TryFork[T](pool: Pool, s: Scope, work: () => T) uses state: Task[T] | TaskLimitReached | Cancelled unsafe go {
   if s.ctx.Err()!=nil { return Cancelled{reason:s._cancelReason()} }
   admission:=reserve(pool)
   release,ok:=admission.(func())
@@ -42,19 +44,3 @@ fn TrySpawn[T](pool: Pool, s: Scope, work: () => T) uses state: Task[T] | TaskLi
   return Task[T]{wait:func()T{return wait().(T)}}
 }
 
-// TryLaunch admits a task without returning its result. Scope cleanup waits
-// for admitted work and reports panics just as ordinary launch does.
-fn TryLaunch(pool: Pool, s: Scope, work: () => Ok) uses state: Ok | TaskLimitReached | Cancelled unsafe go {
-  if s.ctx.Err()!=nil { return Cancelled{reason:s._cancelReason()} }
-  admission:=reserve(pool)
-  release,ok:=admission.(func())
-  if !ok { return admission }
-  _,started:=_borkTryScopeTask(s,func()any{defer release();work();return nil})
-  if !started {
-    release()
-    reason:=s._cancelReason()
-    if reason=="" { reason="scope closed" }
-    return Cancelled{reason:reason}
-  }
-  return _borkOk()
-}

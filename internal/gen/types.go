@@ -1094,7 +1094,7 @@ func _moveResource[R any](r R, from, to *_Scope) R {
 	return r
 }
 
-// _task is a goroutine a scope started (spawn, launch).
+// _task is a goroutine a scope started (fork).
 type _task struct {
 	done     chan struct{}
 	result   any

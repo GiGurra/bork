@@ -93,7 +93,7 @@ test "tasks see mocks and published values" {
   mock Label() { "mocked" }
   with (requestId: "r") {
     scope s {
-      t = spawn(s, () => s"${Label()} ${Sent()}")
+      t = fork(s, () => s"${Label()} ${Sent()}")
       assertEqual(await(t), "mocked x-request=r")
     }
   }

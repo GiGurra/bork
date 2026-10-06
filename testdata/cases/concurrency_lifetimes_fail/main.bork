@@ -2,12 +2,12 @@ import "bork/fs"
 
 fn leak(): Task[Int] {
   scope s {
-    spawn(s, () => 1)
+    fork(s, () => 1)
   }
 }
 
 fn late(): Int {
-  t = scope s { spawn(s, () => 1) }
+  t = scope s { fork(s, () => 1) }
   await(t)
 }
 
@@ -15,10 +15,22 @@ fn inner(path: String) uses io: Int {
   scope outer {
     scope s {
       f = fs.Open(path, s)
-      _ = spawn(outer, () => match (f) { _: fs.File => 1, _: fs.Error => 0 })
+      _ = fork(outer, () => match (f) { _: fs.File => 1, _: fs.Error => 0 })
       0
     }
   }
+}
+
+// A Task[Ok] may be dropped, but not returned from its scope.
+fn leakOk(): Task[Ok] {
+  scope s {
+    fork(s, () => {})
+  }
+}
+
+fn lateOk() {
+  t = scope s { fork(s, () => {}) }
+  await(t)
 }
 
 fn main() {}

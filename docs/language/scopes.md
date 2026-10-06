@@ -77,7 +77,7 @@ termination deadline.
 
 ## Tasks
 
-`spawn` starts a task that runs at the same time as the code that started it. A task also belongs to a scope, and the scope does not end until its tasks are done.
+`fork` starts a task that runs at the same time as the code that started it. A task also belongs to a scope, and the scope does not end until its tasks are done.
 
 ```bork
 fn fib(n: Int): Int {
@@ -86,16 +86,16 @@ fn fib(n: Int): Int {
 
 fn main() {
   results = scope s {
-    a = spawn(s, () => fib(27))
-    b = spawn(s, () => fib(28))
+    a = fork(s, () => fib(27))
+    b = fork(s, () => fib(28))
     [await(a), await(b)]
   }
   println(results)
 }
 ```
 
-- `spawn(s, () => ...)` gives a `Task[T]`, and `await(task)` waits for its result.
-- `launch(s, () => ...)` starts a task that has no result to wait for.
+- `fork(s, () => ...)` gives a `Task[T]`, and `await(task)` waits for its result.
+- Work that gives no value gives a `Task[Ok]`. It can be dropped like an `Ok`, so `fork(s, () => { ... })` on its own line starts fire-and-forget work. The scope still waits for it, and reports it if it panics. Other tasks must be used: dropping a `Task[Int]` is an error, as dropping an `Int` is.
 
 Every task belongs to a scope. When the scope block is finished, all of its tasks are finished.
 
@@ -143,7 +143,7 @@ A channel carries values between tasks.
 fn main() {
   scope s {
     numbers = channel[Int](s, 2)
-    launch(s, () => {
+    fork(s, () => {
       _ = numbers.send(s, 1)
       _ = numbers.send(s, 2)
       numbers.close()
@@ -172,7 +172,7 @@ All values are immutable, so tasks cannot interfere with each other's data. When
 fn main() {
   counter = atom(0)
   scope s {
-    range(0, 100).forEach(i => launch(s, () => {
+    range(0, 100).forEach(i => fork(s, () => {
       _ = update(counter, n => n + 1)
     }))
   }

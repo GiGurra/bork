@@ -4,29 +4,58 @@ fn slow(s: Scope, n: Int, ms: Int) uses clock + state: Int {
   n * n
 }
 
+// A Task[Ok] may be dropped, here as the function's last expression.
+fn background(s: Scope, message: String) uses io {
+  fork(s, () => println(message))
+}
+
 fn main() {
   total = scope s {
-    a = spawn(s, () => slow(s, 3, 30))
-    b = spawn(s, () => slow(s, 4, 10))
-    launch(s, () => {
+    a = fork(s, () => slow(s, 3, 30))
+    b = fork(s, () => slow(s, 4, 10))
+    fork(s, () => {
       _ = time.Sleep(s, time.Nanoseconds((5) * 1000000))
-      println("launched task ran")
+      println("forked task ran")
     })
     await(a) + await(b)
   }
   println(total)
   squares = scope s {
-    tasks = range(1, 6).map(n => spawn(s, () => slow(s, n, 10 - n)))
+    tasks = range(1, 6).map(n => fork(s, () => slow(s, n, 10 - n)))
     tasks.map(t => await(t))
   }
   println(squares)
+  scope s {
+    first: Task[Ok] = fork(s, () => println("awaited task ran"))
+    await(first)
+    if (squares.length() > 0) {
+      fork(s, () => println("conditional task ran"))
+    }
+  }
+  scope s { background(s, "tail task ran") }
+  ran = atom(0)
+  scope s {
+    oks: List[Task[Ok]] = range(0, 3).map(i => fork(s, () => { _ = update(ran, n => n + i) }))
+    oks.forEach(t => await(t))
+  }
+  println("tasks ran", current(ran))
 }
 
 test "tasks run concurrently, and await gives their results" {
   r = scope s {
-    a = spawn(s, () => slow(s, 2, 5))
-    b = spawn(s, () => slow(s, 3, 5))
+    a = fork(s, () => slow(s, 2, 5))
+    b = fork(s, () => slow(s, 3, 5))
     await(a) * await(b)
   }
   assertEqual(r, 36)
+}
+
+test "a task with no value can be awaited or dropped" {
+  ran = atom(0)
+  scope s {
+    first = fork(s, () => { _ = update(ran, n => n + 1) })
+    await(first)
+    fork(s, () => { _ = update(ran, n => n + 10) })
+  }
+  assertEqual(current(ran), 11)
 }

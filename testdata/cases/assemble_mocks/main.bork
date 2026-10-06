@@ -44,7 +44,7 @@ test "a saved provider function still sees the native mock" {
 test "assembly inherits provider mocks in a task" {
   calls = mock database(c, s) { Database { name: "task" } }
   scope app {
-    task = spawn(app, () => assemble[Database](app, database, config))
+    task = fork(app, () => assemble[Database](app, database, config))
     assertEqual(await(task), Database { name: "task" })
     assertEqual(calls.count(), 1)
   }

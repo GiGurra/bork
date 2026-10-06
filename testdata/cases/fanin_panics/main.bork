@@ -9,8 +9,8 @@ test "awaitAll joins every task before propagating a panic" {
   scope s {
     finished = atom(false)
     tasks = [
-      spawn(s, () => broken()),
-      spawn(s, () => { _ = time.Sleep(s, time.Nanoseconds((20) * 1000000)); assertEqual(update(finished, old => true), true); 2 }),
+      fork(s, () => broken()),
+      fork(s, () => { _ = time.Sleep(s, time.Nanoseconds((20) * 1000000)); assertEqual(update(finished, old => true), true); 2 }),
     ]
     assertEqual(fails(() => assertEqual(tasks.awaitAll(), [1, 2])), true)
     assertEqual(current(finished), true)

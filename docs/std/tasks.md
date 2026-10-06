@@ -5,10 +5,10 @@ capacity. `tasks.ValidLimit(n)` proves a dynamic limit. Share one pool across
 request scopes to bound their combined task activity. A slot remains occupied
 until its callback finishes or panics, even if that callback ignores cancellation.
 
-`tasks.TrySpawn(pool, s, work)` gives `Task[T] | tasks.TaskLimitReached | Cancelled`.
-`tasks.TryLaunch(pool, s, work)` gives `Ok | tasks.TaskLimitReached | Cancelled`.
-Both charge `state` plus the callback's effects. `TrySpawn` needs a value result;
-use `TryLaunch` for an Ok callback. Saturation returns `TaskLimitReached { limit }`
+`tasks.TryFork(pool, s, work)` gives `Task[T] | tasks.TaskLimitReached | Cancelled`,
+and charges `state` plus the callback's effects. For an Ok callback the task is a
+`Task[Ok]`: handle the failures, and drop the task once admitted (the scope still
+joins it). It replaces `TrySpawn` and `TryLaunch`. Saturation returns `TaskLimitReached { limit }`
 at once. A cancelled or closing task scope, or a closed pool, gives `Cancelled`.
 Rejected callbacks never run. Admission racing cancellation may succeed, in
 which case the callback can observe that cancellation.
@@ -25,7 +25,7 @@ Submission has no hidden queue and never waits for capacity. A callback using
 the last slot can submit a child and receive TaskLimitReached without deadlocking
 on admission. It must handle that failure or compute the child directly. Use a
 bounded channel and explicit workers when producers should wait. Ordinary
-`spawn`/`launch` and parallel collection methods keep their existing APIs and do
+`fork` and parallel collection methods keep their existing APIs and do
 not implicitly consume a pool; limits apply only to chosen pool submissions.
 
 See [the runnable example](../../examples/task_pool/main.bork), and the

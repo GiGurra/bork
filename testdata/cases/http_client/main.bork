@@ -75,16 +75,16 @@ fn main() {
     if (http.ValidTimeout(timeout)) { println(timedOut(http.Get(base + "/wait", app, timeout))) } else { println("unexpected") }
     println(timedOut(http.Get(base + "/body", app, 20)))
     scope request {
-      task = spawn(request, () => http.Get(base + "/cancel", request, 2000))
+      task = fork(request, () => http.Get(base + "/cancel", request, 2000))
       started(remote)
       cancel(request)
       println(cancelledResult(await(task)))
     }
     observed = atom(false)
     scope request {
-      launch(request, () => {
+      fork(request, () => {
         result = cancelledResult(http.Get(base + "/close", request, 2000))
-        update(observed, previous => result)
+        _ = update(observed, previous => result)
       })
       started(remote)
     }

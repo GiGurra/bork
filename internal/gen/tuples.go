@@ -118,10 +118,51 @@ func (g *gen) instanceArgument(inst *check.Instance, i int, value ast.Expr) ast.
 	if inst.Func.Class != nil {
 		return value // dictMethod exposes the checked, specialized signature
 	}
+	if adapted := g.okResultArgument(inst, i, value); adapted != nil {
+		return adapted
+	}
 	if len(inst.TypeArgs) > 0 && hasTupleRepresentation(inst.Params[i]) {
 		return g.representationConversion(value, inst.Params[i], inst.Func.Params[i], g.goType(inst.Params[i]), g.parameterGoType(inst.Func.Params[i], inst.Func.TypeParams, inst.TypeArgs), inst.Func.TypeParams, inst.TypeArgs, true)
 	}
 	return value
+}
+
+// okResultArgument adapts a function with no result (Go func(...)) to a
+// generic parameter whose result is a type parameter bound to Ok, as in
+// fork(s, () => ...) giving a Task[Ok]: Go sees func(...) _Ok.
+func (g *gen) okResultArgument(inst *check.Instance, i int, value ast.Expr) ast.Expr {
+	declared, ok := inst.Func.Params[i].(*check.FuncType)
+	if !ok {
+		return nil
+	}
+	param, ok := declared.Result.(*check.TypeParam)
+	if !ok {
+		return nil
+	}
+	bound := false
+	for j, p := range inst.Func.TypeParams {
+		if p == param && inst.TypeArgs[j] == check.Ok {
+			bound = true
+		}
+	}
+	if !bound {
+		return nil
+	}
+	actual := inst.Params[i].(*check.FuncType)
+	fun := ast.NewIdent("_okWork")
+	signature := &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: g.goType(check.Ok)}}}}
+	var args []ast.Expr
+	for j, p := range actual.Params {
+		arg := ast.NewIdent(fmt.Sprintf("_okArg%d", j))
+		signature.Params.List = append(signature.Params.List, &ast.Field{Names: []*ast.Ident{arg}, Type: g.goType(p)})
+		args = append(args, arg)
+	}
+	body := []ast.Stmt{&ast.ExprStmt{X: &ast.CallExpr{Fun: fun, Args: args}}, &ast.ReturnStmt{Results: []ast.Expr{g.okValue()}}}
+	// Bind the function first, so it is evaluated once, where it is given.
+	return &ast.CallExpr{
+		Fun:  &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{fun}, Type: g.goType(actual)}}}, Results: &ast.FieldList{List: []*ast.Field{{Type: signature}}}}, Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{&ast.FuncLit{Type: signature, Body: &ast.BlockStmt{List: body}}}}}}},
+		Args: []ast.Expr{value},
+	}
 }
 
 func (g *gen) tupleCodec(d *check.Dict, tuple *check.Record) ast.Expr {

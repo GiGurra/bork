@@ -22,7 +22,7 @@ fn main() {
   println(values.Answer); println(values.Twice)
   println(shared(Shared, Shared)); println(shared(make(), make()))
   scope s {
-    tasks = [1, 2, 3].map(n => spawn(s, () => Shared.value + n))
+    tasks = [1, 2, 3].map(n => fork(s, () => Shared.value + n))
     println(tasks.map(t => await(t)))
   }
   println(cachedFailure())

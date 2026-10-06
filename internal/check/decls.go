@@ -382,6 +382,7 @@ func (c *checker) resolveTypeInner(t *syntax.TypeExpr) Type {
 			switch {
 			case args[i] == Invalid:
 				return Invalid
+			case args[i] == Ok && isTask(e.typ):
 			case !isValue(args[i]):
 				c.errorf(a.Pos, "%s[%s] is not allowed", t.Name, args[i])
 				return Invalid

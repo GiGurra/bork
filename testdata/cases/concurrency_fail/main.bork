@@ -1,6 +1,15 @@
 fn main() {
   scope s {
-    // spawn is for work that gives a value; launch for the rest.
-    t = spawn(s, () => println("x"))
+    // spawn and launch became fork; both still check as fork.
+    t = spawn(s, () => 1)
+    println(await(t))
+    launch(s, () => println("x"))
+    // Only a Task[Ok] may be dropped.
+    fork(s, () => 1)
+    // A union with Ok must still be handled.
+    checkpoint(s)
+    // A task's value list must not be Ok.
+    tasks = [fork(s, () => println("y"))]
+    _ = tasks.awaitAll()
   }
 }

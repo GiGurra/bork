@@ -4,8 +4,8 @@ rejected callbacks 0
 Cancelled { reason: "cancelled" }
 joined 42
 nested submission TaskLimitReached { limit: 1 }
-ordinary spawn unchanged
-launch joined true
+ordinary fork unchanged
+Ok task joined true
 attached pool 7
 slot after panic 9
 concurrent capacity 3

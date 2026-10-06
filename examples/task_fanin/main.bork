@@ -1,9 +1,9 @@
 type Failed = { message: String }
 fn main() {
   scope s {
-    println([spawn(s, () => 1), spawn(s, () => 2)].awaitAll())
-    println([spawn(s, () => 7)].awaitFirst(s))
-    good: Task[Int | Failed] = spawn(s, () => 3)
+    println([fork(s, () => 1), fork(s, () => 2)].awaitAll())
+    println([fork(s, () => 7)].awaitFirst(s))
+    good: Task[Int | Failed] = fork(s, () => 3)
     println([good].awaitAllUntil[Int, Failed](s))
     println(race(s, [child => 9]))
     println(withTimeout(s, 0, child => 10))

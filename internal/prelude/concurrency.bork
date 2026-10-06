@@ -6,15 +6,18 @@
 // that panics panics await, or, if no one awaited it, the scope's
 // routine when the scope closes.
 
-// Task is a running computation of a T, started with spawn.
+// Task is a running computation of a T, started with fork. A Task[Ok] is
+// work with no value: it may be dropped like an Ok, and its scope still
+// waits for it.
 // Native completion handles are implementation details of tasks and channels.
 type TaskHandle = resource
 type ChannelHandle = resource
 
 type Task[T] = private { wait: () => T, native: TaskHandle }
 
-// spawn starts work on its own goroutine, as a task of scope s.
-fn spawn[T](s: Scope, work: () => T): Task[T] unsafe go {
+// fork starts work on its own goroutine, as a task of scope s, which waits
+// for it before it closes.
+fn fork[T](s: Scope, work: () => T): Task[T] unsafe go {
   t := s.Go(func() any { return work() })
   return Task[T]{wait: func() T { return t.Await().(T) }, native: TaskHandle{handle: t, owner: s.Own(func() {})}}
 }
@@ -22,12 +25,6 @@ fn spawn[T](s: Scope, work: () => T): Task[T] unsafe go {
 // await waits for a task to finish, and gives its result.
 fn await[T](task: Task[T]): T unsafe go {
   return task.wait()
-}
-
-// launch starts work that gives no result on its own goroutine, as a
-// task of scope s, which waits for it before it closes.
-fn launch(s: Scope, work: () => Ok) unsafe go {
-  s.Go(func() any { work(); return nil })
 }
 
 // Cancelled is what a cancellation-aware operation gives when its scope
@@ -262,7 +259,7 @@ fn (ch: Channel[T]) toList[T](s: Scope) uses state: List[T] | Cancelled unsafe g
 // closed or s is cancelled.
 fn produce[T](s: Scope, capacity: Int where validCapacity, work: (Channel[T]) => Ok | Closed | Cancelled in s) uses state: Channel[T] {
   out = channel[T](s, capacity)
-  launch(s, () => {
+  fork(s, () => {
     _ = work(out)
     out.close()
   })

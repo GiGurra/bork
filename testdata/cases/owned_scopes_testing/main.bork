@@ -73,14 +73,14 @@ fn holds(app: Scope) uses clock + state {
 test "a parent raises the failures of the children it closes" {
   scope app with taskTimeout(50) {
     onClose(app, () => panic("parent finalizer failed"))
-    launch(app, () => holds(app))
+    fork(app, () => holds(app))
   }
 }
 
 test "a task's failure fails its owned scope's close" {
   scope app {
     b = openScope(app)
-    launch(b.scope, () => panic("task failed"))
+    fork(b.scope, () => panic("task failed"))
     closeScope(b)
   }
 }

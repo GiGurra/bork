@@ -10,7 +10,7 @@ test "reload subscribes without OS signals" {
   scope app {
     calls = mock signal.Subscribe(s, signals) {
       events = signal.MockSubscription(s)
-      launch(s, () => {
+      fork(s, () => {
         assert(match (events.Emit(.Hangup)) { _: Ok => true; _ => false })
       })
       events
@@ -51,13 +51,13 @@ test "test triggers an event after the application subscribes" {
     calls = mock signal.Subscribe(s, signals) {
       events = signal.MockSubscription(s)
       _ = update(ready, old => true)
-      launch(s, () => {
+      fork(s, () => {
         waitForFlag(deliver)
         _ = events.Emit(.Hangup)
       })
       events
     }
-    task = spawn(app, () => reload(app))
+    task = fork(app, () => reload(app))
     waitForFlag(ready)
     _ = update(deliver, old => true)
     assertEqual(await(task), signal.Signal.Hangup)

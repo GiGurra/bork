@@ -62,7 +62,7 @@ fn main() {
     cancel(first.scope)
     println("any cancellation", http.WaitAny([a, b]) == Ok, !cancelled(second.scope))
     // WaitAll must keep waiting for the second scope after the first ends.
-    launch(second.scope, () => {
+    fork(second.scope, () => {
       _ = delay(second.scope, 50)
       cancel(second.scope)
     })

@@ -22,7 +22,7 @@ fn rewrap(c: Conn, s: Scope): Conn { c }
 
 fn pumped(s: Scope) uses io: Conn {
   c = connect("p", s)
-  launch(s, () => println(query(c, "pump")))
+  fork(s, () => println(query(c, "pump")))
   c
 }
 
@@ -86,7 +86,7 @@ fn main() {
     }
     scope s {
       c = connect("c", s)
-      launch(s, () => println(query(c, "task")))
+      fork(s, () => println(query(c, "task")))
       _ = move(c, app)
     }
     scope s {
@@ -118,12 +118,12 @@ fn main() {
     scope s {
       q = connect("q", s)
       scope inner with slow() {
-        launch(inner, () => println(query(q, "orphan")))
+        fork(inner, () => println(query(q, "orphan")))
       }
       _ = move(q, app)
       r = connect("r", s)
       b = openScope(s, [taskTimeout(10)])
-      launch(b.scope, () => println(query(r, "orphan")))
+      fork(b.scope, () => println(query(r, "orphan")))
       closeScope(b)
       _ = move(r, app)
       setScopePolicy(s, taskTimeout(10))
@@ -168,7 +168,7 @@ fn main() {
       kk = connect("kk", s)
       for (n in [1, 2]) {
         if (n == 1) {
-          launch(s, () => println(query(kk, "task")))
+          fork(s, () => println(query(kk, "task")))
           break
         }
       }
