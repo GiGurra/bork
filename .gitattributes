@@ -1,0 +1,7 @@
+# Generated files: collapsed in GitHub diffs and excluded from language stats.
+# CI checks that each one matches its source.
+editors/tree-sitter-bork/src/parser.c linguist-generated=true
+editors/tree-sitter-bork/src/grammar.json linguist-generated=true
+editors/tree-sitter-bork/src/node-types.json linguist-generated=true
+editors/tree-sitter-bork/src/tree_sitter/*.h linguist-generated=true
+internal/stdvalidators/generated.go linguist-generated=true
