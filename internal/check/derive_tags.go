@@ -9,7 +9,10 @@ import (
 
 // A checked value keeps its declaring package's lexical identities. Runtime
 // materialization reuses checked source, as field.default does.
-type metadataChecked struct{ value syntax.Expr }
+type metadataChecked struct {
+	value syntax.Expr
+	raw   bool
+}
 
 func (p *deriveExpansion) tagTypeHead(pos diag.Pos, typ Type) *syntax.TypeHead {
 	written := &syntax.TypeExpr{Pos: pos, Name: typ.String()}
@@ -23,9 +26,9 @@ func (p *deriveExpansion) checkedTagLiteral(pos diag.Pos, value metadataChecked)
 	}
 	call := &syntax.Call{Pos: pos, Fun: &syntax.Ident{Pos: pos, Name: p.generatedName("tag", p.template.Pkg)}}
 	if p.c.info.tagValues == nil {
-		p.c.info.tagValues = map[*syntax.Call]syntax.Expr{}
+		p.c.info.tagValues = map[*syntax.Call]metadataChecked{}
 	}
-	p.c.info.tagValues[call] = value.value
+	p.c.info.tagValues[call] = value
 	return call
 }
 
@@ -105,6 +108,15 @@ func (p *deriveExpansion) checkedTagProperty(value metadataChecked, name string)
 }
 
 func (p *deriveExpansion) checkedTagValue(value syntax.Expr) (any, bool) {
+	return p.checkedTagValueRaw(value, false)
+}
+
+func (p *deriveExpansion) checkedTagValueRaw(value syntax.Expr, raw bool) (any, bool) {
+	if !raw && p.c.info.optionPayloads[value] != nil {
+		option := p.c.info.types[value].(*Sealed)
+		field := option.Variant("Some").Fields[0]
+		return metadataVariant{typ: option, name: "Some", fields: map[string]any{field.Name: metadataChecked{value: value, raw: true}}}, true
+	}
 	switch value := value.(type) {
 	case *syntax.IntLit:
 		return p.eval(value)
@@ -144,7 +156,7 @@ func (p *deriveExpansion) checkedTagValue(value syntax.Expr) (any, bool) {
 			return metadataVariant{typ: variant.Parent, name: variant.Name, fields: fields}, true
 		}
 	}
-	return metadataChecked{value: value}, true
+	return metadataChecked{value: value, raw: raw}, true
 }
 
 func (p *deriveExpansion) tagRecord(literal *syntax.RecordLit) (any, bool) {

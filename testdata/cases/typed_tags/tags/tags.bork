@@ -1,6 +1,6 @@
 import "bork/shape"
 type Policy = sealed { Keep, Change }
-type FieldTags = { policy: Policy = Policy.Keep, name: String = "default", aliases: List[String] = [], count: Int = -1 }
+type FieldTags = { policy: Policy = Policy.Keep, name: Option[String] = Option.None, aliases: List[String] = [], count: Int = -1 }
 type VariantTags = { name: String = "variant" }
 type TypeTags = { name: String = "type" }
 class Names[T] { fn names(value: T): List[String]; fn typeTags(value: T): Option[TypeTags]; fn options(value: T): List[FieldTags] }
@@ -17,7 +17,12 @@ derive instance names[T]: Names[T] {
     comptime if (!shape.tagged[(Int, String), TypeTags]().isNone()) { shape.fail("tuple tags should be absent") }
     prefix = shape.tagged[T, TypeTags]().getOr(TypeTags {}).name
     comptime if (shape.kind[T]() == shape.Record) {
-      [prefix].concat([comptime for (field in shape.fields[T]()) fieldOptions[T](field).name])
+      comptime for (field in shape.fields[T]()) {
+        comptime if (fieldOptions[T](field).name.isSome()) {
+          comptime if (fieldOptions[T](field).name.getOr("") == "") { shape.fail("empty explicit tag name") }
+        }
+      }
+      [prefix].concat([comptime for (field in shape.fields[T]()) fieldOptions[T](field).name.getOr("default")])
     } else {
       [prefix].concat([comptime for (variant in shape.variants[T]()) variant.tagged[VariantTags]().getOr(VariantTags {}).name])
     }

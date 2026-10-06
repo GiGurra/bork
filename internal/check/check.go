@@ -238,7 +238,7 @@ type InterpolationSource struct {
 
 type Info struct {
 	tagGroups map[*syntax.TagGroup]*syntax.RecordLit
-	tagValues map[*syntax.Call]syntax.Expr
+	tagValues map[*syntax.Call]metadataChecked
 
 	// predicateRefs retains checked where-clause identities for editor queries.
 	predicateRefs map[diag.Pos]*Constraint
@@ -1883,8 +1883,11 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 		}
 		return instantiate(c.preludePkg.TypeNamed("Option"), []Type{project.view})
 	}
-	if value := c.info.tagValues[e]; value != nil {
-		return c.info.types[value]
+	if value, ok := c.info.tagValues[e]; ok {
+		if value.raw {
+			return c.info.optionPayloads[value.value]
+		}
+		return c.info.types[value.value]
 	}
 	if field := c.info.shapeDefaults[e]; field != nil {
 		return field.Type

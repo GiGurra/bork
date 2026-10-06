@@ -492,7 +492,11 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 					case "getOr":
 						if len(x.Args) == 1 {
 							if variant.name == "Some" {
-								return variant.fields[variant.typ.Variant("Some").Fields[0].Name], true
+								value := variant.fields[variant.typ.Variant("Some").Fields[0].Name]
+								if checked, ok := value.(metadataChecked); ok {
+									return p.checkedTagValueRaw(checked.value, checked.raw)
+								}
+								return value, true
 							}
 							return p.eval(x.Args[0])
 						}

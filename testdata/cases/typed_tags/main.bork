@@ -2,7 +2,7 @@ import "example.com/typed_tags/tags"
 use tags.OwnNames
 type Row = {
   x: Int tags { name: "external", aliases: ["old"] }
-  y: Int tags {}
+  y: Int tags { name: Option.Some("default") }
   z: Int
 } tags { name: "row" } derive (tags.Names)
 type Mode = sealed { First tags { name: "first" }, Second } derive (tags.Names)
