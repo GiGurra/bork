@@ -200,7 +200,7 @@ fn decodeItems[T: Decode](items: List[Value], index: Int, done: List[T]): List[T
 
 // A Map with String keys is a JSON object; its fields keep their order.
 instance decodeMap[V: Decode]: Decode[Map[String, V]] {
-  metadata FieldSchema = FieldSchema { kind: "json", optional: false }
+  metadata FieldSchema = FieldSchema { kind: "map:" + FieldInfo[V]().kind, optional: false }
   fn decode(json: Value): Map[String, V] | DecodeError {
     match (json) {
       Value.Object { fields: fields } => decodeFields(fields, {:})

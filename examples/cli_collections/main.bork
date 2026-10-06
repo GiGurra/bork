@@ -1,0 +1,40 @@
+import "bork/cli"
+import "bork/codec"
+import "bork/json"
+import "bork/process"
+import "bork/test"
+use codec.Defaults
+use cli.FieldTagsEncode
+
+pred PositiveLimits(value: Option[Map[String, Int]]) {
+  value.map(limits => limits.entries().all(entry => entry.value > 0)).getOr(true)
+}
+type Options = {
+  // Tags as CSV; repeat the flag to append more.
+  tags: List[String] = [] cli { collection: cli.Collection.Csv }
+  // Labels as comma-separated key=value pairs.
+  labels: Option[Map[String, String]] cli { collection: cli.Collection.KeyValue }
+  // Positive limits as key=value pairs.
+  limits: Option[Map[String, Int]] where PositiveLimits cli { collection: cli.Collection.KeyValue }
+} derive (codec.Decode, codec.Encode)
+fn main() {
+  match (cli.Run[Options]("collections", "CSV lists and key=value maps", (options, s) => {
+    println(json.Encode(options))
+  })) {
+    Ok => {}
+    error: cli.Error => { eprintln(error.Render("collections")); process.Exit(2) }
+  }
+}
+
+test "typed collection tags append values and decode map entries" {
+  options = test.AssertIs[Options](cli.Parse[Options]("collections", "", [
+    "--tags", "one,two", "--tags", "three", "--labels", "env=dev,team=ops", "--limits", "http=80"
+  ]))
+  assertEqual(options.tags, ["one", "two", "three"])
+  assertEqual(options.labels.map(labels => labels.get("env")), Option.Some(Option.Some("dev")))
+}
+test "duplicate keys and field facts still reject input" {
+  duplicate = test.AssertIs[cli.Error](cli.Parse[Options]("collections", "", ["--labels", "env=dev,env=prod"]))
+  assert(duplicate.Render("collections").contains("duplicate map key"))
+  assert(cli.Parse[Options]("collections", "", ["--limits", "http=0"]) is cli.Error)
+}

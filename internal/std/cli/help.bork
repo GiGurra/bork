@@ -54,14 +54,16 @@ fn configureHelp(native: nativeCommand, specs: List[FieldSpec], fields: List[inp
   envLines := []string{}
   for _, field := range fields {
     spec := metadata[field.field]
-    if long, enabled := spec.long.(Mapping_Named); enabled { labels[long.name] = typeLabel(field) }
+    label := typeLabel(field)
+    if _, pairs := spec.collection.(Collection_KeyValue); pairs { label = "key=value" }
+    if long, enabled := spec.long.(Mapping_Named); enabled { labels[long.name] = label }
     if _, enabled := spec.long.(Mapping_Named); enabled || spec.positional || spec.hidden || spec.deprecated != "" { continue }
     env, enabled := spec.env.(Mapping_Named)
     if !enabled { continue }
     doc := spec.description
     if field.hasDefault { doc += " (default " + defaultLabel(field) + ")" } else if !field.optional { doc += " (required)" }
     doc += helpChoices(field)
-    envLines = append(envLines, fmt.Sprintf("  %s %s  %s", env.name, typeLabel(field), strings.TrimSpace(doc)))
+    envLines = append(envLines, fmt.Sprintf("  %s %s  %s", env.name, label, strings.TrimSpace(doc)))
   }
   for name, label := range labels {
     if flag := cmd.Flag(name); flag != nil {
