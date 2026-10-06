@@ -806,7 +806,7 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 	}
 	var partial []*ClassInstance // the head fits, but a bound does not
 	scope := c.pkg
-	if c.fn != nil && c.fn.TemplatePkg != nil {
+	if c.fn != nil && c.fn.TemplateScope != nil {
 		scope = c.fn.TemplateScope.Pkg
 	}
 	for _, ci := range scope.inScope {
