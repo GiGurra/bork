@@ -60,10 +60,12 @@ fn main() {
  ]
  leafFlags = if (mode == "long") { baseLeafFlags.concat([.{ field: "replicas", long: cli.Mapping.Named { name: "region" } }]) } else { baseLeafFlags }
  files = if (mode == "badfiles") { ["missing.json"] } else { [] }
- leaf = cli.RootSubcommand[Root, Leaf]("leaf", "Leaf", (root, leaf, s) => {
+ leafBase = cli.RootSubcommand[Root, Leaf]("leaf", "Leaf", (root, leaf, s) => {
   println(s"HANDLER ${root.region}/${root.count}/${root.verbose}/${root.token}/${leaf.name}/${leaf.replicas}/${leaf.files}/${root.tags}")
  }, flags: leafFlags, configFiles: files, settings: .{ autoShort: true })
- commands = [cli.RootGroup[Root]("group", "Group", [leaf])]
+ leaf = if (mode == "aliases") { leafBase.copy(command: leafBase.command.copy(aliases: ["l"])) } else { leafBase }
+ group = cli.RootGroup[Root]("group", "Group", [leaf])
+ commands = [if (mode == "aliases") { group.copy(command: group.command.copy(aliases: ["g"])) } else { group }]
  standalone: Option[(Root, Scope) uses io + net + clock + random + state => Ok] = if (mode == "standalone" || mode == "standalone-warning") {
   Option.Some((root, s) => { println(s"ROOT ${root.region}/${root.count}") })
  } else { Option.None }
@@ -89,13 +91,14 @@ fn main() {
 		t.Fatal(err)
 	}
 	tests := []struct {
-		name, mode, root, leaf, env    string
-		args, want, absent, stderrWant []string
+		name, mode, root, leaf, env, token string
+		args, want, absent, stderrWant     []string
 	}{
 		{name: "default", args: []string{"group", "leaf", "--name", "api"}, want: []string{"HANDLER west/1/false/Option.None/api/2/[]", "Ok"}},
 		{name: "before", args: []string{"--region", "east", "group", "leaf", "--name", "api"}, want: []string{"HANDLER east/1"}},
 		{name: "after", args: []string{"group", "leaf", "--name", "api", "--region", "east", "--verbose", "a,b", "two words"}, want: []string{"HANDLER east/1/true", `["a,b", "two words"]`}},
 		{name: "root-list", args: []string{"group", "leaf", "--name", "api", "--tags", "one", "--tags", "two"}, want: []string{`/api/2/[]/["one", "two"]`}},
+		{name: "aliases", mode: "aliases", args: []string{"g", "l", "--name", "api", "--region", "east"}, want: []string{"HANDLER east/1", "Ok"}},
 		{name: "reuse", mode: "reuse", want: []string{"HANDLER east/1/false/Option.None/first", "HANDLER west/1/false/Option.None/second"}},
 		{name: "automatic-short", args: []string{"group", "leaf", "-n", "api", "-r", "5"}, want: []string{"HANDLER west/1", "/api/5/[]"}},
 		{name: "explicit-short-conflict", mode: "short", args: []string{"group", "leaf", "--name", "api"}, want: []string{"short flag -r conflicts with a root flag"}, absent: []string{"HANDLER"}},
@@ -110,6 +113,7 @@ fn main() {
 		{name: "standalone-child", mode: "standalone", args: []string{"group", "leaf", "--name", "api"}, want: []string{"HANDLER"}, absent: []string{"ROOT "}},
 		{name: "field-errors", args: []string{"--count", "0", "group", "leaf", "--name", "api", "--replicas", "0"}, want: []string{".root.count", ".replicas"}, absent: []string{"HANDLER"}},
 		{name: "record-errors", args: []string{"--region", "blocked", "group", "leaf", "--name", "blocked"}, want: []string{".root", "RootValid", "LeafValid"}, absent: []string{"HANDLER"}},
+		{name: "env-only", token: "secret", args: []string{"group", "leaf", "--name", "api"}, want: []string{`HANDLER west/1/false/Option.Some("secret")/api`}},
 		{name: "env", env: "env", args: []string{"group", "leaf", "--name", "api"}, want: []string{"HANDLER env/1"}},
 		{name: "config", root: `{"region":"config","count":4}`, leaf: `{"name":"configured","replicas":3}`, args: []string{"--root-config", "root.json", "group", "leaf", "--leaf-config", "leaf.json"}, want: []string{"HANDLER config/4", "/configured/3"}},
 		{name: "precedence", env: "env", root: `{"region":"config"}`, leaf: `{"name":"configured"}`, args: []string{"--root-config", "root.json", "group", "leaf", "--leaf-config", "leaf.json", "--region", "flag", "--name", "api"}, want: []string{"HANDLER flag/1", "/api/2"}},
@@ -135,7 +139,7 @@ fn main() {
 			}
 			cmd := exec.Command(exe, append([]string{mode}, tt.args...)...)
 			cmd.Dir = cwd
-			cmd.Env = append(os.Environ(), "BORK_ROOT_REGION="+tt.env, "BORK_ROOT_TOKEN=", "BORK_LEAF_NAME=")
+			cmd.Env = append(os.Environ(), "BORK_ROOT_REGION="+tt.env, "BORK_ROOT_TOKEN="+tt.token, "BORK_LEAF_NAME=")
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout, cmd.Stderr = &stdout, &stderr
 			err := cmd.Run()
