@@ -2376,3 +2376,58 @@ fn main() {}`)
 		t.Fatalf("expected one nested contract diagnostic, got %v", err)
 	}
 }
+
+func TestDeriveTemplateUnrequestedDependentCallIndependentContexts(t *testing.T) {
+	checkPreludeSource(t, `fn consume[A](flag: Int, value: A): String { "ok" }
+derive fn unused[T](value: T): String { flag = true; consume[T](flag, value) }
+fn main() {}`, "derive expression must be Int, found Bool")
+	checkPreludeSource(t, `fn consume[A](value: A): String { "ok" }
+derive fn unused[T](value: T): Int { result: Int = consume[T](value); result }
+fn main() {}`, "derive expression must be Int, found String")
+	checkPreludeSource(t, `fn consume[A](value: A): String { "ok" }
+derive fn unused[T](value: T): Int { result = consume[T](value); result }
+fn main() {}`, "derive expression must be Int, found String")
+	checkPreludeSource(t, `fn consume[A](check: (Int) => Bool, value: A): String { "ok" }
+derive fn unused[T](value: T): String { consume[T](n => n + 1, value) }
+fn main() {}`, "derive expression must be Bool, found Int")
+	checkPreludeSource(t, `fn consume[A](flag: Int, value: A): String { "ok" }
+derive fn unused[T](value: T): String { flag = 1; consume[T](flag: flag, value: value) }
+fn main() {}`, "")
+}
+
+func TestDeriveTemplateUnrequestedPartialFunctionContexts(t *testing.T) {
+	checkPreludeSource(t, `fn consume[A](check: (A) => Bool, value: A): String { "ok" }
+derive fn unused[T](value: T): String { consume[T](item => 1, value) }
+fn main() {}`, "derive expression must be Bool, found Int")
+	checkPreludeSource(t, `fn consume[A](check: (A) => Bool, value: A): String { "ok" }
+derive fn unused[T](value: T): String { consume[T](item => true, value) }
+fn main() {}`, "")
+	checkPreludeSource(t, `fn consume[A](check: (A) => A, value: A): String { "ok" }
+derive fn unused[T](value: T): String { consume[T](item => item, value) }
+fn main() {}`, "")
+	checkPreludeSource(t, `import "bork/shape"
+fn consume[A](check: (shape.Field[A]) => Bool, value: A): String { "ok" }
+derive fn unused[T](value: T): String { consume[T](field => field.index, value) }
+fn main() {}`, "derive expression must be Bool, found Int")
+}
+
+func TestDeriveTemplateUnrequestedConcreteCallLambdaParameter(t *testing.T) {
+	checkPreludeSource(t, `fn consume[A](check: (A) => Bool, value: A): String { "ok" }
+derive fn unused[T](value: T): String { consume[Int]((item: String) => true, 1) }
+fn main() {}`, "parameter item must be Int here, found String")
+	checkPreludeSource(t, `fn consume[A](value: A): A { value }
+derive fn unused[T](value: T): String { result = consume[Int](1); result }
+fn main() {}`, "derive expression must be String, found Int")
+}
+
+func TestDeriveTemplateUnrequestedConcreteHelperCallTypes(t *testing.T) {
+	checkPreludeSource(t, `derive fn id[A](value: A): A { value }
+derive fn unused(): String { result = id[Int](1); result }
+fn main() {}`, "derive expression must be String, found Int")
+	checkPreludeSource(t, `derive fn consume[A](check: (A) => Bool, value: A): String { "ok" }
+derive fn unused(): String { consume[Int]((item: String) => true, 1) }
+fn main() {}`, "parameter item must be Int here, found String")
+	checkPreludeSource(t, `derive fn id[A](value: List[A]): List[A] { value }
+derive fn unused(): List[Int] { result = id[Int]([1]); result }
+fn main() {}`, "")
+}

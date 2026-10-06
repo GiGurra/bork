@@ -178,21 +178,25 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 					var typ Type
 					if parameter.Type != nil && deriveConcreteType(parameter.Type, typeNames) {
 						typ = c.resolveType(parameter.Type)
-						if context != nil && typ != Invalid && !identical(typ, context.Params[i]) {
+						if context != nil && independentDeriveType(context.Params[i]) != nil && typ != Invalid && !identical(typ, context.Params[i]) {
 							c.errorf(parameter.Type.Pos, "parameter %s must be %s here, found %s", parameter.Name, context.Params[i], typ)
 						}
 					} else if parameter.Type == nil && context != nil {
-						typ = context.Params[i]
+						typ = independentDeriveType(context.Params[i])
 					}
 					bind(parameter.Name, typ, parameter)
-					if kind := metadata.annotation(parameter.Type); kind != 0 {
+					kind := metadata.annotation(parameter.Type)
+					if kind == 0 && parameter.Type == nil && context != nil {
+						kind = deriveResolvedDescriptor(context.Params[i])
+					}
+					if kind != 0 {
 						metadata.locals[c.lookup(parameter.Name)] = kind
 					}
 				}
 				outerResult := result
 				result = nil
 				if context != nil && context.Result != Ok {
-					result = context.Result
+					result = independentDeriveType(context.Result)
 				}
 				walk(reflect.ValueOf(node.Body), result)
 				result = outerResult
@@ -225,6 +229,11 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				actual := check(node.Value, declared)
 				if actual == nil {
 					walk(reflect.ValueOf(node.Value), declared)
+					if call, ok := node.Value.(*syntax.Call); ok {
+						if signature := c.deriveCallSignature(call, typeNames); signature != nil {
+							actual = signature.result
+						}
+					}
 				}
 				if node.Type != nil && declared == nil {
 					actual = nil
@@ -274,6 +283,25 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 					return
 				}
 				metadata.checkCall(node)
+				if signature := c.deriveCallSignature(node, typeNames); signature != nil {
+					if want != nil && signature.result != nil && !assignable(signature.result, want) {
+						c.errorf(node.Pos, "derive expression must be %s, found %s", want, signature.result)
+					}
+					for i, argument := range node.Args {
+						// Literal arguments already have a signature check in the
+						// definition call-shape pass; lexical values need this context.
+						if deriveLiteralExpression(argument) {
+							continue
+						}
+						context := signature.argument(node, i)
+						if _, lambda := argument.(*syntax.Lambda); !lambda && context != nil && hasTypeParam(context) {
+							context = nil
+						}
+						walk(reflect.ValueOf(argument), context)
+					}
+					walk(reflect.ValueOf(node.Fun), nil)
+					return
+				}
 			case syntax.Expr:
 				if concrete(node) {
 					check(node, want)
