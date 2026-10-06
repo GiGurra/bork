@@ -1,0 +1,20 @@
+import "example.com/typed_tags/tags"
+use tags.OwnNames
+type Row = {
+  x: Int tags { name: "external", aliases: ["old"] }
+  y: Int tags { name: Option.Some("default") }
+  z: Int
+} tags { name: "row" } derive (tags.Names)
+type Mode = sealed { First tags { name: "first" }, Second } derive (tags.Names)
+type Box[A] = { value: A tags { name: "generic" } } derive (tags.Names)
+fn main() {
+  opts = tags.OptionsOf(Row { x: 1, y: 2, z: 3 }).get(0).getOr(tags.FieldTags {})
+  println(opts.aliases)
+  println(opts.count)
+  println(tags.NamesOf(Box { value: 4 }))
+  println(tags.TagsOf(Row { x: 1, y: 2, z: 3 }).getOr(tags.TypeTags {}).name)
+  println(tags.TagsOf(Mode.First).isNone())
+  println(tags.NamesOf(Row { x: 1, y: 2, z: 3 }))
+  println(tags.NamesOf(Mode.First))
+  println(tags.NamesOf(tags.Own { value: 1 }))
+}

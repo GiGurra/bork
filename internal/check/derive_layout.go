@@ -19,8 +19,9 @@ type metadataRecord struct {
 }
 type metadataList struct{ items []any }
 type metadataVariant struct {
-	typ  *Sealed
-	name string
+	typ    *Sealed
+	name   string
+	fields map[string]any
 }
 
 func (p *deriveExpansion) shapeType(name string) Type {
@@ -216,12 +217,6 @@ func layoutValue(value any, typ Type) bool {
 // layoutLiteral renders a layout value as checked source in the template's
 // package, so runtime metadata equals the compile-time layout.
 func (p *deriveExpansion) layoutLiteral(pos diag.Pos, value any) syntax.Expr {
-	alias := ""
-	for name, pkg := range p.template.Pkg.imports {
-		if pkg.Path == "bork/shape" {
-			alias = name
-		}
-	}
 	switch value := value.(type) {
 	case metadataList:
 		out := &syntax.ListLit{Pos: pos}
@@ -230,13 +225,29 @@ func (p *deriveExpansion) layoutLiteral(pos diag.Pos, value any) syntax.Expr {
 		}
 		return out
 	case metadataRecord:
-		out := &syntax.RecordLit{Type: &syntax.Ident{Pos: pos, Name: alias + "." + value.typ.Name}, End: pos}
+		out := &syntax.RecordLit{Type: p.tagTypeHead(pos, value.typ), End: pos}
 		for _, field := range value.typ.Fields {
 			out.Fields = append(out.Fields, &syntax.FieldInit{Pos: pos, Name: field.Name, Value: p.literal(pos, value.fields[field.Name])})
 		}
 		return out
 	case metadataVariant:
-		return &syntax.Ident{Pos: pos, Name: alias + "." + value.typ.Name + "." + value.name}
+		head := &syntax.Selector{Pos: pos, X: p.tagTypeHead(pos, value.typ), Name: value.name}
+		if len(value.fields) == 0 {
+			return head
+		}
+		variant := value.typ.Variant(value.name)
+		if variant.Positional {
+			call := &syntax.Call{Pos: pos, Fun: head}
+			for _, field := range variant.Fields {
+				call.Args = append(call.Args, p.literal(pos, value.fields[field.Name]))
+			}
+			return call
+		}
+		out := &syntax.RecordLit{Type: head, End: pos}
+		for _, field := range variant.Fields {
+			out.Fields = append(out.Fields, &syntax.FieldInit{Pos: pos, Name: field.Name, Value: p.literal(pos, value.fields[field.Name])})
+		}
+		return out
 	}
 	return nil
 }
