@@ -5,6 +5,11 @@ The template has one target parameter and implements the class's methods.
 Each request expands the template for its target, then checks the resulting
 Bork code with the ordinary type, effect, fact and lifetime rules.
 
+Definitions also check predicate names and arity, concrete expression types,
+and closed dictionary requirements even when no target requests them.
+Known parameter facts participate in dictionary selection. Requirements that
+depend on a target's type or predicate callback remain checks of its expansion.
+
 ```bork
 import "bork/shape"
 

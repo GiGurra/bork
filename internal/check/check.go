@@ -624,7 +624,6 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 	c.declareInstances(files)
 	c.declareDerived()
 	c.resolveUses(files)
-	c.checkDeriveDefinitions(files)
 	for name, fn := range c.preludePkg.Funcs {
 		c.info.Funcs[name] = fn
 	}
@@ -648,6 +647,7 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 	c.resolveConstraints(files)
 	c.ambientConstraints(files)
 	c.instanceConstraints()
+	c.checkDeriveDefinitions(files)
 	c.checkDerivedDuplicates()
 	c.ensureAllFieldDefaults()
 	for _, checkKey := range c.mapKeyChecks {
@@ -687,6 +687,8 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 			c.checkFunc(fn)
 		}
 	}
+	checkExpanded()
+	c.checkDeriveDefinitionBounds()
 	checkExpanded()
 	// Pass 3: check bodies.
 	for _, f := range files {
@@ -865,6 +867,7 @@ type checker struct {
 	tupleBindingMode          bool
 	patternTest               bool
 	derives                   []*deriveRequest
+	deriveDefinitionBounds    []deriveDefinitionBound
 	deriveCalls               map[*syntax.Call]*Func
 	deriveHelperSerial        int
 	deriveSpecializations     map[string]*Func

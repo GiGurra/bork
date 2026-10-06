@@ -160,6 +160,24 @@ func (c *checker) checkDeriveScopes(method *syntax.FuncDecl, localNames, typeNam
 				} else if localNames[node.Name] {
 					c.errorf(node.Pos, "undefined local in derive definition: %s", node.Name)
 				}
+			case *syntax.PredRef:
+				if origin, present := env[node.Name]; present {
+					c.noteDeriveSource(node.Pos, node.Name, origin, "variable")
+					if len(node.Args) != 0 {
+						c.errorf(node.Pos, "%s is a derive parameter and takes no predicate arguments here", node.Name)
+					}
+				} else if localNames[node.Name] {
+					c.errorf(node.Pos, "undefined local in derive definition: %s", node.Name)
+				} else if predicate, found := c.funcNamed(node.Name); !found {
+					c.errorf(node.Pos, "unknown predicate in derive definition: %s", node.Name)
+				} else if !predicate.Decl.IsPred {
+					c.errorf(node.Pos, "%s is a function, not a predicate (declare it with pred)", node.Name)
+				} else {
+					c.noteDeriveSource(node.Pos, node.Name, predicate.Decl.Pos, "function")
+					if len(node.Args) != len(predicate.Params)-1 {
+						c.errorf(node.Pos, "predicate %s takes %d arguments after the value, found %d", node.Name, len(predicate.Params)-1, len(node.Args))
+					}
+				}
 			case *syntax.TypeExpr:
 				if owner, member, projected := strings.Cut(node.Name, "."); projected && (member == "Type" || member == "RawType") && localNames[owner] {
 					if origin, present := env[owner]; present {
@@ -184,6 +202,11 @@ func (c *checker) checkDeriveScopes(method *syntax.FuncDecl, localNames, typeNam
 	for _, param := range method.Params {
 		bind(env, param.Name, param.Pos)
 	}
+	for _, parameter := range method.Params {
+		walk(reflect.ValueOf(parameter.Type), env)
+		walk(reflect.ValueOf(parameter.Default), env)
+	}
+	walk(reflect.ValueOf(method.Result), env)
 	walk(reflect.ValueOf(method.Requires), env)
 	walk(reflect.ValueOf(method.Body), env)
 }

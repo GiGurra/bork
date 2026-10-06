@@ -15,8 +15,10 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 	if method.Body == nil {
 		return
 	}
-	outer, effects := c.scopes, c.used
-	defer func() { c.scopes, c.used = outer, effects }()
+	outer, effects, function := c.scopes, c.used, c.fn
+	defer func() { c.scopes, c.used, c.fn = outer, effects, function }()
+	partial := &Func{Decl: method, Pkg: c.pkg, Effects: c.effectsOf(method.Uses), Result: Invalid}
+	c.fn = partial
 	c.used = 0
 	c.scopes = append(c.scopes, map[string]*local{})
 	metadata := deriveMetadataTypes{c: c, locals: map[*local]deriveDescriptor{}, typeNames: typeNames}
@@ -33,9 +35,20 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 			typ = c.resolveType(param.Type)
 		}
 		bind(param.Name, typ, param)
+		if typ == nil {
+			typ = Invalid
+		}
+		partial.Params = append(partial.Params, typ)
+		partial.ParamConstraints = append(partial.ParamConstraints, nil)
 		symbolic.locals[c.lookup(param.Name)] = symbolic.annotation(param.Type, nil)
 		if kind := metadata.annotation(param.Type); kind != 0 {
 			metadata.locals[c.lookup(param.Name)] = kind
+		}
+	}
+	scope := c.paramScope()
+	for i, parameter := range method.Params {
+		if partial.Params[i] != Invalid && c.deriveIndependentPredicates(parameter.Type, scope) {
+			partial.ParamConstraints[i] = c.constraintsOf(parameter.Type, partial.Params[i], scope)
 		}
 	}
 	var concrete func(syntax.Expr) bool
@@ -464,6 +477,67 @@ func deriveConcreteType(typ *syntax.TypeExpr, typeNames map[string]bool) bool {
 			}
 		}
 		return deriveConcreteType(typ.Func.Result, typeNames)
+	}
+	return true
+}
+
+// Unknown predicate inputs remain expansion obligations. Resolved parameter
+// annotations retain their declared facts for independent dictionary selection.
+func (c *checker) deriveIndependentPredicates(written *syntax.TypeExpr, scope map[string]Type) bool {
+	if written == nil {
+		return true
+	}
+	var independent func(*syntax.PredRef) bool
+	independent = func(predicate *syntax.PredRef) bool {
+		if typ, parameter := scope[predicate.Name]; parameter {
+			if typ == Invalid || len(predicate.Args) != 0 {
+				return false
+			}
+		} else if function, found := c.funcNamed(predicate.Name); !found || !function.Decl.IsPred || len(predicate.Args) != len(function.Params)-1 {
+			// Reference and arity errors were reported by the lexical pass.
+			return false
+		}
+		for _, argument := range predicate.Args {
+			if id, named := argument.(*syntax.Ident); named {
+				if typ, parameter := scope[id.Name]; parameter && typ == Invalid {
+					return false
+				}
+			}
+		}
+		for _, alternative := range predicate.Or {
+			if !independent(alternative) {
+				return false
+			}
+		}
+		return true
+	}
+	for _, predicate := range written.Where {
+		if !independent(predicate) {
+			return false
+		}
+	}
+	for _, child := range written.Args {
+		if !c.deriveIndependentPredicates(child, scope) {
+			return false
+		}
+	}
+	for _, child := range written.Tuple {
+		if !c.deriveIndependentPredicates(child, scope) {
+			return false
+		}
+	}
+	for _, child := range written.Union {
+		if !c.deriveIndependentPredicates(child, scope) {
+			return false
+		}
+	}
+	if written.Func != nil {
+		for _, parameter := range written.Func.Params {
+			if !c.deriveIndependentPredicates(parameter, scope) {
+				return false
+			}
+		}
+		return c.deriveIndependentPredicates(written.Func.Result, scope)
 	}
 	return true
 }

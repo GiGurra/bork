@@ -127,6 +127,9 @@ func (c *checker) checkDeriveDefinitions(files []*syntax.File) {
 				}
 				if call, ok := node.(*syntax.Call); ok {
 					c.checkDeriveCallShape(call, locals)
+					if id, named := call.Fun.(*syntax.Ident); named && !locals[id.Name] {
+						c.collectDeriveDefinitionBounds(call, typeNames)
+					}
 				}
 				if written, ok := node.(*syntax.TypeExpr); ok && written.Name != "" {
 					if classHandles[written] {

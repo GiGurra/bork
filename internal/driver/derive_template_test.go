@@ -416,6 +416,106 @@ fn main() {}`, "undefined name in derive definition: missingFunction")
 fn main() {}`, "undefined name in derive definition: missingFunction")
 }
 
+func TestDeriveTemplateUnrequestedPredicateDefinitions(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ source, diagnostic string }{
+		{`derive fn unused[T](value: T where missing): String { "ok" }`, "unknown predicate in derive definition: missing"},
+		{`derive fn unused[T](value: T): T where missing { value }`, "unknown predicate in derive definition: missing"},
+		{`fn ordinary[T](value: T): Bool { true }
+derive fn unused[T](value: T where ordinary): String { "ok" }`, "ordinary is a function, not a predicate"},
+		{`pred below[T](value: T, limit: Int) { _ = value; limit > 0 }
+derive fn unused[T](value: T where below): String { "ok" }`, "predicate below takes 1 arguments after the value, found 0"},
+		{`derive fn unused[T](value: T, keep: (T) uses nothing => Bool): String {
+ inner: T where keep(1) = value; "ok"
+}`, "keep is a derive parameter and takes no predicate arguments here"},
+		{`derive fn unused[T](value: T): String {
+ comptime if (true) { keep: (T) uses nothing => Bool = x => true }
+ inner: T where keep = value; "ok"
+}`, "undefined local in derive definition: keep"},
+	}
+	for _, test := range cases {
+		checkPreludeSource(t, test.source+"\nfn main() {}", test.diagnostic)
+	}
+	checkPreludeSource(t, `derive fn unused[T](keep: (T) uses nothing => Bool, value: T where keep): T where keep { value }
+fn main() {}`, "")
+	checkPreludeSource(t, `derive fn unused[T](keep: (T) uses nothing => Bool, value: (Int where keep, Int)): String { "ok" }
+fn main() {}`, "")
+}
+
+func TestDeriveTemplateUnrequestedClosedBounds(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `fn need[U: Eq, V](left: U, right: V): String { "ok" }
+derive fn unused[T](scope: Scope, value: T): String { need[Scope, T](scope, value) }
+fn main() {}`, "values of type Scope cannot be compared")
+	checkPreludeSource(t, `derive fn need[U: Eq, V](left: U, right: V): String { "ok" }
+derive fn unused[T](scope: Scope, value: T): String { need[Scope, T](scope, value) }
+fn main() {}`, "values of type Scope cannot be compared")
+	checkPreludeSource(t, `class Available[T] { fn available(value: T): String }
+fn need[U: Available, V](left: U, right: V): String { "ok" }
+derive fn unused[T](value: T): String { need[Int, T](1, value) }
+fn main() {}`, "no instance of Available for Int is in scope")
+	checkPreludeSource(t, `derive fn need[U: Eq, V](left: U, right: V): String { "ok" }
+derive fn unused[T](value: T): String { need[Int, T](1, value) }
+fn main() {}`, "")
+}
+
+func TestDeriveTemplateClosedClassMethodObligation(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `class Available[A] { fn available(value: A): String }
+derive fn unused[T](value: T): String { available[Int](value) }
+fn main() {}`, "no instance of Available for Int is in scope")
+}
+
+func TestDeriveTemplateClosedBoundSingleDiagnostic(t *testing.T) {
+	t.Parallel()
+	source := `fn need[U: Eq](left: U): String { "ok" }
+derive fn unused(scope: Scope): String { need[Scope](scope) }
+fn main() {}`
+	_, _, err := Check(validatorFixture(t, source))
+	if err == nil || strings.Count(err.Error(), "values of type Scope cannot be compared") != 1 {
+		t.Fatalf("want one closed-bound diagnostic, got %v", err)
+	}
+}
+
+func TestDeriveTemplateConcretePredicateSingleDiagnostic(t *testing.T) {
+	t.Parallel()
+	for _, source := range []string{
+		`derive fn unused(value: Int where missing): String { "ok" }`,
+		`fn ordinary(value: Int): Bool { true }
+derive fn unused(value: Int where ordinary): String { "ok" }`,
+		`pred below(value: Int, limit: Int) { value < limit }
+derive fn unused(value: Int where below): String { "ok" }`,
+	} {
+		_, _, err := Check(validatorFixture(t, source+"\nfn main() {}"))
+		failure, ok := err.(*DiagError)
+		if !ok || failure.Diags.Len() != 1 {
+			t.Fatalf("want one predicate diagnostic, got %v", err)
+		}
+	}
+}
+
+func TestDeriveTemplateConcretePredicateParameterType(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `derive fn unused(keep: Int, value: Int where keep): String { "ok" }
+fn main() {}`, "predicate parameter must be a function")
+}
+
+func TestDeriveTemplateClosedBoundsRetainArgumentFacts(t *testing.T) {
+	t.Parallel()
+	declarations := `pred positive(n: Int) { n > 0 }
+class Available[A] { fn available(value: A): String }
+instance positiveOnly: Available[Int where positive] { fn available(value: Int): String { "positive" } }
+fn need[U: Available, V](left: U, right: V): String { "ok" }
+`
+	checkPreludeSource(t, declarations+`derive fn unused[T](left: Int where positive, right: T): String { need[Int, T](left, right) }
+fn main() {}`, "")
+	checkPreludeSource(t, declarations+`derive fn unused[T](left: Int where positive): String { need[Int, Int](left, 1) }
+fn main() {}`, "")
+	checkPreludeSource(t, declarations+`instance plain: Available[Int] { fn available(value: Int): String { "plain" } }
+derive fn unused[T](left: Int): String { need[Int, Int](left, 1) }
+fn main() {}`, "")
+}
+
 func TestDeriveTemplateSharedWorkBudget(t *testing.T) {
 	// Branching argument evaluation must consume the same budget as helper
 	// bodies. Copying a budget before evaluating arguments refunds this work.
