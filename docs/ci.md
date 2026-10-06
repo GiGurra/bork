@@ -92,10 +92,11 @@ reports near-zero elapsed time and avoids counting nested serial time twice.
 These conservative workload weights guide balancing; they are not predictions
 of wall time.
 
-If shards grow beyond the budget, refresh the timings first, then raise
-`SHARDS` in the runner together with the workflow's `shard` list, which
-`test_ci.py` checks. If a single unit exceeds the budget, split that workload
-rather than increasing the timeout.
+Keep the heavy test matrix capped at ten shards and retain the 180-second
+limits. If shards grow beyond the budget, refresh the timings and split large
+units into independent test roots. For example, the CLI runtime and comptime
+C-header rebuild scenarios have separate roots so they can land on different
+shards. `test_ci.py` checks the workflow matrix against the runner's shard count.
 Keep aggregate dependencies current when adding jobs: `CI ok` accepts only
 successful dependencies, including all matrix children, with only the inactive
 test path allowed to be skipped (race shards for docs-only PRs, documentation
