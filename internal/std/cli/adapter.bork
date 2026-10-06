@@ -6,6 +6,7 @@ use codec.Defaults
 type nativeCommand = resource
 type inputField = {
   field: String
+  typeName: String
   kind: String
   optional: Bool
   hasDefault: Bool
@@ -38,7 +39,7 @@ fn inputFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchem
     // CLI switches default to false independently of the record decoder.
     defaultFalse := field.kind == "bool" && !field.optional && !field.hasDefault
     if defaultFalse { text = "false" }
-    fields = append(fields, inputField{field: field.name, kind: field.kind, optional: field.optional, hasDefault: field.hasDefault || defaultFalse, defaultFalse: defaultFalse, defaultText: text, configDefault: path, validate: func(value codec.Value) any {
+    fields = append(fields, inputField{field: field.name, typeName: field.typeName, kind: field.kind, optional: field.optional, hasDefault: field.hasDefault || defaultFalse, defaultFalse: defaultFalse, defaultText: text, configDefault: path, validate: func(value codec.Value) any {
       if err, bad := field.validate(value).(codec.DecodeError); bad { return err }
       return _Ok{}
     }})
@@ -104,7 +105,7 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
     if list { typ = reflect.TypeFor[*[]string]() }
     flag := metadata[field.field]
     doc := flag.description
-    if field.hasDefault { doc += " (default " + field.defaultText + ")" } else if !field.optional { doc += " (required)" }
+    if field.hasDefault { doc += " (default " + helpDefault(field) + ")" } else if !field.optional { doc += " (required)" }
     tag := "optional:\"true\" descr:" + strconv.Quote(strings.TrimSpace(doc))
     if list { tag += " collection:\"array\"" }
     if short := mappingName(flag.short); short != "" { tag += " short:" + strconv.Quote(short) }
@@ -229,6 +230,8 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
   }
   cmd, err := command.ToCobraE()
   if err != nil { return Error{errors: []codec.DecodeError{{path: name, message: err.Error()}}} }
+  native := nativeCommand{handle: cmd, owner: s.Own(func() {})}
+  configureHelp(native, specs, schema, helpType, helpDefault)
   positionalCompletions := map[int]func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective){}
   listPosition := -1
   for _, spec := range specs {
@@ -326,7 +329,7 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
       return nil, cobra.ShellCompDirectiveNoFileComp
     }
   }
-  return adapter{native: nativeCommand{handle: cmd, owner: s.Own(func() {})}, result: func() any { return result }}
+  return adapter{native: native, result: func() any { return result }}
 }
 
 fn evaluate(prepared: adapter, args: List[String], completion: Bool, configure: (nativeCommand, List[String], Bool) => Error | Ok) uses io: parsedInput | Error | Help unsafe go {
