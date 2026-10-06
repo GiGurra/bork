@@ -68,6 +68,7 @@ type RecordField = {
   optional: Bool
   hasDefault: Bool
   defaultValue: Option[() => DefaultSchema]
+  recordSchema: Option[() => Option[RecordSchema]] = Option.None
   validate: (Value) => Ok | DecodeError
 }
 type RecordSchema = { fields: List[RecordField] }
@@ -163,6 +164,7 @@ instance decodeBool: Decode[Bool] {
 
 // An Option is null (or a missing field) for None.
 instance decodeOption[T: Decode]: Decode[Option[T]] {
+  metadata Option[RecordSchema] = Schema[T]()
   metadata FieldSchema = FieldSchema { kind: FieldInfo[T]().kind, optional: true }
   fn decode(json: Value): Option[T] | DecodeError {
     match (json) {
@@ -411,6 +413,7 @@ derive fn RecordInfo[T](): Option[RecordSchema] {
               optional: info.optional,
               hasDefault: field.hasDefault,
               defaultValue: provider,
+              recordSchema: Option.Some(() => Schema[field.RawType]()),
               validate: input => match (decode[field.RawType](input)) {
                 error: DecodeError => atPath(error, s".${FieldWireName[T](field)}")
                 value: field.RawType => match (field.check(value)) {

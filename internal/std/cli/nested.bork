@@ -1,0 +1,118 @@
+import "bork/codec"
+use codec.Defaults
+
+type nestedGroup = { field: String, key: String, optional: Bool, path: List[String], aliases: List[List[String]] }
+type nestedLeaf = { field: String, path: List[String], aliases: List[List[String]] }
+type cliSchema = { record: Option[codec.RecordSchema], groups: List[nestedGroup], leaves: List[nestedLeaf] }
+
+// Flatten only the selected decoder's advertised record inputs. Source paths
+// stay distinct from wire paths and each naming override affects one segment.
+fn flattenRecordSchema(recordSchema: Option[codec.RecordSchema], name: String): cliSchema | Error unsafe go {
+  record, found := _borkOptionGet(recordSchema)
+  if !found { return cliSchema{record: recordSchema, groups: []nestedGroup{}, leaves: []nestedLeaf{}} }
+  result := []codec.RecordField{}
+  groups := []nestedGroup{}
+  leaves := []nestedLeaf{}
+  failures := []codec.DecodeError{}
+  join := func(parent, child string) string { if parent == "" { return child }; return parent + "." + child }
+  var visit func(codec.RecordSchema, string, string, []string, []string, []string, [][]string, int)
+  visit = func(record codec.RecordSchema, source, key string, aliases, words, path []string, aliasPaths [][]string, depth int) {
+    if depth > 32 { failures = append(failures, codec.DecodeError{path: source, message: "nested CLI record exceeds 32 levels"}); return }
+    for _, original := range record.fields {
+      field := original
+      localKey := field.wireName
+      if localKey == "" { localKey = field.name }
+      field.name = join(source, field.name)
+      field.wireName = join(key, localKey)
+      field.words = append(append([]string{}, words...), field.words...)
+      if len(original.words) == 0 { field.words = append(append([]string{}, words...), _borkCodecWords(localKey)... ) }
+      field.aliases = []string{}
+      parents := append([]string{key}, aliases...)
+      children := append([]string{localKey}, original.aliases...)
+      for p, parent := range parents { for c, child := range children { if p != 0 || c != 0 { field.aliases = append(field.aliases, join(parent, child)) } } }
+      nextPath := append(append([]string{}, path...), localKey)
+      nextAliases := [][]string{}
+      for p, parent := range append([][]string{path}, aliasPaths...) { for c, child := range children { if p != 0 || c != 0 { nextAliases = append(nextAliases, append(append([]string{}, parent...), child)) } } }
+      options := fieldTagOptions(original)
+      if failure, bad := options.(codec.DecodeError); bad { failures = append(failures, codec.DecodeError{path: field.name, message: "invalid cli tag group: " + failure.message}); continue }
+      var nested Option[codec.RecordSchema] = Option_None[codec.RecordSchema]{}
+      if provider, present := _borkOptionGet(original.recordSchema); present { nested = provider() }
+      child, nestedRecord := _borkOptionGet(nested)
+      if nestedRecord && options.(FieldTags).flatten {
+        if field.hasDefault { failures = append(failures, codec.DecodeError{path: field.name, message: "flattened record cannot declare a parent default; put defaults on its leaves or use cli { flatten: false }"}); continue }
+        groups = append(groups, nestedGroup{field: field.name, key: field.wireName, optional: field.optional, path: nextPath, aliases: nextAliases})
+        if len(child.fields) != 0 { visit(child, field.name, field.wireName, field.aliases, field.words, nextPath, nextAliases, depth+1); continue }
+        field.hasDefault = true
+      }
+      validate := original.validate
+      parentKey := key
+      field.validate = func(input codec.Value) any {
+        checked := validate(input)
+        if failure, bad := checked.(codec.DecodeError); bad && parentKey != "" { failure.path = "." + parentKey + failure.path; return failure }
+        return checked
+      }
+      result = append(result, field)
+      leaves = append(leaves, nestedLeaf{field: field.name, path: nextPath, aliases: nextAliases})
+    }
+  }
+  visit(record, "", "", nil, nil, nil, nil, 0)
+  if len(failures) != 0 { return Error{errors: failures} }
+  return cliSchema{record: Option_Some[codec.RecordSchema]{E0:codec.RecordSchema{fields:result}}, groups:groups, leaves:leaves}
+}
+
+type flatConfigEntry = { field: String, key: String, value: codec.Value, group: Bool }
+fn flattenConfigFields(fields: List[codec.Field], schema: List[inputField]): List[flatConfigEntry] | Error unsafe go {
+  import "reflect"
+  import "strings"
+  result := []flatConfigEntry{}
+  groups := []nestedGroup{}
+  if len(schema) != 0 { groups = schema[0].groups }
+  var visit func([]codec.Field, []string) *codec.DecodeError
+  visit = func(fields []codec.Field, prefix []string) *codec.DecodeError {
+    seen := map[string]string{}
+    for _, entry := range fields {
+      path := append(append([]string{}, prefix...), entry.name)
+      owner := ""
+      group := false
+      for _, field := range schema {
+        for _, candidate := range append([][]string{field.path}, field.aliasPaths...) { if reflect.DeepEqual(candidate, path) { owner = field.field; break } }
+        if owner != "" { break }
+      }
+      if owner == "" { for _, candidate := range groups {
+        for _, accepted := range append([][]string{candidate.path}, candidate.aliases...) { if reflect.DeepEqual(accepted, path) { owner, group = candidate.field, true; break } }
+        if owner != "" { break }
+      } }
+      key := strings.Join(path, ".")
+      if owner == "" { return &codec.DecodeError{path:key, message:"unknown CLI config field"} }
+      if first, duplicate := seen[owner]; duplicate { return &codec.DecodeError{path:key, message:"CLI config field is the same field as " + first} }
+      seen[owner] = key
+      result = append(result, flatConfigEntry{field:owner, key:key, value:entry.value, group:group})
+      if group {
+        if object, ok := entry.value.(codec.Value_Object); ok { if failure := visit(object.fields, path); failure != nil { return failure } } else if _, null := entry.value.(codec.Value_Null); !null { return &codec.DecodeError{path:key, message:"nested CLI config requires an object or null"} }
+      }
+    }
+    return nil
+  }
+  if failure := visit(fields, nil); failure != nil { return Error{errors:[]codec.DecodeError{*failure}} }
+  return result
+}
+
+fn rebuildNestedFields(fields: List[codec.Field], schema: List[inputField], active: List[String]): List[codec.Field] unsafe go {
+  result := []codec.Field{}
+  var set func([]codec.Field, []string, codec.Value) []codec.Field
+  set = func(fields []codec.Field, path []string, value codec.Value) []codec.Field {
+    if len(path) == 0 { return fields }
+    index := len(fields)
+    for i, field := range fields { if field.name == path[0] { index = i; break } }
+    if index == len(fields) { fields = append(fields, codec.Field{name:path[0], value:codec.Value_Object{fields:[]codec.Field{}}}) }
+    if len(path) == 1 { fields[index].value = value; return fields }
+    child, ok := fields[index].value.(codec.Value_Object)
+    if !ok { child = codec.Value_Object{fields:[]codec.Field{}} }
+    child.fields = set(child.fields, path[1:], value)
+    fields[index].value = child
+    return fields
+  }
+  if len(schema) != 0 { for _, group := range schema[0].groups { for _, source := range active { if source == group.field { result = set(result, group.path, codec.Value_Object{fields:[]codec.Field{}}); break } } } }
+  for _, entry := range fields { for _, field := range schema { if entry.name == field.wireName || entry.name == field.field { result = set(result, field.path, entry.value); break }; for _, alias := range field.aliases { if entry.name == alias { result = set(result, field.path, entry.value); break } } } }
+  return result
+}

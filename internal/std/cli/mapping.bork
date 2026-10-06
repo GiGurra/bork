@@ -57,7 +57,9 @@ fn resolveMetadataWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordS
   import "fmt"
   import "strings"
   import "unicode"
-  record, supported := _borkOptionGet(recordSchema)
+  flattened := flattenRecordSchema(recordSchema, name)
+  if failure, bad := flattened.(Error); bad { return failure }
+  record, supported := _borkOptionGet(flattened.(cliSchema).record)
   schema := record.fields
   if !supported { return Error{errors: []codec.DecodeError{{path: name, message: "CLI options require a derived record decoder"}}} }
   errors := []codec.DecodeError{}
@@ -162,7 +164,9 @@ fn resolveMetadataWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordS
     }
     spec = derive(spec)
     for _, alias := range field.aliases {
-      aliasLong := makeName(alias)
+      aliasBasis := alias
+      for _, leaf := range flattened.(cliSchema).leaves { if leaf.field == field.name { for _, path := range leaf.aliases { if len(path) > 1 && strings.Join(path, ".") == alias { words := []string{}; for _, segment := range path { words = append(words, _borkCodecWords(segment)... ) }; aliasBasis = strings.Join(words, "-"); break } } } }
+      aliasLong := makeName(aliasBasis)
       if nameOf(spec.long) != "" { aliasLong = prefix(settings.flagPrefix, "-", aliasLong); spec.aliases.long = append(spec.aliases.long, aliasLong) }
       if settings.envPrefix != "" && nameOf(spec.env) != "" {
         spec.aliases.env = append(spec.aliases.env, prefix(settings.envPrefix, "_", strings.ToUpper(strings.ReplaceAll(aliasLong, "-", "_"))))

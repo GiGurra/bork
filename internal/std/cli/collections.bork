@@ -4,11 +4,11 @@ use codec.Defaults
 // Repeat preserves literal list words and whole JSON map input.
 type Collection = sealed { Repeat, Csv, KeyValue } derive (codec.Decode, codec.Encode)
 // This concrete tag record is carried by the selected codec record schema.
-type FieldTags = { collection: Collection = Collection.Repeat } derive (codec.Decode)
+type FieldTags = { collection: Collection = Collection.Repeat, flatten: Bool = true } derive (codec.Decode)
 // Select this encoder where options records derive schemas with cli tags.
 instance FieldTagsEncode: codec.Encode[FieldTags] {
   fn encode(value: FieldTags): codec.Value {
-    codec.Value.Object { fields: [codec.Field { name: "collection", value: codec.encode(value.collection) }] }
+    codec.Value.Object { fields: [codec.Field { name: "collection", value: codec.encode(value.collection) }, codec.Field { name: "flatten", value: codec.Value.Bool { value: value.flatten } }] }
   }
 }
 
@@ -52,14 +52,16 @@ fn parseKeyValues(words: List[String], kind: String, parse: (String) => codec.Va
 }
 
 fn fieldCollection(field: codec.RecordField): Collection | codec.DecodeError {
-  mode: Collection = Collection.Repeat
+  match (fieldTagOptions(field)) {
+    tags: FieldTags => tags.collection
+    error: codec.DecodeError => error
+  }
+}
+fn fieldTagOptions(field: codec.RecordField): FieldTags | codec.DecodeError {
   groups = field.tags.filter(group => group.package == "bork/cli")
   if (groups.length() > 1) { return codec.DecodeError { path: "", message: "duplicate cli tag group" } }
   match (groups.head()) {
-    Option.None => mode
-    Option.Some(group) => match (codec.decode[FieldTags](group.value)) {
-      tags: FieldTags => tags.collection
-      error: codec.DecodeError => error
-    }
+    Option.None => FieldTags {}
+    Option.Some(group) => codec.decode[FieldTags](group.value)
   }
 }

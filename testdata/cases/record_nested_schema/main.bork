@@ -1,0 +1,13 @@
+import "bork/codec"
+use codec.Defaults
+
+type Db = { host: String = "localhost", port: Int = 5432 } derive (codec.Decode)
+type Options = { db: Db, optional: Option[Db], names: List[String] } derive (codec.Decode)
+
+fn main() {
+  schema = codec.Schema[Options]().getOr(codec.RecordSchema { fields: [] })
+  for (field in schema.fields) {
+    nested = field.recordSchema.map(provider => provider()).getOr(Option.None)
+    println(s"${field.name}: ${field.optional}: ${nested.map(record => record.fields.map(child => child.name)).getOr([])}")
+  }
+}
