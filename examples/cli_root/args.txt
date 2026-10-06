@@ -1,0 +1,9 @@
+--region
+east
+services
+deploy
+--service
+api
+--replicas
+3
+--verbose

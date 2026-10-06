@@ -232,6 +232,7 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
       value := rootInput.prepared.result()
       if failure, bad := value.(Error); bad {
         for i := range failure.errors { failure.errors[i].path = ".root"+failure.errors[i].path }
+        for _, warning := range warnings() { failure.errors = append(failure.errors, codec.DecodeError{path: cmd.CommandPath(), message: warning}) }
         result = failure
       } else { result = rootInput.apply(parsedInput{value: value.(codec.Value), warnings: warnings(), path: name}, s) }
       diagnostics.Reset(); return nil
@@ -254,6 +255,8 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
     root.ResetFlags()
     for _, flag := range globals { root.PersistentFlags().AddFlag(flag) }
   }
+  root.Flags().SetOutput(&diagnostics)
+  root.PersistentFlags().SetOutput(&diagnostics)
   root.InitDefaultHelpFlag()
   root.InitDefaultHelpCmd()
   if failure, bad := configure(nativeCommand{handle: root, owner: s.Own(func() {})}, arguments, completion).(Error); bad { return failure }
