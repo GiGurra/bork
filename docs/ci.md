@@ -1,7 +1,7 @@
 # CI test shards
 
-CI runs every Go test exactly once, under the race detector, in ten shards
-balanced by `scripts/ci.py`. The race run checks everything an ordinary run
+For code changes and pushes to main, CI runs every Go test exactly once, under
+the race detector, in ten shards balanced by `scripts/ci.py`. The race run checks everything an ordinary run
 checks: the same tests and assertions, plus data-race detection. Earlier CI ran
 each test twice, ordinary and race, and both runs spent most of their time on
 the same child `go build`s of generated programs, which are not race-instrumented.
@@ -49,8 +49,11 @@ shard, breaking ties by name. Placing the first test of a split package in a
 shard adds a five-second overhead for starting that package's test binary, so
 small tests cluster. `scripts/ci-timings.json` holds the weights. A new package
 or test receives a five-second provisional weight and still runs; stale entries
-cannot add or remove coverage. No changed-file filtering is applied, on PRs or
-main.
+cannot add or remove coverage. PRs that change only `docs/**`, Markdown files,
+or `mkdocs.yml` skip the race shards and run all `TestDoc*` driver tests instead, including snippet, link and
+structure checks. Other CI jobs still run. Classification uses the PR merge-base
+diff, including both paths of renames; mixed changes get full coverage. Pushes
+and manual performance runs always get full checks.
 
 Inspect a partition or run one shard from the repository root:
 
@@ -94,8 +97,11 @@ If shards grow beyond the budget, refresh the timings first, then raise
 `test_ci.py` checks. If a single unit exceeds the budget, split that workload
 rather than increasing the timeout.
 Keep aggregate dependencies current when adding jobs: `CI ok` accepts only
-successful dependencies, including all matrix children. The compiler performance
-`benchmark` check runs in a separate workflow.
+successful dependencies, including all matrix children, with only the inactive
+test path allowed to be skipped (race shards for docs-only PRs, documentation
+tests otherwise). Detection failures fail the aggregate. The compiler performance
+`benchmark` check runs in a separate workflow and reports an explicit successful
+no-op for docs-only PRs. macOS latency benchmarks remain manual-only.
 
 Every Go job restores module and build caches through the shared setup action.
 Only successful main jobs save new snapshots, through the `save-go-cache`

@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   macos-latency:
     if: github.event_name == 'workflow_dispatch'
@@ -44,18 +48,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: ./.github/actions/changes
+        id: changes
+      - name: Docs-only PR
+        if: steps.changes.outputs.docs-only == 'true'
+        run: echo "Documentation-only changes; compiler benchmarks are unnecessary."
       - uses: ./.github/actions/setup-go
+        if: steps.changes.outputs.docs-only != 'true'
         id: go-cache
         with:
           cache-name: benchmark
       - name: Compiler phases and allocations
+        if: steps.changes.outputs.docs-only != 'true'
         shell: bash
         run: go test ./internal/driver -run '^$' -bench '^BenchmarkCompilerPhases/(hello|synthetic1000)/' -benchtime=3x -count=3 | tee phases.txt
       - name: CLI latency and sizes
+        if: steps.changes.outputs.docs-only != 'true'
         run: |
           go build -o /tmp/bork ./cmd/bork
           python3 scripts/benchmark.py --bork /tmp/bork --program hello --program synthetic1000 --samples 3 > latency.json
       - uses: actions/upload-artifact@v4
+        if: steps.changes.outputs.docs-only != 'true'
         with:
           name: compiler-performance
           path: |
