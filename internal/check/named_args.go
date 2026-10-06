@@ -104,11 +104,7 @@ func (c *checker) namedArgs(e *syntax.Call, name string, fn *Func, args []syntax
 			missing = append(missing, fmt.Sprintf("%s: %s", p.Name, fn.Params[i]))
 			continue
 		}
-		if isLiteral(p.Default) {
-			out[i] = copyLiteral(p.Default)
-		} else {
-			out[i] = p.Default
-		}
+		out[i] = c.copyDefault(p.Default)
 		order = append(order, i)
 	}
 	if len(missing) > 0 {

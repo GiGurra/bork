@@ -1,4 +1,3 @@
-main.bork:6:34: the default of value can only be a literal, since its type depends on a type parameter
 main.bork:9:13: cannot tell the constructor of .{ ... }; give the value an expected record or sealed type, or write its constructor explicitly
 main.bork:10:10: cannot tell the constructor of .Ready; give the value an expected record or sealed type, or write its constructor explicitly
 main.bork:11:10: cannot tell the constructor of .{ ... }; give the value an expected record or sealed type, or write its constructor explicitly
