@@ -265,6 +265,9 @@ func (p *deriveExpansion) chooseMatch(x *syntax.Match) (syntax.Expr, bool) {
 }
 
 func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
+	if x == nil {
+		return nil, false
+	}
 	if !p.enter(x.Position()) {
 		return nil, false
 	}

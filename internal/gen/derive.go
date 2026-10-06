@@ -13,7 +13,7 @@ import (
 )
 
 // Checked source templates implement structural codecs. The construction
-// helpers below remain shared by foreign Go conversion and captured tuples.
+// helpers below remain in use by foreign Go conversion.
 
 func (g *gen) text(x ast.Node) string {
 	var buf bytes.Buffer

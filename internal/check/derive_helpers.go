@@ -281,6 +281,7 @@ func (p *deriveExpansion) runtimeHelper(call *syntax.Call, helper *syntax.FuncDe
 			fn.Result = p.c.resolveType(fd.Result)
 		}
 		fn.Effects = p.c.effectsOf(fd.Uses)
+		p.c.openSignature(fn)
 		p.c.needsOf(fn)
 		if helper.Requires != nil {
 			fd.Requires = child.expr(helper.Requires)

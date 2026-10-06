@@ -2188,12 +2188,62 @@ func TestDeriveTemplateRuntimeForHeaderScopes(t *testing.T) {
   for (i = 0; i < 3; i = i + 1) { value = i + 1 }
   0
 }
+
 fn main() {}`, "")
 	checkPreludeSource(t, `derive fn unused(): Int {
   for (i = 0; i < 3; i = i + 1) {}
   i
 }
 fn main() {}`, "undefined local in derive definition: i")
+}
+
+func TestDeriveTemplateRequestedRuntimeForHeaders(t *testing.T) {
+	t.Parallel()
+	source := `class C[T] { fn c(value: T): Int }
+derive fn count[T](value: T): Int {
+ for (i = 0; i < 3; i = i + 1) { _ = i }
+ 1
+}
+derive instance c[T]: C[T] {
+ fn c(value: T): Int {
+  for (i = 0; i < 3; i = i + 1) { _ = i }
+  count[T](value) + 1
+ }
+}
+type Row = {} derive (C)
+fn main() { println(c(Row {})) }`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "2\n" {
+		t.Fatalf("run: %v\n%s", err, output)
+	}
+}
+
+func TestDeriveTemplateRequestedOpenHelperCallbacks(t *testing.T) {
+	t.Parallel()
+	source := `class Run[T] { fn run(value: T) uses io: String }
+derive fn invoke[A](work: (A) => String, value: A): String { work(value) }
+derive fn relay[A](work: (A) => String): (A) => String { work }
+derive instance run[T]: Run[T] {
+ fn run(value: T) uses io: String {
+  work = relay[T](item => { println("relay"); "ok" })
+  _ = work(value)
+  invoke[T](item => { println("invoke"); "ok" }, value)
+ }
+}
+type Row = {} derive (Run)
+fn main() { println(run(Row {})) }`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "relay\ninvoke\nok\n" {
+		t.Fatalf("run: %v\n%s", err, output)
+	}
 }
 
 func TestDeriveTemplateConcreteCheckingDefersAmbientCalls(t *testing.T) {

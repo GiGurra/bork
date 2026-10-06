@@ -41,5 +41,5 @@ Structural schema and decoding use source derivation templates and checked
 builders. CLI, environment, HTTP field adapters and CSV read this typed schema.
 A field's optional `defaultValue` callback returns a `codec.DefaultSchema` with
 display text, an optional configuration path and string choices from one default
-evaluation. Tuple constraints that capture caller values retain their existing
-local decoder closure while source capture lowering is being completed.
+evaluation. Tuple constraints that capture caller values use typed source
+helper parameters, with ordinary lifetime checks and pure predicate callbacks.
