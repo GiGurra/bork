@@ -2,8 +2,9 @@
 
 Normal and race tests use `scripts/ci.py`. Each mode discovers all packages with
 `go list` and all driver Test, Example and Fuzz parents with `go test -list`,
-using the same race build tags as the actual run. `core` covers every package
-except `internal/driver` and `internal/lsp`. LSP parents use three shards,
+using the same race build tags as the actual run. `cli` runs `cmd/bork`, whose
+CLI tests are mostly sequential and take 100-170 seconds alone. `core` covers every other package except
+`internal/driver` and `internal/lsp`. LSP parents use four shards,
 golden cases three, examples one, and the remaining driver parents six
 integration shards. Anchored parent patterns retain
 every subtest. Golden case children are discovered from `testdata/cases` using
@@ -82,8 +83,9 @@ successful dependencies, including all matrix children. The compiler performance
 
 Every Go job restores module and build caches through the shared setup action.
 Only successful main jobs save new snapshots, with a distinct writer key for each
-mode/shard; PR runs reuse main's caches. Restore fallbacks can borrow another
-shard's content-addressed build entries. Tests use `-count=1`, so Go build caching
+mode/shard; PR runs reuse main's caches. Restore fallbacks prefer another shard
+of the same mode, since a normal snapshot holds no race builds, and then borrow
+any shard's content-addressed build entries. Tests use `-count=1`, so Go build caching
 never replaces test execution. Cache effectiveness also depends on generated
 Go test programs retaining stable build paths.
 
@@ -123,3 +125,7 @@ Both shared CLI compilers carry a linker-only test marker so automatic detached
 cache workers can require explicit test opt-ins. The ordinary compiler uses
 `cacheTestGate=test`, which enables neither cache probes nor test callbacks;
 the cache fixture compiler retains `cacheTestGate=enabled`.
+
+CI runs in one concurrency group per workflow and ref, cancelling in-progress
+runs on every ref including `main`: a newer push supersedes older runs, so only
+the latest commit is tested.

@@ -14,6 +14,7 @@ runs:
       id: go-cache
       with:
         cache-name: ${{ inputs.mode }}-${{ inputs.shard }}
+        cache-family: ${{ inputs.mode }}
     - name: Run shard
       shell: bash
       env:
