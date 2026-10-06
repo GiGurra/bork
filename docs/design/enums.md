@@ -55,10 +55,11 @@ fn main() {
 A strict service keeps the same shared type and narrows it with a fact alias:
 
 ```bork
-type KnownColor = Color where enum.known
+type KnownColor = Color where enum.Known
 
 // json.Decode[KnownColor] rejects "purple":
-// .: unknown name "purple" of Color; expected one of RED, DARK_BLUE, TEAL
+// DecodeError { path: "", message: "must be Known", ... }
+// Strict lookup with enum.parse on a closed enum reports expected wire names.
 ```
 
 ## Terms
@@ -155,6 +156,7 @@ Alternatives considered (rejected):
 ### 3. Rules for the fallback
 
 - At most one fallback per sealed type. A second is an error on that variant.
+- An enum with a fallback needs at least one known fieldless alternative; a fallback-only type is a compile error.
 - Payload: exactly one positional `String` slot, on an enum-shaped type. It
   holds the input name verbatim; encode writes it back verbatim. Anything else
   is an error. (A `codec.Value` fallback for tagged unions is a later step;
@@ -172,13 +174,13 @@ Alternatives considered (rejected):
 
 ### 4. A fallback holding a known name
 
-`Color.Other("Red")` can be written in code. Left alone, it would encode as
-`"Red"` and come back as `Color.Red`: same wire, different value.
+`Color.Other("RED")` can be written in code. Left alone, it would encode as
+`"RED"` and come back as `Color.Red`: same wire, different value.
 
 Recommendation: the compiler adds an invariant to the fallback variant: its
 `String` payload is not one of the type's wire names or aliases, as computed
 from the type's naming policy and the variants' `codec` tags. Construction
-follows the usual fact rules, so a literal `Color.Other("Red")` is a compile
+follows the usual fact rules, so a literal `Color.Other("RED")` is a compile
 error and a runtime string needs a guard or `enum.parse`. Decoding can never
 violate it.
 
@@ -222,13 +224,13 @@ class Enum[T] {
   fn index(value: T): Option[Int]           // declaration position; None for the fallback
 }
 type UnknownName = { name: String, expected: List[String] }
-pred known[T: Enum](value: T) { ... }       // value is not the fallback
+pred Known[T: Enum](value: T) { ... }       // value is not the fallback
 ```
 
 - `byName` is strict even when a fallback exists; `parse` is total for a type
   with a fallback. `isKnown(name)` is `byName(name).isSome()`, and
   `hasFallback` is in `enum.Info`, so neither is a separate method.
-- `known` needs predicates with class bounds; if the checker can't do that
+- `Known` needs predicates with class bounds; if the checker can't do that
   yet, the template generates a per-type predicate instead.
 - `index` is the declaration position. It is **not** a stable id: reordering
   variants changes it. Stable numeric ids (protobuf-style) are deferred until a

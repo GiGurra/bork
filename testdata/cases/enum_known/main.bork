@@ -4,7 +4,7 @@ import "bork/json"
 use codec.Defaults
 
 // A hand-written instance can classify a payload variant as unknown.
-// Derived payload/fallback support is a subsequent enum implementation step.
+// Known also works independently of the generated enum instance.
 type Color = sealed { Red; Other(String) }
 instance colors: enum.Enum[Color] {
   fn values(): List[Color] { [Color.Red] }
