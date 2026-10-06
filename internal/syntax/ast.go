@@ -124,6 +124,7 @@ type GoTag struct {
 }
 
 type VariantDecl struct {
+	Doc        string
 	Positional bool
 	Slots      []*TypeExpr
 	Pos        diag.Pos

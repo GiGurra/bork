@@ -574,7 +574,7 @@ func (s *Sealed) Instance(args []Type) *Sealed {
 		bound := bindParams(s.TypeParams, args)
 		inst.Constraints = substConstraints(s.Constraints, bound)
 		for _, v := range s.Variants {
-			inst.Variants = append(inst.Variants, &Variant{Name: v.Name, Positional: v.Positional, Fields: substFields(v.Fields, bound), Constraints: substConstraints(v.Constraints, bound), Parent: inst, Index: v.Index})
+			inst.Variants = append(inst.Variants, &Variant{Name: v.Name, Doc: v.Doc, Positional: v.Positional, Fields: substFields(v.Fields, bound), Constraints: substConstraints(v.Constraints, bound), Parent: inst, Index: v.Index})
 		}
 	})
 	return inst
@@ -592,6 +592,7 @@ func (s *Sealed) Variant(name string) *Variant {
 // Variant is one variant of a sealed type. It is not a type of its own:
 // constructing a variant produces a value of the sealed type.
 type Variant struct {
+	Doc         string
 	Positional  bool
 	Name        string
 	Fields      []*Field

@@ -409,7 +409,7 @@ func (p *parser) typeDecl() (td *TypeDecl) {
 		p.expect(LBrace, "to start the list of variants")
 		p.list(RBrace, "a variant", func() {
 			vname := p.expect(TIdent, "(variant name)")
-			v := &VariantDecl{Pos: vname.Pos, Name: vname.Text}
+			v := &VariantDecl{Pos: vname.Pos, Name: vname.Text, Doc: p.fieldDoc(vname.Pos)}
 			if p.at(LBrace) {
 				v.Fields = p.fieldDecls()
 			} else if p.at(LParen) {

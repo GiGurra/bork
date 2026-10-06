@@ -1,0 +1,34 @@
+import "bork/shape"
+
+class Described[T] {
+  fn docs(): List[String]
+}
+
+derive instance described[T]: Described[T] {
+  fn docs(): List[String] {
+    [comptime for (variant in shape.variants[T]()) variant.name + ":" + variant.doc]
+  }
+}
+
+type Color = sealed {
+  // Warm color.
+  // Used for alerts.
+  Red
+  Green // This trailing comment does not document Blue.
+  Blue
+  // Detached comment.
+
+  Other(String)
+} derive (Described)
+
+type Box[T] = sealed {
+  // Generic value.
+  Value(T)
+  Empty
+} derive (Described)
+
+fn main() {
+  println(docs[Color]())
+  println(docs[Box[Int]]())
+  println(docs[Box[String]]())
+}

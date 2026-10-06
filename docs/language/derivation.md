@@ -58,8 +58,10 @@ inspecting `hasDefault` does not call it. Test `hasDefault` before using the
 provider, and exclude computed fields: those require the complete owner and
 are available through `field.read(value)`.
 
-`shape.variants[T]()` describes sealed alternatives, with `name`, `index`, and
-`fields`, plus a `positional` payload flag. Positional fields expose their slot
+`shape.variants[T]()` describes sealed alternatives, with `name`, `doc`, `index`,
+and `fields`, plus a `positional` payload flag. Variant `doc` joins consecutive
+`//` lines immediately above the variant with newlines; it is empty when no
+documentation is present. Positional fields expose their slot
 `index`, `positional: true`, and an empty `name`; internal numeric labels are
 never object keys. `variant.project(value)` checks the tag and returns an `Option`
 containing a read-only payload view. It evaluates the input once per projection.

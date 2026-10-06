@@ -170,6 +170,7 @@ func (c *checker) resolveDecl(e *typeEntry) Type {
 			}
 			s.Variants = append(s.Variants, &Variant{
 				Name:       vd.Name,
+				Doc:        vd.Doc,
 				Positional: vd.Positional,
 				Fields:     c.resolveFields(fields, "variant "+td.Name+"."+vd.Name),
 				Parent:     s,

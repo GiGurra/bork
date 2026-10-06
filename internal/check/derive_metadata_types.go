@@ -162,7 +162,7 @@ func (m *deriveMetadataTypes) scalar(expr syntax.Expr) Type {
 		}
 	case deriveVariant:
 		switch selector.Name {
-		case "name":
+		case "name", "doc":
 			return String
 		case "index":
 			return Int
@@ -332,7 +332,7 @@ func (m *deriveMetadataTypes) checkMember(selector *syntax.Selector) {
 		}
 	case deriveVariant:
 		switch selector.Name {
-		case "name", "index", "positional", "fields", "facts", "Type", "project", "builder":
+		case "name", "doc", "index", "positional", "fields", "facts", "Type", "project", "builder":
 			valid = true
 		}
 	case deriveFact:

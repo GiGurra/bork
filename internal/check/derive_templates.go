@@ -385,6 +385,8 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 				return view, view != nil
 			case "name":
 				return value.variant.Name, true
+			case "doc":
+				return value.variant.Doc, true
 			case "positional":
 				return value.variant.Positional, true
 			case "index":
