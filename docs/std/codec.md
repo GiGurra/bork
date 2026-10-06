@@ -86,6 +86,9 @@ Records encode as objects. Sealed types whose alternatives all have no payload (
 Typed `codec` tags configure derived codecs. A type's `naming` policy applies to its fields and variant names; a field or variant's `name` overrides the policy.
 
 ```bork
+import "bork/codec"
+use codec.Defaults
+
 type User = {
   userID: String
   httpURLPort: Int codec { name: "port" }
@@ -97,6 +100,8 @@ type Access = sealed {
   ReadOnly codec { name: "reader" }
 } derive (codec.Decode, codec.Encode)
 // SiteAdmin encodes as "SITE_ADMIN"; ReadOnly as "reader".
+
+fn main() {}
 ```
 
 `codec.Naming` provides `Verbatim`, `Camel`, `Pascal`, `Snake`, `Kebab`, and `ScreamingSnake`. Records and mixed sealed types default to `Verbatim`. Set an enum's `naming` to `Verbatim` to preserve source spelling; it still encodes as a bare string.
