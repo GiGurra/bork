@@ -40,9 +40,11 @@ class Decode[T] {
   fn decode(json: Value): T | DecodeError
 }
 
+// VariantSchema describes a canonical enum choice and its exact input aliases.
+type VariantSchema = { name: String, doc: String, aliases: List[String] = [] }
 // FieldSchema describes the input shape of the selected decoder. Container
-// schemas delegate their element kind to that element's actual dictionary.
-type FieldSchema = { kind: String, optional: Bool }
+// schemas delegate their element kind and variants to that decoder's dictionary.
+type FieldSchema = { kind: String, optional: Bool, variants: List[VariantSchema] = [] }
 
 fn FieldInfo[T: Decode](): FieldSchema {
   shape.metadata[T, Decode, FieldSchema]().getOr(FieldSchema { kind: "json", optional: false })
@@ -66,6 +68,7 @@ type RecordField = {
   facts: List[String]
   kind: String
   optional: Bool
+  variants: List[VariantSchema] = []
   hasDefault: Bool
   defaultValue: Option[() => DefaultSchema]
   validate: (Value) => Ok | DecodeError
@@ -163,7 +166,7 @@ instance decodeBool: Decode[Bool] {
 
 // An Option is null (or a missing field) for None.
 instance decodeOption[T: Decode]: Decode[Option[T]] {
-  metadata FieldSchema = FieldSchema { kind: FieldInfo[T]().kind, optional: true }
+  metadata FieldSchema = FieldSchema { kind: FieldInfo[T]().kind, optional: true, variants: FieldInfo[T]().variants }
   fn decode(json: Value): Option[T] | DecodeError {
     match (json) {
       Value.Null => Option.None
@@ -176,7 +179,7 @@ instance decodeOption[T: Decode]: Decode[Option[T]] {
 }
 
 instance decodeList[T: Decode]: Decode[List[T]] {
-  metadata FieldSchema = FieldSchema { kind: "list:" + FieldInfo[T]().kind, optional: false }
+  metadata FieldSchema = FieldSchema { kind: "list:" + FieldInfo[T]().kind, optional: false, variants: FieldInfo[T]().variants }
   fn decode(json: Value): List[T] | DecodeError {
     match (json) {
       Value.Array { items } => decodeItems(items, 0, [])
@@ -409,6 +412,7 @@ derive fn RecordInfo[T](): Option[RecordSchema] {
               facts: [comptime for (fact in field.facts) fact.text],
               kind: info.kind,
               optional: info.optional,
+              variants: info.variants,
               hasDefault: field.hasDefault,
               defaultValue: provider,
               validate: input => match (decode[field.RawType](input)) {
@@ -668,10 +672,25 @@ derive fn DecodeSealed[T](json: Value): T | DecodeError {
   }
 }
 
+// ShapeFieldInfo publishes the selected derivation's input kind and known choices.
+derive fn ShapeFieldInfo[T](): FieldSchema {
+  comptime if (EnumShape[T]()) {
+    CheckWireNames[T]()
+    FieldSchema {
+      kind: "string",
+      optional: false,
+      variants: [comptime for (variant in shape.variants[T]()) comptime if (!VariantFallback[T](variant))
+        VariantSchema { name: VariantWireName[T](variant), doc: variant.doc, aliases: VariantAliases[T](variant) }]
+    }
+  } else {
+    FieldSchema { kind: "json", optional: false }
+  }
+}
+
 // Structural decoding and schema construction share the selected instance's
 // independent field dictionaries. Builders certify complete target values.
 derive instance decodeShape[T]: Decode[T] {
-  metadata FieldSchema = FieldSchema { kind: "json", optional: false }
+  metadata FieldSchema = ShapeFieldInfo[T]()
   metadata Option[RecordSchema] = RecordInfo[T]()
   fn decode(json: Value): T | DecodeError {
     comptime match (shape.kind[T]()) {
