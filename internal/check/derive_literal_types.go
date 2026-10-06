@@ -18,6 +18,7 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 	defer func() { c.scopes, c.used = outer, effects }()
 	c.used = 0
 	c.scopes = append(c.scopes, map[string]*local{})
+	metadata := deriveMetadataTypes{c: c, locals: map[*local]deriveDescriptor{}}
 	bind := func(name string, typ Type, node any) {
 		if typ == nil {
 			typ = Invalid
@@ -30,13 +31,21 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 			typ = c.resolveType(param.Type)
 		}
 		bind(param.Name, typ, param)
+		if kind := metadata.annotation(param.Type); kind != 0 {
+			metadata.locals[c.lookup(param.Name)] = kind
+		}
 	}
 	var concrete func(syntax.Expr) bool
 	concrete = func(expr syntax.Expr) bool {
+		if metadata.scalar(expr) != nil {
+			return true
+		}
 		switch expr := expr.(type) {
 		case *syntax.Ident:
 			local := c.lookup(expr.Name)
 			return local != nil && local.typ != Invalid
+		case *syntax.Selector:
+			return metadata.scalar(expr) != nil
 		case *syntax.Call:
 			id, named := expr.Fun.(*syntax.Ident)
 			if !named || expr.Pipe.File != "" {
@@ -90,7 +99,7 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 		if expr == nil || !concrete(expr) {
 			return nil
 		}
-		actual := c.exprWant(expr, want)
+		actual := metadata.check(expr, want)
 		if want != nil && actual != Invalid && !assignable(actual, want) {
 			c.errorf(expr.Position(), "derive expression must be %s, found %s", want, actual)
 		}
@@ -99,6 +108,36 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 	var result Type
 	if deriveConcreteType(method.Result, typeNames) {
 		result = c.resolveType(method.Result)
+	}
+	var bindPattern func(syntax.Pattern)
+	bindPattern = func(pattern syntax.Pattern) {
+		switch pattern := pattern.(type) {
+		case *syntax.TypePat:
+			bind(pattern.Name, nil, pattern)
+		case *syntax.TuplePat:
+			for _, element := range pattern.Elems {
+				bindPattern(element)
+			}
+		case *syntax.ListPat:
+			bind(pattern.Rest, nil, pattern)
+			for _, element := range pattern.Elems {
+				bindPattern(element)
+			}
+		case *syntax.VariantPat:
+			if len(pattern.Path) == 1 && !pattern.Context && !pattern.Braces && !pattern.Positional && len(pattern.Fields) == 0 && !c.isTypeName(pattern.Path[0]) && !typeNames[pattern.Path[0]] {
+				bind(pattern.Path[0], nil, pattern)
+			}
+			for _, element := range pattern.Elems {
+				bindPattern(element)
+			}
+			for _, field := range pattern.Fields {
+				if field.Pattern == nil {
+					bind(field.Field, nil, field)
+				} else {
+					bindPattern(field.Pattern)
+				}
+			}
+		}
 	}
 	var walk func(reflect.Value, Type)
 	walk = func(v reflect.Value, want Type) {
@@ -124,7 +163,40 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				c.scopes = c.scopes[:len(c.scopes)-1]
 				return
 			case *syntax.Lambda:
-				return // Requires its own contextual function signature.
+				// A lambda has its own return context and lexical parameters,
+				// even when its body contains dependent descriptor operations.
+				// Check the independent parts without guessing those operations'
+				// types or inferring an unannotated symbolic parameter.
+				context, _ := want.(*FuncType)
+				if context != nil && len(context.Params) != len(node.Params) {
+					c.errorf(node.Pos, "expected a function taking %d argument(s), but this lambda takes %d", len(context.Params), len(node.Params))
+					context = nil
+				}
+				c.scopes = append(c.scopes, map[string]*local{})
+				for i, parameter := range node.Params {
+					var typ Type
+					if parameter.Type != nil && deriveConcreteType(parameter.Type, typeNames) {
+						typ = c.resolveType(parameter.Type)
+						if context != nil && typ != Invalid && !identical(typ, context.Params[i]) {
+							c.errorf(parameter.Type.Pos, "parameter %s must be %s here, found %s", parameter.Name, context.Params[i], typ)
+						}
+					} else if parameter.Type == nil && context != nil {
+						typ = context.Params[i]
+					}
+					bind(parameter.Name, typ, parameter)
+					if kind := metadata.annotation(parameter.Type); kind != 0 {
+						metadata.locals[c.lookup(parameter.Name)] = kind
+					}
+				}
+				outerResult := result
+				result = nil
+				if context != nil && context.Result != Ok {
+					result = context.Result
+				}
+				walk(reflect.ValueOf(node.Body), result)
+				result = outerResult
+				c.scopes = c.scopes[:len(c.scopes)-1]
+				return
 			case *syntax.If:
 				check(node.Cond, Bool)
 				walk(reflect.ValueOf(node.Then), want)
@@ -133,12 +205,12 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 			case *syntax.Match:
 				walk(reflect.ValueOf(node.X), nil)
 				for _, arm := range node.Arms {
-					// Pattern variables require symbolic pattern typing; mask
-					// concrete locals until that scope has been resolved.
-					outerScopes := c.scopes
-					c.scopes = []map[string]*local{{}}
+					// Pattern values remain dependent, but unrelated outer
+					// locals and descriptor identities keep their known types.
+					c.scopes = append(c.scopes, map[string]*local{})
+					bindPattern(arm.Pattern)
 					walk(reflect.ValueOf(arm.Body), want)
-					c.scopes = outerScopes
+					c.scopes = c.scopes[:len(c.scopes)-1]
 				}
 				return
 			case *syntax.Return:
@@ -151,7 +223,7 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				}
 				actual := check(node.Value, declared)
 				if actual == nil {
-					walk(reflect.ValueOf(node.Value), nil)
+					walk(reflect.ValueOf(node.Value), declared)
 				}
 				if node.Type != nil && declared == nil {
 					actual = nil
@@ -160,6 +232,13 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 					actual = declared
 				}
 				bind(node.Name, actual, node)
+				kind := metadata.kind(node.Value)
+				if kind == 0 {
+					kind = metadata.annotation(node.Type)
+				}
+				if kind != 0 {
+					metadata.locals[c.lookup(node.Name)] = kind
+				}
 				return
 			case *syntax.For:
 				c.scopes = append(c.scopes, map[string]*local{})
@@ -169,6 +248,9 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				check(node.Cond, Bool)
 				walk(reflect.ValueOf(node.Items), nil)
 				bind(node.Name, nil, node)
+				if kind := metadata.kind(node.Items); kind >= deriveFields {
+					metadata.locals[c.lookup(node.Name)] = kind - deriveFields + deriveField
+				}
 				walk(reflect.ValueOf(node.Body), nil)
 				for _, post := range node.Post {
 					check(post.Value, nil)

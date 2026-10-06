@@ -2005,6 +2005,83 @@ derive fn unused(value: Int): String { accept(value) }
 fn main() {}`, "argument 1 to accept must be Bool, found Int")
 }
 
+func TestDeriveTemplateUnrequestedContextualLambdas(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `derive fn unused(): Int {
+  value: (Int) => String = x => x + 1
+  0
+}
+
+fn main() {}`, "derive expression must be String, found Int")
+	checkPreludeSource(t, `derive fn unused(): Int {
+  value: (Int) => String = x => { return x + 1 }
+  0
+}
+fn main() {}`, "derive expression must be String, found Int")
+	checkPreludeSource(t, `derive fn unused(): Int {
+  value: (Int) => Int = (x: String) => 1
+  0
+}
+fn main() {}`, "parameter x must be Int here, found String")
+	checkPreludeSource(t, `derive fn unused(): Int {
+  value: (Int) => String = x => { return "yes" }
+  0
+}
+fn main() {}`, "")
+	checkPreludeSource(t, `derive fn unused(): Int {
+  value: (Int) => Int = (x, y) => 1
+  0
+}
+fn main() {}`, "expected a function taking 1 argument(s), but this lambda takes 2")
+}
+
+func TestDeriveTemplateUnrequestedMetadataScalarTypes(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](): Int {
+  comptime for (field in shape.fields[T]()) { value: Int = field.name }
+  0
+}
+fn main() {}`, "derive expression must be Int, found String")
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](): Int {
+  fields = shape.fields[T]()
+  comptime for (field in fields) { if (field.name) { 1 } else { 2 } }
+  0
+}
+fn main() {}`, "derive expression must be Bool, found String")
+	checkPreludeSource(t, `import "bork/shape"
+fn accept(value: Bool): Int { 1 }
+derive fn unused[T](): Int {
+  comptime for (field in shape.fields[T]()) { value = accept(field.name) }
+  0
+}
+fn main() {}`, "argument 1 to accept must be Bool, found String")
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](): Int {
+  comptime for (variant in shape.variants[T]()) {
+    fields = variant.fields
+    comptime for (field in fields) {
+      comptime for (fact in field.facts) { value: Int = fact.path }
+    }
+  }
+  0
+}
+fn main() {}`, "derive expression must be Int, found String")
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](): Int {
+  comptime for (field in shape.fields[T]()) {
+    name: String = field.name
+    index: Int = field.index
+    positional: Bool = field.positional
+    computed: Bool = field.computed
+    hasDefault: Bool = field.hasDefault
+  }
+  0
+}
+fn main() {}`, "")
+}
+
 func TestDeriveTemplateRuntimeForHeaderScopes(t *testing.T) {
 	t.Parallel()
 	checkPreludeSource(t, `derive fn unused(): Int {
@@ -2105,4 +2182,61 @@ func TestDeriveTemplatePositionalTargetPatternIsNotBareType(t *testing.T) {
 derive instance label[T]: Label[T] { fn label(x: T): Bool { x is T(_) } }
 type Row = {} derive (Label)
 fn main() {}`, "is patterns cannot bind names")
+}
+
+func TestDeriveTemplateUnrequestedMetadataQueryTypes(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](): Int { value: Int = shape.name[T](); 0 }
+fn main() {}`, "derive expression must be Int, found String")
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](): Int { if (shape.owner[T]()) { 1 } else { 2 } }
+fn main() {}`, "derive expression must be Bool, found String")
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](): Int {
+  fields = shape.fields[T]()
+  value: String = fields.length()
+  0
+}
+fn main() {}`, "derive expression must be String, found Int")
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](): Int {
+  fields = shape.fields[T]()
+  value: Int = fields.isEmpty()
+  0
+}
+fn main() {}`, "derive expression must be Int, found Bool")
+}
+
+func TestDeriveTemplateUnrequestedMetadataParameterTypes(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](field: shape.Field[T]): Int { value: Int = field.name; 0 }
+fn main() {}`, "derive expression must be Int, found String")
+	checkPreludeSource(t, `import s "bork/shape"
+derive fn unused[T](variants: List[s.Variant[T]]): Int {
+  comptime for (variant in variants) {
+    comptime for (field in variant.fields) {
+      comptime for (fact in field.facts) { value: Int = fact.text }
+    }
+  }
+  0
+}
+fn main() {}`, "derive expression must be Int, found String")
+}
+
+func TestDeriveTemplateUnrequestedMatchKeepsOuterTypes(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `derive fn unused[T](x: T, outer: Int): String {
+  match (x) { _: T => outer }
+}
+fn main() {}`, "derive expression must be String, found Int")
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](x: T): Int {
+  comptime for (field in shape.fields[T]()) {
+    match (x) { _: T => { value: Int = field.name; 0 } }
+  }
+  0
+}
+fn main() {}`, "derive expression must be Int, found String")
 }
