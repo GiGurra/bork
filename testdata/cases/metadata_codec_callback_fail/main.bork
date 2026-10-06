@@ -1,0 +1,9 @@
+import "bork/codec"
+type Legacy = { value: String }
+instance decodeLegacy: codec.Decode[Legacy] {
+  metadata(() => String | codec.DecodeError) = () => codec.decode[String](codec.Value.Null)
+  fn decode(input: codec.Value): Legacy | codec.DecodeError {
+    codec.DecodeError { path: "", message: "unused" }
+  }
+}
+fn main() {}
