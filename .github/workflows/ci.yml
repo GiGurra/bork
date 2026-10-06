@@ -40,7 +40,8 @@ jobs:
     # Code changes run every Go test once under the race detector; see docs/ci.md.
     name: Test (${{ matrix.shard }})
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    # Allow setup plus the runner’s five-minute discovery/test deadlines.
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:

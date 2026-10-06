@@ -172,13 +172,15 @@ class MeasurementTests(unittest.TestCase):
 
 class RunTests(unittest.TestCase):
     def test_wall_budget_and_original_test_failure(self):
+        self.assertEqual(ci.WARN_SECONDS, 240)
+        self.assertEqual(ci.FAIL_SECONDS, 300)
         with patch("builtins.print") as output:
             self.assertEqual(ci.budget_result(100, 0), 0)
-            self.assertEqual(ci.budget_result(121, 0), 0)
-            self.assertEqual(ci.budget_result(181, 0), 0)
+            self.assertEqual(ci.budget_result(241, 0), 0)
+            self.assertEqual(ci.budget_result(301, 0), 0)
             self.assertEqual(ci.budget_result(100, 7), 7)
         messages = " ".join(str(call) for call in output.call_args_list)
-        self.assertIn("::warning::Shard exceeded the 180s budget", messages)
+        self.assertIn("::warning::Shard exceeded the 300s budget", messages)
 
     def run_shard(self, commands, **patches):
         with tempfile.TemporaryDirectory() as directory:
