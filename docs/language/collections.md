@@ -63,46 +63,9 @@ fn main() {
 }
 ```
 
-`for (x in xs)` goes through a `List` or a `Seq`. The other forms are Go's. `for { ... }` loops until `break` or `return`. `for (cond) { ... }` checks a condition before each round. `for (init; cond; post) { ... }` counts:
-
-```bork
-fn main() {
-  for (i = 0, j = 10; i < j; i = i + 3, j = j - 1) {
-    println(s"$i $j")
-  }
-  for (i = 1;; i = i * 2) {
-    if (i > 50) { break }
-    println(i)
-  }
-}
-```
-
-The header names (`i`, `j`) belong to the loop. Each round has its own values: a closure made in one round keeps that round's. The post clause gives the next round's values, computed together from this round's, so `a = b, b = a` swaps them. `continue` runs it too. It cannot `return`, `?`, `break` or `continue`. A header name may declare facts (`i: Int where nonNegative = 0`), which every first and next value must prove. The condition is known in the body. A `for` without a condition and without a `break` never ends normally, so code after it is unreachable.
-
-A loop builds up values by rebinding names from outside it. Values never change: `total = total + x` binds a new `total`, which the loop *carries* to the next round, and after the loop the name has the value the last round left it with. The body may rebind such a name at its top level and inside the blocks of `if` and `match` statements in it. Where the branches meet, the name has the value of the branch that ran, and a branch that does not rebind it keeps the value it had:
-
-```bork
-fn main() {
-  count = 0
-  total = 0
-  best = 0
-  for (x in [3, -1, 4, -5, 9]) {
-    if (x < 0) { continue }
-    count = count + 1
-    total = total + x
-    if (x > best) { best = x }
-  }
-  println(s"$count values, total $total, best $best")
-}
-```
-
-```text
-3 values, total 16, best 9
-```
-
-A loop can carry a name that the block containing it may rebind, including a name an enclosing loop carries; `break` and `continue` carry the values current where they are. The post clause may rebind carried names too. A carried name keeps the type of its first binding, and the facts that binding declares hold in every round and after the loop. Rebinding it in a lambda, a `scope` or `with` block, or a branch whose value is used is an error, as is a carried value that is only read to compute its own next value: `count = count + 1` alone does not count as using `count`.
-
-A function that calls itself in tail position also compiles to a loop (see [tail calls](basics.md#recursion-and-tail-calls)).
+`for (x in xs)` goes through a `List` or a `Seq`. For condition loops,
+counting loops, early exits, and accumulating values across rounds, see
+[control flow](basics.md#control-flow) and [loop carrying](basics.md#loop-carrying).
 
 ## Maps
 

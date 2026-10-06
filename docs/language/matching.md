@@ -5,9 +5,7 @@
 ## Match
 
 A `match` tries its arms from top to bottom and gives the value of the first one that fits.
-Union type patterns may overlap: a later arm handles only values that earlier
-arms did not match. An arm whose values are all covered by earlier unguarded
-arms is an error.
+An arm already covered by earlier arms is a compile error.
 
 ```bork
 type Shape = sealed {
@@ -31,10 +29,8 @@ fn main() {
 
 Inside the braces, `{ radius }` binds the field to a name of its own, `{ height: h }` binds it to `h`, and `{ radius: 0 }` requires it to equal a value.
 
-A leading dot omits the variant owner: `.Circle` uses the type of `shape`.
-Nested variant patterns use the field or element type. In a union, the written
-variant must belong to exactly one sealed member; write `Shape.Circle` when
-several members have that variant. Qualified patterns keep working.
+A leading dot omits the type name: `.Circle` uses the type of `shape`.
+Write `Shape.Circle` when several types in a union have a `Circle` variant.
 
 ## Positional payloads
 
@@ -68,10 +64,11 @@ spread, and reject braces. A bare variant pattern ignores all its payloads.
 Nested patterns may inspect each slot, and refutable slots require further
 arms to cover the remaining values.
 
-Derived codecs encode positional payloads as a `values` array in a tagged
-object, for example `{"type":"Found","values":[3,"count"]}`. Decoding checks
-exact array length and reports errors at `.values[0]`. Option keeps its existing
-null or bare-value encoding.
+Derived codecs represent positional payloads as a tagged object with a `values`
+array, such as `{"type":"Found","values":[3,"count"]}`. Decoding requires the
+exact payload count and reports a failing element at `.values[0]`, for example.
+Option uses null or the bare value. See [codecs](../std/codec.md) for deriving
+encoders and decoders.
 
 ## Patterns
 
@@ -139,20 +136,26 @@ fn positiveNumber(value: Int | String): Bool {
 }
 pred positive(n: Int) { n > 0 }
 pred atMost(n: Int, limit: Int) { n <= limit }
+
+fn main() {
+  println(matches(Reply.Found { text: "hello" }), matches(Reply.Missing))
+  println(positiveNumber(42), positiveNumber("42"))
+}
 ```
 
-The value is evaluated once. Use `_` for ignored fields and elements;
-`is` cannot bind names or use shorthand field bindings. It supports nested
-match patterns, bare type names, literals and constrained aliases. The erased
-type is checked before its predicates. `and` and `or` short-circuit in source
-order, and predicate panics propagate. Existing predicate preconditions still
-need proof. Predicate arguments use the ordinary constraint scope rules.
+```text
+true false
+true false
+```
 
-`is` binds no names and adds no facts or type narrowing to an enclosing `if`.
-Use `match` to extract a value, or [test.AssertIs](testing.md#typed-assertions)
-when a test needs to keep a checked value. `is` has comparison precedence,
-above `&&` and `||`. Valid impossible tests return false; the linter warns
-when a test always succeeds or fails.
+`is` returns a Bool and evaluates the value once. It cannot bind names; write
+explicit field patterns such as `{ text: "hello" }`, or `_` to ignore a value.
+Patterns can nest and test types, literals, and predicates, as in `match`.
+
+An `is` condition does not narrow the value's type or establish facts inside an
+`if`. Use `match` to extract a value with its type and facts, or
+[test.AssertIs](testing.md#typed-assertions) in a test. Combine Bool tests with
+`&&` and `||`; use parentheses when they make the condition clearer.
 
 ## Every case must be handled
 
