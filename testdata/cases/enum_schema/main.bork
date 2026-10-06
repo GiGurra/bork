@@ -41,6 +41,7 @@ type Options = {
 } derive (codec.Decode)
 
 fn main() {
+  println(codec.FieldInfo[String]())
   println(codec.FieldInfo[Color]())
   println(codec.FieldInfo[Option[Color]]())
   println(codec.FieldInfo[List[Color]]())

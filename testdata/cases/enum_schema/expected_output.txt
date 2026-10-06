@@ -1,3 +1,4 @@
+FieldSchema { kind: "string", optional: false, variants: [] }
 FieldSchema { kind: "string", optional: false, variants: [VariantSchema { name: "RED", doc: "Warm color.", aliases: ["red", "legacy"] }, VariantSchema { name: "DARK_BLUE", doc: "", aliases: [] }] }
 FieldSchema { kind: "string", optional: true, variants: [VariantSchema { name: "RED", doc: "Warm color.", aliases: ["red", "legacy"] }, VariantSchema { name: "DARK_BLUE", doc: "", aliases: [] }] }
 FieldSchema { kind: "list:string", optional: false, variants: [VariantSchema { name: "RED", doc: "Warm color.", aliases: ["red", "legacy"] }, VariantSchema { name: "DARK_BLUE", doc: "", aliases: [] }] }
