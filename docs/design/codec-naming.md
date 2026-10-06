@@ -5,21 +5,14 @@ in the examples is proposed, not valid bork today.
 
 ## Summary
 
-- A type chooses how its member names and variant tags appear on the wire,
-  with one **naming policy**: camel, snake, kebab, pascal or screaming snake.
-  Today's behaviour, the field name verbatim, stays the default.
-- A field or variant can set its own **wire name** and **aliases**. Encode
-  writes the wire name. Decode also accepts one alias in its place.
-- JSON and YAML share all of this, because both decode and encode through
-  `codec.Value`. One type has one wire contract in both formats.
-- `bork/cli`, `bork/env`, CSV and HTTP read names from the same schema, so
-  flags, environment variables and config keys follow the same overrides.
-- Syntax: **typed tag groups**. Today's `go { json: "x" }` field tags become
-  one case of `pkg { key: value }`. The body is checked as a record literal of
-  a type the package exports. No new keywords.
-- From Go's json/v2 we adopt two decode safety fixes now: reject duplicate
-  object names and invalid UTF-8. We add opt-in unknown-member rejection and
-  round-trip-safe omission. Other v2 features are later or never; see the table.
+- Each type has one **naming policy** (verbatim by default). Fields and
+  variants can set a **wire name** and decode **aliases**. JSON, YAML, cli,
+  env, CSV and HTTP all follow the same names.
+- Syntax: **typed tag groups** (`codec { ... }`), which generalise
+  `go { ... }`. No new keywords.
+- From json/v2: reject duplicate names and invalid UTF-8 now. Add opt-in
+  unknown-member rejection and round-trip-safe `omit`. The rest is in the
+  [table](#learnings-from-gos-encodingjsonv2).
 
 ## Example
 
@@ -67,8 +60,9 @@ role:
   must separate the two names (see [Schema changes](#schema-changes)).
 - cli (`flagName`) and env (`variableName`) each have a copy of the same
   word-splitting rule.
-- A named variant payload field called `type` (or `values`) collides with the
-  discriminator member today, and nothing reports it.
+- A named variant payload field called `type` collides with the discriminator
+  member today, and nothing reports it. (`values` is used only by positional
+  payloads, so a named field called `values` is fine.)
 
 ## Naming policy
 
@@ -77,19 +71,23 @@ role:
 - **Words.** A name is split into words with today's cli/env rule: a break
   before an upper-case letter that follows a lower-case letter or a digit, or
   that starts a new capitalised word (`httpURLPort` gives http, url, port;
-  `ipv4Addr` gives ipv4, addr; flags stay `apiURL` → `--api-url`). The rule moves to one function,
+  `ipv4Addr` gives ipv4, addr; flags stay `apiURL` → `--api-url`). `_`, `-`
+  and spaces also separate words, so an override such as `name: "user_name"`
+  gives the flag `--user-name`. The rule moves to one function,
   `codec.words`, which cli and env then call.
 - **Joining.** Each policy joins the words: `httpUrlPort`, `HttpUrlPort`,
   `http_url_port`, `http-url-port`, `HTTP_URL_PORT`. Acronym case is not kept,
   so `userID` under Camel becomes `userId`. Use a `name` override to keep it.
 - **Scope.** The policy is set on the type and covers the record's fields. On
-  a sealed type it covers variant tags and the fields of named payloads.
-  `variantNaming` can set a separate policy for the tags.
+  a sealed type it covers variant tags and the fields of named payloads. A
+  separate policy for tags (serde's `rename_all` versus `rename_all_fields`)
+  can come later if someone needs it.
 - **No inheritance.** Field types keep their own policy. A snake-case record
   that holds a `Point` writes `Point` however `Point` declares it. Each type
   owns its wire contract wherever it is used.
-- **Protocol members.** The discriminator members `type` and `values` are not
-  renamed. Choosing another discriminator name comes later.
+- **Protocol members.** The discriminator member `type` and the positional
+  payload member `values` are not renamed. Choosing another discriminator
+  name comes later.
 - **Map keys** are data, so a policy never changes them.
 
 ## Field and variant overrides
@@ -100,9 +98,13 @@ role:
   `name` is used exactly as written; the policy does not apply to it.
 - **Decode** accepts the wire name or any one alias. If more than one of them
   is present, decoding fails at the second one, for example
-  `.uid: duplicates .login (both name field loginId)`.
+  `.uid: same field as .login`.
 - **Errors** use the name that the input used, so a path points at text the
-  user can find. A missing field is reported under its wire name.
+  user can find. A missing field is reported under its wire name. Builder and
+  fact errors from `pending.finish()` and `RecordField.validate` carry
+  bork-name paths today (`FieldPath` in internal/check/derive_builders.go).
+  The template replaces their first segment with the wire name from a
+  compile-time table. env and CSV trim paths by `wireName`.
 - **Compile-time checks.** These are reported at the tag group, or at the
   type if the policy causes the problem:
   - two members get the same wire name after the policy (`userId` and `userID`
@@ -110,13 +112,23 @@ role:
   - an alias equals any wire name or alias in the same type, including its own
     wire name;
   - an empty name;
-  - a payload member named `type` or `values` in a sealed type (this also fixes
+  - a named payload member whose wire name or alias is `type` (this also fixes
     today's silent collision);
-  - the YAML merge key `<<`.
+  - the YAML merge key `<<`;
+  - `name`, `aliases` or `omit` on a tuple slot or positional payload field,
+    because these have no member names (a positional variant can still rename
+    its tag);
+  - `omit` that a missing field would not round-trip. `Omit.None` needs an
+    `Option` field with no default, or a default of `Option.None`. An
+    `Option[T] = Option.Some(x)` field would decode an omitted None as
+    `Some(x)`. `Omit.Default` needs an eager default and `==` on the field type;
+    a lazy default depends on its siblings, so it is rejected.
 - **Unknown options and wrong types** are ordinary type errors in the tag
   group's record literal (see [Syntax](#syntax)).
-- **Computed fields** keep their name for the "computed field is read-only"
-  check. That check also covers their aliases.
+- **Computed fields** are checked by wire name and aliases in the "computed
+  field is read-only" check.
+- **CSV encode** needs every column, so it ignores `omit` and writes an empty
+  cell for None.
 
 ## Syntax
 
@@ -135,7 +147,9 @@ Three designs were compared.
 know, and it is type-checked like B without a type name on every field.
 
 - **Group name.** The name before `{` must be an imported package's
-  qualifier, or the built-in `go`. A misspelt group is an unknown-name error.
+  qualifier, or the built-in `go`. Inside the package that declares the tag
+  types, the group uses that package's own name. A misspelt group is an
+  unknown-name error. The same group twice in one place is an error.
 - **Body.** The body is checked as a record literal of the package's exported
   `FieldTags`, `VariantTags` or `TypeTags`, depending on where the group is
   written. A package with no such type for that place cannot be used there.
@@ -143,11 +157,15 @@ know, and it is type-checked like B without a type name on every field.
   rules as field defaults, so the derive expansion can evaluate them.
 - **`go { ... }`** is unchanged: String values and ordered `List[Tag]`. It
   stays the only group that GoStruct and ForeignRecord read.
-- **Placement.** Groups go after the field type and default, after a variant,
-  and after a type's body (before `where` and `derive`). Several groups can be
-  written in sequence, e.g. `port: Int = 8080 codec { name: "p" } cli { ... }`.
-  A default expression ends before an identifier, as it already ends before
-  `go`.
+- **Placement.** Groups go after the field type and default, after a
+  variant's payload (before its `where`), and after the body of a record or
+  sealed type (before `where` and `derive`). They cannot go on resource,
+  alias or bare Go-name types. Several groups can be written in sequence, e.g.
+  `port: Int = 8080 codec { name: "p" } cli { ... }`. A default expression
+  ends before an identifier, as it already ends before `go`.
+- **Same line.** A group starts on the same line as what it tags. Otherwise
+  `codec { ... }` on its own line inside a sealed body would parse as a variant
+  named `codec`.
 - **Grammar sketch.**
   `TagGroup = ( "go" | Ident ) "{" [ TagEntry { Sep TagEntry } [ Sep ] ] "}"`,
   `TagEntry = Ident ":" Expr`. `Field`, `Variant` and `TypeDecl` each take
@@ -165,13 +183,8 @@ know, and it is type-checked like B without a type name on every field.
 Codec's tag types:
 
 ```text
-type TypeTags = {
-  naming: Naming = Naming.Verbatim
-  variantNaming: Option[Naming] = Option.None
-  unknown: Unknown = Unknown.Ignore
-  omit: Omit = Omit.Never
-}
-type FieldTags = { name: Option[String] = Option.None, aliases: List[String] = [], omit: Option[Omit] = Option.None }
+type TypeTags = { naming: Naming = Naming.Verbatim, unknown: Unknown = Unknown.Ignore }
+type FieldTags = { name: Option[String] = Option.None, aliases: List[String] = [], omit: Omit = Omit.Never }
 type VariantTags = { name: Option[String] = Option.None, aliases: List[String] = [], fallback: Bool = false }
 type Unknown = sealed { Ignore, Reject }
 type Omit = sealed { Never, None, Default, NoneOrDefault }
@@ -196,6 +209,12 @@ nothing format-specific in codec. Points for YAML:
   allowed as wire names. `bork/yaml` reads keys by their text, so decoding
   works. The renderer must quote them; round-trip tests will check that.
 - **`<<`** is rejected as a wire name (see the checks above).
+- **Merge keys and aliases.** In YAML a mapping's own key overrides the same
+  key from a merged anchor. Codec only sees the merged `codec.Value`, so if
+  an anchor supplies the alias `user` and the mapping writes `login`, decoding
+  fails with "same field". The message says to use the same spelling as the
+  anchor. Teaching the loader about aliases would tie YAML parsing to one
+  type, so this design doesn't.
 - **Config files.** CLI config files (JSON today, YAML planned) use the wire
   name and aliases as keys, the same in both formats.
 
@@ -207,7 +226,10 @@ Agreed with worker boacli, who owns the CLI changes.
   of the field name, as they do today. With a `name` override, they use the
   words of that name: `loginId codec { name: "login" }` gives `--login` and
   `LOGIN`. The policy changes the wire spelling only. Flags stay kebab-case
-  and env names stay UPPER_SNAKE.
+  and env names stay UPPER_SNAKE. This is a deliberate reading of "from the
+  same policy": the words and overrides are shared, but each source keeps its
+  own conventional spelling, since `--http_port` or a camelCase env name
+  would surprise users.
 - **Precedence**, from strongest to weakest: an enricher rename, then
   `cli.Mapping.Named` (exact, no prefixes), then the codec override, then the
   field name.
@@ -220,6 +242,9 @@ Agreed with worker boacli, who owns the CLI changes.
   - **Named:** the canonical name is exact, and the aliases are still derived
     with prefixes.
   - **Disabled:** that source's aliases are disabled too.
+- **Alias env names need a prefix.** Aliases such as `user` or `uid` would
+  give `USER` and `UID`, which shells set. So alias env names are derived only
+  when `envPrefix` (or env.Load's prefix) is non-empty.
 - **Enrichers** see aliases as `FieldSpec.aliases` (long and env), so a
   rename can also change or drop them.
 - **Conflicts.** Giving the canonical flag and an alias flag (or setting both
@@ -232,8 +257,10 @@ Agreed with worker boacli, who owns the CLI changes.
 - **Positional fields.** An override only changes the name shown in help.
 - **Nested flattening** (planned in cli): an override renames that field's own
   segment of words, not the whole path. Prefixes join the parents' words.
-- **`bork/env`** (`env.Load`) follows the same words and alias rules, so cli
-  `autoEnv` and `env.Load` agree.
+- **`bork/env`** (`env.Load`) follows the same words and alias rules. cli
+  `autoEnv` builds env names from the long flag, including `flagPrefix`, so
+  the two agree when there is no `flagPrefix`. That is today's behaviour and
+  this design keeps it.
 
 ## Sealed enums (worker `enums`, bork-rz5wv6)
 
@@ -275,7 +302,7 @@ Read from `go doc encoding/json/v2` and `encoding/json/jsontext` (Go 1.27).
 | Duplicate names | Rejected by default (`AllowDuplicateNames` to allow) | YAML rejects. JSON accepts; a record decode keeps the first, a Map decode keeps the last. | **Now:** `json.Parse` rejects duplicates with line and column, as YAML does. |
 | Invalid UTF-8 | Rejected (v1 replaced it with U+FFFD) | `json.Parse` replaces it through v1 `Unmarshal` | **Now:** reject when parsing. **Later:** Render is infallible today, so it needs its own decision. |
 | Unknown members | Ignored by default; `RejectUnknownMembers` rejects them; an inline fallback map can capture them | Ignored | **Now:** `codec { unknown: codec.Unknown.Reject }` on the type, which rejects at the member's path. Ignore stays the default because APIs need to evolve. **Later:** capture into a `Map[String, codec.Value]` field. |
-| omitzero / omitempty | omitzero: Go zero or `IsZero()`. omitempty: values that encode as null, `""`, `{}` or `[]`. | Every field is written; None is written as null | **Now:** `omit: None / Default / NoneOrDefault`, on a field or for a whole type. Only values that Decode rebuilds when they are missing can be omitted, so round trips hold. **Never** omitempty: an omitted `[]` with no default would fail to decode. |
+| omitzero / omitempty | omitzero: Go zero or `IsZero()`. omitempty: values that encode as null, `""`, `{}` or `[]`. | Every field is written; None is written as null | **Now:** `omit: None / Default / NoneOrDefault` on a field. Only values that Decode rebuilds when they are missing can be omitted, and the compile-time checks keep round trips safe. **Later:** a type-level default. **Never** omitempty: an omitted `[]` with no default would fail to decode. |
 | Inline / embed | `embed` brings a struct's members up into the parent; fallback maps | No embedding | **Later:** `codec { inline: true }` on a record-typed field, with the same compile-time collision checks. Shares the flattening work with cli. |
 | `string` option | Quote numbers inside JSON strings, only at the field's top level | Numbers keep exact text, but JavaScript readers lose precision | **Later:** `codec { quoted: true }`. The template turns Number into String on encode and back on decode. A compile-time error if the field is not a number. |
 | Format options | The released v2 has no `format:` tag. `time.Time` uses RFC 3339 and Duration has no default form. | No codecs for `time.Instant`, `Duration` or `Bytes` | **Later** (separate ticket): the package that owns each type gives it a default instance (RFC 3339, Go duration text, base64). Other forms are separate instance sets chosen with `use`, not format strings in tags. |
@@ -288,7 +315,7 @@ Read from `go doc encoding/json/v2` and `encoding/json/jsontext` (Go 1.27).
 ## Delivery plan (after approval)
 
 1. **JSON safety:** reject duplicate names and invalid UTF-8 in `json.Parse`,
-   sort unordered map keys on encode, and report the `type`/`values` payload
+   sort unordered map keys on encode, and report the `type` payload
    collision.
 2. **Tag groups:** grammar, parser, fmt, checker typing, `shape.tagged`, and
    the editor grammars (docs/syntax-changes.md).
@@ -306,6 +333,10 @@ Read from `go doc encoding/json/v2` and `encoding/json/jsontext` (Go 1.27).
 - Wire options on the type, not on the derive request. One wire contract per
   type, shared by JSON and YAML.
 - Policies don't pass down to field types.
+- Flags and env names keep their own spelling. Only the words and overrides
+  are shared with the wire policy.
+- Alias env names exist only with a non-empty env prefix.
+- A YAML merge that mixes an alias and the wire name is an error.
 - `Camel` loses acronym case (`userID` becomes `userId`).
 - Unknown members are still ignored by default.
 - Duplicate JSON names become an error. This breaks any caller that relies on
