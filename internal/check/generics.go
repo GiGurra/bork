@@ -586,6 +586,25 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 			}
 		}
 	}
+	// An erased field head supplies requirements to a pure producer's dictionary
+	// selection, but is not an input/value proof. Consumers and general generic
+	// functions must use only their ordinarily established argument facts.
+	if fn.Class != nil && len(fn.TypeParams) == 1 && mentionsMember(fn.Result, fn.TypeParams[0]) {
+		producer := true
+		for _, parameter := range fn.Params {
+			if mentionsParam(parameter, fn.TypeParams[0]) {
+				producer = false
+			}
+		}
+		if producer && len(typeArgs) == 1 && len(c.info.shapeRawHeads[typeArgs[0]]) != 0 {
+			copyHave := make([][]*Constraint, len(fn.TypeParams))
+			for i := range have {
+				copyHave[i] = append([]*Constraint(nil), have[i]...)
+			}
+			copyHave[0] = append(copyHave[0], c.info.shapeRawHeads[typeArgs[0]]...)
+			have = copyHave
+		}
+	}
 	s := c.session
 	finish := func() {
 		reported := errs > 0 || cs.blamed

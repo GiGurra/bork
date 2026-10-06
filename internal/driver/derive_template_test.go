@@ -2813,3 +2813,49 @@ fn main() { println(probe(rawRow("valid"))); println(probe(rawRow("invalid"))) }
 		t.Fatalf("generic-root field check: %s, %v", output, err)
 	}
 }
+
+func TestDeriveTemplateRawFieldHeadProducerSelection(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred positive(n: Int) { n > 0 }
+class Combined[T] { fn make(n: Int): T; fn keep(value: T): T }
+instance plain: Combined[Int] {
+ fn make(n: Int): Int { n }
+ fn keep(value: Int): Int { value }
+}
+instance positiveOnly: Combined[Int where positive] {
+ fn make(n: Int): Int where positive { 7 }
+ fn keep(value: Int): Int where positive { value }
+}
+class Probe[T] { fn probe(n: Int): String }
+derive instance probe[T]: Probe[T] { fn probe(n: Int): String {
+ checks: List[(Int) => String] = [comptime for (field in shape.fields[T]())
+  raw => s"${make[field.RawType](raw)},${make[field.Type](raw)},${keep[field.RawType](raw)}"]
+ checks.get(0).map(callback => callback(n)).getOr("missing")
+} }
+type Row = { n: Int where positive } derive(Probe)
+fn main() { println(probe[Row](-1)) }`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "7,7,-1\n" {
+		t.Fatalf("raw field-head selection: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplateRawFieldHeadDoesNotRelaxProducingPromise(t *testing.T) {
+	checkPreludeSource(t, `import "bork/shape"
+pred positive(n: Int) { n > 0 }
+class Produce[T] { fn produce(n: Int): T }
+instance plain: Produce[Int] { fn produce(n: Int): Int { n } }
+class Probe[T] { fn probe(n: Int): String }
+derive instance probe[T]: Probe[T] { fn probe(n: Int): String {
+ checks: List[(Int) => String] = [comptime for (field in shape.fields[T]())
+  raw => toString(produce[field.Type](raw))]
+ checks.get(0).map(callback => callback(n)).getOr("missing")
+} }
+type Row = { n: Int where positive } derive(Probe)
+fn main() {}`, "which does not promise it")
+}

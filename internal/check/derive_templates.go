@@ -905,6 +905,15 @@ func (p *deriveExpansion) clone(value reflect.Value) reflect.Value {
 					typ, yes = field.field.Type, true
 					if member == "Type" {
 						projected = field.field
+					} else {
+						if p.c.info.shapeRawHeads == nil {
+							p.c.info.shapeRawHeads = map[*syntax.TypeExpr][]*Constraint{}
+						}
+						for _, constraint := range field.field.Constraints {
+							if constraint.Path == "" && !constraint.HasSiblingArgs() {
+								p.c.info.shapeRawHeads[written] = append(p.c.info.shapeRawHeads[written], constraint)
+							}
+						}
 					}
 					if origin, known := p.origins[owner]; known {
 						p.c.noteDeriveSource(written.Pos, owner, origin, "variable")

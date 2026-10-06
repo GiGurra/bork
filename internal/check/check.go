@@ -325,6 +325,7 @@ type Info struct {
 	shapeViews             map[*Variant]*Record
 	shapeReadOwners        map[*syntax.Selector]Type
 	shapeTypeFacts         map[*syntax.TypeExpr][]*Constraint
+	shapeRawHeads          map[*syntax.TypeExpr][]*Constraint
 	shapeDefaults          map[*syntax.Call]*Field
 	shapeValidations       map[*syntax.Call]*shapeValidationCall
 	assemblyNames          map[any]string

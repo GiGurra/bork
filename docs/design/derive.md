@@ -290,7 +290,12 @@ dictionaries, sibling references and traversal paths, plus display text.
 They are not parsed predicate strings. The generic field.validate operation,
 also used by metadata callbacks, checks only independent field obligations.
 field.RawType permits an erased input annotation without claiming the destination
-field facts. Successful validation supplies the independent facts on that value;
+field facts. RawType's root obligations guide dictionary selection only for
+class methods producing the target from inputs independent of that target.
+They never become an ArgFacts value promise: a raw result still needs check,
+validate, or completed construction. Consumers and ordinary generic functions
+receive no additional facts or constrained dictionary preference from RawType.
+Successful validation supplies the independent facts on that value;
 it supplies no fact about an incomplete owner. Success types must be provably
 distinct from ValidationError, including through union members. For unresolved
 root parameters or failure-typed fields, field.check supplies an unambiguous
