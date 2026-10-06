@@ -48,8 +48,8 @@ func TestCLIFleetExample(t *testing.T) {
 		{name: "catalog schema error is protocol error", args: []string{"__completeNoDesc", "k", "r", "d", "--catalog", "broken.json", "apply", ""}, want: ":1\n", diagnostic: "resources"},
 		{name: "help skips missing sources", args: []string{"k", "r", "d", "--catalog", "missing.json", "--config", "missing.json", "--help"}, want: "Must be positive.", contains: true},
 		{name: "script generation skips all handlers and catalog", args: []string{"completion", "bash"}, want: "__start_fleet", contains: true},
-		{name: "proven replica field rejects invalid invocation", args: []string{"k", "r", "d", "-r", "0", "apply"}, want: "replicas", contains: true, failure: true},
-		{name: "strict action rejects invalid invocation", args: []string{"k", "r", "d", "unknown"}, want: "action", contains: true, failure: true},
+		{name: "proven replica field rejects invalid invocation", args: []string{"k", "r", "d", "-r", "0", "apply"}, diagnostic: "Error: .replicas:", failure: true},
+		{name: "strict action rejects invalid invocation", args: []string{"k", "r", "d", "unknown"}, diagnostic: "Error: .action:", failure: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -66,6 +66,14 @@ func TestCLIFleetExample(t *testing.T) {
 			err := cmd.Run()
 			if (err != nil) != tt.failure {
 				t.Fatalf("run: %v\nstdout: %s\nstderr: %s", err, &stdout, &stderr)
+			}
+			if tt.failure {
+				if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 2 {
+					t.Fatalf("invalid invocation should exit 2: %v", err)
+				}
+				if !strings.Contains(stderr.String(), "Try 'fleet --help' for usage.") {
+					t.Fatalf("missing usage hint: %s", &stderr)
+				}
 			}
 			if tt.contains {
 				if !strings.Contains(stdout.String(), tt.want) {
