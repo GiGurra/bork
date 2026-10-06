@@ -50,7 +50,7 @@ shard adds a five-second overhead for starting that package's test binary, so
 small tests cluster. `scripts/ci-timings.json` holds the weights. A new package
 or test receives a five-second provisional weight and still runs; stale entries
 cannot add or remove coverage. PRs that change only `docs/**`, Markdown files,
-or `mkdocs.yml` skip the race shards and run all `TestDoc*` driver tests instead, including snippet, link and
+or `mkdocs.yml` skip the race shards and run all `TestDoc*` driver and CLI tests instead, including snippet, link and
 structure checks. Other CI jobs still run. Classification uses the PR merge-base
 diff, including both paths of renames; mixed changes get full coverage. Pushes
 and manual performance runs always get full checks.
