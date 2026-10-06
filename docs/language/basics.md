@@ -346,7 +346,7 @@ Integers wrap around on overflow. Dividing by a constant zero is a compile error
 | `%` | two integers of the same type |
 | `<` `<=` `>` `>=` | numbers, strings, and runes |
 | `==` `!=` | any two values of the same type that can be compared |
-| `&&` `||` `!` | `Bool`. The right side of `&&` and `||` runs only when needed |
+| `&&` `\|\|` `!` | `Bool`. The right side of `&&` and `\|\|` runs only when needed |
 
 `==` compares by content: two records, lists, or maps are equal when their parts are. Functions cannot be compared.
 
@@ -512,4 +512,4 @@ fn main() {}
 
 ---
 
-Next: [Types](types.md) · [All pages](../README.md#the-language)
+Previous: [Scripts](scripts.md) · Next: [Types](types.md) · [All pages](../README.md#the-language)

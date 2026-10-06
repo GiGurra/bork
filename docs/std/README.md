@@ -2,7 +2,11 @@
 
 Standard packages ship with the compiler. Import one as `bork/name` and call its functions with the package name in front: `import "bork/fs"`, then `fs.Open(path, s)`. Each page describes the package's API, with examples and limits.
 
-Operations on strings, lists, maps, options, and bytes need no import. They are methods that are available everywhere, such as `text.trim()` and `xs.map(f)`.
+Operations on strings, lists, maps, options, and bytes need no import. They are methods that are available everywhere, such as `text.trim()` and `xs.map(f)`. Run `bork doc builtin` for their signatures.
+
+<!-- Builtin API slot: add the builtins.md reference link when PR 2b lands. -->
+
+Run `bork doc bork/<package>` for generated package signatures and comments; for example, `bork doc bork/http`.
 
 | Package | Description |
 | --- | --- |
@@ -10,7 +14,7 @@ Operations on strings, lists, maps, options, and bytes need no import. They are 
 | [bork/binary](binary.md) | Fixed-width endian reads and immutable binary readers and writers |
 | [bork/bits](bits.md) | Counting, rotating, reversing, and checking integer bit fields |
 | [bork/build](../language/comptime.md#reading-files-at-build-time) | Reading files while the program compiles |
-| [bork/cli](cli.md) | Command-line options and subcommands decoded into records; [application cookbook](cli-cookbook.md) |
+| [bork/cli](cli.md) | Command-line options and subcommands decoded into records; [CLI application cookbook](cli-cookbook.md) |
 | [bork/compress](compress.md) | Gzip compression of bytes and files |
 | [bork/crypto](crypto.md) | Hashes, HMAC, secure random bytes, and password hashing |
 | [bork/embed](embed.md) | Files and directories built into the executable |
@@ -26,6 +30,7 @@ Operations on strings, lists, maps, options, and bytes need no import. They are 
 | [bork/process](process.md) | Program arguments, exit codes, and running subprocesses |
 | [bork/rand](rand.md) | Random numbers and seeded generators |
 | [bork/regex](regex.md) | Regular expressions, captures, and facts about matching strings |
+| [bork/shape](shape.md) | Typed descriptors, builders, and validation for derivation templates |
 | [bork/signal](signal.md) | Shutdown signals, grace deadlines, and scope-owned subscriptions |
 | [bork/sql](sql.md) | SQLite and Postgres connections, transactions, and typed SQL literals |
 | [bork/strconv](strconv.md) | Integer formatting and parsing in bases 2 through 36 |
