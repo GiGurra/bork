@@ -164,8 +164,11 @@ func TestCacheTrimDetachedEntryRepublicationAndTrashRecovery(t *testing.T) {
 		t.Fatal("fresh entry detached", next, err)
 	}
 }
+
+// Sequential: the exact removal count requires each entry's slot and mutation
+// locks to be free right after the fixture writes it. Parallel subprocess
+// launches can inherit those descriptors until exec, and trim skips busy entries.
 func TestCacheTrimResultNamespacesAndLocators(t *testing.T) {
-	t.Parallel()
 	requireStageLock(t)
 	base := t.TempDir()
 	now := time.Unix(1700000000, 0)
@@ -188,8 +191,11 @@ func TestCacheTrimResultNamespacesAndLocators(t *testing.T) {
 		t.Fatal("result/locator shards", removed)
 	}
 }
+
+// Sequential: removing the stale entry requires each entry's slot and mutation
+// locks to be free right after the fixture writes it. Parallel subprocess
+// launches can inherit those descriptors until exec, and trim skips busy entries.
 func TestCacheTrimMissingMarkerAndInvalidProgress(t *testing.T) {
-	t.Parallel()
 	requireStageLock(t)
 	base := t.TempDir()
 	now := time.Unix(1700000000, 0)

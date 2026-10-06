@@ -58,10 +58,12 @@ fn main() {
         println("session ended")
       }
     })
-    for (name in ["a", "b"]) {
-      conn = connect(name, app)
-      _ = conns.handOver(app, conn)
-    }
+    // Both open first: main prints nothing while the worker serves a, so
+    // the output order does not depend on scheduling.
+    a = connect("a", app)
+    b = connect("b", app)
+    _ = conns.handOver(app, a)
+    _ = conns.handOver(app, b)
     conns.close()
     await(worker)
     println("workers done")

@@ -1,9 +1,9 @@
 0
 open a
+open b
 a: in session
 close a
 session ended
-open b
 b: in session
 close b
 session ended
