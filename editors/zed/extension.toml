@@ -12,5 +12,5 @@ languages = ["bork"]
 
 [grammars.bork]
 repository = "https://github.com/GiGurra/bork"
-rev = "a6b7fe0e69c92660d8770f47acdd0cd57878739a"
+rev = "a2bfee77cf7e8f66373f6b1a688a4ae2e633bdc5"
 path = "editors/tree-sitter-bork"
