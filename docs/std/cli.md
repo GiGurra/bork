@@ -566,7 +566,7 @@ directly. Disabled completion leaves ordinary flags and positionals available.
 Use `ParseWith`, `RunWith` or `SubcommandWith` to register effectful value
 completers. Their ordinary parsing behavior matches Parse/Run/Subcommand, while
 the With APIs charge the closed `io + net + clock + random + state` bound.
-Ordinary Parse and Run propagate callback effects selectively. Each completer has
+Ordinary Parse uses io; Run also propagates its handler's effects. Each completer has
 type `(cli.CompletionRequest, Scope) uses io + net + clock + random + state =>
 cli.Suggestions | cli.Error`. Pure functions with that result union can also be
 used as completers. `ParseDetailedWith` has the same arguments as ParseWith
