@@ -1,10 +1,6 @@
 # bork/yaml
 
-`bork/yaml` reads and writes YAML. A parsed document is a
-[bork/codec](codec.md) `codec.Value`, so the same queries and the same
-`codec.Decode` and `codec.Encode` instances work for YAML and JSON. The
-package wraps [go.yaml.in/yaml/v4](https://github.com/yaml/go-yaml), the YAML
-organization's continuation of gopkg.in/yaml.
+`bork/yaml` reads and writes YAML through the same checked codec instances as JSON.
 
 ```bork
 import codec "bork/codec"
@@ -22,17 +18,27 @@ fn main() {
 }
 ```
 
+Output from the first example:
+
+```text
+host: localhost
+port: 9090
+```
+
+A YAML syntax/mapping failure is `yaml.Error`; a value that does not fit T produces `codec.DecodeError`. The parsed document is a [codec.Value](codec.md). The package uses the YAML organization's [go.yaml.in/yaml/v4](https://github.com/yaml/go-yaml).
+
 ## Reading
 
-| Function | Result |
+| Signature | Meaning |
 | --- | --- |
-| `Parse(text)` | `codec.Value \| yaml.Error`: one document. Text with no document is `Null`; a second document is an error. |
-| `ParseAll(text)` | `List[codec.Value] \| yaml.Error`: every document of a stream, in order. |
-| `ReadFile(path)` | `codec.Value \| yaml.Error \| IoError`, as Parse. Uses io. |
-| `ReadAllFile(path)` | `List[codec.Value] \| yaml.Error \| IoError`, as ParseAll. Uses io. |
+| `Parse(text: String): codec.Value \| yaml.Error` | One document. Text with no document is `Null`; a second document is an error. |
+| `ParseAll(text: String): List[codec.Value] \| yaml.Error` | Every document of a stream, in order. |
+| `ReadFile(path: String) uses io: codec.Value \| yaml.Error \| IoError` | Read a file as one document. |
+| `ReadAllFile(path: String) uses io: List[codec.Value] \| yaml.Error \| IoError` | Read every document in a file. |
 
-`yaml.Error` has `path` (the file, or `""` for text), one-based `line` and
-`column` (0 when no position applies), and `message`.
+`yaml.Error` has `{ path: String, line: Int, column: Int, message: String }`.
+The path is the file, or `""` for text; line and column are one-based, or 0
+when no position applies.
 
 YAML values become codec values like this:
 
@@ -68,13 +74,13 @@ Some YAML is rejected rather than guessed at:
 
 ## Typed values
 
-| Function | Result |
+| Signature | Meaning |
 | --- | --- |
-| `Decode[T](text)` | `T \| yaml.Error \| codec.DecodeError`: Parse, then T's Decode instance. |
-| `DecodeAll[T](text)` | `List[T] \| yaml.Error \| codec.DecodeError`: every document. A DecodeError path starts with the document's index (`[1].port`). |
-| `DecodeFile[T](path)` | `T \| yaml.Error \| IoError \| codec.DecodeError`: ReadFile, then decode. Uses io. |
-| `Encode(value, spaces = 2)` | `String \| yaml.Error`: T's Encode instance, then Render. |
-| `EncodeFile(path, value, spaces = 2)` | `Ok \| yaml.Error \| IoError`: Encode, then WriteFile. Uses io. |
+| `Decode[T: codec.Decode](text: String): T \| yaml.Error \| codec.DecodeError` | Parse, then T's Decode instance. |
+| `DecodeAll[T: codec.Decode](text: String): List[T] \| yaml.Error \| codec.DecodeError` | Decode every document. A DecodeError path starts with the document's index (`[1].port`). |
+| `DecodeFile[T: codec.Decode](path: String) uses io: T \| yaml.Error \| IoError \| codec.DecodeError` | ReadFile, then decode. |
+| `Encode[T: codec.Encode](value: T, spaces: Indent = 2): String \| yaml.Error` | T's Encode instance, then Render. |
+| `EncodeFile[T: codec.Encode](path: String, value: T, spaces: Indent = 2) uses io: Ok \| yaml.Error \| IoError` | Encode, then WriteFile. |
 
 These use the same `codec.Decode` and `codec.Encode` instances as
 [bork/json](json.md), so `derive (codec.Decode, codec.Encode)` records, sealed
@@ -91,13 +97,13 @@ Render's does.
 
 ## Writing
 
-| Function | Result |
+| Signature | Meaning |
 | --- | --- |
-| `Render(value, spaces = 2)` | `String \| yaml.Error`: one block-style document. |
-| `RenderAll(values, spaces = 2)` | `String \| yaml.Error`: documents separated by `---` lines. |
-| `WriteFile(path, value, spaces = 2)` | `Ok \| yaml.Error \| IoError`: replaces the file with one document. Uses io. |
+| `Render(value: codec.Value, spaces: Indent = 2): String \| yaml.Error` | One block-style document. |
+| `RenderAll(values: List[codec.Value], spaces: Indent = 2): String \| yaml.Error` | Documents separated by `---` lines. |
+| `WriteFile(path: String, value: codec.Value, spaces: Indent = 2) uses io: Ok \| yaml.Error \| IoError` | Replace the file with one document. |
 
-`spaces` is the indent, 2 through 9. List items under a field start at the
+`Indent` is an Int in 2 through 9; `spaces` sets that indentation. List items under a field start at the
 field's own indent (`tags:` then `- a`). Objects keep their field order and
 numbers their exact text. Strings that would read back as another kind are
 quoted (`'true'`, `'1.5'`), and so are `yes`, `no`, `on` and `off`, which
@@ -110,9 +116,39 @@ Comments and the original formatting are not kept.
 
 ## Queries
 
-`Field(value, name)`, `Index(value, index)` and `At(value, path)` are the
-[bork/json](json.md) queries: `At(config, ["servers", 0, "host"])` gives
-`Option[codec.Value]`, with `None` for a missing path.
+The pure query functions mirror [bork/json](json.md):
+
+| Signature | Meaning |
+| --- | --- |
+| `Field(value: codec.Value, name: String): Option[codec.Value]` | First matching object field. |
+| `Index(value: codec.Value, index: Int): Option[codec.Value]` | Array element. |
+| `At(value: codec.Value, path: List[String \| Int]): Option[codec.Value]` | Follow keys and indices; None for a missing path. |
+
+For example, `At(config, ["servers", 0, "host"])` selects the first server's host.
+
+## Handle a failure
+
+```bork
+import "bork/codec"
+import "bork/yaml"
+use codec.Defaults
+
+type Config = { port: Int } derive (codec.Decode)
+
+fn main() {
+  match (yaml.Decode[Config]("port: many\n")) {
+    config: Config => println(config.port)
+    error: codec.DecodeError => println(error.path + ": " + error.message)
+    error: yaml.Error => println(error.message)
+  }
+}
+```
+
+Output:
+
+```text
+.port: expected a whole number, found a string
+```
 
 ## Examples
 
