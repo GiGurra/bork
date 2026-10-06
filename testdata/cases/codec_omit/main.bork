@@ -1,0 +1,35 @@
+import "bork/codec"
+import "bork/json"
+import "bork/yaml"
+use codec.Defaults
+
+type Row = {
+  optionalValue: Option[Int] codec { omit: codec.Omit.None }
+  count: Int = 3 codec { omit: codec.Omit.Default }
+  optionalDefault: Option[Int] = Option.None codec { omit: codec.Omit.NoneOrDefault }
+  included: Option[Int]
+} derive (codec.Decode, codec.Encode)
+type Maybe = Option[Int]
+type AliasOption = { value: Maybe = Option.None codec { omit: codec.Omit.None } } derive (codec.Decode, codec.Encode)
+type ListDefault = { numbers: List[Int] = [] codec { omit: codec.Omit.Default } } derive (codec.Decode, codec.Encode)
+type DefaultSome = { value: Option[Int] = Option.Some(4) codec { omit: codec.Omit.Default } } derive (codec.Decode, codec.Encode)
+type Mixed = sealed { Item { value: Int = 4 codec { omit: codec.Omit.Default } }, Empty } derive (codec.Decode, codec.Encode)
+fn round[T: codec.Decode + codec.Encode](value: T) uses io {
+  text = json.Encode(value)
+  println(text)
+  println(json.Decode[T](text))
+  match (yaml.Encode(value)) {
+    yamlText: String => println(yaml.Decode[T](yamlText))
+    error: yaml.Error => println(error)
+  }
+}
+fn main() {
+  round(Row { optionalValue: Option.None, count: 3, optionalDefault: Option.None, included: Option.None })
+  round(Row { optionalValue: Option.Some(1), count: 5, optionalDefault: Option.Some(2), included: Option.None })
+  round(DefaultSome {})
+  round(DefaultSome { value: Option.None })
+  round(Mixed.Item {})
+  round(AliasOption {})
+  round(ListDefault {})
+  round(ListDefault { numbers: [1, 2] })
+}
