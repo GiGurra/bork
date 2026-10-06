@@ -83,7 +83,12 @@ role: member
   default to `Verbatim`. Enum-shaped sealed types (no variant has a payload)
   default to `ScreamingSnake`: `SiteAdmin` is written as `SITE_ADMIN`. This
   changes today's enum wire form (`SiteAdmin`), so the implementation PR lists
-  it as a breaking change. A type-level `naming` overrides either default.
+  it as a breaking change. In `TypeTags`, `naming: Option.None` means the
+  default for the type's shape. An explicit `codec.Naming.Verbatim` opts out.
+  An enum-shaped type may also have one fallback variant. Decode does not
+  accept the source name (`SiteAdmin`) as well, because under the default it
+  would then not reach the fallback. Migration is through explicit aliases.
+  The fallback's payload is never renamed.
 - **Scope.** The policy is set on the type and covers the record's fields. On
   a sealed type it covers variant tags and the fields of named payloads. A
   separate policy for tags (serde's `rename_all` versus `rename_all_fields`)
@@ -189,7 +194,7 @@ know, and it is type-checked like B without a type name on every field.
 Codec's tag types:
 
 ```text
-type TypeTags = { naming: Naming = Naming.Verbatim, unknown: Unknown = Unknown.Ignore }
+type TypeTags = { naming: Option[Naming] = Option.None, unknown: Unknown = Unknown.Ignore }
 type FieldTags = { name: Option[String] = Option.None, aliases: List[String] = [], omit: Omit = Omit.Never }
 type VariantTags = { name: Option[String] = Option.None, aliases: List[String] = [], fallback: Bool = false }
 type Unknown = sealed { Ignore, Reject }
@@ -220,7 +225,9 @@ nothing format-specific in codec. Points for YAML:
   `true`/`True`/`TRUE`, `false`, `null`/`NULL`, `~` and numbers are compile
   errors. `bork/yaml` uses the YAML 1.2 core schema, checked with
   go.yaml.in/yaml/v4, so `on`, `off`, `yes` and `ON` are strings and are
-  allowed. As a bare-string value, hand-written `role: NULL` would otherwise
+  allowed. Rejecting the YAML 1.1 forms would make the common `On`/`Off`
+  enum an error under the default policy. The renderer quotes them for YAML
+  1.1 readers instead, and round-trip tests check this. As a bare-string value, hand-written `role: NULL` would otherwise
   read as Null. Object keys don't have this problem, because keys are read by
   their text.
 - **Merge keys and aliases.** In YAML a mapping's own key overrides the same
