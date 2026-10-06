@@ -43,7 +43,7 @@ file may be released: it belongs to scope s, which ended on line 4
 
 Files are not closed by hand. A function that needs an open resource takes it as a parameter, and its caller's scope keeps it open for the duration of the call.
 
-A scope is itself a value, of type `Scope`, so a function can take one as a parameter and open resources or start tasks in it. Several examples below do this with `s: Scope`.
+A scope is itself a value, of type `Scope`, so a function can take one as a parameter and open resources or start tasks in it. A function taking a `Scope` may run work in it until the scope ends, even after the function returns. Several examples below do this with `s: Scope`.
 
 Tuples preserve these lifetimes too: wrapping a resource in `(file, label)` or
 destructuring that tuple cannot let the resource outlive its scope. A tuple cannot
@@ -82,6 +82,8 @@ fn main() {
 
 - `fork(s, () => ...)` gives a `Task[T]`, and `await(task)` waits for its result.
 - Work that gives no value gives a `Task[Ok]`. It can be dropped like an `Ok`, so `fork(s, () => { ... })` on its own line starts fire-and-forget work. When the scope exits, it cancels and joins the task, and reports an unawaited panic. Work that observes cancellation may stop before completing. Other tasks must be used: dropping a `Task[Int]` is an error, as dropping an `Int` is.
+
+Use a `fork` prefix only when a caller-supplied closure runs as a task that may outlive the call. Taking a `Scope` alone does not require a `fork` prefix; internal background tasks are bounded by that scope.
 
 ## What happens at scope exit
 
