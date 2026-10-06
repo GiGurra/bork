@@ -9,7 +9,7 @@ type File struct {
 	// ExpressionSpans retains parser ranges, including grouping, for compiler
 	// source queries and refactorings. One node can have several grouped spans.
 	ExpressionSpans []ExpressionSpan
-	// Script marks a single executable file with an implicit main.
+	// Script marks a single executable file with an explicit or implicit main.
 	Script bool
 	Path   string
 	// Source retains the original text for compile-time debug probes.

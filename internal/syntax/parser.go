@@ -18,7 +18,7 @@ func Parse(path string, src []byte, diags *diag.List) *File {
 	return parse(path, string(src), toks, comments, diags, false)
 }
 
-// ParseScript parses top-level statements as the body of an implicit main.
+// ParseScript accepts an explicit main or top-level statements in an implicit main.
 func ParseScript(path string, src []byte, diags *diag.List) *File {
 	toks, comments := Lex(path, src, diags)
 	return parseMode(path, string(src), toks, comments, diags, false, true)
@@ -32,6 +32,7 @@ func parseMode(path, src string, toks []Token, comments []Comment, diags *diag.L
 	f := &File{Path: path, Source: src, Comments: comments, Script: script}
 	p := &parser{patternTestOperators: &f.PatternTestOperators, toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, compiler: compiler, spans: &f.ExpressionSpans, spanSeen: map[Expr][]SourceSpan{}}
 	var statements []Stmt
+	var firstStatement diag.Pos
 	// Imports come first.
 	for {
 		p.skipSemis()
@@ -129,7 +130,11 @@ func parseMode(path, src string, toks []Token, comments []Comment, diags *diag.L
 				f.Bindings = append(f.Bindings, binding)
 			}
 		case script:
+			pos := p.tok().Pos
 			if stmt := p.scriptStatement(); stmt != nil {
+				if len(statements) == 0 {
+					firstStatement = pos
+				}
 				statements = append(statements, stmt)
 			}
 		default:
@@ -138,14 +143,20 @@ func parseMode(path, src string, toks []Token, comments []Comment, diags *diag.L
 		}
 	}
 	if script {
+		explicitMain := false
 		for _, fn := range f.Funcs {
 			if fn.Name == "main" && !fn.IsMethod {
-				p.errorf(fn.Pos, "a script has an implicit main; remove fn main and write its statements at the top level")
+				explicitMain = true
+				if len(statements) > 0 {
+					p.diags.AddCode(fn.Pos, "script.mixed-entrypoints", "a script cannot combine fn main() with top-level statements (first statement at %s); move the statements into main or remove main", firstStatement)
+				}
 			}
 		}
-		pos := diag.Pos{File: path, Line: 1, Col: 1}
-		body := &Block{Pos: pos, End: p.tok().Pos, Stmts: statements}
-		f.Funcs = append(f.Funcs, &FuncDecl{Pos: pos, Name: "main", Body: body, ScriptMain: true})
+		if !explicitMain {
+			pos := diag.Pos{File: path, Line: 1, Col: 1}
+			body := &Block{Pos: pos, End: p.tok().Pos, Stmts: statements}
+			f.Funcs = append(f.Funcs, &FuncDecl{Pos: pos, Name: "main", Body: body, ScriptMain: true})
+		}
 	}
 	return f
 }

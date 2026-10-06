@@ -5,7 +5,7 @@ One binary does everything: `bork <command>`. Most commands take a path, which i
 | Command | What it does |
 | --- | --- |
 | [`bork new`](#new) | Create a project from a template |
-| [`bork script`](#scripts) | Run one file with an implicit main |
+| [`bork script`](#scripts) | Run one file with top-level statements or `fn main()` |
 | [`bork run`](#run-build-and-install) | Compile and run a program |
 | [`bork build`](#run-build-and-install) | Compile a program to an executable |
 | [`bork install`](#run-build-and-install) | Compile a program and install the executable |
@@ -61,10 +61,10 @@ bork install .                 # build, then put the executable in BORKBIN
 ## Scripts
 
 ```sh
-bork script hello.bork -- Ada   # top-level statements, with or without a shebang
+bork script hello.bork Ada      # top-level statements or fn main, with or without a shebang
 ```
 
-A script with `#!/usr/bin/env -S bork script` on its first line can also run directly after `chmod +x hello.bork`. It uses the normal compile cache. See [scripts](language/scripts.md) for binding scope, inline Go dependencies and project rules.
+A script with `#!/usr/bin/env -S bork script` on its first line can also run directly after `chmod +x hello.bork`. Compiler flags go before the file; arguments after it belong to the script, including CLI flags such as `--help`. An optional `--` after the file is accepted. It uses the normal compile cache. See [scripts](language/scripts.md) for binding scope, inline Go dependencies and project rules.
 
 ## Check
 

@@ -22,7 +22,10 @@ func TestScriptChecks(t *testing.T) {
 		{"function capture", "x=1\nfn read():Int{x}\nprintln(read())", "use lazy x = ..."},
 		{"function capture before binding", "fn read():Int{x}\nx=1\nprintln(read())", "script local"},
 		{"callback capture", "f:(Int)=>Int=n=>n+1\nfn read():Int{f(1)}\nprintln(read())", "script local"},
-		{"main conflict", "fn main(){}", "implicit main"},
+		{"explicit main", "fn main(){println(1)}", ""},
+		{"main with declarations", "lazy X=1\ntype Item={value:Int}\nfn read():Int{X}\nfn main(){println(Item{value:read()})}", ""},
+		{"main conflict before", "println(1)\nfn main(){}", "top-level statements"},
+		{"main conflict after", "fn main(){}\nprintln(1)", "top-level statements"},
 		{"lazy effect", "lazy X={println(1);1}\nprintln(X)", "pure initializer"},
 		{"no unsafe opt-in", "fn read():String unsafe go \"os.Getwd\"\nprintln(read())", "unsafe go"},
 		{"unsafe opt-in", "// bork:unsafe\nfn read()uses io:String|GoError unsafe go \"os.Getwd\"\nprintln(read())", ""},
@@ -275,5 +278,87 @@ func TestScriptConcurrentDependencyResolution(t *testing.T) {
 	}
 	if !bytes.Equal(first.module.mod, second.module.mod) || !bytes.Equal(first.module.sum, second.module.sum) {
 		t.Fatal("concurrent resolvers published different graphs")
+	}
+}
+
+func TestScriptCLIDispatch(t *testing.T) {
+	t.Parallel()
+	declarations := `import "bork/cli"
+import "bork/codec"
+import "bork/process"
+use codec.Defaults
+type Options = { config: Option[String], name: String = "world" } derive (codec.Decode)
+type Root = { config: Option[String], region: String = "west" } derive (codec.Decode)
+fn commands(): List[cli.Command] {
+ [cli.Subcommand[Options]("greet", "Greeting", (options, s) => { println(options.name) }, flags: [.{ field: "config", configFile: true }], settings: .{ version: "1.2.3" })]
+}
+fn rootCommands(): List[cli.RootCommand[Root]] {
+ [cli.RootSubcommand[Root, Options]("greet", "Greeting", (root, options, s) => { println(s"${root.region}/${options.name}") }, flags: [.{ field: "config", long: cli.Mapping.Named { name: "leaf-config" }, configFile: true }], settings: .{ version: "1.2.3" })]
+}
+`
+	for _, main := range []bool{false, true} {
+		for _, tc := range []struct {
+			name, body string
+			args       []string
+			want       string
+		}{
+			{"RunCommands", `println(cli.RunCommands("app", "Commands", commands(), settings: .{ version: "1.2.3" }))`, []string{"greet", "--config", "leaf.json", "--name", "Ada"}, "Ada\nOk\n"},
+			{"Dispatch", `println(cli.Dispatch("app", "Commands", process.Args(), commands(), settings: .{ version: "1.2.3" }))`, []string{"greet", "--config", "leaf.json"}, "file\nOk\n"},
+			{"RunRoot", `println(cli.RunRoot[Root]("app", "Root commands", rootCommands(), flags: [.{ field: "config", long: cli.Mapping.Named { name: "root-config" }, configFile: true }], settings: .{ version: "1.2.3" }))`, []string{"--root-config", "root.json", "greet", "--leaf-config", "leaf.json", "--region", "east"}, "east/file\nOk\n"},
+		} {
+			name := tc.name + map[bool]string{false: "/top-level", true: "/main"}[main]
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				root := fixtureDir(t)
+				body := tc.body
+				if main {
+					body = "fn main() {\n" + body + "\n}"
+				}
+				path := filepath.Join(root, "script.bork")
+				decls := declarations
+				if tc.name != "Dispatch" {
+					decls = strings.ReplaceAll(decls, "import \"bork/process\"\n", "")
+				}
+				if err := os.WriteFile(path, []byte("#!/usr/bin/env -S bork script\n"+decls+body+"\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				for file, data := range map[string]string{"leaf.json": `{"name":"file"}`, "root.json": `{"region":"north"}`} {
+					if err := os.WriteFile(filepath.Join(root, file), []byte(data), 0600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				exe := filepath.Join(t.TempDir(), "app")
+				if err := Build(path, exe); err != nil {
+					t.Fatal(err)
+				}
+				cmd := exec.Command(exe, tc.args...)
+				cmd.Dir = root
+				out, err := cmd.CombinedOutput()
+				if err != nil || string(out) != tc.want {
+					t.Fatalf("%s: %v", out, err)
+				}
+				for _, args := range [][]string{{"--version"}, {"greet", "--config", "missing.json", "--version"}} {
+					if tc.name == "RunRoot" && len(args) > 1 {
+						args[1] = "--leaf-config"
+					}
+					cmd = exec.Command(exe, args...)
+					cmd.Dir = root
+					out, err = cmd.CombinedOutput()
+					want := "app version 1.2.3"
+					if len(args) > 1 {
+						want = "app greet version 1.2.3"
+					}
+					if err != nil || !strings.Contains(string(out), want) || strings.Contains(string(out), "Error") || strings.Contains(string(out), "world") || strings.Contains(string(out), "west") {
+						t.Fatalf("version must skip config and handler: %s: %v", out, err)
+					}
+				}
+				cmd = exec.Command(exe, "--help")
+				cmd.Dir = root
+				out, err = cmd.CombinedOutput()
+				if err != nil || !strings.Contains(string(out), "greet") || strings.Contains(string(out), "/file") {
+					t.Fatalf("help: %s: %v", out, err)
+				}
+			})
+		}
 	}
 }

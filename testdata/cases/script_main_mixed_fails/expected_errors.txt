@@ -1,0 +1,1 @@
+main.bork:2:1: a script cannot combine fn main() with top-level statements (first statement at main.bork:3:1); move the statements into main or remove main

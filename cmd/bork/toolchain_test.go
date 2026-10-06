@@ -181,4 +181,12 @@ func TestToolchainTarget(t *testing.T) {
 			t.Errorf("%v: %s, %t", args, path, enabled)
 		}
 	}
+	script := &cobra.Command{Use: "script"}
+	script.Flags().Bool("fast", false, "")
+	root.AddCommand(script)
+	for _, args := range [][]string{{"script", "/tool.bork", "--help"}, {"script", "--fast", "/tool.bork", "--version"}, {"script", "/tool.bork", "--", "--help"}} {
+		if path, enabled := earlyToolchainTarget(root, args); !enabled || path != "/tool.bork" {
+			t.Errorf("script flags changed compiler selection %v: %s, %t", args, path, enabled)
+		}
+	}
 }

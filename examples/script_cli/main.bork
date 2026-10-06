@@ -1,0 +1,13 @@
+#!/usr/bin/env -S bork script
+import "bork/cli"
+import "bork/codec"
+import "bork/process"
+use codec.Defaults
+
+type Options = { name: String = "world" } derive (codec.Decode)
+match (cli.Run[Options]("greet", "A greeting script", (options, s) => {
+  println(s"Hello, ${options.name}!")
+})) {
+  error: cli.Error => { eprintln(error.Render("greet")); process.Exit(2) }
+  Ok => {}
+}

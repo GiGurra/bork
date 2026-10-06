@@ -94,6 +94,9 @@ func earlyToolchainTarget(root *cobra.Command, raw []string) (string, bool) {
 		}
 		if !strings.HasPrefix(arg, "-") || arg == "-" {
 			positional = append(positional, arg)
+			if cmd.Name() == "script" {
+				break
+			}
 			continue
 		}
 		name, value, hasValue := strings.Cut(strings.TrimLeft(arg, "-"), "=")
