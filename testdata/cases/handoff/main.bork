@@ -24,6 +24,25 @@ fn serveNext(s: Scope, conns: Handoff[Conn]) uses io + state {
   }
 }
 
+// give hands a connection over, with its arguments named and reordered,
+// and passes a failure on with ?.
+fn give(s: Scope, conns: Handoff[Conn]) uses io + state: Ok | Closed | Cancelled {
+  c = connect("g", s)
+  conns.handOver(r: c, s: s)?
+  Ok
+}
+
+// A handoff parameter known only to outlive s: what it gives is still
+// the receiver's own.
+fn serveIn(s: Scope, conns: Handoff[Conn] in s) uses io + state: Ok | Closed | Cancelled {
+  c = conns.receive(s)?
+  scope session {
+    owned = move(c, session)
+    println(query(owned, "served in"))
+  }
+  Ok
+}
+
 fn main() {
   scope app {
     // A worker owns each connection it receives for one session: it
@@ -91,6 +110,12 @@ fn main() {
       }
     }
     println("outer ended")
+
+    third = handoff[Conn](app, 1)
+    println(give(app, third))
+    println(serveIn(app, third))
+    third.close()
+    println(give(app, third))
   }
   println("app ended")
 }

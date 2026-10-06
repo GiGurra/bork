@@ -305,7 +305,7 @@ fn main() {
 
 - `handoff[R](s)` or `handoff[R](s, capacity)` makes one in scope `s`. It carries resources only.
 - `h.handOver(s, r)` is a `move` of `r` to the handoff's scope, followed by a send. The compiler rejects any later use of `r`, or of anything holding it, and `r` must be movable there, as for `move`. It gives `Ok | Closed | Cancelled`. If it fails, nobody received `r`, so `r` is closed at once (unless it is attached to another scope).
-- `h.receive(s)` and `for (r in h.values(s))` give the receiver the only hold on the resource. It belongs to the handoff's scope until the receiver moves it on, attaches it, or hands it over again. Resources nobody received close with the handoff's scope.
+- `h.receive(s)` and `for (r in h.values(s))` give the receiver a hold of its own on the resource, which it may move: it belongs to the handoff's scope until the receiver moves it on, attaches it, or hands it over again. This works for a handoff held in a variable or parameter. Resources nobody received close with the handoff's scope.
 - `tryReceive`, `close`, `length` and `capacity` work as they do for channels. A value from `tryReceive` is borrowed, and so is one received from a handoff that is not a plain name (`make().receive(s)`). `select` does not take handoffs yet.
 
 ## Patterns

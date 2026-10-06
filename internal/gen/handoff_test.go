@@ -34,6 +34,7 @@ func TestHandOverRuntime(t *testing.T) {
 const handOverRuntimeTest = `package main
 import (
  "context"
+ "sync"
  "sync/atomic"
  "testing"
 )
@@ -120,5 +121,59 @@ func TestUnreceivedClosesWithTheHandoff(t *testing.T) {
  if closes.Load() != 0 { t.Fatal("closed with its source") }
  app.close()
  if closes.Load() != 1 { t.Fatal("not closed with the handoff's scope") }
+}
+
+// A hand-over to a handoff whose scope has finished closing (by an
+// orphaned task) gives Closed and releases the resource.
+func TestHandOverAfterTheHandoffClosed(t *testing.T) {
+ var closes atomic.Int32
+ app, src := scope(), scope()
+ defer src.close()
+ h := _borkNewChan(app, 1)
+ app.close()
+ c := open(src, &closes)
+ if _, ok := _borkHandOver(src, h, c, src).(Closed); !ok { t.Fatal("handed over to a closed scope") }
+ if closes.Load() != 1 { t.Fatal("not released") }
+}
+
+// Receivers move what they receive on while senders wait on an
+// unbuffered handoff: every resource closes exactly once, with the
+// session that received it.
+func TestConcurrentHandOvers(t *testing.T) {
+ var opens, closes atomic.Int32
+ app := scope()
+ h := _borkNewChan(app, 0)
+ var workers sync.WaitGroup
+ for range 4 {
+  workers.Add(1)
+  go func() {
+   defer workers.Done()
+   for {
+    got, ok := _borkChanReceive(app, h)
+    if !ok { return }
+    session := scope()
+    _moveResource(got.(conn), h.scope, session)
+    session.close()
+   }
+  }()
+ }
+ var senders sync.WaitGroup
+ for range 4 {
+  senders.Add(1)
+  go func() {
+   defer senders.Done()
+   for range 500 {
+    src := scope()
+    opens.Add(1)
+    _borkHandOver(src, h, open(src, &closes), src)
+    src.close()
+   }
+  }()
+ }
+ senders.Wait()
+ h.close()
+ workers.Wait()
+ app.close()
+ if opens.Load() != closes.Load() { t.Fatalf("opened %d, closed %d", opens.Load(), closes.Load()) }
 }
 `

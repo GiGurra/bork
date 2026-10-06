@@ -106,7 +106,8 @@ other way (`toList`, passed on as a `Seq`) gives borrowed values.
 The handle's source scope must be nameable at the later `move`, for code
 generation. It is read from the channel itself: the runtime channel
 records the scope it was made in. So the received value is owned only when
-the channel is a simple name (a local or a parameter); `make().receive(s)`
+the channel is a simple name (a local or a parameter, also one declared
+`in` another, whose handles then name the parameter); `make().receive(s)`
 gives a borrowed value.
 
 ### Runtime

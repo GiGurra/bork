@@ -647,9 +647,9 @@ func (c *checker) storeFields(pos diag.Pos, rec *Record) bool {
 		return false
 	}
 	base := genericBaseOrSelf(rec)
-	for _, name := range []string{"Channel", "Handoff", "Atom"} {
+	for name, uses := range map[string]string{"Channel": "methods (send, receive, close, ...)", "Handoff": "methods (handOver, receive, close, ...)", "Atom": "functions (update, current, swap)"} {
 		if base == genericBaseOrSelf(c.preludePkg.TypeNamed(name)) {
-			c.errorf(pos, "the fields of %s are internal; use its functions (send, receive, update, current, ...)", name)
+			c.errorf(pos, "the fields of %s are internal; use its %s", name, uses)
 			return true
 		}
 	}

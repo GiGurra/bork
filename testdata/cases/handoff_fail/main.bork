@@ -11,6 +11,11 @@ fn query(c: Conn, q: String): String unsafe go {
 
 type Holder = { conn: Conn }
 
+// A resource of no scope: not acquired anywhere the checker sees.
+fn global() uses io: Conn unsafe go {
+  return Conn{handle: "global", owner: nil}
+}
+
 // What a type parameter is, is not known here.
 fn relay[R](s: Scope, from: Handoff[R], to: Handoff[R]) uses state {
   match (from.receive(s)) {
@@ -83,6 +88,12 @@ fn main() {
       for (_ in [1, 2]) {
         _ = move(x, app)
       }
+    }
+    // No scope, and two possible scopes.
+    _ = conns.handOver(app, global())
+    scope other {
+      two = if (query(connect("p", app), "x") != "") { connect("q", app) } else { connect("r", other) }
+      _ = conns.handOver(app, two)
     }
     // Received from a handoff that is not named by a variable.
     match (handoff[Conn](app).receive(app)) {

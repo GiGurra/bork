@@ -1037,7 +1037,7 @@ func (o *_Owner) move(from, to *_Scope) (string, bool) {
 	r := &_ownerReg{scope: to}
 	r.owner.Store(o)
 	if !to.tryDefer(r) {
-		return "the target scope has finished closing", false
+		return _errMoveFinished, false
 	}
 	old := o.regs[i]
 	old.owner.Store(nil)
@@ -1092,24 +1092,48 @@ func (o *_Owner) releaseIn(s *_Scope) bool {
 // move compiles to): to now keeps it open, from no longer does, and its
 // cancellation follows to instead of from.
 func _moveResource[R any](r R, from, to *_Scope) R {
-	o, _ := any(r).(interface{ _ownerOf() *_Owner })
+	if why := _tryMoveResource(r, from, to); why != "" {
+		panic("bork: move: " + why)
+	}
+	return r
+}
+
+// _errMoveFinished is why a move into a scope that has finished closing
+// fails.
+const _errMoveFinished = "the target scope has finished closing"
+
+// _tryMoveResource is _moveResource, giving why it cannot move r (and
+// then changing nothing) instead of panicking.
+func _tryMoveResource(r any, from, to *_Scope) string {
+	o, _ := r.(interface{ _ownerOf() *_Owner })
 	if o == nil || o._ownerOf() == nil {
-		panic("bork: move: the resource was not opened with an owner (s.Own)")
+		return "the resource was not opened with an owner (s.Own)"
 	}
 	why, kept := o._ownerOf().move(from, to)
 	if why != "" {
-		panic("bork: move: " + why)
+		return why
 	}
-	if h, ok := any(r).(interface{ _borkRebind(*_Scope) }); ok {
+	if h, ok := r.(interface{ _borkRebind(*_Scope) }); ok {
 		h._borkRebind(to)
 	}
 	// Cancellation follows every owning scope: from only stops counting
 	// once it has no registration left (the same scope may be given
 	// under two names, or attached to twice).
-	if h, ok := any(r).(interface{ _borkUnbind(*_Scope) }); ok && !kept {
+	if h, ok := r.(interface{ _borkUnbind(*_Scope) }); ok && !kept {
 		h._borkUnbind(from)
 	}
-	return r
+	return ""
+}
+
+// _releaseResource releases r's registration with s: it closes, unless
+// other scopes keep it open, and its cancellation stops following s.
+func _releaseResource(r any, s *_Scope) {
+	o := r.(interface{ _ownerOf() *_Owner })._ownerOf()
+	if !o.releaseIn(s) {
+		if h, ok := r.(interface{ _borkUnbind(*_Scope) }); ok {
+			h._borkUnbind(s)
+		}
+	}
 }
 
 // _task is a goroutine a scope started (fork).

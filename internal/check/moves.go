@@ -395,14 +395,14 @@ func (l *lifeChecker) pin(life lifetime, pos diag.Pos, what string, keeper lifet
 // moveCall checks move(r, s), and gives its lifetime: that of s, with a
 // new handle.
 func (l *lifeChecker) moveCall(x *Call) lifetime {
-	args := l.evalArgs(x)
+	args, reported := l.evalArgs(x)
 	r, target := x.Args[0], x.Args[1]
-	if _, ok := r.Type().(*Resource); !ok || args[0] == nil {
+	if _, ok := r.Type().(*Resource); !ok || reported[0] {
 		return args[1] // not a resource, or moved or released already: reported
 	}
 	// The target is evaluated after r (in order): it may have closed or
 	// moved what r is.
-	if !l.evaluatedLast(x, 0) && l.use(r, args[0]) == nil {
+	if !l.evaluatedLast(x, 0) && args[0] != nil && l.use(r, args[0]) == nil {
 		return args[1]
 	}
 	name := describe(r)
@@ -440,7 +440,7 @@ func (l *lifeChecker) moveCall(x *Call) lifetime {
 // It ends r's handles, so it keeps nothing r's source could still use:
 // it pins nothing.
 func (l *lifeChecker) handOverCall(x *Call) lifetime {
-	args := l.evalArgs(x)
+	args, reported := l.evalArgs(x)
 	ch, r := x.Args[0], x.Args[2]
 	if _, ok := r.Type().(*Resource); !ok {
 		// Handoff[R] of a type parameter, in generic code: what it is
@@ -448,13 +448,13 @@ func (l *lifeChecker) handOverCall(x *Call) lifetime {
 		l.errorf(r.Pos(), "%s cannot be handed over: only a resource of a known type can be (not a type parameter)", describe(r))
 		return nil
 	}
-	if args[2] == nil {
+	if reported[2] {
 		return nil // moved or released already: reported
 	}
-	if !l.evaluatedLast(x, 2) && l.use(r, args[2]) == nil {
+	if !l.evaluatedLast(x, 2) && args[2] != nil && l.use(r, args[2]) == nil {
 		return nil
 	}
-	o, ok := l.movable(r, handOverVerb, "send it on a Channel instead, which leaves it where it is")
+	o, ok := l.movable(r, handOverVerb, "only a resource acquired here, or received from a handoff named by a variable, can be handed over")
 	if !ok {
 		return nil
 	}
@@ -470,13 +470,17 @@ func (l *lifeChecker) handOverCall(x *Call) lifetime {
 }
 
 // evalArgs checks the arguments of x in the order they are evaluated,
-// and gives their lifetimes, by parameter.
-func (l *lifeChecker) evalArgs(x *Call) []lifetime {
+// and gives their lifetimes, by parameter, and which were reported as
+// unusable (moved or released).
+func (l *lifeChecker) evalArgs(x *Call) ([]lifetime, []bool) {
 	args := make([]lifetime, len(x.Args))
+	reported := make([]bool, len(x.Args))
 	for _, i := range argOrder(x) {
-		args[i] = l.use(x.Args[i], l.expr(x.Args[i]))
+		life := l.expr(x.Args[i])
+		args[i] = l.use(x.Args[i], life)
+		reported[i] = life != nil && args[i] == nil
 	}
-	return args
+	return args, reported
 }
 
 func argOrder(x *Call) []int {
@@ -567,11 +571,14 @@ func (l *lifeChecker) handoffHandle(ch Expr, pos diag.Pos, loop *For) *handle {
 	if !ok {
 		return nil
 	}
-	life := l.env[v.Var]
-	if len(life) != 1 {
-		return nil
+	// The handoff's scope: its one scope, or, for a parameter that is
+	// known only to outlive some (declared in another), the parameter.
+	// The move finds it at run time from the handoff itself.
+	var scope any = v.Var
+	if life := l.env[v.Var]; len(life) == 1 {
+		scope = unhandle(life[0])
 	}
-	return &handle{res: res, scope: unhandle(life[0]), from: ch, frame: l.cur, loop: loop, pos: pos}
+	return &handle{res: res, scope: scope, from: ch, frame: l.cur, loop: loop, pos: pos}
 }
 
 // handoffValues gives the handle of what a for loop over h.values(s)

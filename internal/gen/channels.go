@@ -359,19 +359,22 @@ func _borkChanSend(scope *_Scope, c *_borkChan, x any) any {
 // _borkHandOver hands the resource r over through c (what a Handoff's
 // handOver compiles to). It moves r's registration from scope from to the
 // channel's scope before r can be received, so that a receiver may move it
-// on at once, and then sends it, waiting in scope. If the send fails,
-// nobody received r and the sender can no longer use it, so the channel's
-// scope releases it: it closes, unless other scopes keep it open.
+// on at once, and then sends it, waiting in scope. If the send fails (or
+// the channel's scope has already closed), nobody received r and the
+// sender can no longer use it, so it is released: it closes, unless other
+// scopes keep it open.
 func _borkHandOver(scope *_Scope, c *_borkChan, r any, from *_Scope) any {
- _moveResource(r, from, c.scope)
+ if why := _tryMoveResource(r, from, c.scope); why == _errMoveFinished {
+  // An orphaned task handing over to a handoff whose scope has closed:
+  // nobody can receive it.
+  _releaseResource(r, from)
+  return Closed{}
+ } else if why != "" {
+  panic("bork: handOver: " + why)
+ }
  result := _borkChanSend(scope, c, r)
  if _, ok := result.(_Ok); !ok {
-  o := any(r).(interface{ _ownerOf() *_Owner })._ownerOf()
-  if !o.releaseIn(c.scope) {
-   if h, ok := any(r).(interface{ _borkUnbind(*_Scope) }); ok {
-    h._borkUnbind(c.scope)
-   }
-  }
+  _releaseResource(r, c.scope)
  }
  return result
 }
