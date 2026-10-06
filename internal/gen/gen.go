@@ -751,7 +751,7 @@ func (g *gen) goFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 func (g *gen) packageAliases(fd *syntax.FuncDecl) string {
 	fn := g.info.FuncOf[fd]
 	pkg := fn.Pkg
-	if pkg == nil || pkg.GoPrefix == "" {
+	if pkg == nil {
 		return ""
 	}
 	var out strings.Builder
@@ -773,30 +773,34 @@ func (g *gen) packageAliases(fd *syntax.FuncDecl) string {
 		seen[lit] = true
 		if t := pkg.TypeNamed(lit); t != nil && len(check.TypeArgs(t)) == 0 {
 			g.goType(t)
-			fmt.Fprintf(&out, "type %s = %s%s; ", lit, pkg.GoPrefix, lit)
-		} else if t, v, ok := strings.Cut(lit, "_"); ok && isVariantOf(pkg.TypeNamed(t), v) {
-			g.goType(pkg.TypeNamed(t))
-			fmt.Fprintf(&out, "type %s = %s%s; ", lit, pkg.GoPrefix, lit)
-		} else if f := pkg.Funcs[lit]; f != nil && f != fn && len(f.TypeParams) == 0 {
+			if pkg.GoPrefix != "" {
+				fmt.Fprintf(&out, "type %s = %s%s; ", lit, pkg.GoPrefix, lit)
+			}
+		} else if t, v, ok := strings.Cut(lit, "_"); ok && variantOf(pkg.TypeNamed(t), v) != nil {
+			variant := variantOf(pkg.TypeNamed(t), v)
+			g.goType(variant.Parent)
+			if generated := variantName(variant).Name; generated != lit {
+				fmt.Fprintf(&out, "type %s = %s; ", lit, generated)
+			}
+		} else if f := pkg.Funcs[lit]; pkg.GoPrefix != "" && f != nil && f != fn && len(f.TypeParams) == 0 {
 			fmt.Fprintf(&out, "%s := %s%s; _ = %s; ", lit, pkg.GoPrefix, lit, lit)
 		}
 	}
 	return out.String()
 }
 
-// isVariantOf reports whether t is a non-generic sealed type with a
-// variant named v.
-func isVariantOf(t check.Type, v string) bool {
+// variantOf finds a variant of a non-generic sealed type.
+func variantOf(t check.Type, v string) *check.Variant {
 	st, ok := t.(*check.Sealed)
 	if !ok || len(check.TypeArgs(st)) > 0 {
-		return false
+		return nil
 	}
 	for _, x := range st.Variants {
 		if x.Name == v {
-			return true
+			return x
 		}
 	}
-	return false
+	return nil
 }
 
 // goReserved holds names a bork identifier may not use verbatim in Go:

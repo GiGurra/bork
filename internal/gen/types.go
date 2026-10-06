@@ -188,7 +188,7 @@ func variantName(v *check.Variant) *ast.Ident {
 	parent := typeName(v.Parent.Name, v.Parent.Pkg).Name
 	candidate := v.Parent.Name + "_" + v.Name
 	declared := v.Parent.Pkg != nil && v.Parent.Pkg.TypeNamed(candidate) != nil
-	if strings.Contains(v.Parent.Name, "_") || strings.Contains(v.Name, "_") || declared {
+	if strings.Contains(v.Parent.Name, "_") || strings.Contains(v.Name, "_") || name(v.Parent.Name).Name != v.Parent.Name || declared {
 		return ast.NewIdent("_variant_" + strconv.Itoa(len(parent)) + "_" + parent + "_" + v.Name)
 	}
 	return ast.NewIdent(parent + "_" + v.Name)

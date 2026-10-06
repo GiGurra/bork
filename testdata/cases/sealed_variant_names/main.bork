@@ -1,3 +1,8 @@
+import "example.com/variantnames/api"
+
+type fmt = sealed { A }
+type fmt__A = {}
+
 type A_B = sealed { C(String) }
 type A = sealed { B_C(String) }
 type Plain = sealed { Item(String) }
@@ -12,7 +17,13 @@ fn unwrap[T](value: Generic_A[(T,)]): T {
   }
 }
 
+fn native(): A unsafe go { return A_B_C{E0: "native"} }
+
+fn importedNative(): api.A unsafe go { return api.A_B_C{E0: "qualified native"} }
+
 fn main() {
+  println(fmt.A, fmt__A {})
+  println(native(), api.Native(), importedNative())
   println(A_B.C("x"), A.B_C("y"))
   println(Plain.Item("z"), Plain_Item { value: "record" })
   println(Generic_A.B((1, "x")), Generic.A_B((2, "y")))
