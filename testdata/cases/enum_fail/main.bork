@@ -1,10 +1,7 @@
 import "bork/enum"
-import "bork/codec"
 
 type Payload = sealed { Full(Int); Empty } derive (enum.Enum)
 type Hidden = sealed { Public; hidden } derive (enum.Enum)
 type Record = { value: Int } derive (enum.Enum)
 type Collision = sealed { HttpError; HTTPError } derive (enum.Enum)
 type NonString = sealed { True } derive (enum.Enum)
-
-type Open = sealed { Red; Other(String) codec { fallback: true } } derive (enum.Enum)

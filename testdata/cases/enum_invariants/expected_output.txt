@@ -1,3 +1,6 @@
+StrictColor.Red
+true
+Option.None
 Option.Some(Color.Red)
 Color.Red
 true

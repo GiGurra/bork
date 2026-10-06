@@ -1,0 +1,15 @@
+[Color.Red, Color.DarkBlue]
+Option.Some(1) Option.Some(2) Option.None
+RED purple
+Option.Some(Color.Red) Option.Some(Color.Red) Option.Some(Color.Red)
+Option.None Option.None
+Color.Red Color.Other("purple") Color.Other("")
+true false
+Option.Some(Info { names: ["RED", "DARK_BLUE"], docs: ["Warm color.", ""], hasFallback: true })
+Color.Red
+DecodeError { path: "", message: "must be Known" }
+[Box.SiteAdmin]
+Option.Some(Box.SiteAdmin)
+Box.Other("site-admin")
+site-admin
+Option.Some(Info { names: ["root"], docs: [""], hasFallback: true })

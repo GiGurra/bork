@@ -1,4 +1,5 @@
 import "bork/enum"
+import "bork/codec"
 
 pred IsRed(value: Color) { value is Color.Red }
 type Color = sealed { Red; Blue } where IsRed derive (enum.Enum)
@@ -12,7 +13,13 @@ fn Panics[T](work: () => T): Bool unsafe go {
   }()
 }
 
+pred IsKnown(value: StrictColor) { value is StrictColor.Red }
+type StrictColor = sealed { Red; Other(String) codec { fallback: true } } where IsKnown derive (enum.Enum)
+
 fn main() {
+  println(enum.parse[StrictColor]("RED"))
+  println(Panics(() => enum.parse[StrictColor]("purple")))
+  println(enum.byName[StrictColor]("purple"))
   println(enum.byName[Color]("RED"))
   println(enum.parse[Color]("RED"))
   println(Panics(() => enum.values[Color]()))

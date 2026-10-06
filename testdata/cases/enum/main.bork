@@ -8,7 +8,7 @@ type Color = sealed {
   // Warm color.
   Red
   DarkBlue
-  Teal codec { name: "cyan" }
+  Teal codec { name: "cyan", aliases: ["teal"] }
 } derive (enum.Enum)
 type KnownColor = Color where enum.Known derive (codec.Decode)
 type Box[T] = sealed { Full; Empty } derive (enum.Enum)
@@ -20,6 +20,8 @@ fn main() {
   println(enum.name(Color.Teal))
   println(enum.byName[Color]("DARK_BLUE"))
   println(enum.byName[Color]("cyan"))
+  println(enum.byName[Color]("teal"))
+  println(enum.parse[Color]("teal"))
   println(enum.byName[Color]("DarkBlue"))
   println(enum.parse[Color]("RED"))
   println(enum.parse[Color]("purple"))

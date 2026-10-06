@@ -3,6 +3,8 @@ DARK_BLUE
 cyan
 Option.Some(Color.DarkBlue)
 Option.Some(Color.Teal)
+Option.Some(Color.Teal)
+Color.Teal
 Option.None
 Color.Red
 UnknownName { name: "purple", expected: ["RED", "DARK_BLUE", "cyan"] }
