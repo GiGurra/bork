@@ -1,32 +1,83 @@
 # bork/uuid
 
-## UUID values
+`bork/uuid` creates and parses canonical UUID values, with JSON string codecs.
 
-`bork/uuid` exposes immutable, canonical lowercase UUIDs, random v4 and
-chronologically ordered v7 generation, parsing, formatting, nil and version
-inspection. Parse normalizes backend-supported text forms; a field fact prevents
-constructing an invalid or noncanonical Uuid. Uuids compare structurally and
-work as map keys. The Codecs instance bundle encodes/decodes JSON strings and
-validates nested values, including environment configuration. V4 declares
-random, V7 random + clock; entropy failures return IoError and parsing returns
-ParseError. google/uuid v1.6.0 is pinned behind this API for Go 1.26/offline
-compatibility; switch to the Go standard UUID backend when the minimum is 1.27.
+```bork
+import "bork/uuid"
 
-## UUID API
+fn main() {
+  println(uuid.Format(uuid.Nil()))
+  match (uuid.Parse("not-a-uuid")) {
+    _: ParseError => println("invalid UUID")
+    id: uuid.Uuid => println(id)
+  }
+}
+```
 
-`bork/uuid` provides `Uuid`, a canonical lowercase UUID value guarded by the
-`Canonical` fact. `Parse(text)` accepts dashed, compact, braced, and urn:uuid
-forms supported by the backend and normalizes them, returning Uuid or ParseError.
-`V4()` generates a random UUID (`uses random`); `V7()` generates a time-ordered
-UUID (`uses random + clock`); entropy errors are IoError. `Nil()`, `Version(id)`,
-and `Format(id)` are pure. Printing and `toString(id)` use canonical text, and
-Uuid works as a map key. `use uuid.Codecs` enables Encode/Decode as JSON strings,
-including nested records and environment config. `env.Load` UUID cells therefore
-use JSON string syntax; `env.LoadJson` works with ordinary JSON UUID strings.
-The backend is pinned google/uuid v1.6.0 to retain Go 1.26 support; it does not
-leak into bork values. See [the UUID example](../../examples/uuid/main.bork).
+```text
+00000000-0000-0000-0000-000000000000
+invalid UUID
+```
 
-## Examples
+## API
 
-Import `bork/uuid` for canonical UUIDs, v4/v7 generation, map keys, and JSON
-string codecs (`use uuid.Codecs`). See [examples/uuid](../../examples/uuid/main.bork).
+| Signature | Meaning |
+| --- | --- |
+| `Parse(text: String): Uuid \| ParseError` | Parse and normalize supported UUID text forms. |
+| `V4() uses random: Uuid \| IoError` | Generate a random version-4 UUID. |
+| `V7() uses random + clock: Uuid \| IoError` | Generate a timestamp-ordered version-7 UUID. |
+| `Format(id: Uuid): String` | Return canonical lowercase text. |
+| `Nil(): Uuid` | Return the all-zero UUID. |
+| `Version(id: Uuid): Int` | Read the UUID version. |
+
+`Uuid` is `{ value: String where Canonical }`. `Canonical(text: String): Bool`
+proves valid, lowercase, dashed UUID text, so invalid or noncanonical values
+cannot be constructed directly. Values compare structurally and work as map keys.
+
+## Generate identifiers
+
+```bork
+import "bork/uuid"
+
+fn main() {
+  match (uuid.V4()) {
+    id: uuid.Uuid => println(uuid.Version(id))
+    error: IoError => eprintln(error.message)
+  }
+  match (uuid.V7()) {
+    id: uuid.Uuid => println(uuid.Version(id))
+    error: IoError => eprintln(error.message)
+  }
+}
+```
+
+```text
+4
+7
+```
+
+V4 is random; V7 includes a timestamp for chronological ordering. Both can
+return `IoError` on entropy failure.
+
+## Parse and encode
+
+```bork
+import "bork/json"
+import "bork/uuid"
+use uuid.Codecs
+
+fn main() {
+  println(json.Encode(uuid.Nil()))
+  println(uuid.Parse("URN:UUID:550e8400-e29b-41d4-a716-446655440000"))
+}
+```
+
+Parse accepts dashed, compact, braced, and `urn:uuid` forms and normalizes them.
+Printing and `toString(id)` use canonical text. `Codecs` provides Encode/Decode
+instances for JSON strings, validating nested record fields too. `env.Load`
+UUID cells use JSON string syntax; `env.LoadJson` accepts ordinary JSON UUID
+strings. See [JSON codecs](codec.md) and the
+[UUID example](../../examples/uuid/main.bork).
+
+
+[All standard packages](README.md)

@@ -1,14 +1,132 @@
-# Exact arithmetic and money
+# bork/math
 
-Import `bork/math`. Every operation is pure. Float functions follow Go's
-[math package](https://pkg.go.dev/math): invalid domains return NaN or infinity.
-Use `IsNaN` and `IsInf` to distinguish these results.
+`bork/math` provides float functions and immutable exact integers, rationals, and decimals.
 
-Float functions are `Abs`, `Min`, `Max`, `Pow`, `Sqrt`, `Floor`, `Ceil`, `Round`
-(ties away from zero), `RoundToEven`, `Sin`, `Cos`, `Tan`, `Asin`, `Acos`, `Atan`,
-`Atan2(y, x)`, `Hypot`, `Log`, `Log2`, `Log10`, `Exp`, and `Exp2`. Constants are
-functions: `Pi()`, `E()`, `NaN()`, and `Inf(sign = 1)`; negative sign selects
-negative infinity.
+```bork
+import "bork/math"
+
+fn demo() uses io: Ok | ParseError | OutOfRange {
+  amount = math.ParseDecimal("12.345")?
+  println(amount.Round(2, math.Rounding.HalfEven)?.ToString())
+  match (math.Integer(1).Div(math.Integer(0))) {
+    error: math.MathError => println(error.message)
+    value: math.BigInt => println(value)
+  }
+}
+
+fn main() {
+  println(demo())
+}
+```
+
+```text
+12.34
+division by zero
+Ok
+```
+
+## API
+
+| Signature | Meaning |
+| --- | --- |
+| `(value: Decimal) Coefficient(): BigInt` | Read the integer coefficient. |
+| `(value: Decimal) Scale(): Int where DecimalScale` | Read the decimal scale. |
+| `DecimalFrom(coefficient: BigInt, scale: Int): Decimal \| OutOfRange` | Construct a decimal with a checked scale. |
+| `ParseDecimal(text: String): Decimal \| ParseError` | Parse fixed-point text, preserving scale. |
+| `(value: Decimal) ToString(): String` | Format canonical text. |
+| `(value: Decimal) Neg(): Decimal` | Negate without mutating the input. |
+| `(value: Decimal) Abs(): Decimal` | Return the absolute value. |
+| `(value: Decimal) Add(other: Decimal): Decimal` | Add exact values. |
+| `(value: Decimal) Sub(other: Decimal): Decimal` | Subtract exact values. |
+| `(value: Decimal) Compare(other: Decimal): Int` | Compare numerically: negative, zero, positive. |
+| `(value: Decimal) Mul(other: Decimal): Decimal \| OutOfRange` | Multiply exact values. |
+| `(value: Decimal) Round(scale: Int, rounding: Rounding): Decimal \| OutOfRange` | Choose a scale and rounding rule explicitly. |
+| `(value: Decimal) Div(other: Decimal, scale: Int, rounding: Rounding): Decimal \| MathError \| OutOfRange` | Divide, rejecting a zero divisor. |
+| `(value: Decimal) ToRational(): BigRat` | Convert a decimal exactly to a rational. |
+| `(value: BigRat) ToDecimal(scale: Int, rounding: Rounding): Decimal \| OutOfRange` | Convert a rational with explicit scale and rounding. |
+| `(value: Decimal) SameValue(other: Decimal): Bool` | Compare decimal numeric values without scale. |
+| `Integer(value: Int): BigInt` | Construct a BigInt from an Int. |
+| `ParseInteger(text: String): BigInt \| ParseError` | Parse signed base-10 digits. |
+| `(value: BigInt) ToString(): String` | Format canonical text. |
+| `(value: BigInt) ToInt(): Int \| OutOfRange` | Narrow to Int with overflow checking. |
+| `(value: BigInt) Compare(other: BigInt): Int` | Compare numerically: negative, zero, positive. |
+| `(value: BigInt) Add(other: BigInt): BigInt` | Add exact values. |
+| `(value: BigInt) Sub(other: BigInt): BigInt` | Subtract exact values. |
+| `(value: BigInt) Mul(other: BigInt): BigInt` | Multiply exact values. |
+| `(value: BigInt) Div(other: BigInt): BigInt \| MathError` | Divide, rejecting a zero divisor. |
+| `(value: BigInt) Rem(other: BigInt): BigInt \| MathError` | Return the truncating remainder. |
+| `(value: BigInt) Mod(other: BigInt): BigInt \| MathError` | Return the nonnegative Euclidean modulus. |
+| `(value: BigInt) Abs(): BigInt` | Return the absolute value. |
+| `(value: BigInt) Neg(): BigInt` | Negate without mutating the input. |
+| `(value: BigInt) Pow(exponent: Int): BigInt \| MathError` | Raise to a nonnegative integer exponent. |
+| `(value: BigInt) Sqrt(): BigInt \| MathError` | Return the square root, rounded down for BigInt. |
+| `Abs(value: Float): Float` | Return the absolute value. |
+| `Sqrt(value: Float): Float` | Compute the floating-point square root. |
+| `Floor(value: Float): Float` | Round toward negative infinity. |
+| `Ceil(value: Float): Float` | Round toward positive infinity. |
+| `Round(value: Float): Float` | Round to an integer float, ties away from zero. |
+| `RoundToEven(value: Float): Float` | Round float ties to even. |
+| `Sin(value: Float): Float` | Compute sine in radians. |
+| `Cos(value: Float): Float` | Compute cosine in radians. |
+| `Tan(value: Float): Float` | Compute tangent in radians. |
+| `Asin(value: Float): Float` | Compute inverse sine. |
+| `Acos(value: Float): Float` | Compute inverse cosine. |
+| `Atan(value: Float): Float` | Compute inverse tangent. |
+| `Log(value: Float): Float` | Compute the natural logarithm. |
+| `Log2(value: Float): Float` | Compute the base-2 logarithm. |
+| `Log10(value: Float): Float` | Compute the base-10 logarithm. |
+| `Exp(value: Float): Float` | Compute e to the value. |
+| `Exp2(value: Float): Float` | Compute 2 to the value. |
+| `Min(a: Float, b: Float): Float` | Return the smaller float. |
+| `Max(a: Float, b: Float): Float` | Return the larger float. |
+| `Pow(a: Float, b: Float): Float` | Compute a raised to b with IEEE results. |
+| `Atan2(a: Float, b: Float): Float` | Compute inverse tangent using y and x. |
+| `Hypot(a: Float, b: Float): Float` | Compute the Euclidean norm. |
+| `Pi(): Float` | Return pi. |
+| `E(): Float` | Return Euler’s number. |
+| `NaN(): Float` | Return IEEE NaN. |
+| `Inf(sign: Int = 1): Float` | Return infinity with the requested sign. |
+| `IsNaN(value: Float): Bool` | Detect NaN. |
+| `IsInf(value: Float): Bool` | Detect either infinity. |
+| `ParseRational(text: String): BigRat \| ParseError` | Parse rational text. |
+| `Rational(numerator: BigInt, denominator: BigInt): BigRat \| MathError` | Construct a reduced rational; reject a zero denominator. |
+| `(value: BigRat) ToString(): String` | Format canonical text. |
+| `(value: BigRat) Numerator(): BigInt` | Read the reduced numerator. |
+| `(value: BigRat) Denominator(): BigInt` | Read the positive denominator. |
+| `(value: BigRat) Compare(other: BigRat): Int` | Compare numerically: negative, zero, positive. |
+| `(value: BigRat) Add(other: BigRat): BigRat` | Add exact values. |
+| `(value: BigRat) Sub(other: BigRat): BigRat` | Subtract exact values. |
+| `(value: BigRat) Mul(other: BigRat): BigRat` | Multiply exact values. |
+| `(value: BigRat) Div(other: BigRat): BigRat \| MathError` | Divide, rejecting a zero divisor. |
+| `(value: BigRat) Abs(): BigRat` | Return the absolute value. |
+| `(value: BigRat) Neg(): BigRat` | Negate without mutating the input. |
+
+Every operation is pure. `MathError` is `{ message: String }`. Exact number
+representations are private: construct them through the checked functions.
+`DecimalScale(value: Int): Bool` proves 0 through 10000 inclusive.
+
+## Float arithmetic
+
+```bork
+import "bork/math"
+
+fn main() {
+  println(math.Round(2.5), math.RoundToEven(2.5))
+  println(math.IsNaN(math.Sqrt(-1.0)))
+  println(math.IsInf(math.Inf()))
+}
+```
+
+```text
+3.0 2.0
+true
+true
+```
+
+Float functions follow IEEE behavior: invalid domains can yield NaN or infinity;
+use `IsNaN` and `IsInf` to detect them. `Round` ties away from zero;
+`RoundToEven` ties to even. Constants are functions; a negative `Inf` sign
+selects negative infinity. Trigonometric functions take radians.
 
 ## Decimal equality includes scale
 
@@ -91,10 +209,8 @@ explicit rounding.
 BigInt and BigRat have private representations, canonical structural equality,
 and numeric `Ord` instances (`use math.OrdBigInt`, `use math.OrdBigRat`). Their
 operations allocate fresh Go big numbers rather than changing their inputs.
-Canonical strings cross the bork boundary; arithmetic parses them into
-`math/big` values and formats the result. This favors immutable value semantics
-over arithmetic throughput: the [benchmark fixture](../../testdata/benchmarks/math/README.md)
-measures the parsing, formatting and allocation overhead.
+The [benchmark fixture](../../testdata/benchmarks/math/README.md) measures
+parsing, formatting and allocation overhead.
 
 ## JSON
 
@@ -107,33 +223,8 @@ values and malformed strings return `codec.DecodeError`.
 
 See [examples/math](../../examples/math/main.bork) for invoice arithmetic.
 
-## Package summary
 
-- **Math (implemented):** `bork/math` has pure IEEE float functions and constants,
-  immutable arbitrary-size `BigInt` and reduced `BigRat`, and fixed-point `Decimal`
-  using `math/big.Int` coefficients. Private variants prevent forged values.
-  Decimal preserves scale: **`1.0 != 1.00` with `==`**, including as map keys;
-  `SameValue` and `Compare` compare numeric amounts. Division and rescaling require
-  explicit scale and rounding (`TowardZero`, `AwayFromZero`, `Floor`, `Ceiling`,
-  `HalfEven`, `HalfAwayFromZero`); scales are checked in 0..10000. Exact arithmetic
-  errors return unions; floats retain IEEE NaN/infinity behavior. Exact JSON codecs
-  use strings, preserving precision and Decimal scale. Canonical string storage
-  keeps mutable Go numbers inside operations, with measurable parsing/allocation
-  overhead. See [math](math.md), [examples/math](../../examples/math/main.bork), and the
-  [benchmark](../../testdata/benchmarks/math/README.md).
 
-## Math API
+Run `bork doc bork/math` for the generated reference.
 
-`bork/math` supplies pure float functions, immutable `BigInt` and `BigRat`, and
-fixed-point `Decimal` with explicit output scale and rounding. Their private
-variants prevent forged representations. Decimal equality includes scale:
-`1.0 != 1.00`; use `SameValue` or `Compare` for numeric comparison. No new syntax.
-See [exact arithmetic and money](math.md) and [examples/math](../../examples/math/main.bork).
-
-## Examples
-
-`bork/math` provides float functions, arbitrary integers and rationals, and exact
-fixed-point Decimal arithmetic for money with explicit rounding. **Decimal `==`
-includes scale (`1.0 != 1.00`); use `SameValue` for numeric equality.** Exact values
-have private representations and JSON string codecs. See [math](math.md)
-and the [invoice example](../../examples/math/main.bork).
+[All standard packages](README.md)
