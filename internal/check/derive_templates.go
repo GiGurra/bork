@@ -89,6 +89,14 @@ func (c *checker) declareDeriveTemplates(files []*syntax.File) {
 				if valid {
 					class.Template = &DeriveTemplate{Decl: decl, Pkg: c.pkg}
 					class.ForeignRecord = c.foreignRecordMetadata(class)
+					if class.ForeignRecord != nil {
+						for _, method := range class.Methods {
+							switch method.Decl.Name {
+							case "New", "FromGo", "ToGo", "Fields":
+								c.errorf(method.Decl.Pos, "class %s has a ForeignRecord derive template, so its method %s would collide with the generated Go conversion member", class.Name, method.Decl.Name)
+							}
+						}
+					}
 				}
 			}
 		}

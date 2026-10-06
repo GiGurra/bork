@@ -855,7 +855,7 @@ func (c *checker) declarePackages(files []*syntax.File, root string) {
 		}
 	}
 	for _, target := range c.preludePkg.imports {
-		target.PreludeOnly = true
+		target.PreludeOnly = !target.Root
 	}
 	for _, pkg := range c.pkgs {
 		for _, target := range pkg.imports {

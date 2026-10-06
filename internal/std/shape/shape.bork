@@ -84,6 +84,6 @@ type ForeignField = { slot: Int, name: String, tags: List[Tag], option: ForeignO
 type ForeignOption = sealed {
   // Pointer maps Option[A] to *A, or to A when A's Go type is already nillable.
   Pointer
-  // Reject refuses Option fields.
+  // Reject refuses fields containing an Option, including list elements and map entries.
   Reject
 }

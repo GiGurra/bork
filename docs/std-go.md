@@ -311,7 +311,8 @@ another foreign-record class `C`, `_d_T_C` has the same members):
 - `FromGo(value any)` accepts that Go struct or a pointer to it and returns
   `(T, []GoValueError)`. It collects conversion and fact errors. A nil pointer or
   wrong Go type returns an error. Use the value only when the error list is empty.
-- `Fields()` returns `[]_borkGoStructField` in Go struct order. Each entry exposes the Decode schema
+- `Fields()` returns `[]_borkGoStructField` in the layout's order (declaration
+  order for a mirror). Each entry exposes the Decode schema
   metadata (`Name`, `Type`, `Constraints`, `Kind`, `Optional`, `Doc`, `HasDefault`,
   `Default`, `Decode`), plus `GoName` and ordered `Tags` (`Name`, `Value`).
   `Decode` is nil when no decoder is available in the declaring package.

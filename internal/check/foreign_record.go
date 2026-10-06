@@ -20,7 +20,8 @@ type ForeignLayout struct {
 	Pos    diag.Pos // the derive request
 	Pkg    *Package // the requesting package
 	Failed bool
-	// Slots lists field indices in Go struct order.
+	// Slots lists field indices in Go struct order for a generated layout,
+	// and in declaration order for a mirror.
 	Slots []int
 	// mirror holds a mirror's layout until its Go fields are matched.
 	mirror []foreignSlot
@@ -176,11 +177,11 @@ func (c *checker) foreignLayout(r *Record) []foreignSlot {
 		return nil
 	}
 	start := c.diags.Len()
-	saved := c.pkg
-	c.pkg = cl.Template.Pkg
+	saved, savedPrelude := c.pkg, c.inPrelude
+	c.pkg, c.inPrelude = cl.Template.Pkg, cl.Prelude
 	plan := &deriveExpansion{c: c, template: cl.Template, target: r, layout: true, scope: layout.Pkg, active: map[*syntax.FuncDecl]bool{}, env: map[string]any{cl.Template.Decl.TypeParams[0].Name: r}, budget: &deriveBudget{remaining: 100000}, names: map[string]bool{}}
 	value, known := plan.eval(source.Value)
-	c.pkg = saved
+	c.pkg, c.inPrelude = saved, savedPrelude
 	c.diags.DeriveContext(start, layout.Pos)
 	if plan.failed {
 		return nil
@@ -229,8 +230,8 @@ func (c *checker) foreignLayout(r *Record) []foreignSlot {
 				seen[tag.Name] = true
 			}
 		}
-		if !slot.pointer && IsOption(f.Type) {
-			c.errorf(f.Decl.Pos, "cannot derive %s for %s: field %s is an Option, which its ForeignRecord layout rejects", cl.Name, r.Name, f.Name)
+		if !slot.pointer && containsOption(f.Type) {
+			c.errorf(f.Decl.Pos, "cannot derive %s for %s: field %s contains an Option, which its ForeignRecord layout rejects", cl.Name, r.Name, f.Name)
 		}
 		slots = append(slots, slot)
 	}
@@ -243,6 +244,18 @@ func (c *checker) foreignLayout(r *Record) []foreignSlot {
 		return nil
 	}
 	return slots
+}
+
+// containsOption reports Options that map into this record's own Go field;
+// nested records have their own layouts.
+func containsOption(t Type) bool {
+	switch t := t.(type) {
+	case *List:
+		return containsOption(t.Elem)
+	case *Map:
+		return containsOption(t.Key) || containsOption(t.Value)
+	}
+	return IsOption(t)
 }
 
 func sameTags(a, b []syntax.GoTag) bool {
@@ -296,6 +309,9 @@ func (c *checker) checkMirrorLayout(r *Record) {
 	for _, slot := range slots {
 		f := r.Fields[slot.field]
 		mirrored := strings.Join(r.GoFields[slot.field].Path, ".")
+		if mirrored == "" {
+			continue // the mirror's own field matching reported it
+		}
 		if !strings.EqualFold(slot.name, mirrored) {
 			c.errorf(f.Decl.Pos, "cannot derive %s for %s: the mirror keeps its Go layout, which maps field %s to %s, not %s", r.Foreign.Class.Name, r.Name, f.Name, mirrored, slot.name)
 		}
@@ -303,7 +319,11 @@ func (c *checker) checkMirrorLayout(r *Record) {
 		if len(slot.tags) > 0 && !sameTags(slot.tags, f.GoTags) {
 			c.errorf(f.Decl.Pos, "cannot derive %s for %s: the mirror keeps its Go struct tags, so the layout cannot add tags to field %s", r.Foreign.Class.Name, r.Name, f.Name)
 		}
-		r.Foreign.Slots = append(r.Foreign.Slots, slot.field)
+	}
+	for i, f := range r.Fields {
+		if !f.Computed {
+			r.Foreign.Slots = append(r.Foreign.Slots, i)
+		}
 	}
 }
 

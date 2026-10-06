@@ -222,8 +222,11 @@ fn main() { println(shape.metadata[User, Row, shape.ForeignRecord]()) }
 
 `slot` is a field index. The layout must place each stored field once, under a
 unique exported Go name. `ForeignOption.Pointer` maps `Option[A]` to `*A` (or to
-`A` when its Go type is already nillable); `ForeignOption.Reject` refuses
-`Option` fields. A record has at most one Go layout, and the existing GoStruct
+`A` when its Go type is already nillable); `ForeignOption.Reject` refuses fields
+containing an `Option`, including list elements and map keys or values. Class
+methods cannot be named `New`, `FromGo`, `ToGo` or `Fields`, since the generated
+dictionary uses those names. Derive helpers can build layout values, and
+String case operations fold only when they resolve to the prelude's methods. A record has at most one Go layout, and the existing GoStruct
 rules apply: no tuples, specializations, resources or fields that depend on
 type parameters, and instances must be derived. A mirror keeps its Go struct:
 the layout must use its field names, ignoring case, and cannot add tags.

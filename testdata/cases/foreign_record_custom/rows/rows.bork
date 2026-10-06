@@ -9,15 +9,18 @@ derive fn column(name: String): String {
   "Col" + name.capitalize()
 }
 
+derive fn entry[T](field: shape.Field[T]): shape.ForeignField {
+  shape.ForeignField {
+    slot: field.index,
+    name: column(field.name),
+    tags: [shape.Tag { name: "db", value: field.name.toLower() }],
+    option: shape.ForeignOption.Reject
+  }
+}
+
 derive instance row[T]: Row[T] {
   metadata shape.ForeignRecord = shape.ForeignRecord {
-    fields: [comptime for (field in shape.fields[T]()) comptime if (!field.computed)
-      shape.ForeignField {
-        slot: field.index,
-        name: column(field.name),
-        tags: [shape.Tag { name: "db", value: field.name.toLower() }],
-        option: shape.ForeignOption.Reject
-    }]
+    fields: [comptime for (field in shape.fields[T]()) comptime if (!field.computed) entry[T](field)]
   }
   fn table(value: T): String { shape.name[T]().toLower() + "s" }
 }

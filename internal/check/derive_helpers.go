@@ -87,6 +87,14 @@ func (p *deriveExpansion) checkMetadataType(written *syntax.TypeExpr, value any,
 	defer func() { p.c.pkg = saved }()
 	clone := p.clone(reflect.ValueOf(written)).Interface().(*syntax.TypeExpr)
 	want := p.c.resolveType(clone)
+	switch value.(type) {
+	case metadataRecord, metadataList, metadataVariant:
+		if !layoutValue(value, want) {
+			p.error(pos, "compile-time value must be %s", want)
+		}
+		p.c.whereReported(clone)
+		return
+	}
 	actual := p.metadataType(value)
 	if actual == Invalid || !identical(actual, want) {
 		p.error(pos, "compile-time value must be %s, found %s", want, actual)

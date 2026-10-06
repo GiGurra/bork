@@ -18,6 +18,13 @@ derive instance strict[T]: Strict[T] {
     fields: [comptime for (field in shape.fields[T]()) shape.ForeignField { slot: field.index, name: field.name.capitalize(), tags: [], option: shape.ForeignOption.Reject }]
   }
 }
+class Clash[T] {
+  fn ToGo(value: T): Int
+}
+derive instance clash[T]: Clash[T] {
+  metadata shape.ForeignRecord = shape.ForeignRecord { fields: [] }
+  fn ToGo(value: T): Int { 0 }
+}
 class Empty[T] {}
 derive instance empty[T]: Empty[T] {
   metadata shape.ForeignRecord = shape.ForeignRecord { fields: [] }
@@ -45,6 +52,8 @@ derive instance prefixed[T]: Prefixed[T] {
 type Pair = { a: Int, b: Int } derive (Twice)
 type Lowered = { value: Int } derive (Lower)
 type Optional = { value: Option[Int] } derive (Strict)
+type Nested = { values: List[Option[Int]] } derive (Strict)
+type BadUrl = go "net/url.URL" { host: String, bogus: Int } derive (GoStruct)
 type Omitted = { value: Int } derive (Empty)
 type Dynamic = { value: Int } derive (Runtime)
 type Both = { value: Int } derive (GoStruct, Strict)

@@ -78,7 +78,11 @@ func (p *deriveExpansion) stringOperation(x *syntax.Call, selector *syntax.Selec
 	}
 	receiver, known := p.eval(selector.X)
 	text, ok := receiver.(string)
-	if !known || !ok || len(x.Args) != 0 || len(x.TypeArgs) != 0 || !p.charge(x.Pos, len(text)) {
+	if !known || !ok || len(x.Args) != 0 || len(x.TypeArgs) != 0 {
+		return nil, false
+	}
+	// Fold only the prelude's method; a package's own String method wins.
+	if method, _ := p.c.methodNamed(String, selector.Name); method == nil || !method.Prelude || !p.charge(x.Pos, len(text)) {
 		return nil, false
 	}
 	switch selector.Name {

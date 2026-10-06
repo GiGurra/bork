@@ -8,6 +8,7 @@ type User = {
   age: Int = 36
   lazy label: String = name + "!"
 } derive (rows.Row)
+type Box[A] = { id: Int = 7 } derive (rows.Row)
 
 fn main() uses io {
   user = User { name: "bob", email: "b@example.com" }
@@ -18,4 +19,7 @@ fn main() uses io {
   println(rows.Scan[User](column => "y"))
   layout = shape.metadata[User, rows.Row, shape.ForeignRecord]()
   println(layout)
+  box: Box[String] = Box {}
+  println(rows.Round(box))
+  println(rows.Columns[Box[Int]]())
 }
