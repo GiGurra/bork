@@ -107,6 +107,33 @@ Decoding checks the exact payload count and reports paths such as `.values[0]`. 
 
 Lazy/computed record fields are omitted by derived codecs; their values are computed again after decoding. See [types](../language/types.md) for field semantics.
 
+Records encode as objects. Sealed types whose alternatives all have no payload (enums) encode as bare strings using `ScreamingSnake` names by default: `SiteAdmin` becomes `"SITE_ADMIN"`. They decode from that string or the existing object form `{"type":"SITE_ADMIN"}`. A sealed type with any payload keeps its object representation and defaults to source names: `{"type":"Item","value":3}`. Fieldless alternatives of such a mixed sealed type also accept their canonical string on decode. Source spellings are accepted only when they equal the canonical name. `Option` retains its null/value representation, and missing optional record fields decode as `None`.
+
+### Wire names
+
+Typed `codec` tags configure derived codecs. A type's `naming` policy applies to its fields and variant names; a field or variant's `name` overrides the policy.
+
+```bork
+type User = {
+  userID: String
+  httpURLPort: Int codec { name: "port" }
+} codec { naming: codec.Naming.Snake } derive (codec.Decode, codec.Encode)
+// JSON: {"user_id":"u","port":8080}
+
+type Access = sealed {
+  SiteAdmin
+  ReadOnly codec { name: "reader" }
+} derive (codec.Decode, codec.Encode)
+// SiteAdmin encodes as "SITE_ADMIN"; ReadOnly as "reader".
+```
+
+`codec.Naming` provides `Verbatim`, `Camel`, `Pascal`, `Snake`, `Kebab`, and `ScreamingSnake`. Records and mixed sealed types default to `Verbatim`. Set an enum's `naming` to `Verbatim` to preserve source spelling; it still encodes as a bare string.
+
+`codec.Words(name)` splits underscores, hyphens, whitespace, lowercase-to-uppercase transitions, and acronym boundaries. Digits stay within their word: `httpURLPort` gives `["http", "url", "port"]` and `ipv4Addr` gives `["ipv4", "addr"]`. `codec.JoinWords(words, naming)` joins words under a policy; `codec.WireName(name, naming)` also preserves the original text under `Verbatim`. The derived helpers `NamingOf[T]`, `FieldWireName[T]`, and `VariantWireName[T]` use the same rules and typed tags. `EnumShape[T]` identifies the payload-free sealed shape.
+
+Derivation rejects duplicate canonical names within a record or variant namespace, empty names, the YAML merge key `<<`, and a named sealed payload field renamed to the discriminator `type`. Variant names must parse as unchanged YAML string scalars: `true`, `null`, and numeric spellings fail, while YAML 1.2 string spellings such as `ON` are allowed. Derived decode errors use canonical field names, including errors from checked builders. Map keys and tuple indices retain their existing representation.
+
+
 ## Tuples
 
 Tuples encode as arrays of exactly their declared length. Element failures carry
@@ -147,9 +174,11 @@ Field adapters need more than a value decoder. The selected decoder can publish 
 | `codec.FieldSchema` | `{ kind: String, optional: Bool }` |
 | `codec.Schema[T: codec.Decode](): Option[codec.RecordSchema]` | Read the selected decoder's record metadata, or None. |
 | `codec.RecordSchema` | `{ fields: List[codec.RecordField] }` |
-| `codec.RecordField` | `name: String`, `typeName: String`, `doc: String`, `facts: List[String]`, `kind: String`, `optional: Bool`, `hasDefault: Bool`, `defaultValue: Option[() => codec.DefaultSchema]`, `validate: (codec.Value) => Ok \| codec.DecodeError` |
+| `codec.RecordField` | `name: String`, `wireName: String`, `typeName: String`, `doc: String`, `facts: List[String]`, `kind: String`, `optional: Bool`, `hasDefault: Bool`, `defaultValue: Option[() => codec.DefaultSchema]`, `validate: (codec.Value) => Ok \| codec.DecodeError` |
 | `codec.DefaultSchema` | `{ display: String, configPath: Option[String], choices: List[String] }` |
 
 Container metadata delegates to its selected element decoder. Missing field metadata uses the general `json` kind and a required input. Record schemas describe named fields, typed validation and optional default-display callbacks. Looking up the schema does not evaluate defaults. A field's defaultValue callback returns display text, an optional configuration path and choices from one default evaluation.
 
 Field validation checks independent facts; facts involving sibling fields require complete `codec.decode[T]`. CLI, environment, HTTP field adapters and CSV read this metadata. Tuple constraints capturing caller values use typed helper parameters with ordinary lifetime checks and pure predicate callbacks. See [the Go schema helpers](../std-go.md) for integration details.
+
+`codec.RecordField.name` is the source field name; `wireName` is its canonical codec key.

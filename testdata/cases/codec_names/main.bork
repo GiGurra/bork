@@ -5,6 +5,21 @@ use codec.Defaults
 type Row = { userID: String, httpURLPort: Int codec { name: "port" } } codec { naming: codec.Naming.Snake } derive (codec.Encode, codec.Decode)
 type Level = sealed { SiteAdmin, HTTPServer } derive (codec.Encode, codec.Decode)
 type Verbatim = sealed { SiteAdmin } codec { naming: codec.Naming.Verbatim } derive (codec.Encode, codec.Decode)
+pred positive(x: Int) { x > 0 }
+pred ordered(c: Limits) { c.lowerBound <= c.upperBound }
+type Limits = {
+  lowerBound: Int where positive
+  upperBound: Int
+} codec { naming: codec.Naming.Kebab } where ordered derive (codec.Encode, codec.Decode)
+type Nested = { rowValue: Row } codec { naming: codec.Naming.Snake } derive (codec.Encode, codec.Decode)
+type Box[T] = { itemValue: T } codec { naming: codec.Naming.Snake } derive (codec.Encode, codec.Decode)
+fn round[T: codec.Decode + codec.Encode](text: String) uses io {
+  match (json.Decode[T](text)) {
+    value: T => println(json.Encode(value))
+    error: codec.DecodeError => println(s"error ${error.path}: ${error.message}")
+    error: json.JsonError => println(error)
+  }
+}
 fn main() {
   println(codec.Words("httpURLPort ipv4Addr--user_ID"))
   println(codec.JoinWords(codec.Words("httpURLPort"), codec.Naming.ScreamingSnake))
@@ -12,4 +27,13 @@ fn main() {
   println(json.Encode(Row { userID: "u", httpURLPort: 8 }))
   println(json.Encode(Level.SiteAdmin))
   println(json.Encode(Verbatim.SiteAdmin))
+  round[Row]("{\"user_id\":\"u\",\"port\":8}")
+  round[Row]("{\"userID\":\"u\",\"port\":8}")
+  round[Nested]("{\"row_value\":{\"user_id\":\"u\",\"port\":\"bad\"}}")
+  round[Box[Row]]("{\"item_value\":{\"user_id\":\"u\",\"port\":8}}")
+  round[Limits]("{\"lower-bound\":0,\"upper-bound\":4}")
+  round[Limits]("{\"lower-bound\":5,\"upper-bound\":4}")
+  for (policy in [codec.Naming.Verbatim, codec.Naming.Camel, codec.Naming.Pascal, codec.Naming.Snake, codec.Naming.Kebab, codec.Naming.ScreamingSnake]) {
+    println(codec.WireName("httpURLPort", policy))
+  }
 }

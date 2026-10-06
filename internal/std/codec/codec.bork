@@ -409,6 +409,7 @@ fn inputField(fields: List[Field], name: String): Option[Value] {
 // The builder evaluates defaults and validates sibling and owner facts only
 // after all independently decoded inputs have been stored.
 derive fn DecodeRecord[T](json: Value): T | DecodeError {
+  CheckWireNames[T]()
   initial = shape.builder[T]()
   comptime if (shape.positional[T]()) {
     match (json) {

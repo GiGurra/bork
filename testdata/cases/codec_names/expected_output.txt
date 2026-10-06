@@ -4,3 +4,15 @@ httpUrlPort
 {"user_id":"u","port":8}
 {"type":"SITE_ADMIN"}
 {"type":"SiteAdmin"}
+{"user_id":"u","port":8}
+error .user_id: is missing
+error .row_value.port: expected a whole number, found a string
+{"item_value":{"user_id":"u","port":8}}
+error .lower-bound: must be positive
+error .lower-bound: must satisfy lowerBound <= upperBound (ordered)
+httpURLPort
+httpUrlPort
+HttpUrlPort
+http_url_port
+http-url-port
+HTTP_URL_PORT

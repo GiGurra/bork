@@ -4,6 +4,11 @@ import "testing"
 
 func TestCodecWireNameChecks(t *testing.T) {
 	for _, tc := range []struct{ name, source, want string }{
+		{"direct record helper collision", `class DecodeOnly[T] { fn decodeOnly(x: codec.Value): T | codec.DecodeError }
+derive instance decoder[T]: DecodeOnly[T] {
+  fn decodeOnly(x: codec.Value): T | codec.DecodeError { codec.DecodeRecord[T](x) }
+}
+type T={a:Int codec{name:"same"},b:Int codec{name:"same"}} derive(DecodeOnly)`, "duplicate wire names"},
 		{"field collision", `type T={userId:Int,userID:Int} codec{naming:codec.Naming.Snake} derive(codec.Encode)`, "duplicate wire names"},
 		{"variant collision", `type T=sealed{UserId,UserID} derive(codec.Decode)`, "duplicate wire names"},
 		{"empty name", `type T={value:Int codec{name:""}} derive(codec.Encode)`, "empty wire name"},
