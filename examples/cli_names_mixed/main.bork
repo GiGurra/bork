@@ -27,7 +27,9 @@ fn flags(): List[cli.Flag] {
 }
 fn main() {
   match (cli.Run[Options]("mixed", "Derived and explicit names in one command", (options, s) => {
-    // env.txt sets MIXED_SERVER_HOST (overridden by the flag), MIXED_LISTEN and MIXED_DEBUG (ignored).
+    // env.txt: the --server-host flag beats MIXED_SERVER_HOST, MIXED_LISTEN=7000
+    // beats settings.json's port 6000, and MIXED_DEBUG is ignored because debug
+    // has no env name.
     println(s"host ${options.serverHost}, port ${options.port}, debug ${options.debug}")
     println(s"api token from config: ${options.apiToken}")
     }, flags: flags(), settings: settings())) {
@@ -42,7 +44,8 @@ test "help shows derived, renamed and hidden sources side by side" {
       assert(help.text.contains("(env: MIXED_SERVER_HOST)"))
       assert(help.text.contains("-p, --listen"))
       assert(help.text.contains("(env: MIXED_LISTEN)"))
-      assert(help.text.contains("-d, --debug                Log request details. (default false)\n"))
+      assert(help.text.contains("-d, --debug"))
+      assert(!help.text.contains("MIXED_DEBUG"))
       assert(!help.text.contains("api-token"))
     }
     other => { panic(s"Expected help, got ${other}") }

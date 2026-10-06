@@ -9,7 +9,12 @@ cd examples/wc
 bork run . -- sample.txt missing.txt poem.txt
 ```
 
-An example that reads environment variables also has an `env.txt` with one `KEY=VALUE` per line, set for its run.
+An example that reads environment variables also has an `env.txt` with one `KEY=VALUE` per line. The example tests set them; to run such an example by hand, pass them yourself:
+
+```sh
+cd examples/cli_names_auto
+env $(cat env.txt) bork run . -- $(cat args.txt)
+```
 
 Each example's expected output is kept in [testdata/examples](../testdata/examples) and checked on every change, so the examples always work with the current compiler.
 

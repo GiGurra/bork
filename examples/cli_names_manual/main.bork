@@ -7,7 +7,7 @@ type Options = {
   host: String = "localhost"
   // Database port.
   port: Int = 5432
-  // Access token; read only from MANUAL_TOKEN.
+  // Access token; read only from MANUAL_TOKEN. Env-only fields don't appear in help.
   token: Option[String]
 } derive (codec.Decode)
 // Automatic naming is off, so every flag, short and env name is written here.

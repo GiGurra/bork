@@ -181,7 +181,17 @@ func TestExamples(t *testing.T) {
 			cmd := exec.Command(exe, args...)
 			cmd.Dir = filepath.Join(root, name)
 			if text, err := os.ReadFile(filepath.Join(root, name, "env.txt")); err == nil {
-				cmd.Env = append(os.Environ(), strings.Fields(string(text))...)
+				cmd.Env = os.Environ()
+				for line := range strings.Lines(string(text)) {
+					line = strings.TrimSpace(line)
+					if line == "" {
+						continue
+					}
+					if !strings.Contains(line, "=") {
+						t.Fatalf("env.txt line %q is not KEY=VALUE", line)
+					}
+					cmd.Env = append(cmd.Env, line)
+				}
 			}
 			out, err := cmd.CombinedOutput()
 			var exitErr *exec.ExitError
