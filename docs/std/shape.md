@@ -161,11 +161,15 @@ See the [labels example](../../examples/derive_labels/README.md) for generic tar
 | Variant property or operation | Meaning |
 | --- | --- |
 | `name: String`, `index: Int` | Source name and declaration-order index. |
+| `doc: String` | Immediately preceding line comments joined with newlines, or empty text. |
 | `positional: Bool` | Whether the payload is positional. |
 | `fields: List[Field[T]]`, `facts: List[Fact[T]]` | Payload fields and resolved obligations. |
 | `variant.Type` | Read-only payload view type supplied by expansion. |
 | `variant.project(value: T): Option[variant.Type]` | Check the tag and return an Option payload view. |
 | `variant.builder()` | Create private immutable storage for this payload. |
+
+Trailing comments and comments separated from a variant by a blank line do not
+document it.
 
 Each projection evaluates its input once. A payload field's `read` requires the
 matching variant view, not the complete sealed value or another variant's view.
@@ -207,6 +211,33 @@ Empty
 projection for every declared variant, with each Some arm unable to continue.
 Projections under runtime conditions or of other values do not count. Its Never
 result allows a complete encoder without an invented fallback.
+
+```bork
+import "bork/shape"
+
+class VariantDocs[T] { fn variantDocs(value: T): List[String] }
+
+derive instance variantDocs[T]: VariantDocs[T] {
+  fn variantDocs(value: T): List[String] {
+    [comptime for (variant in shape.variants[T]()) variant.name + ": " + variant.doc]
+  }
+}
+
+type Outcome = sealed {
+  // A completed operation.
+  Done
+  // An operation to retry.
+  Retry { after: Int }
+} derive (VariantDocs)
+
+fn main() {
+  println(variantDocs(Outcome.Done))
+}
+```
+
+```text
+["Done: A completed operation.", "Retry: An operation to retry."]
+```
 
 ## Builder storage and validation
 
