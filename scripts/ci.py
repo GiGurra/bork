@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Discover, balance, run and measure complete CI test shards."""
 import argparse
+import io
 from concurrent.futures import ThreadPoolExecutor
 import json
 import math
@@ -12,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zipfile
 
 MODULE = "github.com/GiGurra/bork"
 DRIVER = MODULE + "/internal/driver"
@@ -148,12 +150,24 @@ def partition(packages, tests, weights, shards=SHARDS):
     if len(units) != len(set(units)) or set(packages) & set(tests):
         raise RuntimeError("discovered packages or tests are ambiguous")
 
-    # Unknown names still run, with a conservative cost, and spread across
-    # shards until the next measurement records their real duration.
+    # Estimate new roots from their package, and fixtures from their parent.
+    # The upper decile keeps tiny unit tests from hiding new integration work.
+    estimates = {}
+    for package, names in tests.items():
+        measured = weights["tests"].get(package, {})
+        for name in names:
+            family = name.partition("/")[0] if "/" in name else ""
+            key = (package, family)
+            if key not in estimates:
+                samples = sorted(cost for test, cost in measured.items()
+                                 if (test.partition("/")[0] if "/" in test else "") == family)
+                estimates[key] = max(DEFAULT_SECONDS, samples[math.ceil(len(samples) * 0.9) - 1]) if samples else DEFAULT_SECONDS
+
     def cost(unit):
         package, name = unit
         known = weights["packages"].get(name) if package is None else weights["tests"].get(package, {}).get(name)
-        return max(0.01, DEFAULT_SECONDS if known is None else known)
+        estimate = DEFAULT_SECONDS if package is None else estimates[(package, name.partition("/")[0] if "/" in name else "")]
+        return max(0.01, estimate if known is None else known)
 
     groups = [{"packages": [], "tests": {}} for _ in range(shards)]
     totals = [0.0] * shards
@@ -265,9 +279,9 @@ def budget_result(elapsed, status):
     print(f"Shard wall time: {elapsed:.2f}s", flush=True)
     if elapsed > FAIL_SECONDS:
         print(f"::warning::Shard exceeded the {FAIL_SECONDS}s budget; check for a cold build cache, "
-              "then refresh timings or add shards.", flush=True)
+              "then inspect timings and split expensive test roots.", flush=True)
     elif elapsed > WARN_SECONDS:
-        print(f"::warning::Shard exceeded {WARN_SECONDS}s; refresh timings or add shards.", flush=True)
+        print(f"::warning::Shard exceeded {WARN_SECONDS}s; inspect timings and split expensive test roots.", flush=True)
     return status
 
 
@@ -337,6 +351,9 @@ def measurements(paths):
                 raise RuntimeError("refusing timings from a failed test run")
             if event["Action"] not in ("pass", "skip") or "Package" not in event:
                 continue
+            seconds = event.get("Elapsed", 0.0)
+            if not isinstance(seconds, (int, float)) or not math.isfinite(seconds) or seconds < 0:
+                raise RuntimeError("CI timing measurements must be finite nonnegative seconds")
             package = event["Package"]
             if "Test" in event:
                 # Fixture parents run in many shards; their children are the units.
@@ -344,11 +361,11 @@ def measurements(paths):
                     key = (package, event["Test"])
                     if key in tests:
                         raise RuntimeError("timings must come from one -count=1 run")
-                    tests[key] = event.get("Elapsed", 0.0)
+                    tests[key] = seconds
             elif package not in SPLIT:
                 if package in packages:
                     raise RuntimeError("timings contain duplicate package results")
-                packages[package] = event.get("Elapsed", 0.0)
+                packages[package] = seconds
     if not any(package == DRIVER for package, _ in tests):
         raise RuntimeError("timing input has no completed driver tests")
     # A serial parent's Elapsed contains child work, while a parallel parent
@@ -376,6 +393,65 @@ def refresh(args):
     args.timings.write_text(json.dumps(measurement, indent=2, sort_keys=True) + "\n")
 
 
+def github_api(endpoint, deadline):
+    """Use gh's REST client, including its safe authenticated archive redirects."""
+    return subprocess.run(["gh", "api", endpoint], capture_output=True, check=True,
+                          timeout=max(0.01, deadline - time.monotonic())).stdout
+
+
+def fetch_weights(destination):
+    """Fetch once per workflow; any remote failure leaves committed weights."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(TIMINGS.read_bytes())
+    deadline = time.monotonic() + 60
+    try:
+        repo = os.environ["GITHUB_REPOSITORY"]
+        runs = json.loads(github_api(
+            f"repos/{repo}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=1", deadline))
+        run = runs["workflow_runs"][0]
+        artifacts = json.loads(github_api(f"repos/{repo}/actions/runs/{run['id']}/artifacts?per_page=100", deadline))
+        shards = {artifact["name"]: artifact for artifact in artifacts["artifacts"]
+                  if re.fullmatch(r"ci-[0-9]+", artifact["name"]) and not artifact["expired"]}
+        if set(shards) != {f"ci-{index}" for index in range(SHARDS)}:
+            raise RuntimeError("latest successful main run has no complete shard artifacts")
+        expected = set()
+        with tempfile.TemporaryDirectory(prefix="bork-ci-timings-") as directory:
+            paths = []
+            for index in range(SHARDS):
+                artifact = shards[f"ci-{index}"]
+                archive = github_api(f"repos/{repo}/actions/artifacts/{artifact['id']}/zip", deadline)
+                with zipfile.ZipFile(io.BytesIO(archive)) as zipped:
+                    report = json.loads(zipped.read(f"report-{index}.json"))
+                    if report["shard"] != index or report["result"] != 0:
+                        raise RuntimeError("timing artifact contains an unsuccessful shard")
+                    group = report["selected"]
+                    units = {(None, name) for name in group["packages"]}
+                    units.update((package, name) for package, names in group["tests"].items() for name in names)
+                    if not units or expected & units:
+                        raise RuntimeError("timing artifacts contain empty or overlapping shards")
+                    expected.update(units)
+                    for name in zipped.namelist():
+                        if re.fullmatch(rf"shard-{index}-[0-9]+\.jsonl", name):
+                            path = Path(directory) / name
+                            path.write_bytes(zipped.read(name))
+                            paths.append(path)
+            measurement = measurements(paths)
+            actual = {(None, name) for name in measurement["packages"]}
+            actual.update((package, name) for package, names in measurement["tests"].items() for name in names)
+            if actual != expected:
+                raise RuntimeError("timing artifacts do not cover their selected packages and tests")
+            candidate = Path(directory) / "timings.json"
+            candidate.write_text(json.dumps(measurement, indent=2, sort_keys=True) + "\n")
+            read_weights(candidate)
+            destination.write_bytes(candidate.read_bytes())
+        print(f"Using fresh CI timings from successful main run {run['id']}")
+    except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError, RuntimeError,
+            subprocess.SubprocessError, zipfile.BadZipFile) as error:
+        # gh errors may contain API details; the exception string includes only
+        # its command and exit status, never the token or captured stderr.
+        print(f"::warning::Using committed CI timings: {error}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--timings", type=Path, default=TIMINGS)
@@ -387,7 +463,12 @@ def main():
     run.add_argument("--events", type=Path, help="directory for the go test -json event files")
     update = subcommands.add_parser("refresh", help="rewrite timings from go test -json files")
     update.add_argument("--input", type=Path, nargs="+", required=True)
+    fetch = subcommands.add_parser("fetch", help="fetch successful main timings, falling back to committed weights")
+    fetch.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if args.command == "fetch":
+        fetch_weights(args.output)
+        return 0
     if args.command == "run":
         return run_shard(args)
     if args.command == "refresh":

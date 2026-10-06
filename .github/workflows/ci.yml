@@ -17,12 +17,25 @@ jobs:
   changes:
     name: Classify changes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     outputs:
       docs-only: ${{ steps.changes.outputs.docs-only }}
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/changes
         id: changes
+      - name: Prepare shared shard timings
+        if: steps.changes.outputs.docs-only != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci.py fetch --output "$RUNNER_TEMP/ci-timings/ci-timings.json"
+      - uses: actions/upload-artifact@v4
+        if: steps.changes.outputs.docs-only != 'true'
+        with:
+          name: shard-timings
+          path: ${{ runner.temp }}/ci-timings/ci-timings.json
   docs:
     name: Documentation tests
     needs: changes
@@ -53,11 +66,15 @@ jobs:
         with:
           cache-name: race-${{ matrix.shard }}
           cache-family: race
+      - uses: actions/download-artifact@v4
+        with:
+          name: shard-timings
+          path: ${{ runner.temp }}/ci-timings
       - name: Run shard
         env:
           GOTOOLCHAIN: local
           SHARD: ${{ matrix.shard }}
-        run: python3 scripts/ci.py run "$SHARD" --report "$RUNNER_TEMP/ci/report-$SHARD.json" --events "$RUNNER_TEMP/ci"
+        run: python3 scripts/ci.py --timings "$RUNNER_TEMP/ci-timings/ci-timings.json" run "$SHARD" --report "$RUNNER_TEMP/ci/report-$SHARD.json" --events "$RUNNER_TEMP/ci"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
