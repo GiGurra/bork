@@ -3,7 +3,7 @@
 Normal and race tests use `scripts/ci.py`. Each mode discovers all packages with
 `go list` and all driver Test, Example and Fuzz parents with `go test -list`,
 using the same race build tags as the actual run. `cli` runs `cmd/bork`, whose
-CLI tests are mostly sequential. `core` covers every other package except
+CLI tests are mostly sequential and take 100-170 seconds alone. `core` covers every other package except
 `internal/driver` and `internal/lsp`. LSP parents use three shards,
 golden cases three, examples one, and the remaining driver parents six
 integration shards. Anchored parent patterns retain

@@ -22,6 +22,13 @@ class PartitionTests(unittest.TestCase):
         self.assertEqual(groups["core"], ["example/core", "example/new-package"])
         self.assertEqual(groups, ci.partition(list(reversed(packages)), list(reversed(names)), {"TestIntegration0": 90}))
 
+    def test_package_shards_take_their_package_out_of_core(self):
+        cli = ci.PACKAGE_SHARDS["cli"]
+        groups = ci.partition([ci.DRIVER, cli, "example/core"], list(ci.DEDICATED.values()), {})
+        self.assertEqual(groups["cli"], [cli])
+        self.assertEqual(groups["core"], ["example/core"])
+        self.assertLessEqual(set(ci.SHARDS) - set(ci.LSP_SHARDS), set(groups))
+
     def test_lsp_tests_have_exact_balanced_coverage_in_both_modes(self):
         packages = [ci.DRIVER, ci.LSP, "example/core"]
         names = ["TestHeavy", "TestOther", "ExampleNew", "FuzzNew", "TestFuture"]
