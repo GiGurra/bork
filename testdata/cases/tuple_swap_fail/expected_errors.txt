@@ -20,6 +20,5 @@ main.bork:30:29: test.SwapAt index must be a pure compile-time Int constant
 main.bork:31:22: cannot tell what T is for generic here; use it where a function type is expected, or call it in a lambda
 main.bork:36:38: test.SwapAt slot 0 requires exact type Option[Int], found Int
 main.bork:37:35: test.SwapAt slot 0 requires exact type Int | String, found Int
-main.bork:42:3: one is already the name of a function (bork does not allow shadowing)
-main.bork:43:3: index is already the name of a function (bork does not allow shadowing)
 main.bork:44:33: test.SwapAt index must be a pure compile-time Int constant
+main.bork:49:33: test.SwapAt index must be a pure compile-time Int constant

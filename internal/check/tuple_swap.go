@@ -167,7 +167,7 @@ func (c *checker) swapIndexConstant(x syntax.Expr, seen map[syntax.Expr]bool) (r
 	}
 	switch x := x.(type) {
 	case *syntax.Ident:
-		if binding, ok := c.info.defs[x].(*syntax.Binding); ok && !binding.Lazy && binding.AsyncScope == nil {
+		if binding, ok := c.info.defs[x].(*syntax.Binding); ok && !c.headers[binding] && !binding.Lazy && binding.AsyncScope == nil {
 			return c.swapIndexConstant(binding.Value, seen)
 		}
 	case *syntax.Unary:

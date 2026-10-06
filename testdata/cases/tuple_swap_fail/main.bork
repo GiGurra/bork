@@ -39,7 +39,13 @@ fn mismatched() {
 
 fn overflow() {
   max: Int = 9223372036854775807
-  one: Int = 1
-  index = (max + one) / max
-  println(test.SwapAt((1, "a"), index, "bad"))
+  bump: Int = 1
+  slotIndex = (max + bump) / max
+  println(test.SwapAt((1, "a"), slotIndex, "bad"))
+}
+
+fn changingIndex() uses io {
+  for (i = 0; i < 2; i = i + 1) {
+    println(test.SwapAt((1, 2), i, 3))
+  }
 }

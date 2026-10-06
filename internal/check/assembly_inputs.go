@@ -63,7 +63,7 @@ func (c *checker) tupleElementSource(x syntax.Expr, index int, seen map[syntax.E
 			return c.tupleElementSource(expanded.Tail, index, seen)
 		}
 	case *syntax.Ident:
-		if binding, ok := c.info.defs[x].(*syntax.Binding); ok {
+		if binding, ok := c.info.defs[x].(*syntax.Binding); ok && !c.headers[binding] {
 			return c.tupleElementSource(binding.Value, index, seen)
 		}
 		if value := c.info.tupleBindingValues[c.info.defs[x]]; value != nil {
@@ -89,7 +89,7 @@ func (c *checker) providerFunction(x syntax.Expr, seen map[syntax.Expr]bool) *In
 	}
 	switch x := x.(type) {
 	case *syntax.Ident:
-		if binding, ok := c.info.defs[x].(*syntax.Binding); ok {
+		if binding, ok := c.info.defs[x].(*syntax.Binding); ok && !c.headers[binding] {
 			return c.providerFunction(binding.Value, seen)
 		}
 		if value := c.info.tupleBindingValues[c.info.defs[x]]; value != nil {

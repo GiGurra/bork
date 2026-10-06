@@ -9,3 +9,11 @@ fn main() {
     println(assemble[Positive](s, test.Swap(Numbers, negative)))
   }
 }
+
+fn changingProviders() uses io {
+  for (providers = (number,); false; providers = (negative,)) {
+    scope s {
+      println(assemble[Positive](s, providers))
+    }
+  }
+}
