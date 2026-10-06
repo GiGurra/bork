@@ -11,6 +11,7 @@ ask the lead for the answers, and update this table before starting.
 
 | # | Decision | Recommended | Human |
 | --- | --- | --- | --- |
+| 0 | Enum wire names mapped by policy, default UPPER_SNAKE; no raw source-name match | yes | asked for by the human; confirm |
 | 1 | Enum-shaped sealed types encode as bare strings, no opt-out | yes | pending |
 | 2 | Marker: `Other(String) codec { fallback: true }` | yes | pending |
 | 3 | Compiler invariant: the fallback's String is never a wire name or alias | yes | pending |
@@ -21,9 +22,17 @@ ask the lead for the answers, and update this table before starting.
 Agreed with peers (not human decisions):
 
 - codecnames (#408) owns tag groups, `codec.VariantTags { name, aliases,
-  fallback }`, naming policies, and the checks: one fallback, payload is one
-  String, no name/aliases on the fallback, and no YAML-unsafe wire names
-  (`true/false/null/~/on/off`).
+  fallback }`, naming policies, `codec.words`, and the checks: one fallback,
+  payload is one String, no name/aliases on the fallback, collisions after
+  mapping (reported at the later variant), and wire names YAML 1.2 reads as
+  non-strings (`true`/`TRUE`, `false`, `null`/`NULL`, `~`, numbers). `ON`/`YES`
+  are legal; the YAML renderer quotes them.
+- `TypeTags.naming` is `Option[Naming] = Option.None`: None means the shape's
+  default, `ScreamingSnake` for enum-shaped types and `Verbatim` otherwise.
+  Templates must resolve it through one shared helper (ask codecnames which),
+  so codec, enum and cli never disagree on a name.
+- Decode accepts only wire names and aliases, never raw source names. The
+  fallback payload is never mapped.
 - The cli worker reads `FieldSchema.variants: List[codec.VariantSchema { name, doc }]`,
   matches exactly, and never offers or accepts the fallback.
 
@@ -37,6 +46,11 @@ Agreed with peers (not human decisions):
 ## PR breakdown
 
 ### PR 1: bare-string wire form (decision 1)
+
+If #408's naming has landed, PR 1 also applies the `ScreamingSnake` default,
+so enum wire output changes once. If not, ship PR 1 verbatim and land
+the default with #408's implementation. Don't change enum wire names twice
+in separate releases without telling the lead.
 
 - `internal/std/codec/codec.bork`, `encodeShape`: in the `shape.Sealed`
   branch, when every variant has no fields, encode `Value.String { value: name }`
@@ -87,7 +101,10 @@ Agreed with peers (not human decisions):
   decoding. If it doesn't, generate a per-type predicate and update the note.
 - Docs: new `docs/std/enum.md`, link from `docs/std/README.md`, mention in
   `docs/language/types.md` near sealed types. Add an example under `examples/`.
-- Goldens: values order, byName strict with a fallback, parse falls back,
+- `name`, `byName`, `parse`, `UnknownName.expected` and `enum.Info` all use
+  wire names (mapped plus overrides), never source names.
+- Goldens: values order, byName with wire name and alias (and source name
+  rejected under ScreamingSnake), byName strict with a fallback, parse falls back,
   name of the fallback, index None for the fallback, KnownColor rejects
   "purple" with the expected-names message, shape.fail diagnostics.
 
@@ -114,5 +131,7 @@ Agreed with peers (not human decisions):
 - Exhaustiveness: the fallback is an ordinary variant; no checker change.
 - Private variants: codec keeps encoding them as today; only `enum.Enum`
   rejects such types.
+- Words: `DarkBlue` → `DARK_BLUE`, `HTTPError` → `HTTP_ERROR`. Use
+  `codec.words`, don't write a second splitter.
 - Testing policy: focused tests plus `golangci-lint run ./...` and `gofmt -l .`
   locally; CI runs the full suite.

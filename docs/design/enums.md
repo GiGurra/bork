@@ -27,15 +27,15 @@ use codec.Defaults
 
 type Color = sealed {
   Red
-  Green
-  Blue
+  DarkBlue
+  Teal codec { aliases: ["Cyan"] }
   Other(String) codec { fallback: true }
 } derive (enum.Enum, codec.Decode, codec.Encode)
 
 fn label(c: Color): String {
   match (c) {
     .Red => "warm"
-    .Green, .Blue => "cool"
+    .DarkBlue, .Teal => "cool"
     .Other(name) => s"unknown color ${name}"   // required: the point of the fallback
   }
 }
@@ -43,8 +43,11 @@ fn label(c: Color): String {
 fn main() {
   println(json.Decode[Color]("\"purple\""))            // Color.Other("purple")
   println(json.Encode(Color.Other("purple")))           // "purple"
-  println(enum.values[Color]())                         // [Red, Green, Blue]
-  println(enum.byName[Color]("Green"))                  // Some(Green)
+  println(json.Encode(Color.DarkBlue))                  // "DARK_BLUE"
+  println(enum.values[Color]())                         // [Red, DarkBlue, Teal]
+  println(enum.byName[Color]("DARK_BLUE"))              // Some(DarkBlue)
+  println(enum.byName[Color]("Cyan"))                   // Some(Teal)
+  println(enum.name(Color.DarkBlue))                    // DARK_BLUE
   println(enum.name(Color.Other("purple")))             // purple
 }
 ```
@@ -55,7 +58,7 @@ A strict service keeps the same shared type and narrows it with a fact alias:
 type KnownColor = Color where enum.known
 
 // json.Decode[KnownColor] rejects "purple":
-// .: unknown name "purple" of Color; expected one of Red, Green, Blue
+// .: unknown name "purple" of Color; expected one of RED, DARK_BLUE, TEAL
 ```
 
 ## Terms
@@ -63,23 +66,53 @@ type KnownColor = Color where enum.known
 - **Enum-shaped**: a sealed type whose variants all have no payload, except
   at most one fallback. Phantom type parameters are allowed;
   `enum.values[Box[Int]]()` lists that instantiation's values.
-- **External name**: the one string a variant has outside code. It is the
-  source name unless the type's naming policy or a variant override from
-  [codec naming](codec-naming.md) changes it. Codec, CLI, env and enum tooling
-  all use it. Aliases are accepted on input only.
+- **External name** (wire name): the one string a variant has outside code,
+  from the type's naming policy or a variant override (section 0). Codec,
+  CLI, env and enum tooling all use it. Aliases are accepted on input only.
 - **Fallback**: the single variant that receives any input name that matches no
   external name or alias.
 
 ## Decisions
 
+### 0. Names: mapped by policy, UPPER_SNAKE_CASE by default
+
+Variant names are mapped like record fields, with codec naming's mechanism
+([codec naming](codec-naming.md), #408): the same word splitting and the same
+`codec.Naming` policies (`Verbatim`, `Camel`, `Pascal`, `Snake`, `Kebab`,
+`ScreamingSnake`).
+
+- **Default by shape.** A type with no `naming` gets its shape's default:
+  `ScreamingSnake` for enum-shaped types (`DarkBlue` → `"DARK_BLUE"`),
+  `Verbatim` for records and payload-carrying sealed types, as in #408. For
+  this, #408's `TypeTags.naming` becomes `Option[Naming] = Option.None`.
+- **Per-type override**: `} codec { naming: codec.Naming.Kebab }` after the
+  body gives `"dark-blue"`; `codec.Naming.Verbatim` keeps `"DarkBlue"`.
+- **Per-variant**: `DarkBlue codec { name: "navy", aliases: ["DarkBlue"] }`.
+  `name` replaces the mapped name; `aliases` are accepted on decode only.
+- **Collisions** after mapping are compile errors on the later variant
+  (`HttpError` and `HTTPError` both give `HTTP_ERROR`). So are mapped names
+  that bork/yaml (YAML 1.2 core schema) reads as non-strings: `TRUE`, `NULL`,
+  `~`, numbers. `ON`/`YES` stay legal; the renderer quotes them for YAML 1.1
+  readers.
+- **Raw source names are not accepted** on decode. Each variant has exactly
+  the names it shows: its wire name plus explicit aliases. Accepting `DarkBlue`
+  too would double every variant's inputs, hide typos in the policy, and send
+  a name that should reach the fallback to a variant instead. To migrate data
+  written with source names, add them as aliases, or set `Verbatim`.
+- **Everything uses the wire name.** `enum.name`, `byName`, `parse`,
+  `enum.Info`, error messages and CLI choices (`--color DARK_BLUE`). Bork
+  code and `println` keep the source name (`Color.DarkBlue`).
+- The fallback's payload is never mapped: `"purple"` stays `"purple"`.
+
 ### 1. Wire form: enum-shaped types encode as bare strings
 
 Today `Color.Red` encodes as `{"type":"Red"}`; decode already accepts `"Red"`.
 
-- Enum-shaped types encode as the string `"Red"` (JSON string, YAML scalar,
-  CSV cell, CLI/env text).
-- Decode accepts the bare string, and keeps accepting `{"type":"Red"}` for
-  compatibility with data written by older bork programs.
+- Enum-shaped types encode as the bare wire name `"RED"` (JSON string, YAML
+  scalar, CSV cell, CLI/env text).
+- Decode accepts the bare string, and also the object form `{"type":"RED"}`.
+  Old data written as `{"type":"Red"}` needs `Verbatim` or an alias, since
+  the default names changed too.
 - Sealed types with payload variants keep the tagged object form, including
   their fieldless variants (`{"type":"Empty"}`), so one type has one shape.
 
@@ -89,10 +122,8 @@ and TypeScript unions produce (circe's default sealed-trait derivation writes
 `{"Red":{}}`). Bork is pre-1.0, so the note recommends changing it without an
 opt-out.
 
-YAML: a lowercase policy can produce wire names such as `true`, `null` or
-`on`, which a YAML reader turns into Bool or Null. Such a wire name is a
-compile-time error on the variant ("not a plain YAML string; add a name").
-That is simpler than decoding scalars by their text.
+YAML: wire names that YAML 1.2 reads as Bool, Null or a number are compile
+errors (section 0).
 
 ### 2. Opting in: a typed tag on the variant
 
@@ -134,8 +165,9 @@ Alternatives considered (rejected):
 - Inputs: a bare string, or the legacy `{"type": "purple"}` object with no
   other members, falls back. Any other shape (a number, an object with extra
   members) is a decode error, so nothing is silently dropped.
-- Order of lookup on decode: external names, then aliases, then fallback.
-  Matching is exact (case-sensitive), as in codec naming.
+- Order of lookup on decode: wire names, then aliases, then fallback.
+  Matching is exact (case-sensitive), as in codec naming: `"dark_blue"` is
+  unknown under `ScreamingSnake` unless it is an alias.
 - A fallback never appears in `enum.values`, CLI choices or completions.
 
 ### 4. A fallback holding a known name
@@ -219,7 +251,8 @@ pred known[T: Enum](value: T) { ... }       // value is not the fallback
   fallback excluded. (`DefaultSchema.choices` already means something else.)
   Variant docs need a new `doc` property on `shape.Variant`.
 - bork/cli reads `variants` for completion, help and strict
-  validation: `--level debug` with names from the same policy as JSON.
+  validation: `--level DEBUG` by default, or `--level debug` for a type with
+  `codec { naming: codec.Naming.Snake }`. One policy serves JSON and CLI.
 - On the CLI an unknown name is rejected even when the type has a fallback:
   a person typing a flag wants an error, not pass-through. A field can opt
   back in later if a real case appears.
@@ -282,6 +315,10 @@ fact-alias strictness and diagnostics, plus `TestDocSnippets` coverage.
 
 ## Decisions for the human
 
+0. **Names**: enum-shaped types default to `UPPER_SNAKE_CASE` wire names, with
+   per-type `naming` and per-variant `name`/`aliases` (recommended, per the
+   human's feedback). Decode accepts only wire names and aliases, not raw
+   source names (recommended).
 1. **Bare-string wire form** for enum-shaped types, with no opt-out
    (recommended), or keep `{"type": ...}` and make strings opt-in.
 2. **Marker**: `codec { fallback: true }` on the variant (recommended), or a
