@@ -18,7 +18,7 @@ fn main() {
   match (cli.Run[Options]("names", "Names derived from fields", (options, s) => {
     println(s"host ${options.serverHost}, port ${options.httpPort}, verbose ${options.verbose}")
     }, settings: settings())) {
-    error: cli.Error => { println(error); process.Exit(2) }
+    error: cli.Error => { eprintln(error.Render("names")); process.Exit(2) }
     Ok => {}
   }
 }

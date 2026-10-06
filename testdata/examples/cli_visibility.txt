@@ -1,0 +1,2 @@
+Flag --old-port has been deprecated, use --port instead
+trace true, port 9000

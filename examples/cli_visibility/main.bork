@@ -1,0 +1,46 @@
+import "bork/codec"
+import "bork/cli"
+import "bork/process"
+use codec.Defaults
+type Options = {
+  // Internal tracing switch.
+  trace: Bool = false
+  // Listening port.
+  port: Int = 8080
+  // Legacy listening port; use port instead.
+  oldPort: Option[Int]
+} derive (codec.Decode)
+fn flags(): List[cli.Flag] {
+  [.{ field: "trace", hidden: true },
+    .{ field: "oldPort", deprecated: "use --port instead" }]
+}
+fn main() {
+  // Hidden flags still parse, and accepted deprecated flags warn on stderr.
+  match (cli.Run[Options]("visibility", "Hidden and deprecated flags", (options, s) => {
+    println(s"trace ${options.trace}, port ${options.oldPort.getOr(options.port)}")
+    }, flags: flags())) {
+    error: cli.Error => { eprintln(error.Render("visibility")); process.Exit(2) }
+    Ok => {}
+  }
+}
+test "hidden and deprecated flags are omitted from help" {
+  match (cli.Parse[Options]("visibility", "", ["--help"], flags: flags())) {
+    help: cli.Help => {
+      assert(help.text.contains("--port"))
+      assert(!help.text.contains("--trace"))
+      assert(!help.text.contains("--old-port"))
+    }
+    other => { panic(s"Expected help, got ${other}") }
+  }
+}
+test "a failed deprecated flag keeps its warning with the error" {
+  match (cli.Parse[Options]("visibility", "", ["--old-port", "bad"], flags: flags())) {
+    error: cli.Error => {
+      text = error.Render("visibility")
+      assert(text.contains("Error: .oldPort:"))
+      assert(text.contains("use --port instead"))
+      assert(text.contains("Try 'visibility --help' for usage."))
+    }
+    other => { panic(s"Expected an error, got ${other}") }
+  }
+}

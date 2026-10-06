@@ -22,7 +22,7 @@ fn main() {
       }, flags: [cli.Flag { field: "words", positional: true }])
   ]
   match (cli.RunCommands("app", "Typed subcommands", commands)) {
-    error: cli.Error => { println(error); process.Exit(2) }
+    error: cli.Error => { eprintln(error.Render("app")); process.Exit(2) }
     Ok => {}
   }
 }

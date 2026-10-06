@@ -33,7 +33,7 @@ fn main() {
     println(s"host ${options.serverHost}, port ${options.port}, debug ${options.debug}")
     println(s"api token from config: ${options.apiToken}")
     }, flags: flags(), settings: settings())) {
-    error: cli.Error => { println(error); process.Exit(2) }
+    error: cli.Error => { eprintln(error.Render("mixed")); process.Exit(2) }
     Ok => {}
   }
 }

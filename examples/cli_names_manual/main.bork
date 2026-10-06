@@ -21,7 +21,7 @@ fn main() {
   match (cli.Run[Options]("manual", "Every name written by hand", (options, s) => {
     println(s"${options.host}:${options.port}, token set: ${options.token.isSome()}")
     }, flags: flags(), settings: settings())) {
-    error: cli.Error => { println(error); process.Exit(2) }
+    error: cli.Error => { eprintln(error.Render("manual")); process.Exit(2) }
     Ok => {}
   }
 }

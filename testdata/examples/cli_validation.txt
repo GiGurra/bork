@@ -1,3 +1,5 @@
-.name: must be slug
-.port: must satisfy value > 0 (validPort)
+Error: .name: must be slug
+Error: .port: must satisfy value > 0 (validPort)
+
+Try 'validate --help' for usage.
 exit code 2

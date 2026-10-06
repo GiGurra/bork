@@ -33,7 +33,7 @@ fn main() {
     println(s"${options.name} on ${options.port} with ${options.minReplicas}-${options.maxReplicas} replicas")
   })) {
     error: cli.Error => {
-      for (issue in error.errors) { println(s"${if (issue.path == "") { "(options)" } else { issue.path }}: ${issue.message}") }
+      eprintln(error.Render("validate"))
       process.Exit(2)
     }
     Ok => {}

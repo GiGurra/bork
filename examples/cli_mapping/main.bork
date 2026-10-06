@@ -8,7 +8,7 @@ fn main() {
   match (cli.Run[Options]("mapping", "Automatic and exact flag names", (options, s) => {
     println(s"${options.serverHost}:${options.port}")
     }, flags: [.{ field: "port", long: cli.Mapping.Named { name: "listen" }, short: "p" }], settings: .{ autoShort: true, flagPrefix: "service" })) {
-    error: cli.Error => { println(error); process.Exit(2) }
+    error: cli.Error => { eprintln(error.Render("mapping")); process.Exit(2) }
     Ok => {}
   }
 }
