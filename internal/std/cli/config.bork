@@ -1,0 +1,12 @@
+import "bork/codec"
+import "bork/json"
+import "bork/yaml"
+
+// Config formats share codec values and the final options decoder. YAML is
+// selected per file; flags and environment variables retain JSON input syntax.
+fn parseYamlConfig(text: String): codec.Value | json.JsonError {
+  match (yaml.Parse(text)) {
+    error: yaml.Error => json.JsonError { message: s"YAML line ${error.line}, column ${error.column}: ${error.message}" }
+    value: codec.Value => value
+  }
+}
