@@ -74,7 +74,7 @@ bork run .
 bork test .
 ```
 
-A single file works too: `bork run hello.bork`, or `bork script hello.bork` for a file with top-level statements. The [tour](docs/tour.md) continues from here.
+A single file works too: `bork run hello.bork`, or `bork script hello.bork` for a script with top-level statements or `fn main()`. The [tour](docs/tour.md) continues from here.
 
 ## Highlights
 

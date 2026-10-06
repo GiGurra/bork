@@ -97,7 +97,7 @@ type runParams struct {
 	Fast    bool     `optional:"true" descr:"accept reuse with untracked external build inputs"`
 	Rebuild bool     `optional:"true" descr:"recheck all build inputs and rebuild"`
 	Path    string   `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
-	Args    []string `positional:"true" optional:"true" descr:"arguments passed to the program (put them after --)"`
+	Args    []string `positional:"true" optional:"true" descr:"arguments passed to the program (use -- with bork run)"`
 }
 
 type describeParams struct {
