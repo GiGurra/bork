@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -27,7 +28,7 @@ type docPage struct {
 }
 
 // docLanguages are the languages a code block of a reader page may name.
-var docLanguages = map[string]bool{"bork": true, "sh": true, "text": true, "json": true}
+var docLanguages = map[string]bool{"bork": true, "sh": true, "text": true, "json": true, "lua": true, "toml": true, "elisp": true}
 
 var (
 	inlineCode  = regexp.MustCompile("<code>.*?</code>|`+[^`]*`+")
@@ -43,19 +44,32 @@ var (
 // design notes) hold fragments by design, and are not.
 func readerPages(t *testing.T) []string {
 	t.Helper()
-	root := filepath.Join("..", "..")
-	pages := []string{filepath.Join(root, "README.md")}
-	for _, name := range []string{"README.md", "tour.md", "cli.md", "playground.md", "examples.md", "contributing.md"} {
-		pages = append(pages, filepath.Join(root, "docs", name))
-	}
-	for _, dir := range []string{"language", "std"} {
-		found, err := filepath.Glob(filepath.Join(root, "docs", dir, "*.md"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		pages = append(pages, found...)
+	pages, err := findReaderPages(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
 	}
 	return pages
+}
+
+// Only contributor references are excluded; newly added reader pages are checked.
+func findReaderPages(root string) ([]string, error) {
+	contributors := map[string]bool{
+		"grammar.md": true, "requirements.md": true, "roadmap.md": true,
+		"std-go.md": true, "syntax-changes.md": true, "ci.md": true,
+	}
+	pages := []string{filepath.Join(root, "README.md")}
+	for _, dir := range []string{"", "language", "std"} {
+		found, err := filepath.Glob(filepath.Join(root, "docs", dir, "*.md"))
+		if err != nil {
+			return nil, err
+		}
+		for _, path := range found {
+			if dir != "" || !contributors[filepath.Base(path)] {
+				pages = append(pages, path)
+			}
+		}
+	}
+	return pages, nil
 }
 
 // parseDocPage splits a Markdown text. With strict set, it accepts only
@@ -84,7 +98,7 @@ func parseDocPage(text string, strict bool) (docPage, error) {
 		case fence:
 			info := strings.Fields(strings.TrimPrefix(line, "```"))
 			if !strings.HasPrefix(line, "```") || strings.HasPrefix(line, "````") || len(info) == 0 || !docLanguages[info[0]] {
-				return page, fmt.Errorf("line %d: a code block must open with three backticks at the start of the line and one of the languages bork, sh, text, json", i+1)
+				return page, fmt.Errorf("line %d: a code block must open with three backticks at the start of the line and one of the languages bork, sh, text, json, lua, toml, elisp", i+1)
 			}
 			mode := strings.Join(info[1:], " ")
 			if info[0] != "bork" && mode != "" || mode != "" && mode != "fails" && mode != "fragment" {
@@ -306,6 +320,162 @@ func TestParseDocPage(t *testing.T) {
 	for _, link := range []string{"[c][ref]", "[ref]: m.md", `<a href="m.md">`} {
 		if !otherLink.MatchString(link) {
 			t.Errorf("%s is not reported as unchecked", link)
+		}
+	}
+}
+
+// Existing exact duplicates are temporary exceptions, scoped to their page and
+// content. Page owners remove the prose; PR 9 removes this allowlist.
+var docDuplicateAllowlist = map[string]map[string]bool{
+	"docs/std/http.md": {
+		"f4448c9043fb81d950b83ac3cef17028a7deee7f464bbbddb5a14dcdde5224c9": true,
+		"da5d5ffa8ba58ef740b01ba0973896f8da2a0de6232d1dd4fa981cbe79bb1b69": true,
+		"3fb25cbf6c173674b7da14e842b88b3885fb790571bb0e4f611aa283e4decb89": true,
+	},
+}
+
+var nonParagraph = regexp.MustCompile(`^(#{1,6}\s|[-*+]\s|[0-9]+[.)]\s|[|>]|---+$|Previous:|Next:)`)
+
+// docStructure checks prose paragraphs without stripping inline code: two
+// paragraphs describing different inline expressions must remain distinct.
+func docStructure(text string, allowed map[string]bool) error {
+	seen := map[string]int{}
+	var paragraph []string
+	start, footer := 0, false
+	inCode := false
+	flush := func() error {
+		if len(paragraph) == 0 {
+			return nil
+		}
+		value := strings.Join(strings.Fields(strings.Join(paragraph, " ")), " ")
+		paragraph = nil
+		if previous, ok := seen[value]; ok {
+			hash := fmt.Sprintf("%x", sha256.Sum256([]byte(value)))
+			if !allowed[hash] {
+				return fmt.Errorf("line %d: paragraph duplicates line %d", start, previous)
+			}
+		}
+		seen[value] = start
+		return nil
+	}
+	for i, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if footer && trimmed != "" {
+			return fmt.Errorf("line %d: content after the navigation footer", i+1)
+		}
+		if strings.HasPrefix(trimmed, "```") {
+			if err := flush(); err != nil {
+				return err
+			}
+			inCode = !inCode
+			continue
+		}
+		if inCode {
+			continue
+		}
+		if trimmed == "" {
+			if err := flush(); err != nil {
+				return err
+			}
+			continue
+		}
+		if strings.HasPrefix(trimmed, "Previous:") || strings.HasPrefix(trimmed, "Next:") {
+			if err := flush(); err != nil {
+				return err
+			}
+			footer = true
+			continue
+		}
+		if nonParagraph.MatchString(trimmed) {
+			if err := flush(); err != nil {
+				return err
+			}
+			continue
+		}
+		if len(paragraph) == 0 {
+			start = i + 1
+		}
+		paragraph = append(paragraph, line)
+	}
+	return flush()
+}
+
+func TestDocStructure(t *testing.T) {
+	t.Parallel()
+	for _, path := range readerPages(t) {
+		name := strings.TrimPrefix(filepath.ToSlash(path), "../../")
+		source, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := docStructure(string(source), docDuplicateAllowlist[name]); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestDocStructureGuards(t *testing.T) {
+	t.Parallel()
+	for _, text := range []string{
+		"A paragraph.\n\nA paragraph.\n",
+		"A wrapped\nparagraph.\n\nA wrapped paragraph.\n",
+		"# Heading\nRepeated prose.\n\nRepeated prose.\n",
+		"- item\nRepeated prose.\n\nRepeated prose.\n",
+		"Previous: [A](a.md)\n\nMore prose.\n",
+		"Previous: [A](a.md)\n\n```bork\nfn main() {}\n```\n",
+	} {
+		if err := docStructure(text, nil); err == nil {
+			t.Errorf("accepted invalid structure: %q", text)
+		}
+	}
+	for _, text := range []string{
+		"One `a`.\n\nOne `b`.\n",
+		"# Heading\n\n# Heading\n\n- item\n\n- item\n",
+		"One paragraph.\n\n```text\nOne paragraph.\nPrevious: example\n```\n\nPrevious: [A](a.md) · Next: [B](b.md)\n\n",
+	} {
+		if err := docStructure(text, nil); err != nil {
+			t.Errorf("valid structure: %v", err)
+		}
+	}
+	text := "An exception.\n\nAn exception.\n"
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte("An exception.")))
+	if err := docStructure(text, map[string]bool{hash: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := docStructure(text+"\nA new repeat.\n\nA new repeat.\n", map[string]bool{hash: true}); err == nil {
+		t.Fatal("exception hid a new duplicate")
+	}
+}
+
+func TestFindReaderPages(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	for _, name := range []string{"README.md", "docs/new-reader.md", "docs/editors.md", "docs/grammar.md", "docs/requirements.md", "docs/language/new.md", "docs/std/new.md", "docs/design/sketch.md"} {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pages, err := findReaderPages(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"README.md", "docs/editors.md", "docs/new-reader.md", "docs/language/new.md", "docs/std/new.md"}
+	if len(pages) != len(want) {
+		t.Fatalf("pages: %v", pages)
+	}
+	for i, name := range want {
+		if pages[i] != filepath.Join(root, filepath.FromSlash(name)) {
+			t.Errorf("page %d: %s, want %s", i, pages[i], name)
+		}
+	}
+	for _, lang := range []string{"lua", "toml", "elisp"} {
+		page, err := parseDocPage("```"+lang+"\nconfig\n```\n\n```bork\nfn main() {}\n```\n", true)
+		if err != nil || len(page.blocks) != 2 || page.blocks[1].lang != "bork" {
+			t.Errorf("%s: blocks=%v, err=%v", lang, page.blocks, err)
 		}
 	}
 }

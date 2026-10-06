@@ -107,6 +107,18 @@ using valid public bork modules is a sensible-use reading, rather than an
 explicit Google permission grant. See the [service analysis](../design/library-dependencies.md#official-proxy-feasibility-permission-and-privacy)
 and [dependency commands](../cli.md#deps).
 
+The [library/consumer example](https://github.com/GiGurra/bork/tree/main/testdata/libraries) includes a
+library test, committed manifests and checksums, and an offline proxy test.
+Library authors can bind to Go helper packages in their own repository while
+checking or testing before publication. Bork stages a local replacement only in
+its temporary Go compilation module; committed manifests keep published paths.
+
+Downloaded sources are read-only in `bork fmt` and editor edit requests. Hover,
+completion and go-to-definition use cached source positions. Editor checks do
+not install missing modules: run `bork deps download` in the project first.
+`bork clean` preserves the shared Go module cache; `bork clean --all` also drops
+Bork's script resolution graphs. Use `go clean -modcache` to clear Go's cache.
+
 ## Type classes
 
 A type class describes operations that a type supports. Generic code can then require it.
@@ -288,15 +300,3 @@ See the [assemble example](../../examples/assemble/main.bork).
 ---
 
 Previous: [Typed interpolation](interpolators.md) · Next: [Calling Go](go-interop.md) · [All pages](../README.md#the-language)
-
-The [library/consumer example](https://github.com/GiGurra/bork/tree/main/testdata/libraries) includes a
-library test, committed manifests and checksums, and an offline proxy test.
-Library authors can bind to Go helper packages in their own repository while
-checking or testing before publication. Bork stages a local replacement only in
-its temporary Go compilation module; committed manifests keep published paths.
-
-Downloaded sources are read-only in `bork fmt` and editor edit requests. Hover,
-completion and go-to-definition use cached source positions. Editor checks do
-not install missing modules: run `bork deps download` in the project first.
-`bork clean` preserves the shared Go module cache; `bork clean --all` also drops
-Bork's script resolution graphs. Use `go clean -modcache` to clear Go's cache.
