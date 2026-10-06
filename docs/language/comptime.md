@@ -49,7 +49,16 @@ fn main() {
 
 Here `Total` is `55`. Package initializers need not contain `comptime` themselves: `Limit = 6` can also be read by a block. Values that no compile-time computation reads keep their usual lazy runtime initialization. A package value read at compile time must have one of the data types supported for results below.
 
-The result can be made of numbers, strings, Bools, runes, lists, records, options and other sealed or union values, and maps. `Bytes`, functions, and resources cannot be stored.
+The result can be made of numbers, strings, Bools, runes, lists, tuples, records, options and other sealed or union values, and maps. `Bytes`, functions, and resources cannot be stored.
+
+Tuples can combine several computed results in one value:
+
+```bork
+fn main() {
+  summary = comptime { (range(1, 6).fold(0, (sum, n) => sum + n), "ready") }
+  println(summary.0, summary.1)
+}
+```
 
 ## Failing the build
 
@@ -67,37 +76,25 @@ fn main() {
 }
 ```
 
+```text
+comptime failed: panic: bad port: 80a
+```
+
 ## Reading files at build time
 
 The `bork/build` package reads a file during compilation. Together with `comptime`, this parses and validates a configuration file once, at build time:
 
-```bork fragment
-import codec "bork/codec"
-
-import "bork/build"
-import "bork/json"
-use codec.Defaults
-
-type Config = { name: String, limit: Int } derive (codec.Decode)
-
-fn main() {
-  config = comptime {
-    match (json.Decode[Config](build.ReadString("config.json"))) {
-      value: Config => value
-      error => panic(s"invalid build configuration: $error")
-    }
-  }
-  println(config.name)
-}
-```
+Use `build.ReadString("config.json")` inside `comptime`, decode it with
+`json.Decode[Config]`, and panic if decoding fails. The
+[comptime example](../../examples/comptime/README.md) contains the complete
+program and its configuration file, with facts on the decoded record.
 
 The executable carries the decoded `Config`. It does not read or parse `config.json` when it runs, and a malformed file stops the build.
 
 - `build.ReadString(path)` returns the file as a `String`, and `build.ReadBytes(path)` as a `List[Byte]`.
+- ReadBytes returns a list of bytes rather than `Bytes`, because `List[Byte]` can be stored as compile-time data.
 - The path must be a constant. It is relative to the module root, which is the directory holding `bork.mod`, or to the source directory for a program without one. It cannot point outside that directory.
 - These functions can only be called at compile time.
-
-The [comptime example](../../examples/comptime/README.md) is a runnable version of this, with facts on the decoded record.
 
 Multiple blocks share the compiler's evaluation program to reduce build time. Each block still runs after its dependencies have passed their checks, with its own time and result limits.
 

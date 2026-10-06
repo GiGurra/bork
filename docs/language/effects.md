@@ -32,10 +32,6 @@ The effects are:
 | `random` | Random numbers |
 | `state` | Shared state that can change: atoms, channels, cancellation |
 
-`bork/signal` uses `io + state` for process signal registrations and event
-receiving, using the same effects as other process operations. Its mock event
-injection uses only `state`.
-
 A sixth effect, `build`, marks functions that read files during compilation. It is only allowed inside [`comptime`](comptime.md).
 
 `tailrec` may also appear in a function's list (`uses io + tailrec`). It is not an effect but a marker: it asks the compiler to guarantee that the function's calls of itself are compiled as jumps (see [recursion and tail calls](basics.md#recursion-and-tail-calls)). `uses tailrec` alone declares a pure function.
@@ -54,6 +50,22 @@ fn total(prices: List[Int]): Int {
 ```text
 total uses io (it calls println), but its signature allows no effects; declare it: uses io
 ```
+
+Private functions must also use every effect they declare. This catches a
+signature that promises more outside work than its implementation performs:
+
+```bork fails
+fn announce(text: String) uses io + net {
+  println(text)
+}
+```
+
+```text
+announce declares net, but never uses it
+```
+
+Remove `net` here. Exported functions may declare unused effects to keep their
+public contract stable.
 
 If a function has no `uses`, nothing it calls can read a file or use the network, however deep its call tree goes.
 
@@ -127,9 +139,83 @@ fn main() {
 
 This is still checked. A function that needs a value can only be called from inside a `with` that binds it, or from another function that needs it. `handle` declares the need because it calls `log`. Leaving out the `with` in `main` is a compile error.
 
-A function can treat a value as optional with `needs locale?`, and then reads it as an `Option`.
+### Optional needs
 
-An ambient value can also be marked so that the runtime uses it. `logged ambient` adds the value to every log line written while it is bound. `propagated("header-name") ambient` sends it as a header on outgoing HTTP calls, and a bork server on the other side picks it up. The [service_context example](../../examples/service_context/main.bork) shows a trace id passing between two services this way.
+`needs locale?` reads the ambient value as an `Option`. Callers can omit it:
+
+```bork
+ambient locale: String
+
+fn greeting() needs locale?: String {
+  match (locale) {
+    Option.Some("sv") => "hej"
+    _ => "hello"
+  }
+}
+
+fn main() {
+  println(greeting())
+  with (locale: "sv") {
+    println(greeting())
+  }
+}
+```
+
+### Logged and propagated values
+
+`logged ambient` adds the bound value to log records, including records written
+by functions that do not declare a need for it:
+
+```bork
+import "bork/log"
+
+logged ambient requestId: String
+
+fn handle() {
+  log.Info("handling request")
+}
+
+fn main() {
+  log.Configure(log.Defaults().copy(timestamps: false))
+  with (requestId: "req-42") {
+    handle()
+  }
+}
+```
+
+`propagated("header-name") ambient` sends a bound value as a header on outgoing
+HTTP calls. Here the binding covers the request, including any helper calls:
+
+```bork
+import "bork/http"
+
+propagated("X-Request-Id") ambient requestId: String
+
+fn main() {
+  scope app {
+    match (http.Listen("127.0.0.1:0", app, (request, s) => {
+      id = http.HeaderOf(request.headers, "X-Request-Id").getOr("missing")
+      http.Text(200, id)
+    })) {
+      server: http.Server => {
+        with (requestId: "req-42") {
+          match (http.Get("http://" + http.Address(server), app)) {
+            response: http.Response => println(response.body)
+            failure => println(failure)
+          }
+        }
+      }
+      failure => println(failure)
+    }
+  }
+}
+```
+
+The [service_context example](../../examples/service_context/main.bork) shows a
+trace id passing between two services. A bork HTTP server validates incoming
+propagated values and binds valid ones around the handler. A missing or invalid header leaves the optional value
+unbound; handle that case with `needs requestId?` before calling code that
+requires it.
 
 ---
 
