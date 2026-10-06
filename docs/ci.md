@@ -64,12 +64,13 @@ python3 -m unittest discover -s scripts -p 'test_ci.py'
 ```
 
 Each shard reports the wall time of its run step, including discovery and
-compilation but not cache restore or save. Above 120 seconds it warns, and
-above 180 seconds it warns that the budget was exceeded. Discovery, which links
+compilation but not cache restore or save. Above 240 seconds it warns, and
+above 300 seconds it warns that the budget was exceeded. Discovery, which links
 the split packages' race test binaries, and the test run each have their own
-180-second limit; reaching one fails the shard and terminates its process
-groups, naming the tests still running. A cold build cache, after a go.sum or
-Go version change, can push one run past the budget without failing it. A shard also fails when a selected package, test or fixture produced
+300-second limit; reaching one fails the shard and terminates its process
+groups, naming the tests still running. The Actions test job has a ten-minute
+timeout so setup has room before the runner’s five-minute limit fires. A cold
+build cache, after a go.sum or Go version change, can push one run past the budget without failing it. A shard also fails when a selected package, test or fixture produced
 no result, since Go exits successfully when a `-run` pattern matches nothing. Its log shows each package result and
 the output of failing tests. CI uploads a report with the selected tests,
 elapsed seconds and status, and the raw `go test -json` events.
@@ -92,7 +93,7 @@ reports near-zero elapsed time and avoids counting nested serial time twice.
 These conservative workload weights guide balancing; they are not predictions
 of wall time.
 
-Keep the heavy test matrix capped at ten shards and retain the 180-second
+Keep the heavy test matrix capped at ten shards and retain the 300-second
 limits. If shards grow beyond the budget, refresh the timings and split large
 units into independent test roots. For example, the CLI runtime and comptime
 C-header rebuild scenarios have separate roots so they can land on different

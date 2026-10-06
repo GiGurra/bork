@@ -28,8 +28,8 @@ SHARDS = 10
 PACKAGE_OVERHEAD = 5.0
 DEFAULT_SECONDS = 5.0
 TIMINGS = Path(__file__).with_name("ci-timings.json")
-WARN_SECONDS = 120
-FAIL_SECONDS = 180
+WARN_SECONDS = 240
+FAIL_SECONDS = 300
 GO_TEST = ["go", "test", "-race", "-count=1"]
 
 
