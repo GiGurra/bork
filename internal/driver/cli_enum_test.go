@@ -32,6 +32,7 @@ type Options = {
  checked: Mode where QuietOnly = Mode.Quiet
  fallback: Mode = Mode.Other("future-default")
 } derive (codec.Decode, codec.Encode)
+type RenamedOptions = { level: Mode = Mode.Quiet codec { name: "severity" }, optional: Option[Mode] } derive (codec.Decode)
 type NullableOptions = { groups: List[List[Option[Mode]]] = [] } derive (codec.Decode, codec.Encode)
 type NestedOptions = { groups: List[List[Mode]] = [] } derive (codec.Decode, codec.Encode)
 type Leaf = { name: String = "leaf" } derive (codec.Decode)
@@ -67,6 +68,10 @@ fn main() {
  args = process.Args()
  mode = args.head().getOr("normal")
  args = args.drop(1)
+ if (mode == "renamed" || mode == "renamedpartial") {
+  match (cli.ParseWith[RenamedOptions]("app", "Renamed", args, completions:[.{field:"optional", suggest:suggest}])) { help: cli.Help => {println(help.text); eprintln(help.diagnostics)}, error: cli.Error => println(error.Render("app")), other => println(other) }
+  return
+ }
  if (mode == "nullable") {
   match (cli.Parse[NullableOptions]("app", "Nullable", args)) { value: NullableOptions => println(json.Encode(value)), other => println(other) }
   return
@@ -116,6 +121,9 @@ fn main() {
 		name, mode              string
 		args, env, want, absent []string
 	}{
+		{"renamed enum unknown path", "renamed", []string{"--severity", "future"}, nil, []string{".severity", "must be one of"}, []string{".level"}},
+		{"renamed enum partial unknown retained", "renamedpartial", []string{"__completeNoDesc", "--severity", "future", "--optional", ""}, nil, []string{".severity", "must be one of", ":1"}, []string{"missing"}},
+		{"renamed enum partial alias", "renamedpartial", []string{"__completeNoDesc", "--severity", "verbose", "--optional", ""}, nil, []string{`"LOUD"`}, nil},
 		{"nested enum object canonical", "nested", []string{"--groups", `[{"type":"quiet"}]`}, nil, []string{`"groups":[["quiet"]]`}, nil},
 		{"nested enum object alias", "nested", []string{"--groups", `[{"type":"verbose"}]`}, nil, []string{`"groups":[["LOUD"]]`}, nil},
 		{"nested enum object unknown", "nested", []string{"--groups", `[{"type":"future"}]`}, nil, []string{".groups[0][0].type", "must be one of"}, nil},

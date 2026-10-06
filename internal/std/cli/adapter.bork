@@ -244,7 +244,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
             if object, tagged := input.(codec.Value_Object); tagged { for _, member := range object.fields { if member.name == "type" { check(member.value, path+".type"); return } }; return }
             if text, stringInput := input.(codec.Value_String); stringInput && !allowed[text.value] { failures = append(failures, codec.DecodeError{path:path, message:"must be one of: " + strings.Join(names, ", ")}); invalid = true }
           }
-          check(json, "." + field.field)
+          check(json, "." + key)
           if invalid { continue }
         }
         spec := metadata[field.field]
