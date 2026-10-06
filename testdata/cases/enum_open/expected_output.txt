@@ -13,6 +13,3 @@ Option.Some(Box.SiteAdmin)
 Box.Other("site-admin")
 site-admin
 Option.Some(Info { names: ["root"], docs: [""], hasFallback: true })
-[] Option.None Only.Other("OTHER")
-false Option.None
-Option.Some(Info { names: [], docs: [], hasFallback: true })

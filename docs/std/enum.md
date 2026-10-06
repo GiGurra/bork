@@ -1,7 +1,7 @@
 # bork/enum
 
 `bork/enum` derives enumeration and lookup for sealed types with public,
-fieldless variants and an optional positional String fallback. It shares codec wire names: the default is UPPER_SNAKE,
+fieldless variants and an optional positional String fallback. An enum with a fallback must have at least one known variant. It shares codec wire names: the default is UPPER_SNAKE,
 with the type's `codec { naming: ... }` policy and per-variant name overrides.
 Lookup is exact and case-sensitive. Source names are accepted only when they
 are the chosen wire names or explicit aliases.

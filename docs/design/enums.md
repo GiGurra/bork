@@ -156,6 +156,7 @@ Alternatives considered (rejected):
 ### 3. Rules for the fallback
 
 - At most one fallback per sealed type. A second is an error on that variant.
+- An enum with a fallback needs at least one known fieldless alternative; a fallback-only type is a compile error.
 - Payload: exactly one positional `String` slot, on an enum-shaped type. It
   holds the input name verbatim; encode writes it back verbatim. Anything else
   is an error. (A `codec.Value` fallback for tagged unions is a later step;
