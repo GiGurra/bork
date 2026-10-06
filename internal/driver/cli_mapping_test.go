@@ -58,11 +58,11 @@ fn main() {
 		{name: "deprecated-help", args: []string{"--legacy", "81", "--help"}, want: []string{"Usage:", "Ok"}, absent: []string{"Options {"}, warning: true},
 		{name: "deprecated-decode-error", args: []string{"--svc-verbose", "--legacy", "bad"}, want: []string{".oldPort", "Error {", "use --svc-http-port instead"}, absent: []string{"Options {", "Ok"}},
 		{name: "deprecated-syntax-error", args: []string{"--legacy", "81", "--unknown"}, want: []string{"unknown flag", "Error {", "use --svc-http-port instead"}, absent: []string{"Options {", "Ok"}},
-		{name: "required-bool", want: []string{".verbose", "is missing", "Error {"}, absent: []string{"Options {", "Ok"}},
+		{name: "bool-default", want: []string{"verbose: false", "Options {", "Ok"}, absent: []string{"Error {"}},
 		{name: "disabled-long", args: []string{"--svc-verbose", "--svc-env-only", "value"}, want: []string{"unknown flag", "Error {"}, absent: []string{"Options {", "Ok"}},
 		{name: "config-disabled", config: `{"noConfig":null}`, args: []string{"--svc-verbose"}, want: []string{`CLI config field`, "noConfig", "disabled", "Error {"}, absent: []string{"Options {", "Ok"}},
 		{name: "config-precedence", config: `{"serverHost":"file-host","httpPort":81}`, args: []string{"--svc-verbose"}, want: []string{`serverHost: "env-host"`, "httpPort: 81"}},
-		{name: "help", config: `{`, args: []string{"--help"}, want: []string{"Custom host documentation.", "--svc-server-host", "--svc-verbose", "(required)", "default 8080", "BORK_MAPPING_SVC_SERVER_HOST", "Ok"}, absent: []string{"Original host documentation.", "Hidden secret documentation.", "--secret", "--legacy", "--svc-env-only", "Error {"}},
+		{name: "help", config: `{`, args: []string{"--help"}, want: []string{"Custom host documentation.", "--svc-server-host", "--svc-verbose", "default false", "default 8080", "BORK_MAPPING_SVC_SERVER_HOST", "Ok"}, absent: []string{"Original host documentation.", "Hidden secret documentation.", "--secret", "--legacy", "--svc-env-only", "Error {"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
