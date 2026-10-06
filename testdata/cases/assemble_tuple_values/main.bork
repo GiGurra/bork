@@ -17,10 +17,10 @@ Slot = 1
 fn main() uses io {
   swapped = test.Swap(tupleRecipe(), replacementRecipe())
   println("ready")
-  println(swapped.0())
+  println(swapped.0 ())
   selected = test.SwapAt(tupleRecipe(), 0, replacementRecipe())
   println("ready")
-  println(selected.0())
+  println(selected.0 ())
   index = 0
   println(test.SwapAt((1, "a"), index + Slot - 1, 4))
   println(test.SwapAt((1,), comptime { 0 }, 5))

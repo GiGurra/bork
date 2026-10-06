@@ -46,7 +46,7 @@ Providers = (real, "label")
 fn main() {
   replaced = test.Swap(Providers, fake)
   selected = test.SwapAt(Providers, 0, fake)
-  println(replaced.0(), selected.0())
+  println(replaced.0 (), selected.0 ())
 }
 ```
 
