@@ -1,0 +1,13 @@
+JsonError { message: "invalid JSON at line 1, column 8: duplicate key \"x\" (first at line 1, column 2)" }
+JsonError { message: "invalid JSON at line 3, column 3: duplicate key \"x\" (first at line 2, column 3)" }
+JsonError { message: "invalid JSON at line 1, column 18: duplicate key \"x\" (first at line 1, column 12)" }
+Value.Array { items: [Value.Object { fields: [Field { name: "x", value: Value.Number { text: "1" } }] }, Value.Object { fields: [Field { name: "x", value: Value.Number { text: "2" } }] }] }
+JsonError { message: "invalid JSON at line 1, column 8: duplicate key \"x\" (first at line 1, column 2)" }
+JsonError { message: "invalid JSON at line 1, column 8: duplicate key \"x\" (first at line 1, column 2)" }
+JsonError { message: "invalid JSON at line 2, column 8: invalid UTF-8" }
+Value.Object { fields: [Field { name: "x", value: Value.String { value: "�" } }] }
+{"z":1,"a":2,"m":3}
+{"a":2,"m":3,"z":1}
+{"z":1,"m":3,"a":2}
+{"nested":{"a":2,"m":3,"z":1}}
+{}

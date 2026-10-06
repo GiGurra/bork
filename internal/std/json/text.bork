@@ -4,10 +4,12 @@ use codec.Defaults
 // JSON text parsing, rendering, and typed codecs.
 
 // Parse reads a JSON value; object fields keep their order.
+// Duplicate object names and invalid UTF-8 are errors.
 fn Parse(text: String): codec.Value | JsonError unsafe go {
   import "encoding/json"
   import "fmt"
   import "strings"
+  import "unicode/utf8"
   // A small parser of its own, so that messages are the same in every Go
   // version: "invalid JSON at line 1, column 2: expected a value".
   pos := 0
@@ -18,6 +20,19 @@ fn Parse(text: String): codec.Value | JsonError unsafe go {
       return JsonError{message: "unexpected end of JSON: expected " + what}
     }
     return JsonError{message: fmt.Sprintf("invalid JSON at line %d, column %d: expected %s", line, col, what)}
+  }
+  location := func(offset int) (int, int) {
+    return 1 + strings.Count(text[:offset], "\n"), offset - strings.LastIndex(text[:offset], "\n")
+  }
+  if !utf8.ValidString(text) {
+    for offset := 0; offset < len(text); {
+      r, size := utf8.DecodeRuneInString(text[offset:])
+      if r == utf8.RuneError && size == 1 {
+        line, col := location(offset)
+        return JsonError{message: fmt.Sprintf("invalid JSON at line %d, column %d: invalid UTF-8", line, col)}
+      }
+      offset += size
+    }
   }
   space := func() {
     for pos < len(text) && strings.IndexByte(" \t\r\n", text[pos]) >= 0 {
@@ -127,6 +142,7 @@ fn Parse(text: String): codec.Value | JsonError unsafe go {
     case c == '{':
       pos++
       fields := []codec.Field{}
+      names := map[string]int{}
       space()
       if pos < len(text) && text[pos] == '}' {
         pos++
@@ -138,10 +154,18 @@ fn Parse(text: String): codec.Value | JsonError unsafe go {
           e := fail("a field name")
           return nil, &e
         }
+        nameStart := pos
         name, e := str()
         if e != nil {
           return nil, e
         }
+        if previous, exists := names[name]; exists {
+          line, col := location(nameStart)
+          firstLine, firstCol := location(previous)
+          e := JsonError{message: fmt.Sprintf("invalid JSON at line %d, column %d: duplicate key %q (first at line %d, column %d)", line, col, name, firstLine, firstCol)}
+          return nil, &e
+        }
+        names[name] = nameStart
         space()
         if pos >= len(text) || text[pos] != ':' {
           e := fail("':'")

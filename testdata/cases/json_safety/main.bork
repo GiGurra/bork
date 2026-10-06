@@ -1,0 +1,27 @@
+import codec "bork/codec"
+import "bork/json"
+use codec.Defaults
+
+type Row = { x: Int } derive (codec.Decode)
+
+fn invalidText(): String unsafe go {
+  return "{\n  \"x\":\"" + string([]byte{0xff}) + "\"}"
+}
+
+fn main() {
+  println(json.Parse("{\"x\":1,\"x\":2}"))
+  println(json.Parse("{\n  \"x\":1,\n  \"\\u0078\":2\n}"))
+  println(json.Parse("{\"nested\":{\"x\":1,\"x\":2}}"))
+  println(json.Parse("[{\"x\":1},{\"x\":2}]"))
+  println(json.Decode[Row]("{\"x\":1,\"x\":2}"))
+  println(json.Decode[Map[String, Int]]("{\"x\":1,\"x\":2}"))
+  println(json.Parse(invalidText()))
+  println(json.Parse("{\"x\":\"�\"}"))
+  m = { "z": 1, "a": 2, "m": 3 }
+  println(json.Encode(m))
+  println(json.Encode(m.unordered()))
+  println(json.Encode(m.sortedBy((a, b) => a > b)))
+  println(json.Encode({ "nested": m.unordered() }))
+  empty: Map[String, Int] = {:}
+  println(json.Encode(empty.unordered()))
+}
