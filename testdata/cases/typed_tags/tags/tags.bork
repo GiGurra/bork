@@ -3,7 +3,11 @@ type Policy = sealed { Keep, Change }
 type FieldTags = { policy: Policy = Policy.Keep, name: Option[String] = Option.None, aliases: List[String] = [], count: Int = -1 }
 type VariantTags = { name: String = "variant" }
 type TypeTags = { name: String = "type" }
-class Names[T] { fn names(value: T): List[String]; fn typeTags(value: T): Option[TypeTags]; fn options(value: T): List[FieldTags] }
+class Names[T] {
+  fn names(value: T): List[String]
+  fn typeTags(value: T): Option[TypeTags]
+  fn options(value: T): List[FieldTags]
+}
 derive fn fieldOptions[T](field: shape.Field[T]): FieldTags { field.tagged[FieldTags]().getOr(FieldTags {}) }
 derive instance names[T]: Names[T] {
   fn options(value: T): List[FieldTags] {
