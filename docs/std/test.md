@@ -106,13 +106,7 @@ SwapAt checks the replacement against the selected position and requires an
 exact type match. Function types include parameters, result/failure unions and
 effects. To change an element's type or function signature, build a new tuple.
 
-```bork fails
-import "bork/test"
-
-fn main() {
-  println(test.SwapAt((1, "label"), 0, "wrong type"))
-}
-```
+For example, `test.SwapAt((1, "label"), 0, "wrong type")` reports:
 
 ```text
 test.SwapAt slot 0 requires exact type Int, found String
