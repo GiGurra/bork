@@ -82,6 +82,23 @@ func Lookup(files []*syntax.File, info *check.Info, pos diag.Pos, src []byte) (*
 
 	tokens, _ := syntax.Lex(pos.File, src, &diag.List{})
 	index := &sourceIndex{pos: pos, tokens: tokens, lines: lines, info: info}
+	for _, token := range tokens {
+		if index.contains(token.Pos, tokenWidth(token)) {
+			if typ := check.EditorTagType(info, token.Pos); typ != nil {
+				var pkg *check.Package
+				for _, file := range files {
+					if file.Path == pos.File {
+						for _, candidate := range info.Packages {
+							if candidate.Path == file.Package {
+								pkg = candidate
+							}
+						}
+					}
+				}
+				return &Selection{Type: typ, Package: pkg, Expression: token.Text, Site: token.Pos}, nil
+			}
+		}
+	}
 	for _, file := range files {
 		if file.Path != pos.File {
 			continue

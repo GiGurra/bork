@@ -237,6 +237,9 @@ type InterpolationSource struct {
 }
 
 type Info struct {
+	tagGroups map[*syntax.TagGroup]*syntax.RecordLit
+	tagValues map[*syntax.Call]syntax.Expr
+
 	// predicateRefs retains checked where-clause identities for editor queries.
 	predicateRefs map[diag.Pos]*Constraint
 
@@ -655,6 +658,7 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 	c.checkDeriveDefinitions(files)
 	c.checkDerivedDuplicates()
 	c.ensureAllFieldDefaults()
+	c.checkTagGroups(files)
 	for _, checkKey := range c.mapKeyChecks {
 		checkKey()
 	}
@@ -1878,6 +1882,9 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 			return Invalid
 		}
 		return instantiate(c.preludePkg.TypeNamed("Option"), []Type{project.view})
+	}
+	if value := c.info.tagValues[e]; value != nil {
+		return c.info.types[value]
 	}
 	if field := c.info.shapeDefaults[e]; field != nil {
 		return field.Type

@@ -317,6 +317,7 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 		if p.layout {
 			return p.layoutRecord(x)
 		}
+		return p.tagRecord(x)
 	case *syntax.ListLit:
 		if p.layout {
 			return p.layoutList(x)
@@ -339,6 +340,9 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 		}
 		return value, ok
 	case *syntax.Selector:
+		if value, known := p.tagVariantLiteral(x); known {
+			return value, true
+		}
 		if id, yes := x.X.(*syntax.Ident); yes && x.Name == "Type" {
 			if runtime, known := p.env[id.Name].(shapeRuntimeType); known {
 				return runtime.typ, true
@@ -354,6 +358,11 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 			return nil, false
 		}
 		switch value := value.(type) {
+		case metadataChecked:
+			return p.checkedTagProperty(value, x.Name)
+		case metadataRecord:
+			out, known := value.fields[x.Name]
+			return out, known
 		case shapeField:
 			switch x.Name {
 			case "name":
@@ -461,6 +470,36 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 			return a || b, aok && bok
 		}
 	case *syntax.Call:
+		if value, known := p.tagged(x); known {
+			return value, true
+		}
+		if selector, ok := x.Fun.(*syntax.Selector); ok {
+			if value, known := p.eval(selector.X); known {
+				if variant, yes := value.(metadataVariant); yes && variant.typ.Base == p.c.preludePkg.TypeNamed("Option") && len(x.TypeArgs) == 0 {
+					method, _ := p.c.methodNamed(variant.typ, selector.Name)
+					if method == nil || !method.Prelude {
+						return nil, false
+					}
+					switch selector.Name {
+					case "isSome":
+						if len(x.Args) == 0 {
+							return variant.name == "Some", true
+						}
+					case "isNone":
+						if len(x.Args) == 0 {
+							return variant.name == "None", true
+						}
+					case "getOr":
+						if len(x.Args) == 1 {
+							if variant.name == "Some" {
+								return variant.fields[variant.typ.Variant("Some").Fields[0].Name], true
+							}
+							return p.eval(x.Args[0])
+						}
+					}
+				}
+			}
+		}
 		if selector, ok := x.Fun.(*syntax.Selector); ok {
 			if value, known := p.stringOperation(x, selector); known {
 				return value, true
@@ -581,6 +620,13 @@ func (p *deriveExpansion) metadataEqual(x *syntax.Binary, left, right any) (bool
 	switch left.(type) {
 	case bool, string, int64, shapeEnum:
 		return left == right, true
+	case metadataVariant:
+		a, b := left.(metadataVariant), right.(metadataVariant)
+		if len(a.fields) == 0 && len(b.fields) == 0 {
+			return identical(a.typ, b.typ) && a.name == b.name, true
+		}
+		p.error(x.Pos, "metadata equality requires scalar operands")
+		return false, false
 	default:
 		p.error(x.Pos, "metadata equality requires scalar operands")
 		return false, false
@@ -605,6 +651,8 @@ func (p *deriveExpansion) literal(pos diag.Pos, value any) syntax.Expr {
 		return &syntax.BoolLit{Pos: pos, Value: value}
 	case int64:
 		return &syntax.IntLit{Pos: pos, Text: strconv.FormatInt(value, 10)}
+	case metadataChecked:
+		return p.checkedTagLiteral(pos, value)
 	case metadataList, metadataRecord, metadataVariant:
 		return p.layoutLiteral(pos, value)
 	default:

@@ -56,6 +56,8 @@ func (p *deriveExpansion) descriptorType(name string, owner Type) Type {
 
 func (p *deriveExpansion) metadataType(value any) Type {
 	switch value := value.(type) {
+	case metadataChecked:
+		return p.c.info.types[value.value]
 	case bool:
 		return Bool
 	case int64:

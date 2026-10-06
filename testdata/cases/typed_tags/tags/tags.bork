@@ -1,0 +1,31 @@
+import "bork/shape"
+type Policy = sealed { Keep, Change }
+type FieldTags = { policy: Policy = Policy.Keep, name: String = "default", aliases: List[String] = [], count: Int = -1 }
+type VariantTags = { name: String = "variant" }
+type TypeTags = { name: String = "type" }
+class Names[T] { fn names(value: T): List[String]; fn typeTags(value: T): Option[TypeTags]; fn options(value: T): List[FieldTags] }
+derive fn fieldOptions[T](field: shape.Field[T]): FieldTags { field.tagged[FieldTags]().getOr(FieldTags {}) }
+derive instance names[T]: Names[T] {
+  fn options(value: T): List[FieldTags] {
+    comptime if (shape.kind[T]() == shape.Record) { [comptime for (field in shape.fields[T]()) fieldOptions[T](field)] } else { [] }
+  }
+  fn typeTags(value: T): Option[TypeTags] { shape.tagged[T, TypeTags]() }
+  fn names(value: T): List[String] {
+    comptime if (shape.tagged[T, TypeTags]().isSome()) {
+      comptime if (shape.tagged[T, TypeTags]().getOr(TypeTags {}).name == "bad") {}
+    }
+    comptime if (!shape.tagged[(Int, String), TypeTags]().isNone()) { shape.fail("tuple tags should be absent") }
+    prefix = shape.tagged[T, TypeTags]().getOr(TypeTags {}).name
+    comptime if (shape.kind[T]() == shape.Record) {
+      [prefix].concat([comptime for (field in shape.fields[T]()) fieldOptions[T](field).name])
+    } else {
+      [prefix].concat([comptime for (variant in shape.variants[T]()) variant.tagged[VariantTags]().getOr(VariantTags {}).name])
+    }
+  }
+}
+fn NamesOf[T: Names](value: T): List[String] { names(value) }
+type Own = { value: Int tags { name: "own" } } tags { name: "local" } derive (Names)
+
+fn TagsOf[T: Names](value: T): Option[TypeTags] { typeTags(value) }
+
+fn OptionsOf[T: Names](value: T): List[FieldTags] { options(value) }

@@ -37,6 +37,10 @@ type Variant[T] = private {
   fields: List[Field[T]]
   facts: List[Fact[T]]
 }
+// tagged returns a type-level package tag record during derive expansion.
+// Fields and variants provide tagged[M]() with the same Option result.
+fn tagged[T, M](): Option[M] unsafe go { panic("shape.tagged requires a derive template") }
+
 // fields exposes record fields in declaration order during derive expansion.
 fn fields[T](): List[Field[T]] unsafe go { panic("shape.fields requires a derive template") }
 // variants exposes sealed alternatives in declaration order.

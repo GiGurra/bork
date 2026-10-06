@@ -113,6 +113,24 @@ func (m *deriveMetadataTypes) scalar(expr syntax.Expr) Type {
 		}
 	}
 	if call, ok := expr.(*syntax.Call); ok {
+		var metadata *syntax.TypeExpr
+		if selector, ok := call.Fun.(*syntax.Selector); ok && selector.Name == "tagged" && (m.kind(selector.X) == deriveField || m.kind(selector.X) == deriveVariant) && len(call.TypeArgs) == 1 && len(call.Args) == 0 {
+			metadata = call.TypeArgs[0]
+		}
+		if id, ok := call.Fun.(*syntax.Ident); ok {
+			alias, member, qualified := strings.Cut(id.Name, ".")
+			pkg := m.c.pkg.imports[alias]
+			if qualified && pkg != nil && pkg.Path == "bork/shape" && member == "tagged" && len(call.TypeArgs) == 2 && len(call.Args) == 0 {
+				metadata = call.TypeArgs[1]
+			}
+		}
+		if metadata != nil {
+			typ := m.c.resolveType(metadata)
+			if hasTypeParam(typ) {
+				m.c.errorf(metadata.Pos, "tagged requires a closed metadata type")
+			}
+			return instantiate(m.c.preludePkg.TypeNamed("Option"), []Type{typ})
+		}
 		if id, ok := call.Fun.(*syntax.Ident); ok && len(call.TypeArgs) == 1 && len(call.Args) == 0 {
 			alias, member, qualified := strings.Cut(id.Name, ".")
 			pkg := m.c.pkg.imports[alias]
@@ -327,12 +345,12 @@ func (m *deriveMetadataTypes) checkMember(selector *syntax.Selector) {
 	switch kind {
 	case deriveField:
 		switch selector.Name {
-		case "name", "doc", "index", "positional", "computed", "hasDefault", "tags", "facts", "Type", "RawType", "read", "default", "validate", "check":
+		case "name", "doc", "index", "positional", "computed", "hasDefault", "tags", "tagged", "facts", "Type", "RawType", "read", "default", "validate", "check":
 			valid = true
 		}
 	case deriveVariant:
 		switch selector.Name {
-		case "name", "doc", "index", "positional", "fields", "facts", "Type", "project", "builder":
+		case "name", "doc", "index", "positional", "fields", "facts", "tagged", "Type", "project", "builder":
 			valid = true
 		}
 	case deriveFact:
@@ -356,6 +374,12 @@ func (m *deriveMetadataTypes) checkCall(call *syntax.Call) {
 		return
 	}
 	kind := m.kind(selector.X)
+	if selector.Name == "tagged" && (kind == deriveField || kind == deriveVariant) {
+		if len(call.Args) != 0 || len(call.TypeArgs) != 1 {
+			m.c.errorf(call.Pos, "tagged takes one metadata type and no arguments")
+		}
+		return
+	}
 	if kind >= deriveFields {
 		if selector.Name != "length" && selector.Name != "isEmpty" {
 			return
