@@ -190,7 +190,7 @@ bork test my-app
 bork build my-app -o my-app-bin
 bork check --json my-app
 bork describe my-app/main.bork:1:1
-bork doc bork/cli
+bork doc bork/time
 ```
 
 Run `bork <command> --help` for command options. `bork test` runs one package;

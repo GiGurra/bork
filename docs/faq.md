@@ -10,7 +10,7 @@ program, the compiler's actual message, and a checked fix. See the
 Run `bork new app`, then `bork run app` and `bork test app`.
 `bork check --json app` gives structured diagnostics;
 `bork describe app/main.bork:1:1` queries a source position.
-`bork doc bork/cli` renders a package's public API. The
+`bork doc bork/time` renders a package's public API. The
 [command reference](cli.md) explains these commands. For built-ins and methods,
 use the language pages and the compiler's describe output.
 
