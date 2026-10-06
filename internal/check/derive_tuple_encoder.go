@@ -87,7 +87,7 @@ func (c *checker) sourceTupleCodec(dictionary *Dict, tuple *Record, at diag.Pos)
 			}
 		}
 		instance.Type = head
-		plan.target, plan.instance = head, instance
+		plan.instance = instance
 		plan.env[template.Decl.TypeParams[0].Name] = head
 		c.info.deriveTupleCodecs[key] = instance
 		c.info.ClassInstances = append(c.info.ClassInstances, instance)

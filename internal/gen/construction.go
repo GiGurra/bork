@@ -12,7 +12,6 @@ import (
 // constructionInvariant is a whole-owner obligation checked after fields.
 type constructionInvariant struct {
 	fieldPath   func(*check.Field) string
-	positional  bool
 	typ         check.Type
 	constraints []*check.Constraint
 }
@@ -25,9 +24,6 @@ func (g *gen) constructionChecks(fields []*check.Field, owner check.Type, invari
 	fieldPath := func(field *check.Field) string {
 		if len(invariants) > 0 && invariants[0].fieldPath != nil {
 			return invariants[0].fieldPath(field)
-		}
-		if len(invariants) > 0 && invariants[0].positional {
-			return ".values[" + field.Name + "]"
 		}
 		return "." + field.Name
 	}

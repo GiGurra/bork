@@ -179,7 +179,7 @@ func (c *checker) foreignLayout(r *Record) []foreignSlot {
 	start := c.diags.Len()
 	saved, savedPrelude := c.pkg, c.inPrelude
 	c.pkg, c.inPrelude = cl.Template.Pkg, cl.Prelude
-	plan := &deriveExpansion{c: c, template: cl.Template, target: r, layout: true, scope: layout.Pkg, active: map[*syntax.FuncDecl]bool{}, env: map[string]any{cl.Template.Decl.TypeParams[0].Name: r}, budget: &deriveBudget{remaining: 100000}, names: map[string]bool{}}
+	plan := &deriveExpansion{c: c, template: cl.Template, layout: true, scope: layout.Pkg, active: map[*syntax.FuncDecl]bool{}, env: map[string]any{cl.Template.Decl.TypeParams[0].Name: r}, budget: &deriveBudget{remaining: 100000}, names: map[string]bool{}}
 	value, known := plan.eval(source.Value)
 	c.pkg, c.inPrelude = saved, savedPrelude
 	c.diags.DeriveContext(start, layout.Pos)
