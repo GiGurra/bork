@@ -29,7 +29,7 @@ fn main() {
   match (result) {
     Ok => {}
     error: cli.Error => {
-      eprintln(toString(error))
+      eprintln(error.Render("greet"))
       process.Exit(2)
     }
   }
@@ -60,7 +60,9 @@ Flags:
       --excited       Print an excited greeting. (default false)
   -h, --help          help for greet
 $ ./greet
-Error { errors: [DecodeError { path: ".name", message: "is missing" }] }
+Error: .name: is missing
+
+Try 'greet --help' for usage.
 $ echo $?
 2
 ```
@@ -73,9 +75,10 @@ no configuration files. Run prints help and warnings; your program prints Error
 and chooses its exit code.
 
 `cli.Error` contains `errors: List[codec.DecodeError]`, each with path and message.
-Use `eprintln(toString(error))` for the whole value, or loop over errors and print
-`s"${failure.path}: ${failure.message}"`. Call process.Exit after Run returns so
-the handler's scope cleanup has finished.
+`error.Render("greet")` formats field errors and adds a usage hint. Pass it to
+eprintln for stderr output; use toString(error) when you need the raw record
+representation. Call process.Exit after Run returns so the handler's scope
+cleanup has finished.
 
 ## Test explicit arguments
 

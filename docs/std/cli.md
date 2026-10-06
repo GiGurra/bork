@@ -26,7 +26,7 @@ fn main() {
   match (result) {
     Ok => {}
     error: cli.Error => {
-      eprintln(toString(error))
+      eprintln(error.Render("greet"))
       process.Exit(2)
     }
   }
@@ -55,7 +55,9 @@ Flags:
       --excited       Print an excited greeting. (default false)
   -h, --help          help for greet
 $ ./greet
-Error { errors: [DecodeError { path: ".name", message: "is missing" }] }
+Error: .name: is missing
+
+Try 'greet --help' for usage.
 $ echo $?
 2
 ```
@@ -79,6 +81,7 @@ Parse or Dispatch exclude the executable name.
 | `ParseDetailedWith[T: codec.Decode](name: String, description: String, args: List[String], completions: List[cli.Completion] = [], flags: List[cli.Flag] = [], configFiles: List[String] = [], settings: cli.Settings = .{}) uses io + net + clock + random + state: cli.Parsed[T] \| cli.Error \| cli.Help` | Also return successful warnings. |
 | `RunWith[T: codec.Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, completions: List[cli.Completion] = [], flags: List[cli.Flag] = [], configFiles: List[String] = [], settings: cli.Settings = .{}) uses io + net + clock + random + state: Ok \| cli.Error` | Run with dynamic completion. |
 | `SubcommandWith[T: codec.Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, completions: List[cli.Completion] = [], flags: List[cli.Flag] = [], configFiles: List[String] = [], settings: cli.Settings = .{}): cli.Command` | Create a typed leaf with dynamic completion. |
+| `(error: cli.Error) Render(command: String): String` | Format field errors and a usage hint. Pure; pass the result to eprintln. |
 | `(partial: cli.Partial) Get[U: codec.Decode](field: String): U \| cli.Missing \| codec.DecodeError` | Decode one supplied partial field without proving the complete record. |
 
 Both `name` and `description` are required arguments, even if description is `""`.
@@ -90,6 +93,23 @@ closed bound of all five effects even when a particular callback uses fewer effe
 | `cli.Error` | `errors: List[codec.DecodeError]`; each DecodeError has `path: String, message: String`. |
 | `cli.Help` | `text: String, diagnostics: String = ""`; stdout and stderr respectively. |
 | `cli.Parsed[T]` | `options: T, warnings: List[String]`. |
+
+### Render errors
+
+`cli.Error { errors }` contains field paths and messages. Render formats one
+`Error: path: message` line per issue, omitting the path for a whole-record error,
+then a usage hint for the supplied command name. It returns a String without a
+trailing newline, so eprintln supplies the newline and selects stderr.
+
+```bork
+import "bork/cli"
+import "bork/codec"
+
+fn main() {
+  error = cli.Error { errors: [codec.DecodeError { path: ".name", message: "is missing" }] }
+  eprintln(error.Render("greet"))
+}
+```
 
 ### Parse explicit arguments
 
@@ -697,4 +717,5 @@ examples cover [basic options](../../examples/cli/main.bork),
 [dynamic suggestions](../../examples/cli_dynamic/main.bork), and
 [positionals](../../examples/cli_positionals/main.bork).
 
+Run `bork doc bork/cli` for checked public declarations.
 The [CLI design](../design/cli.md) records implementation rationale.
