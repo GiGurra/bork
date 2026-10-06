@@ -1,24 +1,83 @@
-# Binary formats
+# bork/binary
 
-Import `bork/binary` to read and write fixed-width integers in immutable `Bytes`. Choose `binary.ByteOrder.BigEndian` or `LittleEndian` explicitly. Signed reads and writes preserve the integer's two's-complement bit pattern. All operations are pure.
+`bork/binary` reads and writes fixed-width binary formats with immutable buffers and cursors.
 
 ```bork
 import "bork/binary"
 
 fn main() {
-  bytes = [toByte(18), toByte(52), toByte(255), toByte(254)].toBytes()
-  println(bytes.ReadUint16(0, binary.ByteOrder.BigEndian))
-  println(bytes.ReadInt16(2, binary.ByteOrder.BigEndian))
-  println(bytes.WriteUint16(0, 22136, binary.ByteOrder.LittleEndian))
-  println(bytes)
+  data = [toByte(18), toByte(52)].toBytes()
+  println(data.ReadUint16(0, binary.ByteOrder.BigEndian))
+  match (data.ReadUint32(0, binary.ByteOrder.BigEndian)) {
+    error: binary.BinaryError => println(s"need ${error.required} bytes; have ${error.length}")
+    value: Uint32 => println(value)
+  }
 }
 ```
+
+```text
+4660
+need 4 bytes; have 2
+```
+
+## API
+
+| Signature | Meaning |
+| --- | --- |
+| `(data: Bytes) ReadByte(offset: Int): Byte \| BinaryError` | Read one byte. |
+| `(data: Bytes) WriteByte(offset: Int, value: Byte): Bytes \| BinaryError` | Replace one byte in a copied buffer. |
+| `(data: Bytes) ReadUint16(offset: Int, order: ByteOrder): Uint16 \| BinaryError` | Read an unsigned 16-bit integer. |
+| `(data: Bytes) WriteUint16(offset: Int, value: Uint16, order: ByteOrder): Bytes \| BinaryError` | Write an unsigned 16-bit integer. |
+| `(data: Bytes) ReadUint32(offset: Int, order: ByteOrder): Uint32 \| BinaryError` | Read an unsigned 32-bit integer. |
+| `(data: Bytes) WriteUint32(offset: Int, value: Uint32, order: ByteOrder): Bytes \| BinaryError` | Write an unsigned 32-bit integer. |
+| `(data: Bytes) ReadUint64(offset: Int, order: ByteOrder): Uint64 \| BinaryError` | Read an unsigned 64-bit integer. |
+| `(data: Bytes) WriteUint64(offset: Int, value: Uint64, order: ByteOrder): Bytes \| BinaryError` | Write an unsigned 64-bit integer. |
+| `(data: Bytes) ReadInt16(offset: Int, order: ByteOrder): Int16 \| BinaryError` | Read a signed 16-bit integer. |
+| `(data: Bytes) WriteInt16(offset: Int, value: Int16, order: ByteOrder): Bytes \| BinaryError` | Write a signed 16-bit integer. |
+| `(data: Bytes) ReadInt32(offset: Int, order: ByteOrder): Int32 \| BinaryError` | Read a signed 32-bit integer. |
+| `(data: Bytes) WriteInt32(offset: Int, value: Int32, order: ByteOrder): Bytes \| BinaryError` | Write a signed 32-bit integer. |
+| `(data: Bytes) ReadInt64(offset: Int, order: ByteOrder): Int \| BinaryError` | Read a signed 64-bit integer. |
+| `(data: Bytes) WriteInt64(offset: Int, value: Int, order: ByteOrder): Bytes \| BinaryError` | Write a signed 64-bit integer. |
+| `(data: Bytes) ReadInt8(offset: Int): Int8 \| BinaryError` | Read a signed byte. |
+| `(data: Bytes) WriteInt8(offset: Int, value: Int8): Bytes \| BinaryError` | Write a signed byte. |
+| `NewReader(data: Bytes, order: ByteOrder): Reader` | Start a cursor at offset zero. |
+| `(value: Reader) Offset(): Int where ByteCount` | Read the cursor offset. |
+| `(value: Reader) Remaining(): Int where ByteCount` | Count bytes after the cursor. |
+| `(value: Reader) Skip(count: Int): Reader \| BinaryError` | Return a cursor advanced by count. |
+| `(value: Reader) ReadBytes(count: Int): (Bytes, Reader) \| BinaryError` | Read count bytes and a new cursor. |
+| `(value: Reader) ReadByte(): (Byte, Reader) \| BinaryError` | Read one byte. |
+| `(value: Reader) ReadInt8(): (Int8, Reader) \| BinaryError` | Read a signed byte. |
+| `(value: Reader) ReadUint16(): (Uint16, Reader) \| BinaryError` | Read an unsigned 16-bit integer. |
+| `(value: Reader) ReadUint32(): (Uint32, Reader) \| BinaryError` | Read an unsigned 32-bit integer. |
+| `(value: Reader) ReadUint64(): (Uint64, Reader) \| BinaryError` | Read an unsigned 64-bit integer. |
+| `(value: Reader) ReadInt16(): (Int16, Reader) \| BinaryError` | Read a signed 16-bit integer. |
+| `(value: Reader) ReadInt32(): (Int32, Reader) \| BinaryError` | Read a signed 32-bit integer. |
+| `(value: Reader) ReadInt64(): (Int64, Reader) \| BinaryError` | Read a signed 64-bit integer. |
+| `NewWriter(order: ByteOrder): Writer` | Create an empty writer. |
+| `(value: Writer) Length(): Int` | Read accumulated byte count. |
+| `(value: Writer) WriteBytes(data: Bytes): Writer \| BinaryError` | Append an immutable chunk. |
+| `(value: Writer) Bytes(): Bytes` | Materialize a snapshot of all chunks. |
+| `(value: Writer) WriteByte(number: Byte): Writer \| BinaryError` | Append one byte. |
+| `(value: Writer) WriteInt8(number: Int8): Writer \| BinaryError` | Write a signed byte. |
+| `(value: Writer) WriteUint16(number: Uint16): Writer \| BinaryError` | Write an unsigned 16-bit integer. |
+| `(value: Writer) WriteUint32(number: Uint32): Writer \| BinaryError` | Write an unsigned 32-bit integer. |
+| `(value: Writer) WriteUint64(number: Uint64): Writer \| BinaryError` | Write an unsigned 64-bit integer. |
+| `(value: Writer) WriteInt16(number: Int16): Writer \| BinaryError` | Write a signed 16-bit integer. |
+| `(value: Writer) WriteInt32(number: Int32): Writer \| BinaryError` | Write a signed 32-bit integer. |
+| `(value: Writer) WriteInt64(number: Int): Writer \| BinaryError` | Write a signed 64-bit integer. |
+
+`ByteOrder` is `BigEndian | LittleEndian`; choose one explicitly. Signed
+reads and writes preserve two's-complement patterns. `Reader` and `Writer` have
+private representations; use `NewReader` and `NewWriter`. `ByteCount(value: Int)`
+proves a nonnegative Int. Every operation is pure.
+
+## Read and replace bytes
 
 `Bytes` methods are `ReadByte(offset)`, `ReadInt8(offset)`, and `ReadUint16`, `ReadUint32`, `ReadUint64`, `ReadInt16`, `ReadInt32`, `ReadInt64` with `(offset, order)`. The result is the integer or `binary.BinaryError`. `Byte` is also `Uint8`; `Int64` is also `Int`.
 
 Matching write methods take `(offset, value)` for one-byte values and `(offset, value, order)` otherwise. They return a new `Bytes` value or `BinaryError` and require existing space for the entire integer. They never resize or mutate the receiver. Offsets need not be aligned.
 
-`BinaryError` has `offset`, `required`, and `length` fields. A read or replacement write requires a nonnegative offset and enough remaining bytes. Bounds checks avoid adding the offset and width before validating them, so negative or extremely large offsets return errors without overflow or panic.
+`BinaryError` has `offset: Int`, `required: Int`, and `length: Int` fields. A read or replacement write requires a nonnegative offset and enough remaining bytes. Bounds checks avoid adding the offset and width before validating them, so negative or extremely large offsets return errors without overflow or panic.
 
 ## Immutable readers
 
@@ -66,3 +125,8 @@ fn main() {
 ```
 
 Use [bork/bits](bits.md) for integer bit fields and [bork/encoding](encoding.md) for hex, base64, and UTF-8 representations.
+
+
+Run `bork doc bork/binary` for the generated reference.
+
+[All standard packages](README.md)
