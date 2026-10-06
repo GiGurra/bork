@@ -19,23 +19,23 @@ type inputCollection = { fields: List[codec.Field], errors: List[codec.DecodeErr
 type adapter = { native: nativeCommand, result: () uses io => codec.Value | Error | pending }
 type parsedInput = { value: codec.Value, warnings: List[String], path: String }
 
-fn inputFields[T: codec.Decode](name: String): List[inputField] | Error unsafe go {
-  import "fmt"
-  schema, supported := _borkDecodeFields(_d_T_Decode)
+fn inputFields[T: codec.Decode](name: String): List[inputField] | Error {
+  inputFieldsWithSchema[T](codec.Schema[T](), name)
+}
+fn inputFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchema], name: String): List[inputField] | Error unsafe go {
+  record, supported := _borkOptionGet(recordSchema)
+  schema := record.fields
   if !supported { return Error{errors: []codec.DecodeError{{path: name, message: "CLI options require a derived record decoder"}}} }
   fields := []inputField{}
   for _, field := range schema {
     text, path := "", ""
-    if field.HasDefault {
-      value := field.Default()
-      text = fmt.Sprintf("%v", value)
-      switch value := value.(type) {
-      case string: path = value
-      case Option_Some[string]: path = value.E0
-      }
+    if provider, found := _borkOptionGet(field.defaultValue); found {
+      value := provider()
+      text = value.display
+      path, _ = _borkOptionGet(value.configPath)
     }
-    fields = append(fields, inputField{field: field.Name, kind: field.Kind, optional: field.Optional, hasDefault: field.HasDefault, defaultText: text, configDefault: path, validate: func(value codec.Value) any {
-      if err, bad := field.Decode(value).(codec.DecodeError); bad { return err }
+    fields = append(fields, inputField{field: field.name, kind: field.kind, optional: field.optional, hasDefault: field.hasDefault, defaultText: text, configDefault: path, validate: func(value codec.Value) any {
+      if err, bad := field.validate(value).(codec.DecodeError); bad { return err }
       return _Ok{}
     }})
   }

@@ -345,11 +345,6 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 		g.goType(info.Named["GoValueError"])
 	}
 	for _, ci := range info.ClassInstances {
-		for _, m := range ci.Methods {
-			if m.Derived != nil {
-				goFuncs = append(goFuncs, g.derivedFunc(m))
-			}
-		}
 		funcs = append(funcs, g.instanceDecl(ci))
 	}
 	if main != nil {
@@ -526,7 +521,6 @@ type gen struct {
 	loops           []loopFrame
 	// tail is the function being generated, if its self calls jump.
 	tail             *tailFrame
-	usesDecodeSchema bool
 	usesGoStruct     bool
 	usesBytes        bool
 	usesIoFailure    bool

@@ -68,16 +68,20 @@ fn csvValue(raw: String, kind: String, optional: Bool): codec.Value | codecs.Jso
   }
 }
 
-fn decodeCsvRows[T: codec.Decode](rows: List[List[String]], parse: (String, String, Bool) => (codec.Value | codecs.JsonError), decodeRow: (codec.Value) => (T | codec.DecodeError)): List[T] | CsvErrors unsafe go {
+fn decodeCsvRows[T: codec.Decode](rows: List[List[String]], parse: (String, String, Bool) => (codec.Value | codecs.JsonError), decodeRow: (codec.Value) => (T | codec.DecodeError)): List[T] | CsvErrors {
+  decodeCsvRowsWithSchema[T](codec.Schema[T](), rows, parse, decodeRow)
+}
+fn decodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchema], rows: List[List[String]], parse: (String, String, Bool) => (codec.Value | codecs.JsonError), decodeRow: (codec.Value) => (T | codec.DecodeError)): List[T] | CsvErrors unsafe go {
   import "fmt"
   import "strings"
-  schema, supported := _borkDecodeFields(_d_T_Decode)
+  record, supported := _borkOptionGet(recordSchema)
+  schema := record.fields
   if !supported { return CsvErrors{errors: []CsvError{{row: 1, column: "", message: "expected a derived record decoder"}}} }
   if len(schema) == 0 { return CsvErrors{errors: []CsvError{{row: 1, column: "", message: "expected a record with at least one field"}}} }
   if len(rows) == 0 { return []T{} }
   headers := map[string]int{}
   known := map[string]bool{}
-  for _, field := range schema { known[field.Name] = true }
+  for _, field := range schema { known[field.name] = true }
   failures := []CsvError{}
   for index, name := range rows[0] {
     if _, duplicate := headers[name]; duplicate {
@@ -89,8 +93,8 @@ fn decodeCsvRows[T: codec.Decode](rows: List[List[String]], parse: (String, Stri
     }
   }
   for _, field := range schema {
-    if _, found := headers[field.Name]; !found && !field.Optional && !field.HasDefault {
-      failures = append(failures, CsvError{row: 1, column: field.Name, message: "required column is missing"})
+    if _, found := headers[field.name]; !found && !field.optional && !field.hasDefault {
+      failures = append(failures, CsvError{row: 1, column: field.name, message: "required column is missing"})
     }
   }
   if len(failures) != 0 { return CsvErrors{errors: failures} }
@@ -105,21 +109,21 @@ fn decodeCsvRows[T: codec.Decode](rows: List[List[String]], parse: (String, Stri
     bad := false
     for _, field := range schema {
       var json codec.Value = codec.Value_Null{}
-      if column, found := headers[field.Name]; found {
-        parsed := parse(row[column], field.Kind, field.Optional)
+      if column, found := headers[field.name]; found {
+        parsed := parse(row[column], field.kind, field.optional)
         if failure, failed := parsed.(codecs.JsonError); failed {
-          failures = append(failures, CsvError{row: number, column: field.Name, message: failure.message})
+          failures = append(failures, CsvError{row: number, column: field.name, message: failure.message})
           bad = true
           continue
         }
         json = parsed.(codec.Value)
-      } else if field.HasDefault { continue }
-      if failure, failed := field.Decode(json).(codec.DecodeError); failed {
-        failures = append(failures, CsvError{row: number, column: field.Name + strings.TrimPrefix(failure.path, "." + field.Name), message: failure.message})
+      } else if field.hasDefault { continue }
+      if failure, failed := field.validate(json).(codec.DecodeError); failed {
+        failures = append(failures, CsvError{row: number, column: field.name + strings.TrimPrefix(failure.path, "." + field.name), message: failure.message})
         bad = true
         continue
       }
-      fields = append(fields, codec.Field{name: field.Name, value: json})
+      fields = append(fields, codec.Field{name: field.name, value: json})
     }
     if bad { continue }
     decoded := decodeRow(codec.Value_Object{fields: fields})
@@ -140,13 +144,17 @@ fn EncodeCsv[T: codec.Encode + codec.Decode](values: List[T]): String | CsvError
   Csv(rows)
 }
 
-fn encodeCsvRows[T: codec.Decode](values: List[T], encodeRow: (T) => codec.Value, render: (codec.Value) => String): List[List[String]] | CsvError unsafe go {
-  schema, supported := _borkDecodeFields(_d_T_Decode)
+fn encodeCsvRows[T: codec.Decode](values: List[T], encodeRow: (T) => codec.Value, render: (codec.Value) => String): List[List[String]] | CsvError {
+  encodeCsvRowsWithSchema[T](codec.Schema[T](), values, encodeRow, render)
+}
+fn encodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchema], values: List[T], encodeRow: (T) => codec.Value, render: (codec.Value) => String): List[List[String]] | CsvError unsafe go {
+  record, supported := _borkOptionGet(recordSchema)
+  schema := record.fields
   if !supported { return CsvError{row: 1, column: "", message: "expected a derived record decoder"} }
   if len(schema) == 0 { return CsvError{row: 1, column: "", message: "expected a record with at least one field"} }
   if len(values) == 0 { return [][]string{} }
   headers := []string{}
-  for _, field := range schema { headers = append(headers, field.Name) }
+  for _, field := range schema { headers = append(headers, field.name) }
   rows := [][]string{headers}
   for index, value := range values {
     object, supported := encodeRow(value).(codec.Value_Object)
@@ -161,13 +169,13 @@ fn encodeCsvRows[T: codec.Decode](values: List[T], encodeRow: (T) => codec.Value
     if len(fields) != len(schema) { return CsvError{row: int64(index + 2), column: "", message: "encoded fields do not match the record schema"} }
     row := []string{}
     for _, field := range schema {
-      json, found := fields[field.Name]
-      if !found { return CsvError{row: int64(index + 2), column: field.Name, message: "encoded field is missing"} }
-      if _, absent := json.(codec.Value_Null); field.Optional && absent {
+      json, found := fields[field.name]
+      if !found { return CsvError{row: int64(index + 2), column: field.name, message: "encoded field is missing"} }
+      if _, absent := json.(codec.Value_Null); field.optional && absent {
         row = append(row, "")
-      } else if field.Kind == "string" {
+      } else if field.kind == "string" {
         text, valid := json.(codec.Value_String)
-        if !valid { return CsvError{row: int64(index + 2), column: field.Name, message: "expected an encoded string"} }
+        if !valid { return CsvError{row: int64(index + 2), column: field.name, message: "expected an encoded string"} }
         row = append(row, text.value)
       } else {
         row = append(row, render(json))

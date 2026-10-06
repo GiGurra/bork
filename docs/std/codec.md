@@ -37,5 +37,9 @@ and optional default display callbacks. `codec.Schema[T]()` reads this metadata
 from the selected decoder, returning `None` when it has no schema. Field
 validation checks independent facts; facts involving siblings require complete
 `codec.decode[T]`. Looking up a schema does not evaluate field defaults.
-Structural schema and decoder templates are being migrated to source; the
-existing CLI dictionary bridge remains in place during that migration.
+Structural schema and decoding use source derivation templates and checked
+builders. CLI, environment, HTTP field adapters and CSV read this typed schema.
+A field's optional `defaultValue` callback returns a `codec.DefaultSchema` with
+display text, an optional configuration path and string choices from one default
+evaluation. Tuple constraints that capture caller values retain their existing
+local decoder closure while source capture lowering is being completed.

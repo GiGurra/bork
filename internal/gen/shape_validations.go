@@ -14,6 +14,7 @@ func (g *gen) shapeValidate(call *check.CallBuiltin, argument ast.Expr) ast.Expr
 	layout := call.Validation
 	field := *layout.Field
 	field.Computed = false
+	field.Lazy = false
 	field.Constraints = layout.Constraints
 	errorType := g.info.PackageNamed("bork/shape").TypeNamed("ValidationError")
 	var fields []*check.Field

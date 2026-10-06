@@ -177,28 +177,23 @@ In a program without marked declarations the helpers read and bind nothing.
 
 ## Decode schema
 
-Derived `Decode` dictionaries also expose a general record schema. In an
-`unsafe go` function with `T: Decode`, `_d_T_Decode` is the dictionary parameter;
-`_borkDecodeFields(_d_T_Decode)` returns `(fields, supported)`. `supported` is
-false for custom, primitive, and sealed-type instances. Fields follow declaration
-order and have these stable members:
+`codec.Schema[T]()` exposes selected-instance metadata through ordinary typed
+Bork values. It returns `Option[codec.RecordSchema]`, whose `fields` follow
+source declaration order. Pass the schema to an `unsafe go` adapter from a typed
+Bork wrapper; `_borkOptionGet(option)` returns `(value, present)` without
+variant-name coupling.
 
-- `Name`: the bork field name.
-- `Type`: the underlying bork type's display name (aliases are resolved).
-- `Constraints`: the field's declared fact requirements, as text.
-- `Doc`: consecutive `//` comment lines directly above the field, without markers.
-- `HasDefault`: whether the field declares a closed default value.
-- `Default`: a `func() any` producing that value, or nil when absent.
-- `Kind`: `string`, `number`, `bool`, `json`, or `list:<element kind>` recursively; Option uses its element's kind. Generic element kinds come from their decoder dictionary.
-- `Optional`: whether the field is an Option. `HasDefault` independently permits an absent field.
-- `Decode`: a `func(codec.Value) any` that returns the field's decoded value or a
-  `DecodeError`, checking its facts just as the derived record decoder does.
+Each `codec.RecordField` contains `name`, `typeName`, `doc`, declared `facts`
+text, selected-decoder `kind` and `optional`, and `hasDefault`. Its `validate`
+callback returns `Ok | codec.DecodeError` after checking the independent field
+facts. It never returns a partial owner; use complete `codec.decode[T]` for
+sibling and owner invariants.
 
-Schemas are fresh immutable snapshots; callers must not change their slices.
-They describe fields independently, and do not construct partial records in
-bork. Call the regular `Decode` method to construct a complete proven record.
-`bork/env` consumes this schema; it is also available to other std integrations.
-`_borkOptionGet(option)` returns `(value, present)` without variant-name coupling.
+An optional `defaultValue` callback returns `codec.DefaultSchema` with display
+text, an optional configuration path and string choices. Schema lookup does not
+invoke it. This replaces the old `_borkDecodeFields` bridge and its erased
+`func() any` default and decoder callbacks. Hand-written instances may publish
+`metadata codec.RecordSchema = ...` to opt into the same typed adapter contract.
 
 ## Standard Go dependencies
 

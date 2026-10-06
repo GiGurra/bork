@@ -49,10 +49,7 @@ func (g *gen) classDecl(class *check.Class) ast.Decl {
 		})
 	}
 	if check.IsCodec(class, "Decode") {
-		g.usesDecodeSchema = true
-		callback, _ := parser.ParseExpr("func() []_borkDecodeField")
 		st.Fields.List = append(st.Fields.List,
-			&ast.Field{Names: []*ast.Ident{ast.NewIdent("fields")}, Type: callback},
 			&ast.Field{Names: []*ast.Ident{ast.NewIdent("kind")}, Type: ast.NewIdent("string")},
 			&ast.Field{Names: []*ast.Ident{ast.NewIdent("optional")}, Type: ast.NewIdent("bool")})
 	}
@@ -189,15 +186,6 @@ func (g *gen) instanceDecl(ci *check.ClassInstance) ast.Decl {
 		lit.Elts = append(lit.Elts,
 			&ast.KeyValueExpr{Key: ast.NewIdent("kind"), Value: kind},
 			&ast.KeyValueExpr{Key: ast.NewIdent("optional"), Value: ast.NewIdent(fmt.Sprintf("%t", check.IsOption(ci.Type)))})
-	}
-	if check.IsCodec(ci.Class, "Decode") && len(ci.Methods) > 0 && ci.Methods[0].Derived != nil {
-		if record, ok := ci.Type.(*check.Record); ok {
-			callback, err := parser.ParseExpr(g.decodeSchema(ci, record))
-			if err != nil {
-				panic(err)
-			}
-			lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: ast.NewIdent("fields"), Value: callback})
-		}
 	}
 	return &ast.FuncDecl{
 		Name: ast.NewIdent(instName(ci)),

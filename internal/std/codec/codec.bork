@@ -50,6 +50,8 @@ fn FieldInfo[T: Decode](): FieldSchema {
 
 // RecordSchema contains declaration-order inputs of a named record. Its
 // callbacks check an independent field; sibling facts require complete Decode.
+type DefaultSchema = { display: String, configPath: Option[String], choices: List[String] }
+
 type RecordField = {
   name: String
   typeName: String
@@ -58,7 +60,7 @@ type RecordField = {
   kind: String
   optional: Bool
   hasDefault: Bool
-  displayDefault: Option[() => String]
+  defaultValue: Option[() => DefaultSchema]
   validate: (Value) => Ok | DecodeError
 }
 type RecordSchema = { fields: List[RecordField] }
@@ -74,9 +76,17 @@ fn Schema[T: Decode](): Option[RecordSchema] {
 }
 
 // Display follows Go's default-value presentation used by CLI help.
-fn displayDefault[T](value: T): String unsafe go {
+fn defaultInfo[T](value: T): DefaultSchema unsafe go {
   import "fmt"
-  return fmt.Sprintf("%v", value)
+  var path Option[string] = Option_None[string]{}
+  choices := []string{}
+  switch value := any(value).(type) {
+  case string: path = Option_Some[string]{E0:value}; choices = []string{value}
+  case []string: choices = value
+  case Option_Some[string]: path = Option_Some[string]{E0:value.E0}; choices = []string{value.E0}
+  case Option_Some[[]string]: choices = value.E0
+  }
+  return DefaultSchema{display:fmt.Sprintf("%v",value),configPath:path,choices:choices}
 }
 
 // Encode writes typed values to the value tree; `derive (Encode)` gives
@@ -341,8 +351,8 @@ derive fn RecordInfo[T](): Option[RecordSchema] {
         fields: List[RecordField] = [comptime for (field in shape.fields[T]())
           comptime if (!field.computed) {
             info = shape.metadata[field.RawType, Decode, FieldSchema]().getOr(FieldSchema { kind: "json", optional: false })
-            provider: Option[() => String] = comptime if (field.hasDefault) {
-              Option.Some(() => displayDefault(field.default()))
+            provider: Option[() => DefaultSchema] = comptime if (field.hasDefault) {
+              Option.Some(() => defaultInfo(field.default()))
             } else {
               Option.None
             }
@@ -354,7 +364,7 @@ derive fn RecordInfo[T](): Option[RecordSchema] {
               kind: info.kind,
               optional: info.optional,
               hasDefault: field.hasDefault,
-              displayDefault: provider,
+              defaultValue: provider,
               validate: input => match (decode[field.RawType](input)) {
                 error: DecodeError => atPath(error, s".${field.name}")
                 value: field.RawType => match (field.check(value)) {
@@ -413,6 +423,7 @@ derive fn DecodeRecord[T](json: Value): T | DecodeError {
   } else {
     match (json) {
       Value.Object { fields } => {
+        _ = fields
         steps: List[(initial.Type) => initial.Type | DecodeError] = [comptime for (field in shape.fields[T]())
           (state: initial.Type) => {
             comptime if (field.computed) {
@@ -455,6 +466,132 @@ derive fn DecodeRecord[T](json: Value): T | DecodeError {
         }
       }
       other => decodeMismatch("an object", other)
+    }
+  }
+}
+
+fn quoted(value: String): String unsafe go {
+  import "strconv"
+  return strconv.Quote(value)
+}
+
+// DecodeSealed selects a declared variant and constructs it through its
+// checked builder. Positional payloads are arrays under the values member.
+derive fn DecodeSealed[T](json: Value): T | DecodeError {
+  tag: String | DecodeError = match (json) {
+    Value.String { value } => value
+    Value.Object { fields } => match (inputField(fields, "type")) {
+      Option.Some(value) => match (value) {
+        Value.String { value: name } => name
+        _ => DecodeError { path: ".type", message: "expected the variant's name, as a string" }
+      }
+      Option.None => DecodeError { path: ".type", message: "expected the variant's name, as a string" }
+    }
+    other => decodeMismatch("an object", other)
+  }
+  match (tag) {
+    error: DecodeError => error
+    name: String => {
+      fields: List[Field] = match (json) { Value.Object { fields } => fields, _ => [] }
+      _ = fields
+      comptime for (variant in shape.variants[T]()) {
+        if (name == variant.name) {
+          initial = variant.builder()
+          comptime if (variant.positional) {
+            items: List[Value] | DecodeError = match (inputField(fields, "values")) {
+              Option.Some(value) => match (value) {
+                Value.Array { items } => items
+                _ => DecodeError { path: ".values", message: "expected an array of payload values" }
+              }
+              Option.None => DecodeError { path: ".values", message: "expected an array of payload values" }
+            }
+            match (items) {
+              error: DecodeError => return error
+              values: List[Value] => {
+                if (values.length() != variant.fields.length()) {
+                  return DecodeError { path: ".values", message: s"expected an array of length ${variant.fields.length()}" }
+                }
+                steps: List[(initial.Type) => initial.Type | DecodeError] = [comptime for (field in variant.fields)
+                  (state: initial.Type) => match (values.get(field.index)) {
+                    Option.Some(input) => match (decode[field.RawType](input)) {
+                      error: DecodeError => atPath(error, s".values[${field.index}]")
+                      value: field.RawType => state.set(field, value)
+                    }
+                    Option.None => DecodeError { path: s".values[${field.index}]", message: "is missing" }
+                  }]
+                start: initial.Type | DecodeError = initial
+                assembled = steps.fold(start, (state, step) => match (state) {
+                  error: DecodeError => error
+                  pending: initial.Type => step(pending)
+                })
+                return match (assembled) {
+                  error: DecodeError => error
+                  pending: initial.Type => match (pending.finish()) {
+                    error: shape.ValidationError => DecodeError { path: if (error.path.startsWith("[")) { ".values" + error.path } else { error.path }, message: error.message }
+                    value: T => value
+                  }
+                }
+              }
+            }
+          } else {
+            steps: List[(initial.Type) => initial.Type | DecodeError] = [comptime for (field in variant.fields)
+              (state: initial.Type) => {
+                comptime if (field.computed) {
+                  if (inputField(fields, field.name).isSome()) {
+                    DecodeError { path: s".${field.name}", message: "computed field is read-only" }
+                  } else { state }
+                } else {
+                  input: Option[Value] | DecodeError = match (inputField(fields, field.name)) {
+                    Option.Some(value) => Option.Some(value)
+                    Option.None => {
+                      comptime if (field.hasDefault) { Option.None } else {
+                        info = shape.metadata[field.RawType, Decode, FieldSchema]().getOr(FieldSchema { kind: "json", optional: false })
+                        if (info.optional) { Option.Some(Value.Null) } else {
+                          DecodeError { path: s".${field.name}", message: "is missing" }
+                        }
+                      }
+                    }
+                  }
+                  match (input) {
+                    error: DecodeError => error
+                    Option.None => state
+                    Option.Some(value) => match (decode[field.RawType](value)) {
+                      error: DecodeError => atPath(error, s".${field.name}")
+                      decoded: field.RawType => state.set(field, decoded)
+                    }
+                  }
+                }
+              }]
+            start: initial.Type | DecodeError = initial
+            assembled = steps.fold(start, (state, step) => match (state) {
+              error: DecodeError => error
+              pending: initial.Type => step(pending)
+            })
+            return match (assembled) {
+              error: DecodeError => error
+              pending: initial.Type => match (pending.finish()) {
+                error: shape.ValidationError => DecodeError { path: error.path, message: error.message }
+                value: T => value
+              }
+            }
+          }
+        }
+      }
+      DecodeError { path: ".type", message: "unknown variant " + quoted(name) + " of " + shape.name[T]() }
+    }
+  }
+}
+
+// Structural decoding and schema construction share the selected instance's
+// independent field dictionaries. Builders certify complete target values.
+derive instance decodeShape[T]: Decode[T] {
+  metadata FieldSchema = FieldSchema { kind: "json", optional: false }
+  metadata Option[RecordSchema] = RecordInfo[T]()
+  fn decode(json: Value): T | DecodeError {
+    comptime match (shape.kind[T]()) {
+      shape.Record => DecodeRecord[T](json)
+      shape.Sealed => DecodeSealed[T](json)
+      shape.Other => shape.fail("Decode requires a record or sealed target")
     }
   }
 }

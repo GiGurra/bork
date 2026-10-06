@@ -3136,7 +3136,7 @@ fn main() {
    println(field.name + ":" + field.typeName + ":" + field.kind + ":" + toString(field.optional))
    println(field.validate(codec.Value.Number { text: "-1" }))
    println(field.validate(codec.Value.Number { text: "1" }))
-   match (field.displayDefault) { Option.Some(provider) => println(provider()), Option.None => {} }
+   match (field.defaultValue) { Option.Some(provider) => println(provider().display), Option.None => {} }
   })
   Option.None => println("missing")
  }
@@ -3211,6 +3211,132 @@ fn main() {
 		t.Fatalf("custom schemas: %s, %v", output, err)
 	}
 	for _, expected := range []string{`kind: "list:string", optional: false`, `kind: "string", optional: true`} {
+		if !strings.Contains(string(output), expected) {
+			t.Fatalf("want %q in %s", expected, output)
+		}
+	}
+}
+
+func TestSourceCodecSealedDecodeBuilder(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/codec"
+use codec.Defaults
+pred positive(n: Int) { n > 0 }
+class ReadSealed[T] { fn readSealed(json: codec.Value): T | codec.DecodeError }
+derive instance reader[T]: ReadSealed[T] {
+ fn readSealed(json: codec.Value): T | codec.DecodeError { codec.DecodeSealed[T](json) }
+}
+type Choice[A] = sealed { Empty, Named { value: A, note: Option[String] }, Pair(Int where positive, String) } derive(ReadSealed)
+fn number(value: Int): codec.Value { codec.Value.Number { text: toString(value) } }
+fn s(value: String): codec.Value { codec.Value.String { value: value } }
+fn field(name: String, value: codec.Value): codec.Field { codec.Field { name: name, value: value } }
+fn main() {
+ println(readSealed[Choice[Int]](s("Empty")))
+ println(readSealed[Choice[Int]](codec.Value.Object { fields: [field("type",s("Named")),field("value",number(4))] }))
+ println(readSealed[Choice[Int]](codec.Value.Object { fields: [field("type",s("Pair")),field("values",codec.Value.Array { items: [number(3),s("x")] })] }))
+ println(readSealed[Choice[Int]](codec.Value.Object { fields: [field("type",s("Pair")),field("values",codec.Value.Array { items: [number(-1),s("x")] })] }))
+ println(readSealed[Choice[Int]](codec.Value.Object { fields: [field("type",s("Pair")),field("values",codec.Value.Array { items: [number(3),codec.Value.Null] })] }))
+ println(readSealed[Choice[Int]](s("Pair")))
+ println(readSealed[Choice[Int]](s("Unknown")))
+}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatalf("sealed decoding: %s, %v", output, err)
+	}
+	for _, expected := range []string{`Choice.Empty`, `value: 4`, `note: Option.None`, `Choice.Pair(3, "x")`, `path: ".values[0]"`, `positive`, `path: ".values[1]"`, `path: ".values"`, `unknown variant`} {
+		if !strings.Contains(string(output), expected) {
+			t.Fatalf("want %q in %s", expected, output)
+		}
+	}
+}
+
+func TestSourceCodecTupleDecodeFacts(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/codec"
+use codec.Defaults
+pred positive(n: Int) { n > 0 }
+pred negative(n: Int) { n < 0 }
+type Pair = (Int where positive, Int)
+type NegativePair = (Int where negative, Int)
+fn pair[A: codec.Decode](json: codec.Value): (A, Int) | codec.DecodeError { codec.decode[(A, Int)](json) }
+fn main() {
+ println(codec.decode[(Int, Int)](codec.Value.Array { items: [codec.Value.Number { text: "0" }, codec.Value.Number { text: "2" }] }))
+ println(codec.decode[NegativePair](codec.Value.Array { items: [codec.Value.Number { text: "1" }, codec.Value.Number { text: "2" }] }))
+ println(pair[String](codec.Value.Array { items: [codec.Value.String { value: "x" }, codec.Value.Number { text: "2" }] }))
+ println(codec.decode[Pair](codec.Value.Array { items: [codec.Value.Number { text: "-1" }, codec.Value.Number { text: "2" }] }))
+ println(codec.decode[Pair](codec.Value.Array { items: [codec.Value.Number { text: "1" }, codec.Value.Number { text: "2" }] }))
+}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatalf("tuple facts: %s, %v", output, err)
+	}
+	for _, expected := range []string{`path: "[0]"`, `positive`, `negative`, `(1, 2)`, `(0, 2)`, `("x", 2)`} {
+		if !strings.Contains(string(output), expected) {
+			t.Fatalf("want %q in %s", expected, output)
+		}
+	}
+}
+
+func TestSourceCodecSealedAliasAndOwnerPaths(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/codec"
+use codec.Defaults
+type Choice = sealed { Full(Int) }
+pred rejected(value: Choice) { false }
+type Restricted = Choice where rejected
+derive codec.Decode for Restricted
+fn main() {
+ println(codec.decode[Restricted](codec.Value.Object { fields: [
+  codec.Field { name: "type", value: codec.Value.String { value: "Full" } },
+  codec.Field { name: "values", value: codec.Value.Array { items: [codec.Value.Number { text: "1" }] } }
+ ] }))
+}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatalf("sealed alias facts: %s, %v", output, err)
+	}
+	if !strings.Contains(string(output), `path: ""`) || !strings.Contains(string(output), `rejected`) {
+		t.Fatalf("lost alias fact or root path: %s", output)
+	}
+}
+
+func TestSourceCodecTupleCallerFacts(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/codec"
+use codec.Defaults
+pred above(value: Int, limit: Int) { value > limit }
+fn check(limit: Int, json: codec.Value): String {
+ match (codec.decode[(Int where above(limit), Int)](json)) {
+  error: codec.DecodeError => error.path + ":" + error.message
+  value: (Int, Int) => toString(value)
+ }
+}
+fn main() {
+ value = codec.Value.Array { items: [codec.Value.Number { text: "3" }, codec.Value.Number { text: "2" }] }
+ println(check(1, value))
+ println(check(4, value))
+}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatalf("captured tuple facts: %s, %v", output, err)
+	}
+	for _, expected := range []string{`(3, 2)`, `[0]:`, `above(limit)`} {
 		if !strings.Contains(string(output), expected) {
 			t.Fatalf("want %q in %s", expected, output)
 		}

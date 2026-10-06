@@ -367,9 +367,9 @@ once per omitted field when constructing the final value.
 
 Schema consumers validate fields, assemble codec.Value, then call the complete
 Decode method before returning T. CLI Partial.Get additionally performs its
-requested U decoding; it never obtains T from a partial schema. Existing
-`_borkDecodeFields` is a temporary Go compatibility adapter, removed after its
-std consumers migrate. Metadata initializer functions remain runtime code;
+requested U decoding; it never obtains T from a partial schema.
+`_borkDecodeFields` was a temporary Go compatibility adapter; typed schema
+metadata now replaces it in standard consumers. Metadata initializer functions remain runtime code;
 only their template structure is expanded at compile time.
 
 GoStruct moves to a library derivation using generic foreign-record shape

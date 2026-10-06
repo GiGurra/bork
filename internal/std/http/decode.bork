@@ -31,24 +31,28 @@ fn fieldsAs[T: codec.Decode](values: Headers): T | codec.DecodeError {
   json = fieldsJson[T](values)?
   codec.decode[T](json)
 }
-fn fieldsJson[T: codec.Decode](values: Headers): codec.Value | codec.DecodeError unsafe go {
-  schema, supported := _borkDecodeFields(_d_T_Decode)
+fn fieldsJson[T: codec.Decode](values: Headers): codec.Value | codec.DecodeError {
+  fieldsJsonWithSchema[T](codec.Schema[T](), values)
+}
+fn fieldsJsonWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchema], values: Headers): codec.Value | codec.DecodeError unsafe go {
+  record, supported := _borkOptionGet(recordSchema)
+  schema := record.fields
   if !supported { return codec.DecodeError{path: "", message: "expected a derived record decoder"} }
   fields := []codec.Field{}
   for _, field := range schema {
-    raw, found := _borkMapGet(values, field.Name)
+    raw, found := _borkMapGet(values, field.name)
     if !found {
-      if !field.Optional { return codec.DecodeError{path: "."+field.Name, message: "is missing"} }
+      if !field.optional { return codec.DecodeError{path: "."+field.name, message: "is missing"} }
       continue
     }
-    if len(raw) != 1 { return codec.DecodeError{path: "."+field.Name, message: "expected exactly one value"} }
+    if len(raw) != 1 { return codec.DecodeError{path: "."+field.name, message: "expected exactly one value"} }
     var value codec.Value = codec.Value_String{value: raw[0]}
-    if field.Kind != "string" {
+    if field.kind != "string" {
       parsed := parseJsonValue(raw[0])
-      if failure, failed := parsed.(codecs.JsonError); failed { return codec.DecodeError{path: "."+field.Name, message: failure.message} }
+      if failure, failed := parsed.(codecs.JsonError); failed { return codec.DecodeError{path: "."+field.name, message: failure.message} }
       value = parsed.(codec.Value)
     }
-    fields = append(fields, codec.Field{name: field.Name, value: value})
+    fields = append(fields, codec.Field{name: field.name, value: value})
   }
   return codec.Value_Object{fields: fields}
 }

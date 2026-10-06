@@ -149,6 +149,29 @@ func (c *checker) patSources(p *Pat, subject syntax.Expr, path string, field *Fi
 	}
 }
 
+// A successful finish already validates its owner's requested facts. Matching
+// that certified union member must not add a refutable duplicate guard.
+func (c *checker) certifiedBuilderPattern(subject syntax.Expr, source syntax.Pattern, pattern *Pat) {
+	call, ok := subject.(*syntax.Call)
+	if !ok {
+		return
+	}
+	operation := c.info.shapeBuildCalls[call]
+	if operation == nil || operation.operation != "finish" || operation.layout == nil {
+		return
+	}
+	typed, ok := source.(*syntax.TypePat)
+	if !ok || pattern.guard == nil || !identical(pattern.BindType, operation.layout.Owner) {
+		return
+	}
+	constraints := c.constraintsOf(typed.Type, pattern.BindType, c.paramScope())
+	layout := operation.layout
+	validated := append(append(append([]*Constraint(nil), TypeConstraints(layout.Owner)...), layout.Constraints...), variantConstraints(layout.Variant)...)
+	if len(missingConstraints(validated, constraints)) == 0 {
+		pattern.guard = nil
+	}
+}
+
 func (c *checker) match(m *syntax.Match, want Type) Type {
 	// As a statement in a loop body, the arms may give the names the loop
 	// carries new values (see carried.go).
@@ -202,6 +225,7 @@ func (c *checker) match(m *syntax.Match, want Type) Type {
 			if p == nil {
 				ok = false
 			} else {
+				c.certifiedBuilderPattern(m.X, arm.Pattern, p)
 				c.info.armPats[arm] = p
 				c.patSources(p, m.X, "", nil, nil)
 			}

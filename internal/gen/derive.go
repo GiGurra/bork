@@ -12,34 +12,8 @@ import (
 	"github.com/GiGurra/bork/internal/check"
 )
 
-// Structural Decode still uses the compiler backend while its source template
-// and schema companions are being ported. Encode uses the codec source template.
-//
-// JSON objects map to records by field name. A sealed type's value is an
-// object whose "type" field names the variant ({"type": "Circle",
-// "radius": 2}); a variant without fields may also be just its name
-// ("Empty").
-//
-// A derived decoder checks each field's where clause, so the record it
-// returns is proven: the compiler trusts it like Go code, and it is
-// right by construction.
-
-// derivedFunc generates a derived instance method.
-func (g *gen) derivedFunc(fn *check.Func) string {
-	g.tmp = 0
-	g.fnResult = fn.Result
-	g.usesDerive = true
-	g.goType(g.codecType("Value"))
-	g.goType(g.codecType("Field"))
-	var sig bytes.Buffer
-	_ = printer.Fprint(&sig, token.NewFileSet(), g.signature(fn.Decl))
-	var body string
-	switch fn.Of.Class.Name {
-	case "Decode":
-		body = g.deriveDecode(fn)
-	}
-	return sig.String() + " {\n" + body + "}\n"
-}
+// Checked source templates implement structural codecs. The construction
+// helpers below remain shared by foreign Go conversion and captured tuples.
 
 func (g *gen) text(x ast.Node) string {
 	var buf bytes.Buffer
@@ -52,41 +26,6 @@ func (g *gen) typeText(t check.Type) string { return g.text(g.goType(t)) }
 // decodeError is Go code returning a DecodeError.
 func (g *gen) decodeError(path, message string) string {
 	return g.constructionError(g.codecType("DecodeError"), path, message)
-}
-
-func (g *gen) deriveDecode(fn *check.Func) string {
-	var b strings.Builder
-	jsonVariant := func(name string) string {
-		return g.text(g.variantType(g.codecType("Value").(*check.Sealed).Variant(name)))
-	}
-	fmt.Fprintf(&b, "_obj, _isObj := json.(%s)\n", jsonVariant("Object"))
-	switch t := fn.Of.Type.(type) {
-	case *check.Record:
-		if len(t.Fields) == 0 {
-			b.WriteString("_ = _obj\n")
-		}
-		b.WriteString("if !_isObj {\n" + g.decodeError(`""`, `"expected an object, found " + _jsonKind(json)`) + "}\n")
-		b.WriteString(g.decodeFields(t.Fields, fn.Derived.FieldDicts[0], g.typeText(t), constructionInvariant{typ: t, constraints: append(append([]*check.Constraint{}, t.Constraints...), fn.Of.Constraints...)}))
-	case *check.Sealed:
-		b.WriteString("var _tag string\n")
-		fmt.Fprintf(&b, "if _s, _isStr := json.(%s); _isStr {\n_tag = _s.value\n} else if _isObj {\n", jsonVariant("String"))
-		b.WriteString("_t, _present := _jsonField(_obj, \"type\")\n")
-		fmt.Fprintf(&b, "_ts, _isStr := _t.(%s)\n", jsonVariant("String"))
-		b.WriteString("if !_present || !_isStr {\n" + g.decodeError(`".type"`, `"expected the variant's name, as a string"`) + "}\n")
-		b.WriteString("_tag = _ts.value\n} else {\n")
-		b.WriteString(g.decodeError(`""`, `"expected an object, found " + _jsonKind(json)`) + "}\n")
-		b.WriteString("switch _tag {\n")
-		for i, v := range t.Variants {
-			fmt.Fprintf(&b, "case %q:\n", v.Name)
-			cons := append(append([]*check.Constraint{}, t.Constraints...), v.Constraints...)
-			cons = append(cons, fn.Of.Constraints...)
-			b.WriteString(g.decodeFields(v.Fields, fn.Derived.FieldDicts[i], g.text(g.variantType(v)), constructionInvariant{typ: t, constraints: cons, positional: v.Positional}))
-		}
-		b.WriteString("}\n")
-		g.imports["strconv"] = true
-		b.WriteString(g.decodeError(`".type"`, strconv.Quote("unknown variant ")+" + strconv.Quote(_tag) + "+strconv.Quote(" of "+t.Name)))
-	}
-	return b.String()
 }
 
 // decodeFields decodes the fields of a record (or variant) from _obj,

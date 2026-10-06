@@ -263,7 +263,7 @@ words, `--`, repeated Lists, and positional prefixes.
 
 Refactor the existing adapter into command construction, input collection,
 field conversion, and final decoding. Keep boa/Cobra inside the stdlib unsafe-go
-bridge. Reuse `_borkDecodeFields`, per-field codec.Decode and the final T decoder.
+bridge. Reuse `codec.Schema`, independent field validation and the final T decoder.
 Do not implement facts, field documentation parsing, option inference, kebab naming
 or shell protocols a second time in the compiler.
 
