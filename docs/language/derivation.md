@@ -110,7 +110,8 @@ Lines requires a record
 ## Advanced template reference
 
 The sections below explain how `bork/shape` descriptors participate in expansion
-and validation.
+and validation. See the [typed derivation API reference](../std/shape.md)
+for descriptor signatures, builders, and validation rules.
 
 ### Fields, facts and defaults
 
@@ -343,3 +344,7 @@ The compiler requires an immutable owner parameter and a preceding unconditional
 projection for every declared variant whose `Some` arm cannot continue. A
 projection under a runtime condition, or of another value, does not count. The
 operation returns `Never`, so complete sealed encoders need no fallback value.
+
+---
+
+Previous: [Typed interpolation](interpolators.md) · Next: [Calling Go](go-interop.md) · [All pages](../README.md#the-language)

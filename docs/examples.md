@@ -117,12 +117,14 @@ These examples build on [bork/cli](std/cli.md). Configuration and catalog paths 
 
 | Example | What it shows | Run from repository root |
 | --- | --- | --- |
+| [cli_bool](../examples/cli_bool/main.bork) | Omitted Bool switches, explicit defaults, and optional Bool values | `bork run examples/cli_bool` |
 | [cli_completion](../examples/cli_completion/main.bork) | Shell completion and positional arguments | `(cd examples/cli_completion && bork run . -- --environment prod web worker)` |
 | [cli_docs](../examples/cli_docs/main.bork) | Field comments and flag help | `(cd examples/cli_docs && bork run . -- --host docs.example --keep-alive)` |
 | [cli_dynamic](../examples/cli_dynamic/main.bork) | Dynamic defaults and choices with local configuration | `(cd examples/cli_dynamic && bork run . -- --config settings.json --namespace team --resource team-web)` |
 | [cli_enrichers](../examples/cli_enrichers/main.bork) | Composed flag metadata policies | `(cd examples/cli_enrichers && bork run . -- --team-host team.example --team-port 9000)` |
 | [cli_env](../examples/cli_env/main.bork) | Environment bindings and command-line overrides | `(cd examples/cli_env && bork run . -- --server-host env.example)` |
 | [cli_help](../examples/cli_help/main.bork) | Selected input kinds, readable defaults and env-only help | `bork run examples/cli_help` |
+| [cli_yaml](../examples/cli_yaml/main.bork) | YAML and JSON configuration overlays, selected files, and flag precedence | `(cd examples/cli_yaml && bork run . -- --config selected.yml --port 9090)` |
 | [cli_fleet](../examples/cli_fleet/main.bork) | A complete nested CLI with config files and dynamic choices | `(cd examples/cli_fleet && bork run . -- k r d --config settings.json --catalog catalog.json --namespace team -r 2 apply web worker)` |
 | [cli_mapping](../examples/cli_mapping/main.bork) | Explicit long and short flag mappings | `(cd examples/cli_mapping && bork run . -- -s api.example -p 443)` |
 | [cli_positionals](../examples/cli_positionals/main.bork) | Ordered positional arguments and a trailing list | `(cd examples/cli_positionals && bork run . -- copy 2 first.txt second.txt)` |

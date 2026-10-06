@@ -10,6 +10,7 @@ type inputField = {
   kind: String
   optional: Bool
   hasDefault: Bool
+  defaultFalse: Bool
   defaultText: String
   configDefault: String
   validate: (codec.Value) uses nothing => Ok | codec.DecodeError
@@ -35,7 +36,10 @@ fn inputFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchem
       text = value.display
       path, _ = _borkOptionGet(value.configPath)
     }
-    fields = append(fields, inputField{field: field.name, typeName: field.typeName, kind: field.kind, optional: field.optional, hasDefault: field.hasDefault, defaultText: text, configDefault: path, validate: func(value codec.Value) any {
+    // CLI switches default to false independently of the record decoder.
+    defaultFalse := field.kind == "bool" && !field.optional && !field.hasDefault
+    if defaultFalse { text = "false" }
+    fields = append(fields, inputField{field: field.name, typeName: field.typeName, kind: field.kind, optional: field.optional, hasDefault: field.hasDefault || defaultFalse, defaultFalse: defaultFalse, defaultText: text, configDefault: path, validate: func(value codec.Value) any {
       if err, bad := field.validate(value).(codec.DecodeError); bad { return err }
       return _Ok{}
     }})
@@ -172,7 +176,7 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
         value := shadow.Elem().Field(i)
         var json codec.Value
         if value.IsNil() {
-          if configured, exists := config[field.field]; exists { json = configured } else {
+          if configured, exists := config[field.field]; exists { json = configured } else if field.defaultFalse && !partial { json = codec.Value_Bool{value: false} } else {
             if partial || field.hasDefault { continue }
             if !field.optional { failures = append(failures, codec.DecodeError{path: "." + field.field, message: "is missing"}); continue }
             json = codec.Value_Null{}

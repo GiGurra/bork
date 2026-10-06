@@ -125,4 +125,4 @@ The [Go helper reference](../std-go.md) describes the helper API that Go bodies 
 
 ---
 
-Previous: [Packages and type classes](packages.md) · Next: [Testing](testing.md) · [All pages](../README.md#the-language)
+Previous: [Derivation templates](derivation.md) · Next: [Testing](testing.md) · [All pages](../README.md#the-language)
