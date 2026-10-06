@@ -120,7 +120,7 @@ func (m *deriveMetadataTypes) scalar(expr syntax.Expr) Type {
 				switch member {
 				case "kind":
 					return pkg.TypeNamed("Kind")
-				case "name", "owner":
+				case "name", "typeName", "owner":
 					return String
 				case "positional":
 					return Bool

@@ -505,6 +505,8 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 			return ok && record.Tuple, true
 		case "facts":
 			return p.factSequence(x.Pos, target, nil, targetShapeFacts(target), headFacts)
+		case "typeName":
+			return target.String(), true
 		case "name":
 			switch target := target.(type) {
 			case *Record:

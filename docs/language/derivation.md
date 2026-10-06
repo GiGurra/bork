@@ -114,6 +114,8 @@ metadata cannot establish a proof or construct an unchecked owner.
 `shape.kind[T]()` selects `shape.Record`, `shape.Sealed`, or
 `shape.Other` in `comptime if` or `comptime match`. `shape.name[T]()` and
 `shape.owner[T]()` expose the target's source name and defining package path.
+`shape.typeName[T]()` retains type arguments in a display name such as
+`Option[List[String]]`; it does not identify a metadata key.
 Inspecting a foreign private representation remains an error.
 Use `shape.fail("explanation")` in a selected branch to reject an unsupported
 target. Its diagnostic points to the derive request and identifies the template

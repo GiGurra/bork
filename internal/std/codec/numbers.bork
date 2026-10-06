@@ -1,6 +1,7 @@
 // Numeric-width codecs check decimal range before returning a typed value.
 
 instance decodeInt8: Decode[Int8] {
+  metadata FieldSchema = FieldSchema { kind: "number", optional: false }
   fn decode(json: Value): Int8 | DecodeError unsafe go {
     import "strconv"
     value, ok := json.(Value_Number)
@@ -15,6 +16,7 @@ instance encodeInt8: Encode[Int8] {
 }
 
 instance decodeInt16: Decode[Int16] {
+  metadata FieldSchema = FieldSchema { kind: "number", optional: false }
   fn decode(json: Value): Int16 | DecodeError unsafe go {
     import "strconv"
     value, ok := json.(Value_Number)
@@ -29,6 +31,7 @@ instance encodeInt16: Encode[Int16] {
 }
 
 instance decodeInt32: Decode[Int32] {
+  metadata FieldSchema = FieldSchema { kind: "number", optional: false }
   fn decode(json: Value): Int32 | DecodeError unsafe go {
     import "strconv"
     value, ok := json.(Value_Number)
@@ -43,6 +46,7 @@ instance encodeInt32: Encode[Int32] {
 }
 
 instance decodeUint8: Decode[Uint8] {
+  metadata FieldSchema = FieldSchema { kind: "number", optional: false }
   fn decode(json: Value): Uint8 | DecodeError unsafe go {
     import "strconv"
     value, ok := json.(Value_Number)
@@ -57,6 +61,7 @@ instance encodeUint8: Encode[Uint8] {
 }
 
 instance decodeUint16: Decode[Uint16] {
+  metadata FieldSchema = FieldSchema { kind: "number", optional: false }
   fn decode(json: Value): Uint16 | DecodeError unsafe go {
     import "strconv"
     value, ok := json.(Value_Number)
@@ -71,6 +76,7 @@ instance encodeUint16: Encode[Uint16] {
 }
 
 instance decodeUint32: Decode[Uint32] {
+  metadata FieldSchema = FieldSchema { kind: "number", optional: false }
   fn decode(json: Value): Uint32 | DecodeError unsafe go {
     import "strconv"
     value, ok := json.(Value_Number)
@@ -85,6 +91,7 @@ instance encodeUint32: Encode[Uint32] {
 }
 
 instance decodeUint64: Decode[Uint64] {
+  metadata FieldSchema = FieldSchema { kind: "number", optional: false }
   fn decode(json: Value): Uint64 | DecodeError unsafe go {
     import "strconv"
     value, ok := json.(Value_Number)
@@ -99,6 +106,7 @@ instance encodeUint64: Encode[Uint64] {
 }
 
 instance decodeFloat32: Decode[Float32] {
+  metadata FieldSchema = FieldSchema { kind: "number", optional: false }
   fn decode(json: Value): Float32 | DecodeError unsafe go {
     import "strconv"
     value, ok := json.(Value_Number)

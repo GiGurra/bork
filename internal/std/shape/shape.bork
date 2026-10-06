@@ -41,6 +41,8 @@ fn variants[T](): List[Variant[T]] unsafe go { panic("shape.variants requires a 
 fn kind[T](): Kind unsafe go { panic("shape.kind requires a derive template") }
 // name returns the target's source type name during derive expansion.
 fn name[T](): String unsafe go { panic("shape.name requires a derive template") }
+// typeName preserves type arguments in the target's display name.
+fn typeName[T](): String unsafe go { panic("shape.typeName requires a derive template") }
 // owner returns the target's defining package path during derive expansion.
 fn owner[T](): String unsafe go { panic("shape.owner requires a derive template") }
 // facts exposes the target's invariants and constrained head obligations.

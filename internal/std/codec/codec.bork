@@ -40,6 +40,45 @@ class Decode[T] {
   fn decode(json: Value): T | DecodeError
 }
 
+// FieldSchema describes the input shape of the selected decoder. Container
+// schemas delegate their element kind to that element's actual dictionary.
+type FieldSchema = { kind: String, optional: Bool }
+
+fn FieldInfo[T: Decode](): FieldSchema {
+  shape.metadata[T, Decode, FieldSchema]().getOr(FieldSchema { kind: "json", optional: false })
+}
+
+// RecordSchema contains declaration-order inputs of a named record. Its
+// callbacks check an independent field; sibling facts require complete Decode.
+type RecordField = {
+  name: String
+  typeName: String
+  doc: String
+  facts: List[String]
+  kind: String
+  optional: Bool
+  hasDefault: Bool
+  displayDefault: Option[() => String]
+  validate: (Value) => Ok | DecodeError
+}
+type RecordSchema = { fields: List[RecordField] }
+
+// Schema follows the selected Decode instance. A hand-written decoder may
+// publish RecordSchema directly; structural derivations use an optional value
+// because tuples and sealed values do not have named record inputs.
+fn Schema[T: Decode](): Option[RecordSchema] {
+  match (shape.metadata[T, Decode, RecordSchema]()) {
+    Option.Some(schema) => Option.Some(schema)
+    Option.None => shape.metadata[T, Decode, Option[RecordSchema]]().getOr(Option.None)
+  }
+}
+
+// Display follows Go's default-value presentation used by CLI help.
+fn displayDefault[T](value: T): String unsafe go {
+  import "fmt"
+  return fmt.Sprintf("%v", value)
+}
+
 // Encode writes typed values to the value tree; `derive (Encode)` gives
 // records and sealed types an instance.
 class Encode[T] {
@@ -57,6 +96,7 @@ fn atPath (e: DecodeError, step: String): DecodeError {
 }
 
 instance decodeInt: Decode[Int] {
+  metadata FieldSchema = FieldSchema { kind: "number", optional: false }
   fn decode(json: Value): Int | DecodeError {
     match (json) {
       Value.Number { text } => match (parseInt(text)) {
@@ -69,6 +109,7 @@ instance decodeInt: Decode[Int] {
 }
 
 instance decodeFloat: Decode[Float] {
+  metadata FieldSchema = FieldSchema { kind: "number", optional: false }
   fn decode(json: Value): Float | DecodeError {
     match (json) {
       Value.Number { text } => match (parseFloat(text)) {
@@ -81,6 +122,7 @@ instance decodeFloat: Decode[Float] {
 }
 
 instance decodeString: Decode[String] {
+  metadata FieldSchema = FieldSchema { kind: "string", optional: false }
   fn decode(json: Value): String | DecodeError {
     match (json) {
       Value.String { value } => value
@@ -90,6 +132,7 @@ instance decodeString: Decode[String] {
 }
 
 instance decodeBool: Decode[Bool] {
+  metadata FieldSchema = FieldSchema { kind: "bool", optional: false }
   fn decode(json: Value): Bool | DecodeError {
     match (json) {
       Value.Bool { value } => value
@@ -100,6 +143,7 @@ instance decodeBool: Decode[Bool] {
 
 // An Option is null (or a missing field) for None.
 instance decodeOption[T: Decode]: Decode[Option[T]] {
+  metadata FieldSchema = FieldSchema { kind: FieldInfo[T]().kind, optional: true }
   fn decode(json: Value): Option[T] | DecodeError {
     match (json) {
       Value.Null => Option.None
@@ -112,6 +156,7 @@ instance decodeOption[T: Decode]: Decode[Option[T]] {
 }
 
 instance decodeList[T: Decode]: Decode[List[T]] {
+  metadata FieldSchema = FieldSchema { kind: "list:" + FieldInfo[T]().kind, optional: false }
   fn decode(json: Value): List[T] | DecodeError {
     match (json) {
       Value.Array { items } => decodeItems (items, 0, [])
@@ -132,6 +177,7 @@ fn decodeItems [T: Decode](items: List[Value], index: Int, done: List[T]): List[
 
 // A Map with String keys is a JSON object; its fields keep their order.
 instance decodeMap[V: Decode]: Decode[Map[String, V]] {
+  metadata FieldSchema = FieldSchema { kind: "json", optional: false }
   fn decode(json: Value): Map[String, V] | DecodeError {
     match (json) {
       Value.Object { fields: fields } => decodeFields (fields, {:})
@@ -155,6 +201,7 @@ fn fieldPut [V](m: Map[String, V], name: String, value: V): Map[String, V] unsaf
 }
 
 instance decodeValue: Decode[Value] {
+  metadata FieldSchema = FieldSchema { kind: "json", optional: false }
   fn decode(json: Value): Value | DecodeError { json }
 }
 
@@ -212,6 +259,7 @@ instance encodeRune: Encode[Rune] {
 }
 
 instance decodeRune: Decode[Rune] {
+  metadata FieldSchema = FieldSchema { kind: "string", optional: false }
   fn decode(json: Value): Rune | DecodeError {
     match (json) {
       Value.String { value } => if ( validRuneString (value)) {
@@ -278,6 +326,135 @@ derive instance encodeShape[T]: Encode[T] {
         Value.Null
       }
       shape.Other => shape.fail("Encode requires a record or sealed target")
+    }
+  }
+}
+
+// RecordInfo expands typed callbacks for a named record without constructing
+// that record. Default providers run only when explicitly requested by callers.
+derive fn RecordInfo[T](): Option[RecordSchema] {
+  comptime match (shape.kind[T]()) {
+    shape.Record => {
+      comptime if (shape.positional[T]()) {
+        Option.None
+      } else {
+        fields: List[RecordField] = [comptime for (field in shape.fields[T]())
+          comptime if (!field.computed) {
+            info = shape.metadata[field.RawType, Decode, FieldSchema]().getOr(FieldSchema { kind: "json", optional: false })
+            provider: Option[() => String] = comptime if (field.hasDefault) {
+              Option.Some(() => displayDefault(field.default()))
+            } else {
+              Option.None
+            }
+            RecordField {
+              name: field.name,
+              typeName: shape.typeName[field.RawType](),
+              doc: field.doc,
+              facts: [comptime for (fact in field.facts) fact.text],
+              kind: info.kind,
+              optional: info.optional,
+              hasDefault: field.hasDefault,
+              displayDefault: provider,
+              validate: input => match (decode[field.RawType](input)) {
+                error: DecodeError => atPath(error, s".${field.name}")
+                value: field.RawType => match (field.check(value)) {
+                  error: shape.ValidationError => DecodeError { path: s".${field.name}" + error.path, message: error.message }
+                  Ok => Ok
+                }
+              }
+            }
+          }]
+        Option.Some(RecordSchema { fields: fields })
+      }
+    }
+    shape.Sealed => Option.None
+    shape.Other => Option.None
+  }
+}
+
+fn inputField(fields: List[Field], name: String): Option[Value] {
+  fields.find(field => field.name == name).map(field => field.value)
+}
+
+// DecodeRecord expands ordered input reads followed by the checked builder.
+// The builder evaluates defaults and validates sibling and owner facts only
+// after all independently decoded inputs have been stored.
+derive fn DecodeRecord[T](json: Value): T | DecodeError {
+  initial = shape.builder[T]()
+  comptime if (shape.positional[T]()) {
+    match (json) {
+      Value.Array { items } => {
+        if (items.length() != shape.fields[T]().length()) {
+          return DecodeError { path: "", message: s"expected an array of length ${shape.fields[T]().length()}" }
+        }
+        steps: List[(initial.Type) => initial.Type | DecodeError] = [comptime for (field in shape.fields[T]())
+          (state: initial.Type) => match (items.get(field.index)) {
+            Option.Some(input) => match (decode[field.RawType](input)) {
+              error: DecodeError => atPath(error, s"[${field.index}]")
+              value: field.RawType => state.set(field, value)
+            }
+            Option.None => DecodeError { path: s"[${field.index}]", message: "tuple element is missing" }
+          }]
+        start: initial.Type | DecodeError = initial
+        assembled = steps.fold(start, (state, step) => match (state) {
+          error: DecodeError => error
+          pending: initial.Type => step(pending)
+        })
+        match (assembled) {
+          error: DecodeError => error
+          pending: initial.Type => match (pending.finish()) {
+            error: shape.ValidationError => DecodeError { path: error.path, message: error.message }
+            value: T => value
+          }
+        }
+      }
+      other => decodeMismatch("an array", other)
+    }
+  } else {
+    match (json) {
+      Value.Object { fields } => {
+        steps: List[(initial.Type) => initial.Type | DecodeError] = [comptime for (field in shape.fields[T]())
+          (state: initial.Type) => {
+            comptime if (field.computed) {
+              if (inputField(fields, field.name).isSome()) {
+                DecodeError { path: s".${field.name}", message: "computed field is read-only" }
+              } else { state }
+            } else {
+              input: Option[Value] | DecodeError = match (inputField(fields, field.name)) {
+                Option.Some(value) => Option.Some(value)
+                Option.None => {
+                  comptime if (field.hasDefault) { Option.None } else {
+                    info = shape.metadata[field.RawType, Decode, FieldSchema]().getOr(FieldSchema { kind: "json", optional: false })
+                    if (info.optional) { Option.Some(Value.Null) } else {
+                      DecodeError { path: s".${field.name}", message: "is missing" }
+                    }
+                  }
+                }
+              }
+              match (input) {
+                error: DecodeError => error
+                Option.None => state
+                Option.Some(value) => match (decode[field.RawType](value)) {
+                  error: DecodeError => atPath(error, s".${field.name}")
+                  decoded: field.RawType => state.set(field, decoded)
+                }
+              }
+            }
+          }]
+        start: initial.Type | DecodeError = initial
+        assembled = steps.fold(start, (state, step) => match (state) {
+          error: DecodeError => error
+          pending: initial.Type => step(pending)
+        })
+        match (assembled) {
+          error: DecodeError => error
+          pending: initial.Type => match (pending.finish()) {
+            error: shape.ValidationError => DecodeError { path: error.path, message: error.message }
+            value: T => value
+          }
+        }
+      }
+      other => decodeMismatch("an object", other)
     }
   }
 }

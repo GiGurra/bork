@@ -25,3 +25,17 @@ fn main() {
 Records encode as objects. A named sealed variant encodes with a `"type"` discriminator and its fields; a fieldless variant can also decode from its name. `Option` retains its null/value representation, and missing optional record fields decode as `None`.
 
 [bork/json](json.md) parses and renders this tree and supplies typed text adapters. [bork/yaml](yaml.md) does the same for YAML (`yaml.Decode[T]`, `yaml.Encode`), so a type that derives `codec.Decode` and `codec.Encode` reads and writes both formats. JSON syntax errors are `json.JsonError`; typed conversion errors are `codec.DecodeError`. The old prelude `Json`, `JsonField`, `DecodeError`, `JsonError`, `Encode`, and `Decode` names have no compatibility aliases.
+
+Selected decoders can publish `metadata codec.FieldSchema = ...` with a
+`kind` (`string`, `number`, `bool`, `list:` followed by an element kind, or
+`json`) and `optional` flag. `codec.FieldInfo[T]()` reads that actual instance;
+container metadata delegates to its selected element decoder. Missing metadata
+uses the general `json` kind and a required input.
+
+`codec.RecordSchema` describes named record inputs with typed field validation
+and optional default display callbacks. `codec.Schema[T]()` reads this metadata
+from the selected decoder, returning `None` when it has no schema. Field
+validation checks independent facts; facts involving siblings require complete
+`codec.decode[T]`. Looking up a schema does not evaluate field defaults.
+Structural schema and decoder templates are being migrated to source; the
+existing CLI dictionary bridge remains in place during that migration.
