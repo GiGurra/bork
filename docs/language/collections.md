@@ -2,9 +2,7 @@
 
 bork has lists, maps, lazy sequences, and bytes built in. All of them are immutable: an operation gives a new collection and leaves the old one as it was.
 
-[Tuples](types.md#tuples) group a fixed number of values whose types may differ;
-lists hold any number of values of one element type. Comparable tuples can also
-be map keys.
+For a fixed number of values of different types, use a [tuple](types.md#tuples).
 
 ## Lists
 
@@ -135,6 +133,7 @@ true
 - `put` and `remove` give a new map. The old one is unchanged, and the two share most of their storage.
 - A map remembers the order in which keys were added. `m.sorted()` gives a map that keeps its keys in sorted order.
 - Two maps are equal when they hold the same entries.
+- Comparable [tuples](types.md#tuples) can be keys, such as `(x, y)` for a grid position.
 
 The map methods: `get`, `getOr`, `has`, `put`, `remove`, `size`, `isEmpty`, `keys`, `values`, `entries`, `merge`, `mapValues`, `filter`, `forEach`, `sorted`, `sortedBy`, `inOrder`, and `unordered`.
 

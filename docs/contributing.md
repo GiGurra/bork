@@ -70,6 +70,8 @@ After publication, the workflow creates or updates `Formula/bork.rb` in `GiGurra
 
 The packaged extension remains thin: it launches the installed compiler's `bork lsp`. Its independent extension version and registry publication guide are in [the VS Code directory](../editors/vscode/PUBLISHING.md).
 
+The manually dispatched **Upgrade benchmark** GitHub workflow measures time to first output and total upgrade time on macOS for the original source installer and the new prebuilt path. It records both transcripts and timings as an artifact and in the workflow summary.
+
 ## Design notes
 
 | Note | Subject |

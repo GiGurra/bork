@@ -58,11 +58,12 @@ class SiteTests(unittest.TestCase):
         nav = docs_site.navigation(root, "https://github.com/GiGurra/bork", "main")
         self.assertEqual([next(iter(item)) for item in nav],
                          ["Home", "Start", "The language", "Reference", "For contributors"])
-        self.assertEqual(nav[1]["Start"][0], {"A tour of bork": "tour.md"})
+        self.assertEqual(nav[1]["Start"][:2], [{"Installing bork": "install.md"}, {"A tour of bork": "tour.md"}])
         reference = nav[3]["Reference"]
         packages = reference[1]["Standard packages"]
         self.assertIn({"bork/http": "std/http.md"}, packages)
-        self.assertTrue(reference[2]["Editor support and VS Code"].endswith("/blob/main/editors/vscode/README.md"))
+        self.assertEqual(reference[2], {"Editors": "editors.md"})
+        self.assertTrue(reference[3]["VS Code extension"].endswith("/blob/main/editors/vscode/README.md"))
 
 
 if __name__ == "__main__":

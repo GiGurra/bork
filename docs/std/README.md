@@ -2,6 +2,8 @@
 
 Standard packages ship with the compiler. Import one as `bork/name` and call its functions with the package name in front: `import "bork/fs"`, then `fs.Open(path, s)`. Each page describes the package's API, with examples and limits.
 
+Operations on strings, lists, maps, options, and bytes need no import. They are methods that are available everywhere, such as `text.trim()` and `xs.map(f)`.
+
 | Package | Description |
 | --- | --- |
 | [bork/archive](archive.md) | Reading and writing ZIP and TAR archives |
@@ -33,7 +35,5 @@ Standard packages ship with the compiler. Import one as `bork/name` and call its
 | [bork/url](url.md) | Parsing, building, and escaping URLs |
 | [bork/uuid](uuid.md) | Parsing and generating UUIDs |
 | [bork/yaml](yaml.md) | Parsing and writing YAML, as codec values or typed records |
-
-Operations on strings, lists, maps, options, and bytes need no import. They are methods that are available everywhere, such as `text.trim()` and `xs.map(f)`.
 
 For contributors: when adding a package, add its page and a row to this table. The [Go helper API](../std-go.md) documents the contracts that standard-package implementations share.
