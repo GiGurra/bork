@@ -331,20 +331,24 @@ derive instance encodeShape[T]: Encode[T] {
           match (variant.project(x)) {
             Option.Some(payload) => {
               _ = payload
-              comptime if (variant.positional) {
-                values: List[Value] = [comptime for (field in variant.fields)
-                  encode[field.Type](field.read(payload))]
-                return Value.Object { fields: [
-                  Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } },
-                  Field { name: "values", value: Value.Array { items: values } }
-                ] }
+              comptime if (EnumShape[T]() && variant.fields.isEmpty()) {
+                return Value.String { value: VariantWireName[T](variant) }
               } else {
-                fields: List[Field] = [comptime for (field in variant.fields)
-                  comptime if (!field.computed) {
-                    Field { name: FieldWireName[T](field), value: encode[field.Type](field.read(payload)) }
-                }]
-                return Value.Object { fields: prepend(
-                  Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } }, fields) }
+                comptime if (variant.positional) {
+                  values: List[Value] = [comptime for (field in variant.fields)
+                    encode[field.Type](field.read(payload))]
+                  return Value.Object { fields: [
+                    Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } },
+                    Field { name: "values", value: Value.Array { items: values } }
+                  ] }
+                } else {
+                  fields: List[Field] = [comptime for (field in variant.fields)
+                    comptime if (!field.computed) {
+                      Field { name: FieldWireName[T](field), value: encode[field.Type](field.read(payload)) }
+                  }]
+                  return Value.Object { fields: prepend(
+                    Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } }, fields) }
+                }
               }
             }
             Option.None => {}
@@ -605,7 +609,8 @@ derive fn DecodeSealed[T](json: Value): T | DecodeError {
           }
         }
       }
-      DecodeError { path: ".type", message: "unknown variant " + quoted(name) + " of " + shape.name[T]() }
+      expected: List[String] = [comptime for (variant in shape.variants[T]()) VariantWireName[T](variant)]
+      DecodeError { path: ".type", message: "unknown variant " + quoted(name) + " of " + shape.name[T]() + "; expected one of " + expected.join(", ") }
     }
   }
 }
