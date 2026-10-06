@@ -76,7 +76,7 @@ func (c *checker) declareDeriveTemplates(files []*syntax.File) {
 								valid = false
 							}
 						}
-						var result Type = Ok
+						result := Ok
 						if method.Result != nil {
 							result = c.resolveType(plan.clone(reflect.ValueOf(method.Result)).Interface().(*syntax.TypeExpr))
 						}
@@ -215,11 +215,6 @@ func (p *deriveExpansion) projectedTypeArg(t *syntax.TypeExpr) (Type, []*Constra
 	facts := p.c.constraintsOf(written, typ, p.c.paramScope())
 	p.c.whereReported(t) // The metadata query consumed these source obligations.
 	return typ, facts
-}
-
-func (p *deriveExpansion) typeArg(t *syntax.TypeExpr) Type {
-	typ, _ := p.projectedTypeArg(t)
-	return typ
 }
 
 func (p *deriveExpansion) chooseMatch(x *syntax.Match) (syntax.Expr, bool) {
