@@ -208,7 +208,7 @@ func (c *checker) variantExpectedFix(pos diag.Pos, owner string, sealed *Sealed,
 	if index > 0 && source.tokens[index-1].Kind == syntax.Dot {
 		index--
 	} else {
-		for index+1 < len(source.tokens) && !(source.tokens[index].Kind == syntax.Dot && source.tokens[index+1].Text == name) {
+		for index+1 < len(source.tokens) && (source.tokens[index].Kind != syntax.Dot || source.tokens[index+1].Text != name) {
 			index++
 		}
 	}

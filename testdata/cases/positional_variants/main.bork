@@ -12,6 +12,9 @@ derive codec.Decode for Payload
 derive codec.Encode for Positive
 derive codec.Decode for Positive
 
+type Defaults = { payload: Option[Int] = .Some(4), nested: Option[Option[Int]] = .Some(.Some(5)), tuple: Payload[Int] = Payload[Int].One((8, "default")) }
+fn defaultOption(value: Option[Int] = Option[Int].Some(9)): Int { match(value) { .Some(n) => n, .None => 0 } }
+
 type Bits = sealed { Pair(Bool, Bool), Empty }
 
 fn read[T](value: Payload[T]): T | String {
@@ -31,6 +34,11 @@ fn inspectBits(x: Bits): Bool {
   match (x) { .Pair(true, _) => true, .Pair(false, true) => true, .Pair(false, false) => false, .Empty => false }
 }
 fn main() {
+  defaults = Defaults {}
+  assertEqual(defaults.payload, Option.Some(4))
+  assertEqual(defaults.nested, Option.Some(Option.Some(5)))
+  assertEqual(read(defaults.tuple), 8)
+  assertEqual(defaultOption(), 9)
   value = Payload.Pair(2, "ok")
   tuple = Payload[Int].One((3, "tuple"))
   println(value, tuple, read(value), read(tuple), Payload[Int].Empty)

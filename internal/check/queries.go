@@ -121,6 +121,12 @@ func defaultText(x syntax.Expr) string {
 		return "." + x.Name
 	case *syntax.Selector:
 		return defaultText(x.X) + "." + x.Name
+	case *syntax.Call:
+		var args []string
+		for _, arg := range x.Args {
+			args = append(args, defaultText(arg))
+		}
+		return defaultText(x.Fun) + "(" + strings.Join(args, ", ") + ")"
 	case *syntax.TupleLit:
 		var parts []string
 		for _, e := range x.Elems {

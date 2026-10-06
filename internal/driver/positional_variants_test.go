@@ -26,6 +26,9 @@ func TestPositionalVariantsRejected(t *testing.T) {
 		{"refutable payload", `type A=sealed{Value(Bool),Empty};fn f(x:A):Int{match(x){.Value(true)=>1,.Empty=>0}}`, "missing A.Value(false)"},
 		{"unproven constraint", `pred positive(x:Int){x>0};type A=sealed{Value(Int where positive)};fn f(n:Int):A{.Value(n)}`, "not proven"},
 		{"is binding", `fn f(x:Option[Int]):Bool{x is .Some(n)}`, "unknown type n"},
+		{"function parameter default", `fn Make():Int{1};fn f(x:Int=Make()):Int{x}`, "default must be a closed value"},
+		{"function field default", `fn Make():Int{1};type Box={value:Int=Make()}`, "default must be a closed value"},
+		{"function payload default", `fn Make():Int{1};type Box={value:Option[Int]=Option.Some(Make())}`, "default must be a closed value"},
 		{"wrong specialization", `fn f(x:Option[Int]):Int{match(x){Option[String].Some(_)=>1,_=>0}}`, "cannot occur"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

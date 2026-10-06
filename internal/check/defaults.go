@@ -60,8 +60,12 @@ func (c *checker) ensureDefaults(fn *Func) {
 			}
 			c.sharedDefaults[x] = true
 		}
-		if t := c.exprWant(x, fn.Params[i]); t != Invalid && !assignable(t, fn.Params[i]) {
-			c.errorf(p.Default.Position(), "the default of %s must be %s, found %s", p.Name, fn.Params[i], t)
+		if t := c.exprWant(x, fn.Params[i]); t != Invalid {
+			if !isClosed(x, c.info.variantCalls) {
+				c.errorf(x.Position(), "a parameter's default must be a closed value: a literal, or a record or variant of them (such as Level.Info)")
+			} else if !assignable(t, fn.Params[i]) {
+				c.errorf(p.Default.Position(), "the default of %s must be %s, found %s", p.Name, fn.Params[i], t)
+			}
 		}
 	}
 }
@@ -93,7 +97,7 @@ func (c *checker) withDefaults(args []syntax.Expr, fn *Func) []syntax.Expr {
 
 // isClosed reports whether x is a closed value: a literal, or a list,
 // map, record, or variant value made of closed values.
-func isClosed(x syntax.Expr) bool {
+func isClosed(x syntax.Expr, variantCalls ...map[*syntax.Call]*syntax.RecordLit) bool {
 	switch x := x.(type) {
 	case *syntax.ContextName:
 		return x.Name != ""
@@ -104,30 +108,42 @@ func isClosed(x syntax.Expr) bool {
 		return isPath(x.X)
 	case *syntax.RecordLit:
 		for _, f := range x.Fields {
-			if f.Value == nil || !isClosed(f.Value) {
+			if f.Value == nil || !isClosed(f.Value, variantCalls...) {
+				return false
+			}
+		}
+		return true
+	case *syntax.Call:
+		// Before checking, calls are candidates for positional construction.
+		// Afterwards, only calls resolved to actual variants are closed values.
+		if len(variantCalls) > 0 && variantCalls[0][x] == nil {
+			return false
+		}
+		for _, arg := range x.Args {
+			if !isClosed(arg, variantCalls...) {
 				return false
 			}
 		}
 		return true
 	case *syntax.Unary:
-		return (x.Op == syntax.Minus || x.Op == syntax.Caret) && isClosed(x.X)
+		return (x.Op == syntax.Minus || x.Op == syntax.Caret) && isClosed(x.X, variantCalls...)
 	case *syntax.TupleLit:
 		for _, elem := range x.Elems {
-			if !isClosed(elem) {
+			if !isClosed(elem, variantCalls...) {
 				return false
 			}
 		}
 		return true
 	case *syntax.ListLit:
 		for _, el := range x.Elems {
-			if !isClosed(el) {
+			if !isClosed(el, variantCalls...) {
 				return false
 			}
 		}
 		return true
 	case *syntax.MapLit:
 		for i := range x.Keys {
-			if !isClosed(x.Keys[i]) || !isClosed(x.Values[i]) {
+			if !isClosed(x.Keys[i], variantCalls...) || !isClosed(x.Values[i], variantCalls...) {
 				return false
 			}
 		}
@@ -297,8 +313,12 @@ func (c *checker) ensureFieldDefault(field *Field) {
 		}
 		c.sharedDefaults[x] = true
 	}
-	if t := c.fieldInitializer(x, field); t != Invalid && !assignable(t, field.Type) {
-		c.errorf(field.Decl.Default.Position(), "the default of %s must be %s, found %s", field.Name, field.Type, t)
+	if t := c.fieldInitializer(x, field); t != Invalid {
+		if !isClosed(x, c.info.variantCalls) {
+			c.errorf(x.Position(), "a field's default must be a closed value: a literal, or a record or variant of them")
+		} else if !assignable(t, field.Type) {
+			c.errorf(field.Decl.Default.Position(), "the default of %s must be %s, found %s", field.Name, field.Type, t)
+		}
 	}
 	c.info.fieldDefaults[field] = x
 }

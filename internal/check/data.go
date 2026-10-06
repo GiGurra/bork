@@ -33,14 +33,6 @@ func instanceIn(t Type, base Type) Type {
 	return found
 }
 
-// article is "a" or "an", for the word w.
-func article(w string) string {
-	if w != "" && strings.ContainsRune("AEIOUaeiou", rune(w[0])) {
-		return "an"
-	}
-	return "a"
-}
-
 // optionIn finds the Option type that t is or contains (see instanceIn).
 func (c *checker) optionIn(t Type) *Sealed {
 	s, _ := instanceIn(t, c.info.Named["Option"]).(*Sealed)
