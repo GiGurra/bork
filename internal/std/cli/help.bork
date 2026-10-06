@@ -60,6 +60,7 @@ fn configureHelp(native: nativeCommand, specs: List[FieldSpec], fields: List[inp
     if !enabled { continue }
     doc := spec.description
     if field.hasDefault { doc += " (default " + defaultLabel(field) + ")" } else if !field.optional { doc += " (required)" }
+    doc += helpChoices(field)
     envLines = append(envLines, fmt.Sprintf("  %s %s  %s", env.name, typeLabel(field), strings.TrimSpace(doc)))
   }
   for name, label := range labels {
@@ -118,4 +119,12 @@ fn configureHelp(native: nativeCommand, specs: List[FieldSpec], fields: List[inp
     _, err = fmt.Fprint(out, text)
     return err
   })
+}
+
+fn helpChoices(field: inputField): String unsafe go {
+  import "strings"
+  if len(field.variants) == 0 { return "" }
+  names := []string{}
+  for _, variant := range field.variants { names = append(names, variant.name) }
+  return " (choices " + strings.Join(names, ", ") + ")"
 }

@@ -133,6 +133,7 @@ fn resolveMetadataWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordS
     doc := field.doc
     if description, ok := flag.description.(Option_Some[string]); ok { doc = description.E0 }
     spec := FieldSpec{field: field.name, long: flag.long, short: flag.shortName, env: flag.envName, description: doc, positional: flag.positional, position: flag.position, configFile: flag.configFile, config: flag.config, hidden: flag.hidden, deprecated: flag.deprecated, choices: flag.choices, strictChoices: flag.strictChoices, files: flag.files, directories: flag.directories, keepOrder: flag.keepOrder}
+    if len(spec.choices) == 0 && (field.kind == "string" || field.kind == "list:string") { for _, variant := range field.variants { spec.choices = append(spec.choices, Choice{value:variant.name, description:strings.Join(strings.Fields(variant.doc), " ")}) } }
     automaticShort := false
     derive := func(spec FieldSpec) FieldSpec {
       if _, auto := spec.long.(Mapping_Auto); auto {
