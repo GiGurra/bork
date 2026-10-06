@@ -31,7 +31,7 @@ main.bork:202:19: h already belongs to scope s
 main.bork:206:16: k cannot be moved: it may belong to scope s or scope app
 main.bork:208:22: l cannot be moved here: it was acquired outside this lambda (or lazy, async or comptime body), which may run later or more than once; move it before
 main.bork:210:18: l cannot be moved here: it was acquired outside this lambda (or lazy, async or comptime body), which may run later or more than once; move it before
-main.bork:214:18: a loop cannot move m, which was acquired outside its body
-main.bork:217:34: move cannot be used as a function value: a call through a function value is not checked
-main.bork:218:20: o is used by this call after another of its arguments moves it to scope app (line 218)
-main.bork:220:23: p is used by this call after another of its arguments moves it to scope app (line 220)
+main.bork:215:18: a loop cannot move m, which was acquired outside its body
+main.bork:218:34: move cannot be used as a function value: a call through a function value is not checked
+main.bork:219:20: o is used by this call after another of its arguments moves it to scope app (line 219)
+main.bork:221:23: p is used by this call after another of its arguments moves it to scope app (line 221)
