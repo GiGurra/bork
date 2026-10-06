@@ -19,6 +19,7 @@ Run `bork doc bork/<package>` for generated package signatures and comments; for
 | [bork/crypto](crypto.md) | Hashes, HMAC, secure random bytes, and password hashing |
 | [bork/embed](embed.md) | Files and directories built into the executable |
 | [bork/encoding](encoding.md) | Hex, base64, and CSV |
+| [bork/enum](enum.md) | Enumerating sealed variants and looking up wire names |
 | [bork/env](env.md) | Environment variables, and configuration decoded from them |
 | [bork/fs](fs.md) | Files, directories, and paths |
 | [bork/http](http.md) | HTTP clients and servers: routes, TLS, load limits, and shutdown |

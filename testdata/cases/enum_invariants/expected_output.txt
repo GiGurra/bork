@@ -1,0 +1,5 @@
+Option.Some(Color.Red)
+Color.Red
+true
+true
+true

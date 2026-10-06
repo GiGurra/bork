@@ -1,0 +1,21 @@
+import "bork/codec"
+import "bork/enum"
+import "bork/json"
+use codec.Defaults
+
+type Color = sealed {
+  // Warm color.
+  Red
+  DarkBlue
+  Teal codec { name: "cyan" }
+} derive (enum.Enum, codec.Encode, codec.Decode)
+
+fn main() {
+  println(enum.values[Color]())
+  println(enum.name(Color.DarkBlue))
+  println(enum.byName[Color]("DARK_BLUE"))
+  println(enum.parse[Color]("purple"))
+  println(enum.index(Color.Teal))
+  println(json.Encode(Color.DarkBlue))
+  println(json.Decode[Color]("\"DARK_BLUE\""))
+}
