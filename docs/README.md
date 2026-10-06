@@ -40,7 +40,7 @@ Each page covers one area in plain terms, with code you can run. Follow the Prev
 - [FAQ and pitfalls](faq.md): compiler diagnostics, explanations, and checked fixes.
 - [Coming from another language](coming-from.md): Go, TypeScript, Rust, and Python comparisons.
 
-<!-- Builtin API slot: add std/builtins.md when PR 2b publishes its source entry page. -->
+- [Built-in APIs](std/builtins.md): generated signatures and comments for functions and methods available without imports.
 
 ## Reference
 
