@@ -66,6 +66,22 @@ func TestCompletionScopesFieldsAndArguments(t *testing.T) {
 		t.Fatal("offered duplicate field")
 	}
 }
+func TestCompletionForkProducer(t *testing.T) {
+	src := "fn main() { scope s {} }\n"
+	s, path := newTestServer(t, src)
+	items := completeAt(t, s, path, "fn main() { scope s { | } }\n")
+	if completionItem(items, "forkProducer") == nil {
+		t.Fatal("missing forkProducer completion")
+	}
+	if completionItem(items, "produce") != nil {
+		t.Fatal("offered removed produce API")
+	}
+	items = completeAt(t, s, path, "fn main() { scope s { _ = forkProducer[Int](s, cap|) } }\n")
+	if c := completionItem(items, "capacity"); c == nil || c["textEdit"].(textEdit).NewText != "capacity: " {
+		t.Fatalf("named capacity: %+v", items)
+	}
+}
+
 func TestCompletionGenericFieldsAndMatchArms(t *testing.T) {
 	src := "type Box[T] = { value: T }\ntype Choice = sealed { First { value: Int }, Second }\nfn read(choice: Choice): Int { match (choice) { Choice.First { value } => value, Choice.Second => 0 } }\nfn main() uses io { box = Box[Int] { value: 1 }; println(read(Choice.Second)); println(box.value) }\n"
 	s, path := newTestServer(t, src)

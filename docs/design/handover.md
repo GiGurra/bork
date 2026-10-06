@@ -174,7 +174,7 @@ finalizers and an owner's `closeFn` run with neither lock held, and
 cancellation callbacks run on their own goroutines.
 
 ## Not in this design
-- `tryHandOver`, an unbounded `Handoff`, `produce`/`merge` for handoffs.
+- `tryHandOver`, an unbounded `Handoff`, `forkProducer`/`merge` for handoffs.
 - Values holding a resource (a record with a `Conn` field): `move` does
   not move them either.
 

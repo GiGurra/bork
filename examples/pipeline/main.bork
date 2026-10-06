@@ -36,11 +36,12 @@ fn labels(s: Scope, input: Channel[Int], out: Channel[String]) uses state: Ok | 
 
 fn main() {
   scope s {
-    // produce runs each stage as a task and closes its output when the
-    // stage returns.
-    candidates = produce[Int](s, 4, out => numbers(s, out))
-    found = produce[Int](s, 4, out => primes(s, candidates, out))
-    lines = produce[String](s, 0, out => labels(s, found, out))
+    // forkProducer makes a buffered channel, forks work as a task of s
+    // writing into it, closes it when work returns, and returns the channel.
+    // A capacity of 0 makes an unbuffered channel.
+    candidates = forkProducer[Int](s, capacity: 4, work: out => numbers(s, out))
+    found = forkProducer[Int](s, capacity: 4, work: out => primes(s, candidates, out))
+    lines = forkProducer[String](s, capacity: 0, work: out => labels(s, found, out))
     for (line in lines.values(s).take(8)) {
       println(line)
     }

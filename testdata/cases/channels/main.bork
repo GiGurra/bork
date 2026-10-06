@@ -75,12 +75,12 @@ fn main() {
   }
   // A producer closes its channel when it returns; merge fans in.
   scope s {
-    tens = produce[Int](s, 2, out => multiples(s, out, 10, 1, 5))
-    hundreds = produce[Int](s, 0, out => multiples(s, out, 100, 1, 5))
+    tens = forkProducer[Int](s, 2, out => multiples(s, out, 10, 1, 5))
+    hundreds = forkProducer[Int](s, 0, out => multiples(s, out, 100, 1, 5))
     println(total(s, merge(s, [tens, hundreds])))
     println(merge[Int](s, []).toList(s))
     // A producer stops when its consumer closes the channel.
-    endless = produce[Int](s, 0, out => multiples(s, out, 1, 0, 1000000000))
+    endless = forkProducer[Int](s, 0, out => multiples(s, out, 1, 0, 1000000000))
     println(endless.receive(s), endless.receive(s))
     endless.close()
   }

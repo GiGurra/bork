@@ -8,3 +8,8 @@ fn scenario(n: Int) uses io {
   println(0)
 }
 fn main() {}
+fn producer() uses state {
+  scope s {
+    _ = forkProducer[Int](s, capacity: 1, work: out => out.send(s, 1))
+  }
+}
