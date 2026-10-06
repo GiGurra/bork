@@ -8,3 +8,4 @@ main.bork:9:28: codec fallback requires one positional String without facts, def
 main.bork:11:32: codec fallback requires one positional String without facts, defaults, or a variant where clause
 main.bork:12:30: codec fallback requires one positional String without facts, defaults, or a variant where clause
 main.bork:13:31: codec fallback requires one positional String without facts, defaults, or a variant where clause
+main.bork:14:22: an enum with a fallback needs at least one known variant

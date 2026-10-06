@@ -132,7 +132,7 @@ fn main() {
 
 Known canonical names and aliases select their declared variants. Unknown strings become the fallback and encode unchanged. The legacy `{ "type": "purple" }` form also falls back; extra members fail decoding. Other input shapes fail. The type still defaults to `ScreamingSnake` for known names.
 
-A fallback requires exactly one positional String and fieldless known alternatives. It cannot declare facts, defaults, a variant `where`, a wire name, or aliases. The compiler adds a payload fact excluding every known canonical name and alias, even without deriving a codec. Known literals fail construction; a runtime string needs a guard proving those exclusions or a checked builder. Builder validation reports the payload path `[0]`.
+A fallback requires exactly one positional String and at least one fieldless known alternative. It cannot declare facts, defaults, a variant `where`, a wire name, or aliases. The compiler adds a payload fact excluding every known canonical name and alias, even without deriving a codec. Known literals fail construction; a runtime string needs a guard proving those exclusions or a checked builder. Builder validation reports the payload path `[0]`.
 
 `FieldAliases[T]`, `VariantAliases[T]`, `FieldNames[T]`, and `VariantNames[T]` expose aliases and canonical-first accepted names during derivation; `VariantFallback[T]` reads the fallback flag.
 

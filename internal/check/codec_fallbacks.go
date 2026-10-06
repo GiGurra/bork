@@ -61,10 +61,12 @@ func (c *checker) checkCodecFallbacks() {
 			continue
 		}
 		var names []string
+		knownVariants := 0
 		for _, variant := range sealed.Variants {
 			if marked[variant] {
 				continue
 			}
+			knownVariants++
 			if len(variant.Fields) != 0 {
 				c.errorf(sealed.Decl.Variants[variant.Index].Pos, "codec fallback is only supported with fieldless known variants")
 				valid = false
@@ -81,6 +83,10 @@ func (c *checker) checkCodecFallbacks() {
 					names = append(names, name)
 				}
 			}
+		}
+		if valid && knownVariants == 0 {
+			c.errorf(sealed.Decl.Variants[fallback.Index].Pos, "an enum with a fallback needs at least one known variant")
+			valid = false
 		}
 		if !valid {
 			continue
