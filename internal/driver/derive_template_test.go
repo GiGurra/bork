@@ -500,6 +500,104 @@ func TestDeriveTemplateConcretePredicateParameterType(t *testing.T) {
 fn main() {}`, "predicate parameter must be a function")
 }
 
+// Helper bodies without shape operations are ordinary generic functions, so
+// the ordinary checker is the oracle: a definition-time effect error must be
+// one the same code reports as a declared function, and vice versa.
+func TestDeriveTemplateUnrequestedDeclaredEffects(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, source, want string }{
+		{"builtin", `derive fn unused[T](value: T): String { println("io"); "ok" }`, "unused uses io (it calls println), but its signature allows no effects"},
+		{"declared", `derive fn unused[T](value: T) uses io: String { println("io"); "ok" }`, ""},
+		{"closed callback", `derive fn unused[T](action: (T) uses io => String, value: T): String { action(value) }`, "unused uses io (it calls action)"},
+		{"open callback", `derive fn unused[T](action: (T) => String, value: T): String { action(value) }`, ""},
+		{"function", `fn noisy[A](value: A) uses io: String { println("io"); "ok" }
+derive fn unused[T](value: T): String { noisy[T](value) }`, "unused uses io (it calls noisy)"},
+		{"helper", `derive fn noisy[A](value: A) uses io: String { println("io"); "ok" }
+derive fn unused[T](value: T): String { noisy[T](value) }`, "unused uses io (it calls noisy)"},
+		{"nested call", `fn noisy() uses io: String { println("io"); "ok" }
+derive fn unused[T](value: T): String { text = "a" + noisy(); text }`, "unused uses io (it calls noisy)"},
+		{"closed lambda", `derive fn unused[T](value: T): (T) uses nothing => String { item => { println("io"); "ok" } }`, "this lambda uses io (it calls println)"},
+		{"declared lambda", `derive fn unused[T](value: T): (T) uses io => String { item => { println("io"); "ok" } }`, ""},
+		{"open result lambda", `derive fn unused[T](): (T) => String { item => { println("io"); "ok" } }`, "this lambda uses io"},
+		{"closed open result", `derive fn unused(): (Int) => String { item => { println("io"); "ok" } }`, "this lambda uses io"},
+		{"open result forwards", `derive fn unused[A](work: (A) => String): (A) => String { item => work(item) }`, ""},
+		{"open result calls", `derive fn unused[A](work: (A) => String, value: A): (A) => String { _ = work(value); work }`, "unused returns an open function"},
+		{"open value in closed lambda", `derive fn unused[A](work: (A) => String): (A) uses nothing => String { item => work(item) }`, "it can only be passed to an open parameter"},
+		{"open argument", `derive fn consume[A](run: (A) => String): String { "ok" }
+derive fn unused[T](): String { consume[T](item => { println("io"); "ok" }) }`, "unused uses io (it calls consume, with a lambda that calls println)"},
+		{"pure open argument", `derive fn consume[A](run: (A) => String): String { "ok" }
+derive fn unused[T](): String { consume[T](item => "ok") }`, ""},
+		{"named open argument", `derive fn consume[A](first: Int, run: (A) => String): String { "ok" }
+derive fn unused[T](): String { consume[T](run: item => { println("io"); "ok" }, first: 1) }`, "it calls consume, with a lambda"},
+		{"closed parameter", `derive fn consume[A](run: (Int) => String): String { "ok" }
+derive fn unused[T](): String { consume[T](item => { println("io"); "ok" }) }`, "unused uses io"},
+		{"open list argument", `derive fn all[A](runs: List[(A) => String]): String { "ok" }
+derive fn unused[T](): String { all[T]([item => { println("io"); "ok" }]) }`, "it calls all, with a lambda that calls println"},
+		{"function reference argument", `fn noisy(value: Int) uses io: String { println("io"); "ok" }
+fn consume(run: (Int) => String): String { "ok" }
+derive fn unused[T](): String { consume(noisy) }`, "it calls consume, with noisy"},
+		{"bound lambda", `derive fn unused[T](): String { work = (item: Int) => { println("io"); "ok" }; work(1) }`, "unused uses io (it calls work)"},
+		{"unused lambda", `derive fn unused[T](): String { _ = (item: Int) => { println("io"); "ok" }; "ok" }`, ""},
+		{"open result value", `derive fn relay[A](work: (A) => String): (A) => String { work }
+derive fn unused[T](value: T): String { work = relay[T](item => { println("io"); "ok" }); work(value) }`, "unused uses io (it calls work)"},
+		{"open result not called", `derive fn relay[A](work: (A) => String): (A) => String { work }
+derive fn unused[T](value: T): String { _ = relay[T](item => { println("io"); "ok" }); "ok" }`, ""},
+		{"local annotation is closed", `derive fn unused[T](): String { work: (Int) => String = item => { println("io"); "ok" }; work(1) }`, "this lambda uses io"},
+		{"value to closed parameter", `derive fn consume[A](run: (A) uses nothing => String): String { "ok" }
+derive fn unused[T](): String { work = (item: Int) => { println("io"); "ok" }; consume[Int](work) }`, "work uses io, but the function type expected here allows no effects"},
+		{"value to open parameter", `derive fn consume[A](run: (A) => String): String { "ok" }
+derive fn unused[T](): String { work = (item: Int) => { println("io"); "ok" }; consume[Int](work) }`, "it calls consume, with work"},
+		{"pure value to open parameter", `derive fn consume[A](run: (A) => String): String { "ok" }
+derive fn unused[T](): String { work = (item: Int) => "ok"; consume[Int](work) }`, ""},
+		{"value as open result", `derive fn unused(): (Int) => String { work = (item: Int) => { println("io"); "ok" }; work }`, "work uses io"},
+		{"reference as open result", `fn noisy(value: Int) uses io: String { println("io"); "ok" }
+derive fn unused(): (Int) => String { noisy }`, "noisy uses io"},
+		{"open value as closed result", `derive fn unused[A](work: (A) => String): (A) uses nothing => String { work }`, "it can only be passed to an open parameter"},
+		{"pure open result value called", `derive fn relay[A](work: (A) => String): (A) => String { work }
+derive fn unused[T](value: T): (T) => String { w = relay[T](item => "ok"); _ = w(value); w }`, ""},
+		{"pure open result value to closed parameter", `derive fn relay[A](work: (A) => String): (A) => String { work }
+derive fn consume[A](run: (A) uses nothing => String): String { "ok" }
+derive fn unused[T](): String { w = relay[T](item => "ok"); consume[T](w) }`, ""},
+		{"block open argument", `derive fn consume[A](run: (A) => String): String { "ok" }
+derive fn unused[T]() uses io: String { consume[T]({ x => { println("io"); "a" } }) }`, ""},
+		{"if open argument", `derive fn consume[A](run: (A) => String): String { "ok" }
+derive fn unused[T](flag: Bool) uses io: String { consume[T](if (flag) { x => { println("io"); "a" } } else { x => "b" }) }`, ""},
+		{"typed value to open parameter", `derive fn consume[A](run: (Int) => String): String { "ok" }
+derive fn unused[T](work: (Int) uses io => String) uses io: String { consume[T](work) }`, ""},
+		{"typed value charged through open parameter", `fn consume[A](run: (Int) => String): String { "ok" }
+derive fn unused[T](work: (Int) uses io => String): String { consume[T](work) }`, "it calls consume, with work"},
+		{"typed result to open parameter", `fn make(): (Int) uses io => String { item => { println("io"); "ok" } }
+derive fn consume[A](run: (Int) => String): String { "ok" }
+derive fn unused[T]() uses io: String { consume[T](make()) }`, ""},
+		{"typed list to open list", `derive fn all[A](runs: List[(Int) => String]): String { "ok" }
+derive fn unused[T](work: (Int) uses nothing => String): String { all[T]([work]) }`, ""},
+		{"generator", `derive fn unused[T](): Seq[Int] uses io { generate[Int] { println("x"); yield 1 } }`, ""},
+		{"comptime", `derive fn unused(): String { text = comptime { println("io"); "ok" }; text }`, "comptime requires pure code, found uses io"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			source := tc.source + "\nfn main() {}"
+			checkPreludeSource(t, source, tc.want)
+			ordinary := strings.ReplaceAll(source, "derive fn", "fn")
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte(ordinary), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := Check(dir); (err != nil) != (tc.want != "") {
+				t.Fatalf("ordinary oracle disagrees: %v", err)
+			}
+		})
+	}
+	// Some targets select no copy of a staged body, so its charges stay with
+	// the expansion. Values in it must still fit their own contexts.
+	checkPreludeSource(t, `derive fn unused[T](value: T): String { comptime if (false) { println("io") }; "ok" }
+fn main() {}`, "")
+	checkPreludeSource(t, `derive fn unused[T](): String { comptime if (true) { work: (Int) => String = item => { println("io"); "ok" }; _ = work }; "ok" }
+fn main() {}`, "this lambda uses io")
+	checkPreludeSource(t, `derive fn unused[T](): String { text = comptime { "ok" }; text }
+fn main() {}`, "")
+}
+
 func TestDeriveTemplateClosedBoundsRetainArgumentFacts(t *testing.T) {
 	t.Parallel()
 	declarations := `pred positive(n: Int) { n > 0 }
@@ -3635,4 +3733,105 @@ fn main() {}`, tc.want)
 type Choice = sealed { Empty }
 fn stop(x: Choice): Never { shape.exhausted[Choice](x) }
 fn main() {}`, "inside a derive template")
+}
+
+// Definition checking reads signatures only: an unused template captures no
+// module files and schedules no native compile-time evaluation.
+func TestDeriveTemplateUnusedDefinitionsCaptureNothing(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	source := `import "bork/build"
+import "bork/embed"
+derive fn embedded[T](): String { embed.ReadString("missing-embed.txt") }
+derive fn read[T](): String { text = comptime { build.ReadString("missing-build.txt") }; text }
+derive fn computed[T](): Int { comptime { 1 + 2 } }
+fn main() {}`
+	for name, value := range map[string]string{ModFile: "module example.com/unused\n", "main.bork": source} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(value), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, info, err := Check(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(info.Embeds) != 0 || len(info.BuildReads) != 0 || len(info.Comptimes) != 0 {
+		t.Fatalf("embeds=%d build reads=%d comptimes=%d", len(info.Embeds), len(info.BuildReads), len(info.Comptimes))
+	}
+}
+
+func TestDeriveTemplateInstanceEffectsAtDefinition(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `class Show[T] { fn show(value: T): String }
+derive instance show[T]: Show[T] {
+ fn show(value: T): String { println("io"); "ok" }
+}
+fn main() {}`, "show uses io (it calls println), but class Show allows no effects")
+	// Templates match the class's open callback positions exactly.
+	checkPreludeSource(t, `class Pure[T] { fn pure(value: T, work: (T) uses nothing => String): String }
+derive instance pure[T]: Pure[T] {
+ fn pure(value: T, work: (T) => String): String { "ok" }
+}
+fn main() {}`, "template parameter work must match its class signature")
+	checkPreludeSource(t, `class Many[T] { fn many(value: T, works: List[(T) => String]): String }
+derive instance many[T]: Many[T] {
+ fn many(value: T, works: List[(T) => String]): String { "ok" }
+}
+fn main() {}`, "")
+	// Metadata values are evaluated by expansion and charge nothing here.
+	checkPreludeSource(t, `class Tagged[T] { fn tag(value: T): String }
+derive instance tagged[T]: Tagged[T] {
+ metadata (Int) => String = item => { println("io"); "t" }
+ fn tag(value: T): String { "t" }
+}
+fn main() {}`, "")
+	// Staged per-field code and dependent method calls keep their effects
+	// for the expansion; independent charges stay within the declared uses.
+	source := `import "bork/shape"
+class Trace[T] { fn trace(value: T) uses io: String }
+fn note(text: String) uses io: String { println(text); text }
+derive fn each[A](work: (A) => String, value: A): String { work(value) }
+class Apply[T] { fn apply(value: T, work: (T) => String): String }
+derive instance apply[T]: Apply[T] {
+ fn apply(value: T, work: (T) => String): String { work(value) }
+}
+derive instance trace[T]: Trace[T] {
+ fn trace(value: T) uses io: String {
+  names = [comptime for (field in shape.fields[T]()) note(field.name)]
+  count = names.length()
+  each[T](item => note("each"), value) + s"$count"
+ }
+}
+type Row = { a: Int, b: String } derive (Trace, Apply)
+fn main() {
+ println(trace(Row { a: 1, b: "x" }))
+ println(apply(Row { a: 1, b: "x" }, row => { println("apply"); row.b }))
+}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "a\nb\neach\neach2\napply\nx\n" {
+		t.Fatalf("run: %v\n%s", err, output)
+	}
+}
+
+// A staged branch that the requested target does not select charges nothing.
+func TestDeriveTemplateUnselectedStagedEffects(t *testing.T) {
+	t.Parallel()
+	staged := `import "bork/shape"
+class C[T] { fn c(x: T): String }
+derive instance c[T]: C[T] {
+ fn c(x: T): String {
+  comptime if (shape.kind[T]() == shape.Record) { "record" } else { println("io"); "other" }
+ }
+}
+type Row = { a: Int } derive (C)
+fn main() { println(c(Row { a: 1 })) }`
+	if executable, err := buildFixtureOutput(t, validatorFixture(t, staged)); err != nil {
+		t.Fatal(err)
+	} else if output, err := exec.Command(executable).CombinedOutput(); err != nil || string(output) != "record\n" {
+		t.Fatalf("run: %v\n%s", err, output)
+	}
 }

@@ -15,14 +15,15 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 	if method.Body == nil {
 		return
 	}
-	outer, effects, function := c.scopes, c.used, c.fn
-	defer func() { c.scopes, c.used, c.fn = outer, effects, function }()
+	outer, used, function := c.scopes, c.used, c.fn
+	defer func() { c.scopes, c.used, c.fn = outer, used, function }()
 	partial := &Func{Decl: method, Pkg: c.pkg, Effects: c.effectsOf(method.Uses), Result: Invalid}
 	c.fn = partial
 	c.used = 0
 	c.scopes = append(c.scopes, map[string]*local{})
 	metadata := deriveMetadataTypes{c: c, locals: map[*local]deriveDescriptor{}, typeNames: typeNames}
 	symbolic := deriveSymbolicTypes{c: c, metadata: &metadata, names: typeNames, locals: map[*local]*deriveTypeTerm{}}
+	effects := c.newDeriveEffects()
 	bind := func(name string, typ Type, node any) {
 		if typ == nil {
 			typ = Invalid
@@ -34,13 +35,16 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 		if param.Type != nil && deriveConcreteType(param.Type, typeNames) {
 			typ = c.resolveType(param.Type)
 		}
+		if typ != nil {
+			typ = c.openParamAt(typ, param.Type)
+		}
 		bind(param.Name, typ, param)
 		if typ == nil {
 			typ = Invalid
 		}
 		partial.Params = append(partial.Params, typ)
 		partial.ParamConstraints = append(partial.ParamConstraints, nil)
-		symbolic.locals[c.lookup(param.Name)] = symbolic.annotation(param.Type, nil)
+		symbolic.locals[c.lookup(param.Name)] = c.deriveOpenSignatureTerm(symbolic.annotation(param.Type, nil), param.Type, true)
 		if kind := metadata.annotation(param.Type); kind != 0 {
 			metadata.locals[c.lookup(param.Name)] = kind
 		}
@@ -69,6 +73,11 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 			}
 			fn, found := c.funcNamed(id.Name)
 			if !found || len(fn.Needs) != 0 || len(fn.TypeParams) > 0 && len(expr.TypeArgs) == 0 {
+				return false
+			}
+			// Build and embed calls register captured files during ordinary
+			// checking. Definition checking reads them without capturing inputs.
+			if buildIntrinsic(fn) || embedIntrinsic(fn) {
 				return false
 			}
 			for _, arg := range expr.TypeArgs {
@@ -115,17 +124,35 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 		if expr == nil || !concrete(expr) {
 			return nil
 		}
+		c.used = 0
 		actual := metadata.check(expr, want)
-		if want != nil && actual != Invalid && !assignable(actual, want) {
+		effects.concrete(expr, c.used)
+		c.used = 0
+		fits := assignable
+		if effects.open[expr] {
+			fits = fitsParam // An open parameter accepts a callback with any effects.
+		}
+		if want != nil && actual != Invalid && !fits(actual, want) {
 			c.errorf(expr.Position(), "derive expression must be %s, found %s", want, actual)
 		}
 		return actual
 	}
+	// Metadata values are evaluated at expansion, not called at run time:
+	// they have neither open positions nor a function's effect allowance.
+	runtime := method.Name != ""
+	effects.quiet = !runtime
 	var result Type
 	if deriveConcreteType(method.Result, typeNames) {
 		result = c.resolveType(method.Result)
+		if method.Result != nil && runtime {
+			result = c.openAt(result, method.Result)
+		}
 	}
 	symbolicResult := symbolic.annotation(method.Result, nil)
+	if runtime {
+		symbolicResult = c.deriveOpenSignatureTerm(symbolicResult, method.Result, false)
+	}
+	openResult := isOpen(result) || deriveOpenTerm(symbolicResult)
 	var bindPattern func(syntax.Pattern)
 	bindPattern = func(pattern syntax.Pattern) {
 		switch pattern := pattern.(type) {
@@ -174,6 +201,15 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				symbolic.check(expression, symbolicWant)
 			}
 			switch node := v.Interface().(type) {
+			case *syntax.Generate:
+				// A generator's effects belong to its sequence, which charges
+				// them when traversed; traversal is left to expansion.
+				effects.nested(func() { walk(reflect.ValueOf(node.Body), nil, nil) })
+				return
+			case *syntax.Comptime:
+				inner := effects.nested(func() { walk(reflect.ValueOf(node.Body), want, symbolicWant) })
+				effects.comptime(node, inner)
+				return
 			case *syntax.Block:
 				c.scopes = append(c.scopes, map[string]*local{})
 				for _, stmt := range node.Stmts {
@@ -255,15 +291,24 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				if result == nil {
 					result = deriveConcreteTermType(symbolicResult)
 				}
-				walk(reflect.ValueOf(node.Body), result, symbolicResult)
+				inner := effects.nested(func() { walk(reflect.ValueOf(node.Body), result, symbolicResult) })
+				if context != nil {
+					effects.lambda(node, inner, context.Effects, true)
+				} else if symbolicContext != nil {
+					effects.lambda(node, inner, symbolicContext.effects, true)
+				} else {
+					effects.lambda(node, inner, 0, false)
+				}
 				result = outerResult
 				symbolicResult = outerSymbolicResult
 				c.scopes = c.scopes[:len(c.scopes)-1]
 				return
 			case *syntax.If:
 				walk(reflect.ValueOf(node.Cond), Bool, deriveNativeTerm(Bool, nil))
-				walk(reflect.ValueOf(node.Then), want, symbolicWant)
-				walk(reflect.ValueOf(node.Else), want, symbolicWant)
+				effects.staged(node.Comptime, func() {
+					walk(reflect.ValueOf(node.Then), want, symbolicWant)
+					walk(reflect.ValueOf(node.Else), want, symbolicWant)
+				})
 				return
 			case *syntax.Match:
 				walk(reflect.ValueOf(node.X), nil, nil)
@@ -272,7 +317,7 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 					// locals and descriptor identities keep their known types.
 					c.scopes = append(c.scopes, map[string]*local{})
 					bindPattern(arm.Pattern)
-					walk(reflect.ValueOf(arm.Body), want, symbolicWant)
+					effects.staged(node.Comptime, func() { walk(reflect.ValueOf(arm.Body), want, symbolicWant) })
 					c.scopes = c.scopes[:len(c.scopes)-1]
 				}
 				return
@@ -312,6 +357,9 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				}
 				bind(node.Name, actual, node)
 				symbolic.locals[c.lookup(node.Name)] = symbolicActual
+				if value, known := effects.value(node.Value, &symbolic); node.Type == nil && known {
+					effects.values[c.lookup(node.Name)] = value
+				}
 				kind := metadata.kind(node.Value)
 				if kind == 0 {
 					kind = metadata.annotation(node.Type)
@@ -354,11 +402,18 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 						c.diags.Suggest(node.Pos, "type.error", node.Pos, diag.Fix{Message: "add comptime", Edits: []diag.TextEdit{{Start: node.Pos, End: node.Pos, Replacement: "comptime "}}})
 					}
 				}
-				walk(reflect.ValueOf(node.Body), nil, nil)
+				effects.staged(node.Comptime, func() { walk(reflect.ValueOf(node.Body), nil, nil) })
 				for _, post := range node.Post {
 					check(post.Value, nil)
 				}
 				c.scopes = c.scopes[:len(c.scopes)-1]
+				return
+			case *syntax.Ident:
+				if concrete(node) {
+					check(node, want)
+					return
+				}
+				effects.valueFits(node, want, symbolicWant, &symbolic)
 				return
 			case *syntax.Selector:
 				if concrete(node) {
@@ -367,13 +422,18 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				}
 				metadata.checkMember(node)
 			case *syntax.Call:
-				symbolicParams, symbolicCallResult, symbolicNames := symbolic.call(node)
 				if concrete(node) {
 					check(node, want)
 					return
 				}
+				symbolicParams, symbolicCallResult, symbolicNames := symbolic.call(node)
+				signature := c.deriveCallSignature(node, typeNames)
+				if id, named := node.Fun.(*syntax.Ident); !named || c.lookup(id.Name) == nil {
+					effects.markOpen(node, symbolicParams, symbolicNames)
+				}
 				metadata.checkCall(node)
-				if signature := c.deriveCallSignature(node, typeNames); signature != nil {
+				switch {
+				case signature != nil:
 					if want != nil && signature.result != nil && !assignable(signature.result, want) {
 						c.errorf(node.Pos, "derive expression must be %s, found %s", want, signature.result)
 					}
@@ -391,21 +451,20 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 						walk(reflect.ValueOf(argument), context, deriveTermArgument(node, i, symbolicParams, symbolicNames))
 					}
 					walk(reflect.ValueOf(node.Fun), nil, nil)
-					return
-				}
-
-				if symbolicParams != nil {
+				case symbolicParams != nil:
 					if actual := deriveConcreteTermType(symbolicCallResult); want != nil && actual != nil && !assignable(actual, want) {
 						c.errorf(node.Pos, "derive expression must be %s, found %s", want, actual)
 					}
 					for i, argument := range node.Args {
-
 						argumentTerm := deriveTermArgument(node, i, symbolicParams, symbolicNames)
 						walk(reflect.ValueOf(argument), deriveConcreteTermType(argumentTerm), argumentTerm)
 					}
 					walk(reflect.ValueOf(node.Fun), nil, nil)
-					return
+				default:
+					walk(v.Elem(), nil, nil)
 				}
+				effects.call(node, signature, symbolicParams, symbolicCallResult, symbolicNames, &symbolic)
+				return
 			case syntax.Expr:
 				if concrete(node) {
 					check(node, want)
@@ -424,6 +483,9 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 		}
 	}
 	walk(reflect.ValueOf(method.Body), result, symbolicResult)
+	if runtime {
+		effects.finish(method, partial.Effects, openResult)
+	}
 }
 
 func deriveLiteralExpression(expr syntax.Expr) bool {
