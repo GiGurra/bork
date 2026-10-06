@@ -41,7 +41,7 @@ localhost 8080 Option.None
 
 ## Load configuration
 
-Field `httpPort` with prefix `APP` maps to `APP_HTTP_PORT`. String fields use literal text; other fields use JSON syntax. Absent fields with defaults use those defaults; missing Option fields without defaults become None. Derived field facts are checked, and all invalid or missing fields are collected rather than stopping at the first failure.
+Field `httpPort` with prefix `APP` maps to `APP_HTTP_PORT`. String fields use literal text; other fields use JSON syntax. Absent fields with defaults use those defaults; missing Option fields without defaults become None. Missing-variable, parsing and independent field-validation errors are collected. Once those checks pass, full decoding checks sibling-dependent and record facts, returning the first such error in ConfigError.
 
 ```bork
 import "bork/codec"

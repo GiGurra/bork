@@ -54,7 +54,7 @@ Both base64 parsers require zero trailing padding bits and accept CR/LF. Copy a 
 
 ## Round-trip records
 
-Derive both codec classes to encode and decode CSV; the Decode schema supplies field names and optional semantics. String cells are literal, so `007` stays `007`. Other types use JSON syntax. Facts and types are checked before constructing records, collecting all row/field errors; no partial records are returned.
+Derive both codec classes to encode and decode CSV; the Decode schema supplies field names and optional semantics. String cells are literal, so `007` stays `007`. Other types use JSON syntax. Types and independent field facts are checked before constructing records, collecting their row/field errors. Full decoding then checks sibling-dependent and record facts and returns the first such error per row. No partial records are returned.
 
 ```bork
 import "bork/codec"
@@ -86,8 +86,8 @@ Ada,37,
 true
 ```
 
-Headers match fields exactly. Unknown, duplicate or missing required headers, ragged typed rows and zero-field schemas are errors. Empty typed input encodes to empty text.
+Headers match fields exactly. Unknown, duplicate or missing required headers for fields without defaults, ragged typed rows and zero-field schemas are errors. Empty typed input encodes to empty text.
 
-Empty optional cells and missing optional columns become None. Nonempty optional cells become Some and parse like required fields: an optional String cell `hello` needs no JSON quotes. Some("") encodes like None and cannot round-trip. Nonempty JSON `null` in an optional non-String cell is rejected; use an empty cell for None. The JSON bridge also cannot preserve Some(codec.Value.Null), which encodes like None.
+Absent columns with defaults use those defaults. Empty optional cells and missing optional columns without defaults become None. Nonempty optional cells become Some and parse like required fields: an optional String cell `hello` needs no JSON quotes. Some("") encodes like None and cannot round-trip. Nonempty JSON `null` in an optional non-String cell is rejected; use an empty cell for None. The JSON bridge also cannot preserve Some(codec.Value.Null), which encodes like None.
 
 Raw CSV supports quoted newlines, skips blank lines, normalizes CRLF and writes LF, following Go CSV behavior. See [the CSV example](../../examples/csv/main.bork) for collected validation failures.
