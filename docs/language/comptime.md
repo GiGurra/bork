@@ -109,4 +109,4 @@ To include files as they are, without processing them, [bork/embed](../std/embed
 
 ---
 
-Previous: [Scopes and tasks](scopes.md) · Next: [Typed interpolation](interpolators.md) · [All pages](../README.md#the-language)
+Previous: [Channels](channels.md) · Next: [Typed interpolation](interpolators.md) · [All pages](../README.md#the-language)

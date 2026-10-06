@@ -22,6 +22,7 @@ Each page covers one area in plain terms, with code you can run.
 | [Facts](language/facts.md) | Predicates, `where`, and what the compiler proves |
 | [Effects](language/effects.md) | `uses`, pure functions, and ambient values |
 | [Scopes and tasks](language/scopes.md) | Resources, tasks, channels, shared state, cancellation, process signals, and `lazy` and `async` bindings |
+| [Channels](language/channels.md) | Sending and receiving between tasks, closing, producers, `select`, timeouts, and pipelines |
 | [Compile-time evaluation](language/comptime.md) | `comptime` blocks and reading files at build time |
 | [Typed interpolation](language/interpolators.md) | `s"..."`, `sql.SQL"..."`, and defining your own prefix |
 | [Packages and type classes](language/packages.md) | Packages, modules, imports, type classes, derived instances, and dependency assembly |

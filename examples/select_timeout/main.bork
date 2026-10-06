@@ -1,0 +1,63 @@
+// select waits for whichever of several channel operations can happen
+// first, and completes only that one. Timeouts and tickers are channels
+// too, so they are ordinary arms.
+import "bork/time"
+
+type TimedOut = {}
+
+fn ms(n: Int): time.Duration { time.Nanoseconds(n * 1_000_000) }
+
+// ask starts a worker that answers after a delay, and waits for the
+// answer for at most patience. (The delays here are far apart, so the
+// output does not depend on how fast the machine is.)
+fn ask(s: Scope, question: String, delay: Int, patience: Int) uses clock + state: String | TimedOut | Closed | Cancelled {
+  answers = channel[String](s, 1)
+  launch(s, () => {
+    _ = time.Sleep(s, ms(delay))
+    _ = answers.send(s, s"$question: 42")
+  })
+  // The timer belongs to s, so it stops when s ends, fired or not.
+  deadline = time.After(s, ms(patience))
+  select {
+    answer = answers.receive(s) => answer
+    _ = deadline.receive(s) => TimedOut {}
+  }
+}
+
+// paced runs one step per tick of a ticker, which stops when s ends.
+fn paced(s: Scope, steps: List[String]) uses io + clock + state: Ok | Closed | Cancelled {
+  ticks = time.Tick(s, ms(10))
+  for (step in steps) {
+    _ = ticks.receive(s)?
+    println(s"tick: $step")
+  }
+  Ok
+}
+
+fn main() {
+  scope s {
+    println(ask(s, "fast question", 0, 3_600_000))
+    // This call runs in a scope of its own, so when it ends the slow worker
+    // is cancelled instead of running on.
+    println(scope q { ask(q, "slow question", 3_600_000, 20) })
+
+    println(scope p { paced(p, ["fetch", "parse", "store"]) })
+
+    // A _ arm runs when nothing is ready, so the select does not wait.
+    mailbox = channel[String](s, 1)
+    poll = () => select {
+      message = mailbox.receive(s) => s"got $message"
+      _ => "nothing yet"
+    }
+    println(poll())
+    _ = mailbox.send(s, "hello")
+    println(poll())
+
+    // A deadline on the scope stops every select waiting in it: the
+    // select gives Cancelled.
+    never = channel[String](s)
+    println(withTimeout(s, 20, c => select {
+      message = never.receive(c) => message
+    }))
+  }
+}

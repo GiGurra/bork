@@ -1,0 +1,52 @@
+// A pipeline is a chain of stages joined by channels. Each stage is a
+// task that receives from the stage before it and sends to the one
+// after, so all stages run at once, and small buffers keep a fast stage
+// from running far ahead of a slow one.
+
+// numbers sends 1, 2, 3, ... until the channel is closed or s is cancelled.
+fn numbers(s: Scope, out: Channel[Int]) uses state: Ok | Closed | Cancelled {
+  for (n in Seq.range(1, 1_000_000_000)) {
+    out.send(s, n)?
+  }
+  Ok
+}
+
+// primes passes on the numbers that are prime.
+fn primes(s: Scope, input: Channel[Int], out: Channel[Int]) uses state: Ok | Closed | Cancelled {
+  for (n in input.values(s)) {
+    if (isPrime(n)) {
+      out.send(s, n)?
+    }
+  }
+  Ok
+}
+
+fn isPrime(n: Int): Bool {
+  n > 1 && range(2, n).filter(d => d * d <= n).all(d => n % d != 0)
+}
+
+// labels turns each number into a line of text.
+fn labels(s: Scope, input: Channel[Int], out: Channel[String]) uses state: Ok | Closed | Cancelled {
+  count = atom(0)
+  for (n in input.values(s)) {
+    out.send(s, s"prime #${update(count, c => c + 1)}: $n")?
+  }
+  Ok
+}
+
+fn main() {
+  scope s {
+    // produce runs each stage as a task and closes its output when the
+    // stage returns.
+    candidates = produce[Int](s, 4, out => numbers(s, out))
+    found = produce[Int](s, 4, out => primes(s, candidates, out))
+    lines = produce[String](s, 0, out => labels(s, found, out))
+    for (line in lines.values(s).take(8)) {
+      println(line)
+    }
+    // numbers would count forever. When the scope ends it cancels the
+    // stages still running: each waiting send gives Cancelled, and ?
+    // returns it.
+    println("done")
+  }
+}

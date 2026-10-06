@@ -1,0 +1,43 @@
+// Fan out: several workers receive from one channel of jobs, so the jobs
+// are shared between them. Fan in: merge passes the values of several
+// channels on to one, which closes when all of them have.
+
+type Order = { id: Int, items: Int }
+type Packed = { order: Int, boxes: Int }
+
+// jobs sends the orders, then returns, and produce closes the channel.
+fn jobs(s: Scope, out: Channel[Order]) uses state: Ok | Closed | Cancelled {
+  for (id in Seq.range(1, 10)) {
+    out.send(s, Order { id: id, items: id * 3 })?
+  }
+  Ok
+}
+
+// pack takes orders until there are none left. A receive gives each
+// order to exactly one worker.
+fn pack(s: Scope, orders: Channel[Order], out: Channel[Packed]) uses state: Ok | Closed | Cancelled {
+  for (order in orders.values(s)) {
+    out.send(s, Packed { order: order.id, boxes: (order.items + 3) / 4 })?
+  }
+  Ok
+}
+
+fn main() {
+  scope s {
+    orders = produce[Order](s, 0, out => jobs(s, out))
+    // Three workers share the orders: fan out.
+    worker = () => produce[Packed](s, 0, out => pack(s, orders, out))
+    workers = [worker(), worker(), worker()]
+    // One channel for all their results: fan in.
+    packed = merge(s, workers).toList(s)
+    match (packed) {
+      results: List[Packed] => {
+        // Which worker packs which order depends on timing; the totals do not.
+        println(s"packed ${results.length()} orders")
+        println(s"boxes: ${results.fold(0, (total, p) => total + p.boxes)}")
+        println(s"orders: ${results.map(p => p.order).sorted()}")
+      }
+      cancelled: Cancelled => println(cancelled)
+    }
+  }
+}
