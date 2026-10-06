@@ -13,7 +13,7 @@ import time
 
 DRIVER = "github.com/GiGurra/bork/internal/driver"
 LSP = "github.com/GiGurra/bork/internal/lsp"
-LSP_SHARDS = ("lsp-0", "lsp-1", "lsp-2")
+LSP_SHARDS = ("lsp-0", "lsp-1", "lsp-2", "lsp-3")
 PACKAGE_SHARDS = {"cli": "github.com/GiGurra/bork/cmd/bork"}
 DEDICATED = {"driver-examples": "TestExamples"}
 CASE_SHARDS = 3
