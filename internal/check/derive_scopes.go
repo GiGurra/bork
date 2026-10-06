@@ -20,8 +20,14 @@ func (c *checker) checkDeriveScopes(method *syntax.FuncDecl, localNames, typeNam
 		}
 		return inner
 	}
+	runtimeLoopBody := false
 	bind := func(env scope, name string, pos diag.Pos) {
 		if name == "" || name == "_" {
+			return
+		}
+		if _, present := env[name]; runtimeLoopBody && present {
+			// Carried-name eligibility depends on ordinary control-flow
+			// checking. Preserve the origin and defer that decision.
 			return
 		}
 		_, builtin := builtins[name]
@@ -47,8 +53,11 @@ func (c *checker) checkDeriveScopes(method *syntax.FuncDecl, localNames, typeNam
 			}
 			bind(env, pat.Rest, pat.RestPos)
 		case *syntax.VariantPat:
-			if len(pat.Path) == 1 && !pat.Context && !pat.Braces && len(pat.Fields) == 0 && !c.isTypeName(pat.Path[0]) && !typeNames[pat.Path[0]] {
+			if len(pat.Path) == 1 && !pat.Context && !pat.Braces && !pat.Positional && len(pat.Fields) == 0 && !c.isTypeName(pat.Path[0]) && !typeNames[pat.Path[0]] {
 				bind(env, pat.Path[0], pat.Pos)
+			}
+			for _, elem := range pat.Elems {
+				pattern(elem, env)
 			}
 			for _, field := range pat.Fields {
 				if field.Pattern == nil {
@@ -93,12 +102,31 @@ func (c *checker) checkDeriveScopes(method *syntax.FuncDecl, localNames, typeNam
 				pattern(node.Pattern, env)
 				return
 			case *syntax.For:
+				savedLoopBody := runtimeLoopBody
+				runtimeLoopBody = false
+				defer func() { runtimeLoopBody = savedLoopBody }()
 				walk(reflect.ValueOf(node.Items), env)
 				inner := copyScope(env)
+				for _, init := range node.Init {
+					walk(reflect.ValueOf(init), inner)
+				}
 				bind(inner, node.Name, node.NamePos)
+				walk(reflect.ValueOf(node.Cond), inner)
+				runtimeLoopBody = savedLoopBody || !node.Comptime
 				walk(reflect.ValueOf(node.Body), inner)
+				runtimeLoopBody = false
+				for _, post := range node.Post {
+					if _, present := inner[post.Name]; !present {
+						c.errorf(post.Pos, "undefined loop post target in derive definition: %s", post.Name)
+					}
+					walk(reflect.ValueOf(post.Type), inner)
+					walk(reflect.ValueOf(post.Value), inner)
+				}
 				return
 			case *syntax.Lambda:
+				savedLoopBody := runtimeLoopBody
+				runtimeLoopBody = false
+				defer func() { runtimeLoopBody = savedLoopBody }()
 				inner := copyScope(env)
 				for _, param := range node.Params {
 					walk(reflect.ValueOf(param.Type), env)
@@ -116,6 +144,9 @@ func (c *checker) checkDeriveScopes(method *syntax.FuncDecl, localNames, typeNam
 				}
 				return
 			case *syntax.ScopeExpr:
+				savedLoopBody := runtimeLoopBody
+				runtimeLoopBody = false
+				defer func() { runtimeLoopBody = savedLoopBody }()
 				for _, policy := range node.Policies {
 					walk(reflect.ValueOf(policy), env)
 				}

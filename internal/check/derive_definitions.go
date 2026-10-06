@@ -99,7 +99,7 @@ func (c *checker) checkDeriveDefinitions(files []*syntax.File) {
 						locals[node.Field] = true
 					}
 				case *syntax.VariantPat:
-					if len(node.Path) == 1 && !node.Context && !node.Braces && len(node.Fields) == 0 && !c.isTypeName(node.Path[0]) && !typeNames[node.Path[0]] {
+					if len(node.Path) == 1 && !node.Context && !node.Braces && !node.Positional && len(node.Fields) == 0 && !c.isTypeName(node.Path[0]) && !typeNames[node.Path[0]] {
 						locals[node.Path[0]] = true
 					}
 				}

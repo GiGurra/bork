@@ -151,7 +151,10 @@ type deriveBudget struct {
 	frames      []*deriveBudgetFrame
 }
 
-type deriveBudgetFrame struct{ start, peak int }
+type deriveBudgetFrame struct {
+	start, peak int
+	deferred    bool
+}
 
 func (budget *deriveBudget) observeDepth(depth int) {
 	for _, frame := range budget.frames {
@@ -862,7 +865,7 @@ func (p *deriveExpansion) clone(value reflect.Value) reflect.Value {
 		if value.IsNil() {
 			return value
 		}
-		if pattern, ok := value.Interface().(*syntax.VariantPat); ok && !pattern.Context && !pattern.Braces && len(pattern.Fields) == 0 && len(pattern.Path) == 1 {
+		if pattern, ok := value.Interface().(*syntax.VariantPat); ok && !pattern.Context && !pattern.Braces && !pattern.Positional && len(pattern.Fields) == 0 && len(pattern.Path) == 1 {
 			if _, known := p.env[pattern.Path[0]].(Type); known {
 				written := &syntax.TypeExpr{Pos: pattern.Pos, Name: pattern.Path[0]}
 				name := ""
@@ -909,7 +912,15 @@ func (p *deriveExpansion) clone(value reflect.Value) reflect.Value {
 				p.c.info.assemblyTypes[written] = typ
 				facts := p.typeFacts[written.Name]
 				if projected != nil {
-					facts = projected.Constraints
+					// A dependent field type can retain only facts whose
+					// arguments do not require the complete owner value.
+					// Sibling facts stay on the descriptor and owner proof.
+					facts = nil
+					for _, constraint := range projected.Constraints {
+						if !constraint.HasSiblingArgs() {
+							facts = append(facts, constraint)
+						}
+					}
 				}
 				if len(facts) != 0 {
 					if p.c.info.shapeTypeFacts == nil {

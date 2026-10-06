@@ -1989,3 +1989,120 @@ fn main(){println(build[Row](2));println(build[Row](-1))}`
 		t.Fatalf("sealed nested head facts: %s, %v", output, err)
 	}
 }
+
+func TestDeriveTemplateUnrequestedConcreteDataflow(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `derive fn unused(x: Int): String { value = x + 1; value }
+fn main() {}`, "derive expression must be String, found Int")
+	checkPreludeSource(t, `derive fn unused(x: Int): Int { if (x) { 1 } else { 2 } }
+fn main() {}`, "derive expression must be Bool, found Int")
+}
+
+func TestDeriveTemplateUnrequestedConcreteCall(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `fn accept(x: Bool): String { "ok" }
+derive fn unused(value: Int): String { accept(value) }
+fn main() {}`, "argument 1 to accept must be Bool, found Int")
+}
+
+func TestDeriveTemplateRuntimeForHeaderScopes(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `derive fn unused(): Int {
+  for (i = 0; i < 3; i = i + 1) { value = i + 1 }
+  0
+}
+fn main() {}`, "")
+	checkPreludeSource(t, `derive fn unused(): Int {
+  for (i = 0; i < 3; i = i + 1) {}
+  i
+}
+fn main() {}`, "undefined local in derive definition: i")
+}
+
+func TestDeriveTemplateConcreteCheckingDefersAmbientCalls(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `ambient trace: String
+fn readTrace() needs trace: String { trace }
+derive fn unused() needs trace: String { readTrace() }
+derive fn provided(): String { with (trace: "yes") { readTrace() } }
+fn main() {}`, "")
+}
+
+func TestDeriveTemplateRuntimeForCarriesAndPostTargets(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `derive fn unused(): Int {
+  for (i = 0; i < 3; i = i + 1) { i = i + 1 }
+  0
+}
+fn main() {}`, "")
+	checkPreludeSource(t, `derive fn unused(): Int {
+  for (i = 0; i < 3; missing = 0) {}
+  0
+}
+fn main() {}`, "undefined loop post target in derive definition: missing")
+}
+
+func TestDeriveTemplateDeferredHelperValidationWorkBudget(t *testing.T) {
+	t.Parallel()
+	var fields strings.Builder
+	for i := 0; i < 128; i++ {
+		fmt.Fprintf(&fields, "f%d: Int = 1,", i)
+	}
+	source := `import "bork/shape"
+class C[T] { fn c(x: T): Bool }
+derive fn finish[A, S](value: S): Bool {
+  match (value.finish()) {
+    _: A => true,
+    _: shape.ValidationError => false
+  }
+}
+derive instance c[T]: C[T] {
+  fn c(x: T): Bool {
+    builder = shape.builder[T]()
+    _ = [comptime for (field in shape.fields[T]()) finish[T, builder.Type](builder)]
+    true
+  }
+}
+type Row = {` + fields.String() + `} derive (C)
+fn main() {}`
+	checkPreludeSource(t, source, "derive template expansion exceeds its compile-time work limit")
+}
+
+func TestDeriveTemplateUnrequestedConcreteGenericCalls(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `fn identity[A](value: A): A { value }
+derive fn unused(value: Int): String { identity[Int](value) }
+fn main() {}`, "derive expression must be String, found Int")
+	checkPreludeSource(t, `fn identity[A](value: A): A { value }
+derive fn unused(value: Int): Int { identity[Int](value) }
+derive fn symbolic[A](value: A): A { identity[A](value) }
+fn main() {}`, "")
+}
+
+func TestDeriveTemplateConcreteCheckingDefersDependentGenericContext(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `fn empty[A](): List[A] { [] }
+derive fn emptyFor[T](): List[T] { empty() }
+derive fn local[T](): List[T] { values: List[T] = empty(); values }
+fn main() {}`, "")
+}
+
+func TestDeriveTemplateStagedForPreservesRuntimeCarryScope(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](): Int {
+  for (i = 0; i < 3; i = i + 1) {
+    comptime for (field in shape.fields[T]()) { i = i + 1 }
+  }
+  0
+}
+fn main() {}`, "")
+}
+
+func TestDeriveTemplatePositionalTargetPatternIsNotBareType(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `class Label[T] { fn label(x: T): Bool }
+derive instance label[T]: Label[T] { fn label(x: T): Bool { x is T(_) } }
+type Row = {} derive (Label)
+fn main() {}`, "is patterns cannot bind names")
+}

@@ -123,6 +123,9 @@ func (p *deriveExpansion) builderCreation(call *syntax.Call, variant *Variant, h
 
 func (p *deriveExpansion) recordBuildCall(call *syntax.Call, operation *shapeBuildCall) {
 	operation.expansion = p
+	for _, frame := range p.budget.frames {
+		frame.deferred = true
+	}
 	if p.c.info.shapeBuildCalls == nil {
 		p.c.info.shapeBuildCalls = map[*syntax.Call]*shapeBuildCall{}
 	}

@@ -215,7 +215,9 @@ func (p *deriveExpansion) evalBlock(block *syntax.Block) (any, bool) {
 
 // Local typed-function memoization preserves logical expansion work and peak
 // depth. A provisional function can serve recursive references, but only a
-// successful complete expansion receives a reusable cost receipt.
+// successful complete expansion receives a reusable cost receipt. Helpers
+// with deferred builder validation (including callers of those helpers) remain
+// uncached until their complete validation cost can be represented in a plan.
 type deriveSpecializationCost struct{ work, depth int }
 
 func (p *deriveExpansion) runtimeHelper(call *syntax.Call, helper *syntax.FuncDecl, pkg *Package) syntax.Expr {
@@ -291,7 +293,7 @@ func (p *deriveExpansion) runtimeHelper(call *syntax.Call, helper *syntax.FuncDe
 		p.c.info.ExpandedFunctions = append(p.c.info.ExpandedFunctions, fn)
 		p.failed = p.failed || child.failed
 		p.budget.frames = p.budget.frames[:len(p.budget.frames)-1]
-		if !child.failed && p.c.diags.Len() == errors {
+		if !child.failed && p.c.diags.Len() == errors && !frame.deferred {
 			if p.c.deriveSpecializationCosts == nil {
 				p.c.deriveSpecializationCosts = map[string]deriveSpecializationCost{}
 			}
