@@ -1,9 +1,2 @@
 // IoError is returned when reading or writing outside the program fails.
 type IoError = { path: String, message: String }
-
-// eprintln prints text and a newline to standard error.
-fn eprintln(text: String) uses io unsafe go {
-  import "fmt"
-  import "os"
-  fmt.Fprintln(os.Stderr, text)
-}

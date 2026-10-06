@@ -76,9 +76,9 @@ and chooses its exit code.
 
 `cli.Error` contains `errors: List[codec.DecodeError]`, each with path and message.
 `error.Render("greet")` formats field errors and adds a usage hint. Pass it to
-eprintln for stderr output; use toString(error) when you need the raw record
-representation. Call process.Exit after Run returns so the handler's scope
-cleanup has finished.
+`eprintln` for stderr output. Use `eprintln(error)` to print the raw record,
+or `toString(error)` when you need its representation as a `String`. Call
+`process.Exit` after Run returns so the handler's scope cleanup has finished.
 
 ## Test explicit arguments
 

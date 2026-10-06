@@ -299,7 +299,7 @@ func (u *effectUses) expr(x Expr) {
 		for _, a := range x.Args {
 			u.expr(a)
 		}
-		if x.Builtin == BuiltinPrintln || x.Builtin == BuiltinAssertSnapshot {
+		if x.Builtin == BuiltinPrintln || x.Builtin == BuiltinEprintln || x.Builtin == BuiltinAssertSnapshot {
 			u.add(EffIO, x.Pos(), x.Name)
 		}
 	case *CallValue:

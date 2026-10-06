@@ -233,7 +233,7 @@ func (dependencies packageDependencies) specializedTree(root Expr, bound map[*Ty
 			if node.Builtin == BuiltinShapeValidate && node.Validation != nil {
 				dependencies.validation(node.Validation, bound)
 			}
-			if node.Builtin == BuiltinToString || node.Builtin == BuiltinPrintln || node.Builtin == BuiltinDbg {
+			if node.Builtin == BuiltinToString || node.Builtin == BuiltinPrintln || node.Builtin == BuiltinEprintln || node.Builtin == BuiltinDbg {
 				for _, value := range node.Args {
 					dependencies.render(subst(value.Type(), bound), map[Type]bool{})
 				}
@@ -308,7 +308,7 @@ func (dependencies packageDependencies) tree(root Expr) {
 			if node.Builtin == BuiltinShapeValidate && node.Validation != nil {
 				dependencies.validation(node.Validation, nil)
 			}
-			if node.Builtin == BuiltinToString || node.Builtin == BuiltinPrintln || node.Builtin == BuiltinDbg {
+			if node.Builtin == BuiltinToString || node.Builtin == BuiltinPrintln || node.Builtin == BuiltinEprintln || node.Builtin == BuiltinDbg {
 				for _, value := range node.Args {
 					dependencies.render(value.Type(), map[Type]bool{})
 				}

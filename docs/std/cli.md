@@ -129,7 +129,7 @@ fn main() {
       println(help.text)
       if (help.diagnostics != "") { eprintln(help.diagnostics) }
     }
-    error: cli.Error => eprintln(toString(error))
+    error: cli.Error => eprintln(error)
   }
 }
 ```
@@ -191,7 +191,7 @@ fn main() {
       println(help.text)
       if (help.diagnostics != "") { eprintln(help.diagnostics) }
     }
-    error: cli.Error => eprintln(toString(error))
+    error: cli.Error => eprintln(error)
     options: Options => println(options.name)
   }
 }
@@ -335,7 +335,7 @@ fn main() {
       println(help.text)
       if (help.diagnostics != "") { eprintln(help.diagnostics) }
     }
-    error: cli.Error => eprintln(toString(error))
+    error: cli.Error => eprintln(error)
   }
 }
 ```
@@ -439,7 +439,7 @@ fn main() {
       println(help.text)
       if (help.diagnostics != "") { eprintln(help.diagnostics) }
     }
-    error: cli.Error => eprintln(toString(error))
+    error: cli.Error => eprintln(error)
   }
 }
 ```

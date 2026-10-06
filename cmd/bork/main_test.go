@@ -394,6 +394,15 @@ func TestDocCommand(t *testing.T) {
 			t.Fatalf("HTML: %s", &stdout)
 		}
 	}
+	for _, args := range [][]string{{"doc", "builtin"}, {"doc", "builtin", "--html"}} {
+		cmd := exec.Command(exe, args...)
+		cmd.Dir = root
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		if err := cmd.Run(); err != nil || stderr.Len() != 0 || !bytes.Contains(stdout.Bytes(), []byte("eprintln")) || bytes.Contains(stdout.Bytes(), []byte("compilerSelect")) {
+			t.Fatalf("builtin doc: %v, %s / %s", err, &stdout, &stderr)
+		}
+	}
 	if err := os.WriteFile(path, []byte("fn Answer(): Int { missing }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
