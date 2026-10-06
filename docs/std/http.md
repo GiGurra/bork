@@ -161,7 +161,7 @@ The valid path succeeds and the fact violation returns 422:
 | `Multipart(request: Request, maxBodyBytes: BodyLimit = 16777216)` | `MultipartForm \| IoError` |
 | `Static(request: Request, root: String, prefix: String = "") uses io` | `Response` |
 
-Except for Static, these helpers are pure. Body parses JSON; syntax errors come from `bork/json`, while type/fact failures come from `bork/codec`. QueryAs and PathAs require derived record decoders, use literal strings for String fields and JSON syntax for other fields, and make missing Option fields None. Repeated query values for one record field are errors.
+Except for Static, these helpers are pure. Body parses JSON; syntax errors come from `bork/json`, while type/fact failures come from `bork/codec`. QueryAs and PathAs require derived record decoders, use literal strings for String fields and JSON syntax for other fields, and make missing Option fields None or use declared defaults. Query and path keys use canonical codec wire names and accept aliases; errors identify the supplied key. Supplying both a canonical key and an alias, or repeated query values for one field, is an error. Unknown keys follow the selected decoder’s policy, including `codec.Unknown.Reject`.
 
 Form parses a URL-encoded body independently of the query. Multipart returns `MultipartForm { values: Headers, files: List[Upload] }`, where `Upload` has `field: String`, `filename: String`, `contentType: String`, and immutable `data: Bytes`.
 

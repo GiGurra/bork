@@ -1,0 +1,9 @@
+ok    schema keeps source names and publishes wire aliases and words
+ok    environment uses override words and accepts aliases
+ok    environment collisions fail before lookup
+ok    CSV uses canonical headers and accepts aliases with supplied error paths
+ok    CSV explains omitted columns
+ok    HTTP query and path use aliases, defaults and unknown policy
+ok    hand-written schemas without new metadata keep source keys
+7 passed, 0 failed
+exit code 0

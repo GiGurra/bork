@@ -79,22 +79,35 @@ fn decodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSch
   if !supported { return CsvErrors{errors: []CsvError{{row: 1, column: "", message: "expected a derived record decoder"}}} }
   if len(schema) == 0 { return CsvErrors{errors: []CsvError{{row: 1, column: "", message: "expected a record with at least one field"}}} }
   if len(rows) == 0 { return []T{} }
-  headers := map[string]int{}
-  known := map[string]bool{}
-  for _, field := range schema { known[field.name] = true }
+  headers := map[int]int{}
+  supplied := map[int]string{}
+  owners := map[string]int{}
   failures := []CsvError{}
-  for index, name := range rows[0] {
-    if _, duplicate := headers[name]; duplicate {
-      failures = append(failures, CsvError{row: 1, column: name, message: "duplicate column"})
-    }
-    headers[name] = index
-    if !known[name] {
-      failures = append(failures, CsvError{row: 1, column: name, message: "unknown column"})
+  for index, field := range schema {
+    key := field.wireName
+    if key == "" { key = field.name }
+    for _, name := range append([]string{key}, field.aliases...) {
+      if _, duplicate := owners[name]; duplicate { failures = append(failures, CsvError{row: 1, column: name, message: "duplicate schema field name"}) }
+      owners[name] = index
     }
   }
-  for _, field := range schema {
-    if _, found := headers[field.name]; !found && !field.optional && !field.hasDefault {
-      failures = append(failures, CsvError{row: 1, column: field.name, message: "required column is missing"})
+  seenHeaders := map[string]bool{}
+  for column, name := range rows[0] {
+    if seenHeaders[name] { failures = append(failures, CsvError{row: 1, column: name, message: "duplicate column"}); continue }
+    seenHeaders[name] = true
+    index, known := owners[name]
+    if !known { failures = append(failures, CsvError{row: 1, column: name, message: "unknown column"}); continue }
+    if first, duplicate := supplied[index]; duplicate {
+      message := "duplicate column"
+      if first != name { message = "same field as " + first }
+      failures = append(failures, CsvError{row: 1, column: name, message: message})
+    } else { headers[index], supplied[index] = column, name }
+  }
+  for index, field := range schema {
+    key := field.wireName
+    if key == "" { key = field.name }
+    if _, found := headers[index]; !found && !field.optional && !field.hasDefault {
+      failures = append(failures, CsvError{row: 1, column: key, message: "required column is missing"})
     }
   }
   if len(failures) != 0 { return CsvErrors{errors: failures} }
@@ -107,23 +120,27 @@ fn decodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSch
     }
     fields := []codec.Field{}
     bad := false
-    for _, field := range schema {
+    for fieldIndex, field := range schema {
+      key := field.wireName
+      if key == "" { key = field.name }
+      name := key
+      if actual, found := supplied[fieldIndex]; found { name = actual }
       var json codec.Value = codec.Value_Null{}
-      if column, found := headers[field.name]; found {
+      if column, found := headers[fieldIndex]; found {
         parsed := parse(row[column], field.kind, field.optional)
         if failure, failed := parsed.(codecs.JsonError); failed {
-          failures = append(failures, CsvError{row: number, column: field.name, message: failure.message})
+          failures = append(failures, CsvError{row: number, column: name, message: failure.message})
           bad = true
           continue
         }
         json = parsed.(codec.Value)
       } else if field.hasDefault { continue }
       if failure, failed := field.validate(json).(codec.DecodeError); failed {
-        failures = append(failures, CsvError{row: number, column: field.name + strings.TrimPrefix(failure.path, "." + field.name), message: failure.message})
+        failures = append(failures, CsvError{row: number, column: name + strings.TrimPrefix(failure.path, "." + key), message: failure.message})
         bad = true
         continue
       }
-      fields = append(fields, codec.Field{name: field.name, value: json})
+      fields = append(fields, codec.Field{name: name, value: json})
     }
     if bad { continue }
     decoded := decodeRow(codec.Value_Object{fields: fields})
@@ -154,7 +171,11 @@ fn encodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSch
   if len(schema) == 0 { return CsvError{row: 1, column: "", message: "expected a record with at least one field"} }
   if len(values) == 0 { return [][]string{} }
   headers := []string{}
-  for _, field := range schema { headers = append(headers, field.name) }
+  for _, field := range schema {
+    key := field.wireName
+    if key == "" { key = field.name }
+    headers = append(headers, key)
+  }
   rows := [][]string{headers}
   for index, value := range values {
     object, supported := encodeRow(value).(codec.Value_Object)
@@ -166,21 +187,23 @@ fn encodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSch
       }
       fields[field.name] = field.value
     }
-    if len(fields) != len(schema) { return CsvError{row: int64(index + 2), column: "", message: "encoded fields do not match the record schema"} }
     row := []string{}
     for _, field := range schema {
-      json, found := fields[field.name]
-      if !found { return CsvError{row: int64(index + 2), column: field.name, message: "encoded field is missing"} }
+      key := field.wireName
+      if key == "" { key = field.name }
+      json, found := fields[key]
+      if !found { return CsvError{row: int64(index + 2), column: key, message: "encoded field is missing; CSV requires every column (use codec.Omit.Never)"} }
       if _, absent := json.(codec.Value_Null); field.optional && absent {
         row = append(row, "")
       } else if field.kind == "string" {
         text, valid := json.(codec.Value_String)
-        if !valid { return CsvError{row: int64(index + 2), column: field.name, message: "expected an encoded string"} }
+        if !valid { return CsvError{row: int64(index + 2), column: key, message: "expected an encoded string"} }
         row = append(row, text.value)
       } else {
         row = append(row, render(json))
       }
     }
+    if len(fields) != len(schema) { return CsvError{row: int64(index + 2), column: "", message: "encoded fields do not match the record schema"} }
     rows = append(rows, row)
   }
   return rows
