@@ -1,0 +1,2 @@
+type Row={name:String="Ada" codec{name:Option.Some("login"),aliases:["user","uid"]}go{json:"login"}} codec{naming:codec.Naming.Snake}
+type Mode=sealed{Plain codec{name:"plain"},Named{value:Int codec{name:"v"}} codec{aliases:["old"]}where ok,Positional(String) codec{fallback:true}}

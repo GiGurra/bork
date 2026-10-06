@@ -24,6 +24,9 @@ for line in [9, 10]
   let variant_column = stridx(getline(line), 'Found') + 1
   call assert_equal('borkType', synIDattr(synID(line, variant_column, 1), 'name'))
 endfor
+call append('$', 'type Row = { value: Int codec { name: "v" } }')
+let group_column = stridx(getline(11), 'codec') + 1
+call assert_equal('borkTagGroup', synIDattr(synID(11, group_column, 1), 'name'))
 for file in split(glob('examples/**/*.bork') . "\n" . glob('testdata/cases/**/*.bork'), "\n")
   execute 'edit! ' . fnameescape(file)
   call assert_equal('bork', &filetype, file)

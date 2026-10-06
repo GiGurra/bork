@@ -2,3 +2,5 @@
  (instance_declaration) (instances_declaration)
  (list_literal) (list_comprehension) (map_literal) (tuple_literal) (tuple_type) (tuple_pattern)
  (go_body) (comment)] @fold
+
+(tag_group) @fold

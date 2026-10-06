@@ -1080,6 +1080,12 @@
     }
   },
   {
+    "type": "comment",
+    "named": true,
+    "extra": true,
+    "fields": {}
+  },
+  {
     "type": "comptime_control_expression",
     "named": true,
     "fields": {},
@@ -1264,10 +1270,6 @@
           "named": true
         },
         {
-          "type": "go_tags",
-          "named": true
-        },
-        {
           "type": "if_expression",
           "named": true
         },
@@ -1337,6 +1339,10 @@
         },
         {
           "type": "string",
+          "named": true
+        },
+        {
+          "type": "tag_group",
           "named": true
         },
         {
@@ -1973,25 +1979,6 @@
       "types": [
         {
           "type": "go_content",
-          "named": true
-        },
-        {
-          "type": "string",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
-    "type": "go_tags",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": true,
-      "required": false,
-      "types": [
-        {
-          "type": "identifier",
           "named": true
         },
         {
@@ -5961,6 +5948,186 @@
     }
   },
   {
+    "type": "tag_entry",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "binary_expression",
+          "named": true
+        },
+        {
+          "type": "block",
+          "named": true
+        },
+        {
+          "type": "boolean",
+          "named": true
+        },
+        {
+          "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
+          "type": "comptime_expression",
+          "named": true
+        },
+        {
+          "type": "for_expression",
+          "named": true
+        },
+        {
+          "type": "generate_expression",
+          "named": true
+        },
+        {
+          "type": "generic_expression",
+          "named": true
+        },
+        {
+          "type": "go_body",
+          "named": true
+        },
+        {
+          "type": "if_expression",
+          "named": true
+        },
+        {
+          "type": "interpolated_string",
+          "named": true
+        },
+        {
+          "type": "is_expression",
+          "named": true
+        },
+        {
+          "type": "lambda_expression",
+          "named": true
+        },
+        {
+          "type": "list_literal",
+          "named": true
+        },
+        {
+          "type": "map_literal",
+          "named": true
+        },
+        {
+          "type": "match_expression",
+          "named": true
+        },
+        {
+          "type": "mock_expression",
+          "named": true
+        },
+        {
+          "type": "number",
+          "named": true
+        },
+        {
+          "type": "parenthesized_expression",
+          "named": true
+        },
+        {
+          "type": "qualified_name",
+          "named": true
+        },
+        {
+          "type": "record_expression",
+          "named": true
+        },
+        {
+          "type": "return_expression",
+          "named": true
+        },
+        {
+          "type": "rune",
+          "named": true
+        },
+        {
+          "type": "scope_expression",
+          "named": true
+        },
+        {
+          "type": "select_expression",
+          "named": true
+        },
+        {
+          "type": "selector_expression",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        },
+        {
+          "type": "try_expression",
+          "named": true
+        },
+        {
+          "type": "tuple_literal",
+          "named": true
+        },
+        {
+          "type": "unary_expression",
+          "named": true
+        },
+        {
+          "type": "with_expression",
+          "named": true
+        },
+        {
+          "type": "yield_expression",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "tag_group",
+    "named": true,
+    "fields": {
+      "package": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "tag_entry",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "test_declaration",
     "named": true,
     "fields": {},
@@ -6678,6 +6845,10 @@
           "named": true
         },
         {
+          "type": "tag_group",
+          "named": true
+        },
+        {
           "type": "type",
           "named": true
         },
@@ -6909,6 +7080,10 @@
       "types": [
         {
           "type": "record_type",
+          "named": true
+        },
+        {
+          "type": "tag_group",
           "named": true
         },
         {
@@ -7390,11 +7565,6 @@
   {
     "type": "class",
     "named": false
-  },
-  {
-    "type": "comment",
-    "named": true,
-    "extra": true
   },
   {
     "type": "comptime",

@@ -100,11 +100,12 @@ func (c *checker) resolveForeignRecords(files []*syntax.File) {
 			}
 			for _, fields := range groups {
 				for _, field := range fields {
-					if len(field.GoTags) > 0 && (!ok || !r.GoGenerated) {
-						c.errorf(field.GoTags[0].Pos, "Go struct tags require a generated record with derive (GoStruct); mirrors cannot add tags")
+					tags := field.GoTags()
+					if len(tags) > 0 && (!ok || !r.GoGenerated) {
+						c.errorf(tags[0].Pos, "Go struct tags require a generated record with derive (GoStruct); mirrors cannot add tags")
 					}
 					seen := map[string]bool{}
-					for _, tag := range field.GoTags {
+					for _, tag := range tags {
 						if seen[tag.Name] {
 							c.errorf(tag.Pos, "Go struct tag %s is repeated", tag.Name)
 						}

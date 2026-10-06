@@ -73,8 +73,9 @@ fn (xs: List[Int]) head() where xs.length() > 0 uses nothing: Int { xs.first() }
         (identifier)))
     (block
       (call_expression
-        (qualified_name
-          (identifier)
+        (selector_expression
+          (qualified_name
+            (identifier))
           (identifier))))))
 
 ==================
@@ -492,8 +493,9 @@ fn f() {
         (select_arm
           (identifier)
           (call_expression
-            (qualified_name
-              (identifier)
+            (selector_expression
+              (qualified_name
+                (identifier))
               (identifier))
             (argument
               (qualified_name
@@ -502,8 +504,9 @@ fn f() {
             (identifier)))
         (select_arm
           (call_expression
-            (qualified_name
-              (identifier)
+            (selector_expression
+              (qualified_name
+                (identifier))
               (identifier))
             (argument
               (qualified_name
