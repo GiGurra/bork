@@ -807,7 +807,7 @@ fn main() {
     f = () => query(d)
     println(f())
     e = connect(s)
-    for (i in [1, 2]) { println(query(e)) }
+    for (i in [1, 2]) { println(query(e)); println(i) }
   }
 }
 fn more(s: Scope, w: Scope, v: Scope, flag: Bool) uses io: String {
@@ -816,10 +816,10 @@ fn more(s: Scope, w: Scope, v: Scope, flag: Bool) uses io: String {
   b = connect(s)
   if (flag) { _ = move(b, w) } else { return "early" }
   e = connect(s)
-  for (x in [e]) { c = e; println(query(c)) }
+  for (x in [e]) { c = e; println(query(c)); println(query(x)) }
   k = connect(s)
   launch(s, () => println(query(k)))
-  k2 = k
+  k2 = k; println(query(k2))
   t = connect(s)
   scope u { launch(u, () => println(query(t))) }
   query(t)
