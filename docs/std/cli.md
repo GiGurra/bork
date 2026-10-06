@@ -234,6 +234,7 @@ There is no process-global registry.
 
 | Setting | Behavior |
 | --- | --- |
+| `version: String = ""` | Enable command-local --version output when nonempty |
 | `completion: Bool = true` | Expose completion shell generators and hidden protocol endpoints |
 | `autoLong: Bool = true` | Derive kebab-case long flags: httpPort becomes --http-port |
 | `autoShort: Bool = false` | Derive the first ASCII letter of the canonical long name |
@@ -333,6 +334,22 @@ function may deliberately enable it again. Auto returned by a custom function
 is resolved under settings after the chain. Prefixes apply only to automatic
 names, once. Enrichers cannot change record defaults, requiredness or facts.
 See [the composed enricher example](../../examples/cli_enrichers/main.bork).
+
+## Version output
+
+Set `settings: .{ version: "1.2.3" }` to enable `--version` for Parse/Run,
+the With APIs, or a tree/root entrypoint. It prints
+`<command path> version 1.2.3` followed by a newline. Explicit-argument APIs
+return this output in `cli.Help`; Run APIs print it. Version output skips
+configuration reads, field validation and handlers, even with required fields.
+
+For a leaf, pass its own Settings to Subcommand; for a group, use
+`group.copy(version: "1.2.3")`. `Command.version` is also available through copy
+for per-command metadata. Versions are local to each command and are not
+inherited by descendants. An empty version leaves an ordinary `version` field
+available; enabling output reserves the long name `version` and rejects a
+colliding flag. No automatic `-v` shorthand is added.
+See [cli_version](../../examples/cli_version/main.bork).
 
 ## Hidden flags and warnings
 
@@ -524,6 +541,7 @@ metadata without changing the leaf's typed options record.
 | Command metadata | Default / meaning |
 | --- | --- |
 | `name: String, description: String` | Required name and one-line help. |
+| `version: String = ""` | Command-local version text; empty disables version output. |
 | `aliases: List[String] = []` | Alternate sibling names. |
 | `longDescription: String = "", examples: String = ""` | Detailed help and usage examples. |
 | `hidden: Bool = false, deprecated: String = ""` | Hide without rejecting; deprecation also warns. |

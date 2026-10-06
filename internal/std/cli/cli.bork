@@ -44,13 +44,13 @@ fn Parse[T: codec.Decode](name: String, description: String, args: List[String],
 fn ParseDetailed[T: codec.Decode](name: String, description: String, args: List[String], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}) uses io: Parsed[T] | Error | Help {
   match (resolve[T](flags, settings, name)) {
     error: Error => error
-    fields: List[FieldSpec] => prepare[T](name, description, args, fields, configFiles, settings.completion)
+    fields: List[FieldSpec] => prepare[T](name, description, args, fields, configFiles, settings.completion, settings.version)
   }
 }
-fn prepare[T: codec.Decode](name: String, description: String, args: List[String], specs: List[FieldSpec], configFiles: List[String], completion: Bool) uses io: Parsed[T] | Error | Help {
+fn prepare[T: codec.Decode](name: String, description: String, args: List[String], specs: List[FieldSpec], configFiles: List[String], completion: Bool, version: String) uses io: Parsed[T] | Error | Help {
   match (inputFields[T](name)) {
     error: Error => error
-    fields: List[inputField] => match (parseInput(name, description, args, specs, fields, configFiles, completion)) {
+    fields: List[inputField] => match (parseInput(name, description, args, specs, fields, configFiles, completion, version)) {
       error: Error => error
       help: Help => help
       input: parsedInput => match (codec.decode[T](input.value)) {

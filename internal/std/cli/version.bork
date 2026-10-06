@@ -1,0 +1,14 @@
+// Version is command-local. Register only the long flag so automatic or explicit
+// user shorthands remain available; Cobra handles it before pre-runs/handlers.
+fn configureVersion(native: nativeCommand, version: String): Ok | Error unsafe go {
+  import "github.com/spf13/cobra"
+  cmd := native.handle.(*cobra.Command)
+  if version == "" { return _Ok{} }
+  if cmd.Flags().Lookup("version") != nil || cmd.PersistentFlags().Lookup("version") != nil {
+    return Error{errors: []codec.DecodeError{{path: cmd.CommandPath(), message: "flag --version is reserved when version output is enabled"}}}
+  }
+  cmd.Version = version
+  cmd.SetVersionTemplate("{{.CommandPath}} version {{.Version}}\n")
+  cmd.Flags().Bool("version", false, "version for "+cmd.Name())
+  return _Ok{}
+}

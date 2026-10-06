@@ -5,6 +5,7 @@ use codec.Defaults
 type Mapping = sealed { Auto, Disabled, Named { name: String } }
 type Choice = { value: String, description: String = "" }
 type Settings = {
+  version: String = ""
   completion: Bool = true
   autoLong: Bool = true
   autoShort: Bool = false

@@ -49,12 +49,15 @@ fn ParseDetailedWith[T: codec.Decode](name: String, description: String, args: L
         error: Error => error
         fields: List[inputField] => match (buildAdapter(name, description, specs, fields, configFiles, codecs.Parse, flagName, completions, invokeCompletion, owner)) {
           error: Error => error
-          prepared: adapter => match (evaluateWith(() => evaluate(prepared, args, settings.completion, configureCompletion))) {
-            error: Error => error
-            help: Help => help
-            input: parsedInput => match (codec.decode[T](input.value)) {
-              error: codec.DecodeError => withWarnings(Error { errors: [error] }, input.warnings, input.path)
-              options: T => Parsed[T] { options: options, warnings: input.warnings }
+          prepared: adapter => {
+            configureVersion(prepared.native, settings.version)?
+            match (evaluateWith(() => evaluate(prepared, args, settings.completion, configureCompletion))) {
+              error: Error => error
+              help: Help => help
+              input: parsedInput => match (codec.decode[T](input.value)) {
+                error: codec.DecodeError => withWarnings(Error { errors: [error] }, input.warnings, input.path)
+                options: T => Parsed[T] { options: options, warnings: input.warnings }
+              }
             }
           }
         }
@@ -77,7 +80,7 @@ fn RunWith[T: codec.Decode](name: String, description: String, run: (T, Scope) u
 
 // SubcommandWith stores dynamic completers alongside the typed leaf handler.
 fn SubcommandWith[T: codec.Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, completions: List[Completion] = [], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}): Command {
-  makeSubcommand[T](name, description, run, configFiles, resolve[T](flags, settings, name), inputFields[T](name), settings.completion, completions)
+  makeSubcommand[T](name, description, run, configFiles, resolve[T](flags, settings, name), inputFields[T](name), settings.completion, completions, settings.version)
 }
 
 // Native Cobra callbacks hold their closed effects behind the private adapter.
