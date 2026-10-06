@@ -52,7 +52,8 @@ type Options = {
  aliasLiteral: Token = "Token.keep"
 } derive (codec.Decode)
 fn flags(): List[cli.Flag] {
- [.{ field: "config", configFile: true },
+ [.{ field: "count", description: Option.Some("Count \u00603\u0060 items to process.") },
+  .{ field: "config", configFile: true },
   .{ field: "token", long: cli.Mapping.Disabled, env: "BORK_HELP_TOKEN" },
   .{ field: "secret", long: cli.Mapping.Disabled, env: "BORK_HELP_SECRET", hidden: true },
   .{ field: "oldToken", long: cli.Mapping.Disabled, env: "BORK_HELP_OLD", deprecated: "use token instead" }]
@@ -60,7 +61,7 @@ fn flags(): List[cli.Flag] {
 fn main() {
  arguments = process.Args()
  if (arguments.head() == Option.Some("tree")) {
-  match (cli.Dispatch("app", "", arguments.drop(1), [cli.Group("group", "Group", [cli.Subcommand[Options]("serve", "Serve", (options, s) => { println("handler") }, flags: flags())])])) {
+  match (cli.Dispatch("app", "", arguments.drop(1), [cli.Group("group", "Group", [cli.Subcommand[Options]("serve", "Serve", (options, s) => { println("handler") }, flags: flags()).copy(examples: "      --count 3 \\")])])) {
    help: cli.Help => { println(help.text) }
    other => { panic(s"Expected help, got ${other}") }
   }
@@ -88,6 +89,9 @@ fn main() {
 				t.Fatalf("help: %v\n%s", err, out)
 			}
 			text := string(out)
+			if args[0] == "tree" && !strings.Contains(text, "Examples:\n      --count 3 \\") {
+				t.Errorf("command example changed:\n%s", text)
+			}
 			for _, want := range []string{
 				"--count int", "--ratio float", "--character rune", "--tags strings", "--ids ints",
 				"--level json", "--db json", "--box json", "--custom string",

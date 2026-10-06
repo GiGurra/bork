@@ -72,7 +72,8 @@ fn configureHelp(native: nativeCommand, specs: List[FieldSpec], fields: List[inp
     current.SetOut(out)
     current.SetErr(errOut)
     if err != nil { return err }
-    lines := strings.Split(captured.String(), "\n")
+    flagRows := current.LocalFlags().FlagUsages()
+    lines := strings.Split(flagRows, "\n")
     // Preserve Cobra's command/positional layout and pflag's wrapping. Change
     // only value labels at the start of known flag rows, never descriptions.
     current.LocalFlags().VisitAll(func(flag *pflag.Flag) {
@@ -91,7 +92,12 @@ fn configureHelp(native: nativeCommand, specs: List[FieldSpec], fields: List[inp
         lines[i] = prefix+replacement+suffix
       }
     })
-    text := strings.Join(lines, "\n")
+    // Cobra also prints user examples verbatim. Replace its actual flag block,
+    // which follows examples, rather than rewriting similar example lines.
+    text := captured.String()
+    before := strings.TrimRight(flagRows, " \t\r\n")
+    after := strings.TrimRight(strings.Join(lines, "\n"), " \t\r\n")
+    if before != "" { if index := strings.LastIndex(text, before); index >= 0 { text = text[:index]+after+text[index+len(before):] } }
     if len(envLines) != 0 { text = strings.TrimRight(text, "\n")+"\n\nEnvironment variables:\n"+strings.Join(envLines, "\n")+"\n" }
     _, err = fmt.Fprint(out, text)
     return err
