@@ -1,0 +1,99 @@
+// Labels follow the selected decoder's input kind, rather than the raw String
+// pointers used for boa binding. Numeric built-ins retain their precision.
+fn helpType(field: inputField): String unsafe go {
+  import "strings"
+  kind, typ := field.kind, field.typeName
+  for strings.HasPrefix(typ, "Option[") && strings.HasSuffix(typ, "]") { typ = typ[7:len(typ)-1] }
+  list := strings.HasPrefix(kind, "list:")
+  if list {
+    kind = strings.TrimPrefix(kind, "list:")
+    if strings.HasPrefix(typ, "List[") && strings.HasSuffix(typ, "]") { typ = typ[5:len(typ)-1] }
+  }
+  label := "json"
+  switch kind {
+  case "string":
+    label = "string"
+    if typ == "Rune" { label = "rune" }
+  case "bool": label = "bool"
+  case "number":
+    label = "number"
+    switch typ {
+    case "Int", "Float", "Int8", "Int16", "Int32", "Uint8", "Uint16", "Uint32", "Uint64", "Float32": label = strings.ToLower(typ)
+    }
+  }
+  if list { label += "s" }
+  return label
+}
+
+// Defaults are readable display text, not guaranteed accepted input syntax.
+// Removing only the outer type keeps nested values and quoted strings intact.
+fn helpDefault(field: inputField): String unsafe go {
+  import "strings"
+  text, typ := field.defaultText, field.typeName
+  for strings.HasPrefix(typ, "Option[") && strings.HasSuffix(typ, "]") {
+    typ = typ[7:len(typ)-1]
+    if text == "Option.None" { return "unset" }
+    if strings.HasPrefix(text, "Option.Some(") && strings.HasSuffix(text, ")") { text = text[12:len(text)-1] }
+  }
+  if typ == "String" { return text }
+  if index := strings.IndexByte(typ, '['); index >= 0 { typ = typ[:index] }
+  text = strings.TrimPrefix(text, typ+".")
+  return strings.TrimPrefix(text, typ+" ")
+}
+
+fn configureHelp(native: nativeCommand, specs: List[FieldSpec], fields: List[inputField], typeLabel: (inputField) => String, defaultLabel: (inputField) => String): Ok unsafe go {
+  import "bytes"
+  import "fmt"
+  import "strings"
+  import "github.com/spf13/cobra"
+  import "github.com/spf13/pflag"
+  cmd := native.handle.(*cobra.Command)
+  labels := map[string]string{}
+  metadata := map[string]FieldSpec{}
+  for _, spec := range specs { metadata[spec.field] = spec }
+  envLines := []string{}
+  for _, field := range fields {
+    spec := metadata[field.field]
+    if long, enabled := spec.long.(Mapping_Named); enabled { labels[long.name] = typeLabel(field) }
+    if _, enabled := spec.long.(Mapping_Named); enabled || spec.positional || spec.hidden || spec.deprecated != "" { continue }
+    env, enabled := spec.env.(Mapping_Named)
+    if !enabled { continue }
+    doc := spec.description
+    if field.hasDefault { doc += " (default " + defaultLabel(field) + ")" } else if !field.optional { doc += " (required)" }
+    envLines = append(envLines, fmt.Sprintf("  %s %s  %s", env.name, typeLabel(field), strings.TrimSpace(doc)))
+  }
+  usage := cmd.UsageFunc()
+  cmd.SetUsageFunc(func(current *cobra.Command) error {
+    out, errOut := current.OutOrStdout(), current.ErrOrStderr()
+    var captured bytes.Buffer
+    current.SetOut(&captured)
+    current.SetErr(&captured)
+    err := usage(current)
+    current.SetOut(out)
+    current.SetErr(errOut)
+    if err != nil { return err }
+    lines := strings.Split(captured.String(), "\n")
+    // Preserve Cobra's command/positional layout and pflag's wrapping. Change
+    // only value labels at the start of known flag rows, never descriptions.
+    current.LocalFlags().VisitAll(func(flag *pflag.Flag) {
+      label, known := labels[flag.Name]
+      previous, _ := pflag.UnquoteUsage(flag)
+      if !known || previous == "" { return }
+      prefix := "      --"+flag.Name+" "
+      if flag.Shorthand != "" { prefix = "  -"+flag.Shorthand+", --"+flag.Name+" " }
+      replacement := label
+      if len(label) < len(previous) { replacement += strings.Repeat(" ", len(previous)-len(label)) }
+      for i, line := range lines {
+        if !strings.HasPrefix(line, prefix+previous+" ") { continue }
+        suffix := strings.TrimPrefix(line, prefix+previous)
+        // Longer labels consume padding while retaining a word separator.
+        for extra := len(label)-len(previous); extra > 0 && strings.HasPrefix(suffix, "  "); extra-- { suffix = suffix[1:] }
+        lines[i] = prefix+replacement+suffix
+      }
+    })
+    text := strings.Join(lines, "\n")
+    if len(envLines) != 0 { text = strings.TrimRight(text, "\n")+"\n\nEnvironment variables:\n"+strings.Join(envLines, "\n")+"\n" }
+    _, err = fmt.Fprint(out, text)
+    return err
+  })
+}
