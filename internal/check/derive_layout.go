@@ -17,7 +17,10 @@ type metadataRecord struct {
 	typ    *Record
 	fields map[string]any
 }
-type metadataList struct{ items []any }
+type metadataList struct {
+	items   []any
+	element Type
+}
 type metadataVariant struct {
 	typ    *Sealed
 	name   string
@@ -146,7 +149,11 @@ func (p *deriveExpansion) layoutList(x *syntax.ListLit) (any, bool) {
 			delete(p.env, loop.Name)
 		}
 	}
-	return metadataList{items: items}, true
+	element := Type(nil)
+	if list, ok := p.c.info.types[x].(*List); ok {
+		element = list.Elem
+	}
+	return metadataList{items: items, element: element}, true
 }
 
 func (p *deriveExpansion) layoutRecord(x *syntax.RecordLit) (any, bool) {

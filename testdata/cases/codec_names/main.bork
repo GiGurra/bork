@@ -1,0 +1,15 @@
+import "bork/codec"
+import "bork/json"
+use codec.Defaults
+
+type Row = { userID: String, httpURLPort: Int codec { name: "port" } } codec { naming: codec.Naming.Snake } derive (codec.Encode, codec.Decode)
+type Level = sealed { SiteAdmin, HTTPServer } derive (codec.Encode, codec.Decode)
+type Verbatim = sealed { SiteAdmin } codec { naming: codec.Naming.Verbatim } derive (codec.Encode, codec.Decode)
+fn main() {
+  println(codec.Words("httpURLPort ipv4Addr--user_ID"))
+  println(codec.JoinWords(codec.Words("httpURLPort"), codec.Naming.ScreamingSnake))
+  println(codec.WireName("httpURLPort", codec.Naming.Camel))
+  println(json.Encode(Row { userID: "u", httpURLPort: 8 }))
+  println(json.Encode(Level.SiteAdmin))
+  println(json.Encode(Verbatim.SiteAdmin))
+}
