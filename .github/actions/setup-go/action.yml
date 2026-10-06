@@ -35,10 +35,12 @@ runs:
       run: |
         echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
         echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+        echo "BORK_GO_CACHE_STARTED=$(date +%s)" >> "$GITHUB_ENV"
     # Restore everywhere, but callers save only successful main runs after
-    # their tests/builds. PR snapshots would evict the warm main caches.
+    # their tests/builds, through ../save-go-cache. PR snapshots would evict
+    # the warm main caches.
     # A commit-specific key retains new builds even when go.sum is unchanged.
-    # Fall back to the same family first: a normal snapshot holds no race
+    # Fall back to the same family first: other jobs' snapshots hold no race
     # builds, so restoring one leaves a race shard to compile everything.
     - uses: actions/cache/restore@v4
       id: cache
