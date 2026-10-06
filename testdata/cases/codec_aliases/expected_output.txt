@@ -1,0 +1,18 @@
+{"login":3,"upper_bound":9}
+error .uid: same field as .login
+error .login: same field as .old
+error .old: must be positive
+error .uid: must satisfy loginID <= upperBound (ordered)
+error .extra: unknown field
+error .login: is missing
+"SITE_ADMIN"
+"SITE_ADMIN"
+{"type":"Item","fieldValue":4}
+error .old: expected a whole number, found a string
+error .extra: unknown field
+error .old: computed field is read-only
+error .row.uid: must be positive
+{"value":1}
+Row { loginID: 3, upperBound: 9 }
+Row { loginID: 3, upperBound: 9 }
+DecodeError { path: ".login", message: "same field as .old" }

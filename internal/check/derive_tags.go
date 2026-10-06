@@ -118,6 +118,16 @@ func (p *deriveExpansion) checkedTagValueRaw(value syntax.Expr, raw bool) (any, 
 		return metadataVariant{typ: option, name: "Some", fields: map[string]any{field.Name: metadataChecked{value: value, raw: true}}}, true
 	}
 	switch value := value.(type) {
+	case *syntax.ListLit:
+		list, ok := p.c.info.types[value].(*List)
+		if !ok {
+			return metadataChecked{value: value, raw: raw}, true
+		}
+		items := make([]any, len(value.Elems))
+		for i, element := range value.Elems {
+			items[i], _ = p.checkedTagValue(element)
+		}
+		return metadataList{items: items, element: list.Elem}, true
 	case *syntax.IntLit:
 		return p.eval(value)
 	case *syntax.Unary:

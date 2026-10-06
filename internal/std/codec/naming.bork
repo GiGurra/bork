@@ -2,9 +2,10 @@ import "bork/shape"
 
 // Naming selects the spelling of record fields and sealed tags on the wire.
 type Naming = sealed { Verbatim, Camel, Pascal, Snake, Kebab, ScreamingSnake }
-type TypeTags = { naming: Option[Naming] = Option.None }
-type FieldTags = { name: Option[String] = Option.None }
-type VariantTags = { name: Option[String] = Option.None }
+type Unknown = sealed { Ignore, Reject }
+type TypeTags = { naming: Option[Naming] = Option.None, unknown: Unknown = Unknown.Ignore }
+type FieldTags = { name: Option[String] = Option.None, aliases: List[String] = [] }
+type VariantTags = { name: Option[String] = Option.None, aliases: List[String] = [], fallback: Bool = false }
 
 // Words splits separators and transitions in names, retaining digits within
 // their word and treating the end of an acronym as a new capitalised word.
@@ -62,26 +63,86 @@ fn remapWirePath(path: String, names: List[(String, String)]): String unsafe go 
 // These checks consume closed names only during typed derive expansion.
 fn wireNameAllowed(name: String): Bool unsafe go { panic("wireNameAllowed requires derive expansion") }
 fn variantNameAllowed(name: String): Bool unsafe go { panic("variantNameAllowed requires derive expansion") }
-fn wireNamesUnique(names: List[String]): Bool unsafe go { panic("wireNamesUnique requires derive expansion") }
 
 derive fn CheckFieldNames[T](fields: List[shape.Field[T]]): Ok {
   comptime for (field in fields) {
+    comptime if (!wireAliasesAllowed(FieldAliases[T](field), false)) { shape.fail("codec field '" + field.name + "' has an invalid alias") }
     comptime if (!wireNameAllowed(FieldWireName[T](field))) { shape.fail("codec field '" + field.name + "' has an empty wire name or the YAML merge key '<<'") }
   }
-  comptime if (!wireNamesUnique([comptime for (field in fields) FieldWireName[T](field)])) { shape.fail("codec fields have duplicate wire names") }
+  comptime if (!wireNamespacesUnique([comptime for (field in fields) FieldNames[T](field)])) { shape.fail("codec fields have duplicate wire names or aliases") }
+  Ok
+}
+derive fn CheckPositionalNames[T](fields: List[shape.Field[T]]): Ok {
+  comptime for (field in fields) {
+    comptime if (field.tagged[FieldTags]().getOr(FieldTags {}).name.isSome() || !FieldAliases[T](field).isEmpty()) { shape.fail("codec names and aliases cannot be used on positional fields") }
+  }
   Ok
 }
 derive fn CheckWireNames[T](): Ok {
   comptime match (shape.kind[T]()) {
-    shape.Record => { comptime if (!shape.positional[T]()) { CheckFieldNames[T](shape.fields[T]()) } else { Ok } }
+    shape.Record => { comptime if (!shape.positional[T]()) { CheckFieldNames[T](shape.fields[T]()) } else { CheckPositionalNames[T](shape.fields[T]()) } }
     shape.Sealed => {
       comptime for (variant in shape.variants[T]()) {
+        comptime if (!wireAliasesAllowed(VariantAliases[T](variant), true)) { shape.fail("codec variant '" + variant.name + "' has an invalid YAML alias") }
         comptime if (!variantNameAllowed(VariantWireName[T](variant))) { shape.fail("codec variant '" + variant.name + "' has invalid YAML wire name '" + VariantWireName[T](variant) + "'") }
-        comptime if (!variant.positional) { CheckFieldNames[T](variant.fields) }
+        comptime if (!variant.positional) { CheckFieldNames[T](variant.fields) } else { CheckPositionalNames[T](variant.fields) }
       }
-      comptime if (!wireNamesUnique([comptime for (variant in shape.variants[T]()) VariantWireName[T](variant)])) { shape.fail("codec variants have duplicate wire names") }
+      comptime if (!wireNamespacesUnique([comptime for (variant in shape.variants[T]()) VariantNames[T](variant)])) { shape.fail("codec variants have duplicate wire names or aliases") }
       Ok
     }
     _ => Ok
   }
+}
+
+// Aliases are exact input spellings; the naming policy does not change them.
+derive fn FieldAliases[T](field: shape.Field[T]): List[String] {
+  field.tagged[FieldTags]().getOr(FieldTags {}).aliases
+}
+derive fn VariantAliases[T](variant: shape.Variant[T]): List[String] {
+  variant.tagged[VariantTags]().getOr(VariantTags {}).aliases
+}
+derive fn FieldNames[T](field: shape.Field[T]): List[String] {
+  wireNames(FieldWireName[T](field), FieldAliases[T](field))
+}
+derive fn VariantNames[T](variant: shape.Variant[T]): List[String] {
+  wireNames(VariantWireName[T](variant), VariantAliases[T](variant))
+}
+derive fn RejectUnknown[T](): Bool {
+  shape.tagged[T, TypeTags]().getOr(TypeTags {}).unknown == Unknown.Reject
+}
+fn wireNames(name: String, aliases: List[String]): List[String] { prepend(name, aliases) }
+fn wireAliasesAllowed(aliases: List[String], variant: Bool): Bool unsafe go { panic("wireAliasesAllowed requires derive expansion") }
+fn wireNamespacesUnique(names: List[List[String]]): Bool unsafe go { panic("wireNamespacesUnique requires derive expansion") }
+
+// Duplicate spellings are checked in input order before constructing fields.
+fn checkInputNames(fields: List[Field], namespaces: List[List[String]], protocol: List[String], reject: Bool): Ok | DecodeError unsafe go {
+  owners := map[string]int{}
+  for index, names := range namespaces { for _, name := range names { owners[name] = index } }
+  seen := map[int]string{}
+  for _, field := range fields {
+    skip := false
+    for _, name := range protocol { if field.name == name { skip = true; break } }
+    if skip { continue }
+    owner, known := owners[field.name]
+    if !known {
+      if reject { return DecodeError{path:"." + field.name, message:"unknown field"} }
+      continue
+    }
+    if first, duplicate := seen[owner]; duplicate { return DecodeError{path:"." + field.name, message:"same field as ." + first} }
+    seen[owner] = field.name
+  }
+  return _borkOk()
+}
+fn inputNamedField(fields: List[Field], names: List[String]): Option[Value] {
+  fields.find(field => names.includes(field.name)).map(field => field.value)
+}
+fn inputWireName(fields: List[Field], canonical: String, names: List[String]): String {
+  fields.find(field => names.includes(field.name)).map(field => field.name).getOr(canonical)
+}
+
+fn wireNamesHave(names: List[String], name: String): Bool { names.includes(name) }
+
+// Fallback behavior and its shape restrictions are supplied by enum support.
+derive fn VariantFallback[T](variant: shape.Variant[T]): Bool {
+  variant.tagged[VariantTags]().getOr(VariantTags {}).fallback
 }
