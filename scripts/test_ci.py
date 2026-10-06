@@ -1,4 +1,5 @@
 """Coverage and timing regressions for the CI runner (Go only for the -run check)."""
+import io
 import json
 from pathlib import Path
 import re
@@ -9,6 +10,8 @@ import tempfile
 import time
 from types import SimpleNamespace
 import unittest
+import zipfile
+import zlib
 from unittest.mock import patch
 
 import ci
@@ -36,6 +39,16 @@ class PartitionTests(unittest.TestCase):
         self.assertEqual(len(units), len(set(units)))
         reordered = {package: list(reversed(names)) for package, names in reversed(list(tests.items()))}
         self.assertEqual(groups, ci.partition(list(reversed(packages)), reordered, weights))
+
+    def test_new_roots_use_package_upper_decile_separately_from_fixtures(self):
+        weights = {"packages": {}, "tests": {ci.DRIVER: {
+            **{f"TestRoot{i}": i for i in range(1, 11)}, "TestCases/slow": 100}}}
+        groups = ci.partition([], {ci.DRIVER: ["TestNew"]}, weights, shards=1)
+        self.assertEqual(groups[0]["weight"], 9 + ci.PACKAGE_OVERHEAD)
+        groups = ci.partition([], {ci.DRIVER: ["TestCases/new"]}, weights, shards=1)
+        self.assertEqual(groups[0]["weight"], 100 + ci.PACKAGE_OVERHEAD)
+        groups = ci.partition([], {ci.LSP: ["TestNew"]}, weights, shards=1)
+        self.assertEqual(groups[0]["weight"], ci.DEFAULT_SECONDS + ci.PACKAGE_OVERHEAD)
 
     def test_ambiguous_units_fail_closed(self):
         with self.assertRaises(RuntimeError):
@@ -168,6 +181,92 @@ class MeasurementTests(unittest.TestCase):
         ]:
             with self.subTest(events=events), self.assertRaises(RuntimeError):
                 self.measure(events)
+
+
+class FetchTests(unittest.TestCase):
+    def setUp(self):
+        self.artifacts = [{"id": index, "name": f"ci-{index}", "expired": False} for index in range(ci.SHARDS)]
+        self.archives = {}
+        for index in range(ci.SHARDS):
+            group = {"packages": [], "tests": {ci.DRIVER: [f"TestRoot{index}"]}}
+            events = [{"Action": "pass", "Package": ci.DRIVER, "Test": f"TestRoot{index}", "Elapsed": index + 1}]
+            self.archives[index] = self.archive(index, group, events)
+
+    def archive(self, index, group, events, result=0):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as zipped:
+            zipped.writestr(f"report-{index}.json", json.dumps({"shard": index, "result": result, "selected": group}))
+            zipped.writestr(f"shard-{index}-0.jsonl", "\n".join(map(json.dumps, events)))
+            # Unrelated members are never extracted.
+            zipped.writestr("../ignored", "ignored")
+        return buffer.getvalue()
+
+    def api(self, endpoint, deadline):
+        self.assertGreater(deadline, time.monotonic())
+        if "/workflows/" in endpoint:
+            self.assertIn("branch=main&event=push&status=success", endpoint)
+            return json.dumps({"workflow_runs": [{"id": 123}]}).encode()
+        if "/runs/" in endpoint:
+            return json.dumps({"artifacts": self.artifacts}).encode()
+        return self.archives[int(endpoint.split("/")[-2])]
+
+    def fetch(self, api=None):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "nested" / "weights.json"
+            with patch.dict("os.environ", {"GITHUB_REPOSITORY": "example/repo"}), \
+                 patch.object(ci, "github_api", side_effect=api or self.api), patch("builtins.print") as printed:
+                ci.fetch_weights(destination)
+            return destination.read_bytes(), str(printed.call_args_list)
+
+    def test_complete_successful_main_run_replaces_committed_weights(self):
+        data, printed = self.fetch()
+        weights = json.loads(data)
+        self.assertEqual(weights["tests"][ci.DRIVER], {f"TestRoot{i}": i + 1 for i in range(ci.SHARDS)})
+        self.assertIn("successful main run 123", printed)
+
+    def test_api_timeout_auth_or_no_successful_run_falls_back(self):
+        for error in [subprocess.TimeoutExpired("gh", 1), subprocess.CalledProcessError(1, "gh"),
+                      OSError("offline"), IndexError("no successful run")]:
+            with self.subTest(error=error):
+                def fail(endpoint, deadline):
+                    raise error
+                data, printed = self.fetch(fail)
+                self.assertEqual(data, ci.TIMINGS.read_bytes())
+                self.assertIn("Using committed CI timings", printed)
+
+    def test_corrupt_compressed_member_falls_back(self):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zipped:
+            zipped.writestr("report-0.json", "a report to compress")
+        archive = bytearray(buffer.getvalue())
+        # Keep ZIP metadata intact but use DEFLATE's reserved block type.
+        archive[30 + len("report-0.json")] = 0x07
+        with zipfile.ZipFile(io.BytesIO(archive)) as zipped, self.assertRaises(zlib.error):
+            zipped.read("report-0.json")
+        self.archives[0] = bytes(archive)
+        data, printed = self.fetch()
+        self.assertEqual(data, ci.TIMINGS.read_bytes())
+        self.assertIn("Using committed CI timings", printed)
+
+    def test_missing_expired_corrupt_failed_or_incomplete_artifacts_fall_back(self):
+        for failure in ["missing", "expired", "corrupt", "failed", "incomplete", "overlap", "invalid"]:
+            with self.subTest(failure=failure):
+                self.setUp()
+                if failure == "missing":
+                    self.artifacts.pop()
+                elif failure == "expired":
+                    self.artifacts[0]["expired"] = True
+                elif failure == "corrupt":
+                    self.archives[0] = b"bad zip"
+                else:
+                    name = "TestRoot1" if failure == "overlap" else "TestRoot0"
+                    group = {"packages": [], "tests": {ci.DRIVER: [name]}}
+                    events = [] if failure == "incomplete" else [{"Action": "pass", "Package": ci.DRIVER,
+                                                                 "Test": name, "Elapsed": -1 if failure == "invalid" else 1}]
+                    self.archives[0] = self.archive(0, group, events, result=1 if failure == "failed" else 0)
+                data, printed = self.fetch()
+                self.assertEqual(data, ci.TIMINGS.read_bytes())
+                self.assertIn("Using committed CI timings", printed)
 
 
 class RunTests(unittest.TestCase):
