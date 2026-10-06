@@ -385,19 +385,20 @@ String methods include `byteLength`, `runeCount`, `contains`, `startsWith`, `end
 ### Printing
 
 `println` writes values to standard output, separated by spaces, then adds a
-newline. `eprintln` writes one `String` to standard error. Convert another type
-with `toString`, or interpolate it:
+newline. `eprintln` accepts the same values and writes to standard error.
+Both use a value's `Show` instance when available:
 
 ```bork
 fn main() {
   count = 3
   println("count:", count)
-  eprintln(toString(count))
-  eprintln(s"count: $count")
+  eprintln(count)
+  eprintln("count:", count)
 }
 ```
 
-Calling `eprintln(count)` or `eprintln("count:", count)` is a compile error.
+Calling either function with no arguments prints a newline. Use `toString` or
+interpolation when you need the rendered value as a `String`.
 Functions that print declare `uses io`; `main` can use the entry point's effects.
 
 ## Runes
