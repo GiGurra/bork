@@ -13,7 +13,7 @@ fn main() {
   match (cli.Run[Options]("docs", "Field comments become help", (options, s) => {
     println(s"Connecting to ${options.host}; keep alive: ${options.keepAlive}")
     }, flags: [.{ field: "keepAlive", description: Option.Some("Reuse the connection.") }])) {
-    error: cli.Error => { println(error); process.Exit(2) }
+    error: cli.Error => { eprintln(error.Render("docs")); process.Exit(2) }
     Ok => {}
   }
 }

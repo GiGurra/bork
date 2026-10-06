@@ -18,7 +18,7 @@ fn commands(): List[cli.Command] {
 }
 fn main() {
   match (cli.RunCommands("fleet", "Manage a fleet", commands())) {
-    error: cli.Error => { println(error); process.Exit(2) }
+    error: cli.Error => { eprintln(error.Render("fleet")); process.Exit(2) }
     Ok => {}
   }
 }

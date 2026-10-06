@@ -8,7 +8,7 @@ fn main() {
   match (cli.Run[Options]("env", "Opt into automatic environment bindings", (options, s) => {
     println(s"Connecting to ${options.serverHost}")
     }, flags: [.{ field: "internalToken", long: cli.Mapping.Disabled, envName: cli.Mapping.Disabled }], settings: .{ autoEnv: true, envPrefix: "BORK_EXAMPLE" })) {
-    error: cli.Error => { println(error); process.Exit(2) }
+    error: cli.Error => { eprintln(error.Render("env")); process.Exit(2) }
     Ok => {}
   }
 }

@@ -12,7 +12,16 @@ first; item numbers below refer to its §3 table.
   findings fixed). CI was running at handoff; check it, then the lead merges.
 - **bork-9ay1ag**: filed for deferred item 12 (config discovery, dump, live
   reload, value sources). Not part of this plan.
-- No library changes have been made yet.
+- PR A contains no library changes.
+
+## Implementation progress
+
+- Item 1 adds `cli.Error.Render(command: String): String`: readable `Error:`
+  lines followed by a usage hint, preserving decoder paths and omitting an
+  empty path for whole-record failures. CLI examples print it with `eprintln`
+  and retain their existing exit status. `cli_visibility` demonstrates accepted
+  hidden flags and deprecated-flag warnings. `docs4e` owns the matching
+  `docs/std/cli.md` API documentation update.
 
 ## Approved order (lead, message #14009): one focused PR each, under ~2k lines
 

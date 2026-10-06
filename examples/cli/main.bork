@@ -20,7 +20,7 @@ fn main() {
     println(options.tags)
     }, flags: [.{ field: "port", short: "p" }, .{ field: "config", configFile: true }])
   match (result) {
-    error: cli.Error => { println(error); process.Exit(2) }
+    error: cli.Error => { eprintln(error.Render("greet")); process.Exit(2) }
     Ok => {}
   }
 }
