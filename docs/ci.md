@@ -61,9 +61,12 @@ python3 -m unittest discover -s scripts -p 'test_ci.py'
 ```
 
 Each shard reports the wall time of its run step, including discovery and
-compilation but not cache restore or save. Above 120 seconds it warns; at 180
-seconds it fails and terminates its test process groups, naming the tests still
-running. A shard also fails when a selected package, test or fixture produced
+compilation but not cache restore or save. Above 120 seconds it warns, and
+above 180 seconds it warns that the budget was exceeded. Discovery, which links
+the split packages' race test binaries, and the test run each have their own
+180-second limit; reaching one fails the shard and terminates its process
+groups, naming the tests still running. A cold build cache, after a go.sum or
+Go version change, can push one run past the budget without failing it. A shard also fails when a selected package, test or fixture produced
 no result, since Go exits successfully when a `-run` pattern matches nothing. Its log shows each package result and
 the output of failing tests. CI uploads a report with the selected tests,
 elapsed seconds and status, and the raw `go test -json` events.
@@ -97,8 +100,10 @@ successful dependencies, including all matrix children. The compiler performance
 Every Go job restores module and build caches through the shared setup action.
 Only successful main jobs save new snapshots, through the `save-go-cache`
 action, with a distinct writer key for each job or shard; PR runs reuse main's
-caches. Restore fallbacks prefer another test shard, since other jobs hold no
-race builds, and then borrow any job's content-addressed build entries. Before
+caches. Keys put the writer name before the go.sum hash, so a job keeps its own
+snapshot across dependency changes. Restore fallbacks then prefer another test
+shard, since other jobs hold no race builds, and finally borrow any job's
+content-addressed build entries. Before
 saving, the action deletes build cache entries this job did not use: Go
 refreshes a used entry's modification time once it is an hour old, so entries
 older than an hour before the job started went unused. The action removes whole

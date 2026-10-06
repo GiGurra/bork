@@ -259,36 +259,44 @@ def unrun(group, finished):
 
 
 def budget_result(elapsed, status):
+    # Only the test phase's own deadline fails a shard. A cold build cache
+    # (a new go.sum or Go version) can push discovery's compilation past
+    # the budget once without anything being wrong.
     print(f"Shard wall time: {elapsed:.2f}s", flush=True)
     if elapsed > FAIL_SECONDS:
-        print(f"::error::Shard exceeded {FAIL_SECONDS}s; refresh timings and add shards.", flush=True)
-        return status or 1
-    if elapsed > WARN_SECONDS:
+        print(f"::warning::Shard exceeded the {FAIL_SECONDS}s budget; check for a cold build cache, "
+              "then refresh timings or add shards.", flush=True)
+    elif elapsed > WARN_SECONDS:
         print(f"::warning::Shard exceeded {WARN_SECONDS}s; refresh timings or add shards.", flush=True)
     return status
 
 
 def run_shard(args):
     started = time.monotonic()
-    deadline = started + FAIL_SECONDS
+    tested = None
     group = {}
     status = 0
     events = args.events or Path(tempfile.mkdtemp(prefix="bork-ci-"))
     paths = []
     try:
         events.mkdir(parents=True, exist_ok=True)
-        packages, tests = discover(deadline)
+        # Listing tests links the split packages' race test binaries, so this
+        # deadline also bounds most compilation.
+        packages, tests = discover(started + FAIL_SECONDS)
         group = partition(packages, tests, read_weights(args.timings))[args.shard]
         selected = commands(group)
         if not selected:
             raise RuntimeError("selected shard is empty")
+        tested = time.monotonic()
         print(f"shard {args.shard}: {len(group['packages'])} packages, "
-              f"{sum(map(len, group['tests'].values()))} split tests, weight {group['weight']}s", flush=True)
+              f"{sum(map(len, group['tests'].values()))} split tests, weight {group['weight']}s, "
+              f"discovered in {tested - started:.2f}s", flush=True)
         paths = [events / f"shard-{args.shard}-{index}.jsonl" for index in range(len(selected))]
-        if any(execute_all(selected, paths, deadline)):
+        if any(execute_all(selected, paths, tested + FAIL_SECONDS)):
             status = 1
     except subprocess.TimeoutExpired:
-        print(f"::error::Shard reached {FAIL_SECONDS}s wall-time limit.", flush=True)
+        phase = "Discovery" if tested is None else "Test run"
+        print(f"::error::{phase} reached the {FAIL_SECONDS}s wall-time limit.", flush=True)
         status = 1
     except (RuntimeError, subprocess.CalledProcessError, OSError, ValueError, KeyError) as error:
         print(f"::error::{error}", file=sys.stderr)
@@ -303,6 +311,7 @@ def run_shard(args):
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(json.dumps({"shard": args.shard, "seconds": round(elapsed, 2),
+                                          "test_seconds": None if tested is None else round(time.monotonic() - tested, 2),
                                           "result": result, "selected": group}, indent=2) + "\n")
     return result
 

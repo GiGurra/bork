@@ -175,11 +175,10 @@ class RunTests(unittest.TestCase):
         with patch("builtins.print") as output:
             self.assertEqual(ci.budget_result(100, 0), 0)
             self.assertEqual(ci.budget_result(121, 0), 0)
-            self.assertEqual(ci.budget_result(181, 0), 1)
+            self.assertEqual(ci.budget_result(181, 0), 0)
             self.assertEqual(ci.budget_result(100, 7), 7)
         messages = " ".join(str(call) for call in output.call_args_list)
-        self.assertIn("::warning::", messages)
-        self.assertIn("::error::", messages)
+        self.assertIn("::warning::Shard exceeded the 180s budget", messages)
 
     def run_shard(self, commands, **patches):
         with tempfile.TemporaryDirectory() as directory:
