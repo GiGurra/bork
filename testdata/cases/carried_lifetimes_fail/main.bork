@@ -1,0 +1,44 @@
+type Conn = resource
+
+fn connect(s: Scope): Conn unsafe go {
+  return Conn{handle: 1, owner: s.Own(func() {})}
+}
+
+fn read(c: Conn): String unsafe go { return "x" }
+
+// A value a break passes out of the loop must live as long as the
+// carried name's first value.
+fn breaks() uses io + state {
+  scope app {
+    c = connect(app)
+    for (x in [1, 2]) {
+      child = openScope(app)
+      d = connect(child.scope)
+      if (x == 1) {
+        c = d
+        closeScope(child)
+        break
+      }
+      closeScope(child)
+    }
+    println(read(c))
+  }
+}
+
+// So must a value an iteration passes on.
+fn continues() uses io + state {
+  scope app {
+    c = connect(app)
+    for (_ in [1, 2]) {
+      child = openScope(app)
+      c = connect(child.scope)
+      closeScope(child)
+    }
+    println(read(c))
+  }
+}
+
+fn main() uses io + state {
+  breaks()
+  continues()
+}

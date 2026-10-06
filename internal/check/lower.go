@@ -25,6 +25,14 @@ type lowerer struct {
 	withs                int
 	interpolationSources map[syntax.Expr]Expr
 	interpolationSites   []*InterpolationSite
+	// loops are the carried names of the loops being lowered, innermost
+	// last, for the breaks and continues in them.
+	loops [][]*Carry
+	// invariants are the facts the first binding of a carried name
+	// declares, for the variables of its later values.
+	invariants map[*Var][]*Constraint
+	// roots are the typed trees lowered, for the passes over all of them.
+	roots []Expr
 }
 
 // nameRebinding keeps immutable identities distinct in generated Go.
@@ -97,6 +105,7 @@ func (c *checker) lower(files []*syntax.File) {
 	}
 	for _, binding := range c.info.PackageBindings {
 		binding.Value = l.stmt(binding.Decl).(*Let)
+		l.roots = append(l.roots, binding.Value.Value)
 		binding.Boundary.Body = &Block{expr: expr{pos: binding.Decl.Pos, typ: binding.Type}, Stmts: []Stmt{binding.Value}, Tail: &VarRef{expr: expr{pos: binding.Decl.Pos, typ: binding.Type}, Var: binding.Var}}
 	}
 	for _, cl := range c.info.Classes {
@@ -109,6 +118,7 @@ func (c *checker) lower(files []*syntax.File) {
 	}
 	for field, x := range c.info.fieldDefaults {
 		field.Default = l.expr(x)
+		l.roots = append(l.roots, field.Default)
 		if metadata := c.info.lazyFields[x]; metadata != nil {
 			c.info.fieldRecipes[field.Default] = metadata
 		}
@@ -126,6 +136,7 @@ func (c *checker) lower(files []*syntax.File) {
 		l.rule(r)
 	}
 	l.interpolationBatches()
+	c.checkCarried(l.roots)
 }
 
 func (l *lowerer) function(fn *Func) {
@@ -135,6 +146,9 @@ func (l *lowerer) function(fn *Func) {
 			v.GoName = "_ctorArg" + strconv.Itoa(i)
 		}
 		l.vars[p] = v
+		if i < len(fn.ParamConstraints) {
+			l.setInvariant(v, fn.ParamConstraints[i])
+		}
 		fn.ParamVars = append(fn.ParamVars, v)
 	}
 	fn.NeedVars = nil
@@ -148,6 +162,7 @@ func (l *lowerer) function(fn *Func) {
 	}
 	if fn.Decl.Body != nil {
 		fn.Body = l.block(fn.Decl.Body)
+		l.roots = append(l.roots, fn.Body)
 	}
 }
 
@@ -200,9 +215,12 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 		if s.AsyncScope != nil && l.info.types[s.AsyncScope] == Never {
 			return &ExprStmt{X: l.expr(s.AsyncScope)}
 		}
-		let := &Let{Pos: s.Pos, Value: l.expr(s.Value), Declared: s.Type != nil, Constraints: l.info.bindingConstraints[s]}
+		let := &Let{Pos: s.Pos, Value: l.expr(s.Value), Declared: s.Type != nil, Constraints: l.info.bindingConstraints[s], Carried: l.info.carriedBindings[s] != nil}
 		let.Var = &Var{Label: l.info.assemblyNames[s], Name: s.Name, Pos: s.Pos, Type: l.info.bindings[s], Kind: VarLet, Let: let, Unused: l.info.unused[s]}
 		l.nameRebinding(let.Var, s)
+		if let.Carried {
+			l.setInvariant(let.Var, l.invariantOf(l.vars[l.info.rebindings[s]]))
+		}
 		if global := l.vars[s]; global != nil && global.PackageBinding != nil {
 			global.Let = let
 			let.Var = global
@@ -317,7 +335,7 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		return &Yield{expr: at, Value: l.expr(x.Value), Elem: l.yieldElem}
 	case *syntax.For:
 		if x.Items == nil {
-			return l.loop(x, at)
+			return l.loop(x, &For{expr: at})
 		}
 		items := l.expr(x.Items)
 		var elem Type
@@ -332,9 +350,9 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 			v.GoName = fmt.Sprintf("_discard_loop_%d_%d", x.NamePos.Line, x.NamePos.Col)
 		}
 		l.vars[x] = v
-		return &For{expr: at, Var: v, Items: items, Body: l.block(x.Body)}
+		return l.loop(x, &For{expr: at, Var: v, Items: items})
 	case *syntax.LoopControl:
-		return &LoopControl{expr: at, Continue: x.Continue}
+		return l.loopControl(x, at)
 	case *syntax.StaticPartsLit:
 		rec := typ.(*Record)
 		list := &ListLit{expr: expr{pos: x.Pos, typ: &List{Elem: String}}}
@@ -478,9 +496,19 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		if x.Else != nil {
 			out.Else = l.expr(x.Else)
 		}
+		out.Joins = l.joins(x, func(i int) *Block {
+			if i == 0 {
+				return out.Then
+			}
+			b := branchBlock(out.Else)
+			out.Else = b
+			return b
+		})
 		return out
 	case *syntax.Block:
-		return l.block(x)
+		out := l.block(x)
+		out.Joins = l.joins(x, func(int) *Block { return out })
+		return out
 	case *syntax.WithExpr:
 		// The bindings are lets of a block around the body, under names
 		// of their own: an inner with may bind the same value again.
@@ -613,6 +641,11 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 			l.patVars(pat, out.X)
 			out.Arms = append(out.Arms, &MatchArm{Pat: pat, Body: l.expr(arm.Body)})
 		}
+		out.Joins = l.joins(x, func(i int) *Block {
+			b := branchBlock(out.Arms[i].Body)
+			out.Arms[i].Body = b
+			return b
+		})
 		return out
 	case *syntax.Try:
 		out := &Try{expr: at, X: l.expr(x.X)}
@@ -831,26 +864,3 @@ func (l *lowerer) assertIs(source *syntax.Call, at expr, assertion *assertIsInfo
 // loop lowers `for { }`, `for (cond) { }`, and `for (init; cond; post)
 // { }`. A header name is one variable for every iteration, without the
 // initial value's identity: later iterations have other values.
-func (l *lowerer) loop(x *syntax.For, at expr) *For {
-	out := &For{expr: at}
-	index := map[string]int{}
-	for i, b := range x.Init {
-		value := l.expr(b.Value)
-		v := &Var{Name: b.Name, Pos: b.Pos, Type: l.info.bindings[b], Kind: VarLoop, Unused: l.info.unused[b], Invariant: l.info.bindingConstraints[b]}
-		l.vars[b] = v
-		index[b.Name] = i
-		out.Header = append(out.Header, v)
-		out.Init = append(out.Init, value)
-	}
-	if x.Cond != nil {
-		out.Cond = l.expr(x.Cond)
-	}
-	out.Body = l.block(x.Body)
-	out.Post = make([]Expr, len(out.Header))
-	for _, b := range x.Post {
-		if i, ok := index[b.Name]; ok {
-			out.Post[i] = l.expr(b.Value)
-		}
-	}
-	return out
-}

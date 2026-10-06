@@ -68,9 +68,15 @@ func (g *gen) forSeq(e *check.For) []ast.Stmt {
 	if source == nil {
 		return stmts
 	}
-	return append(stmts, g.inLoop(func(root *loopCleanup) ast.Stmt {
+	outer, _, ok := g.carryStart(e)
+	stmts = append(stmts, outer...)
+	if !ok {
+		return stmts
+	}
+	stmts = append(stmts, g.inLoop(func(root *loopCleanup) ast.Stmt {
 		// Iteration names are always legal when unused.
-		body := append([]ast.Stmt{assign(ast.NewIdent("_"), varIdent(e.Var))}, g.effect(e.Body)...)
+		body := append([]ast.Stmt{assign(ast.NewIdent("_"), varIdent(e.Var))}, g.carryHeads(e)...)
+		body = append(body, g.effect(e.Body)...)
 		loop := &ast.RangeStmt{Tok: token.DEFINE, Body: &ast.BlockStmt{List: body}}
 		if _, ok := e.Items.Type().(*check.Seq); ok {
 			loop.Key = varIdent(e.Var)
@@ -85,49 +91,42 @@ func (g *gen) forSeq(e *check.For) []ast.Stmt {
 		}
 		return loop
 	})...)
+	return append(stmts, g.carryAfter(e)...)
 }
 
 // forLoop lowers `for { }`, `for (cond) { }`, and `for (init; cond;
-// post) { }`. The first values are bound before the loop, under the
-// header names; the Go loop then binds a copy of each per iteration
-// (closures capture it) and its post statement assigns the next ones:
+// post) { }`. Each carried name (see docs/design/loops.md) has a state
+// variable, its latch, which holds its first value before the loop;
+// each iteration binds its own copy (closures capture it), the paths
+// that end the iteration assign the latch, and the Go loop's post
+// statement computes the next values from the latches:
 //
-//	i := 0
-//	for i := i; i < n; i = i + 1 { ... }
+//	_latch_i := 0
+//	for ; ; _latch_i = func() int64 { _latch_i := _latch_i; return _latch_i + 1 }() {
+//		i := _latch_i
+//		if !(i < n) {
+//			break
+//		}
+//		...
+//	}
 //
-// A condition that needs statements is checked at the top of the body,
-// and next values that need statements are computed in function
-// literals (the checker keeps return, ? and loop control out of them).
+// The function literal keeps closures in the post clause from
+// capturing the latch, which the next iteration assigns; the checker
+// keeps return, ? and loop control out of it.
 func (g *gen) forLoop(e *check.For) []ast.Stmt {
-	var stmts []ast.Stmt
-	var names []ast.Expr
-	for i, init := range e.Init {
-		s, x := g.value(init)
-		stmts = append(stmts, s...)
-		if x == nil {
-			return stmts
-		}
-		v := e.Header[i]
-		stmts = append(stmts, typedVar(varIdent(v), g.goType(v.Type), g.convert(x, init.Type(), v.Type)))
-		names = append(names, varIdent(v))
+	outer, stmts, ok := g.carryStart(e)
+	if !ok {
+		return append(outer, stmts...)
 	}
 	stmts = append(stmts, g.inLoop(func(*loopCleanup) ast.Stmt {
 		loop := &ast.ForStmt{Body: &ast.BlockStmt{}}
-		var body []ast.Stmt
-		if len(names) > 0 {
-			loop.Init = &ast.AssignStmt{Lhs: names, Tok: token.DEFINE, Rhs: names}
-			blanks := make([]ast.Expr, len(names))
-			for i := range blanks {
-				blanks[i] = ast.NewIdent("_")
-			}
-			body = append(body, &ast.AssignStmt{Lhs: blanks, Tok: token.ASSIGN, Rhs: names})
-		}
+		body := g.carryHeads(e)
 		if e.Cond != nil {
 			s, cond := g.value(e.Cond)
 			switch {
 			case cond == nil:
 				body = append(body, s...)
-			case len(s) == 0:
+			case len(s) == 0 && len(e.Carries) == 0:
 				loop.Cond = cond
 			default:
 				body = append(body, s...)
@@ -135,25 +134,7 @@ func (g *gen) forLoop(e *check.For) []ast.Stmt {
 			}
 		}
 		body = append(body, g.effect(e.Body)...)
-		var lhs, rhs []ast.Expr
-		for i, post := range e.Post {
-			if post == nil {
-				continue
-			}
-			v := e.Header[i]
-			s, x := g.value(post)
-			x = g.convert(x, post.Type(), v.Type)
-			if len(s) > 0 {
-				x = &ast.CallExpr{Fun: &ast.FuncLit{
-					Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: g.goType(v.Type)}}}},
-					Body: &ast.BlockStmt{List: append(s, &ast.ReturnStmt{Results: []ast.Expr{x}})},
-				}}
-			}
-			lhs, rhs = append(lhs, varIdent(v)), append(rhs, x)
-		}
-		if len(lhs) > 0 {
-			loop.Post = &ast.AssignStmt{Lhs: lhs, Tok: token.ASSIGN, Rhs: rhs}
-		}
+		loop.Post = g.carryPost(e)
 		loop.Body.List = body
 		return loop
 	})...)
@@ -161,11 +142,14 @@ func (g *gen) forLoop(e *check.For) []ast.Stmt {
 		// Only returns leave it, which Go does not see through the exits.
 		stmts = append(stmts, &ast.ExprStmt{X: &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: []ast.Expr{strLit("bork: unreachable")}}})
 	}
-	if len(names) > 0 {
-		// Sibling loops may use the same header names.
-		return []ast.Stmt{&ast.BlockStmt{List: stmts}}
+	for _, c := range e.Carries {
+		if c.Header() {
+			// Sibling loops may use the same header names.
+			stmts = []ast.Stmt{&ast.BlockStmt{List: stmts}}
+			break
+		}
 	}
-	return stmts
+	return append(append(outer, stmts...), g.carryAfter(e)...)
 }
 
 // inLoop generates a loop in a frame of its own: build lowers its body
@@ -255,6 +239,7 @@ func (g *gen) loopControl(e *check.LoopControl) []ast.Stmt {
 	if e.Continue {
 		tok = token.CONTINUE
 	}
+	stmts = append(stmts, g.carryEdges(e.Carry)...)
 	return append(stmts, &ast.BranchStmt{Tok: tok, Label: frame.label})
 }
 

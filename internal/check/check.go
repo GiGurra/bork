@@ -383,6 +383,14 @@ type Info struct {
 	unused map[any]bool
 	// rebindings records the previous declaration replaced by a sequential binding.
 	rebindings map[any]any
+	// Carried rebinding (see carried.go): the names each loop carries,
+	// the values a break or continue carries out of an iteration, the
+	// names joined after an if, match or block statement in a loop body,
+	// and the bindings that give a carried name its next value.
+	loopCarries     map[*syntax.For]*carryLoop
+	loopEdges       map[*syntax.LoopControl][]any
+	joins           map[syntax.Expr][]*joinCarry
+	carriedBindings map[*syntax.Binding]*carrySlot
 	// consts holds the value of every constant expression (number
 	// literals and arithmetic on them), already converted to the type
 	// recorded in types (or optionPayloads for a promoted value).
@@ -489,6 +497,10 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 			tries:                  map[*syntax.Try]*TryInfo{},
 			unused:                 map[any]bool{},
 			rebindings:             map[any]any{},
+			loopCarries:            map[*syntax.For]*carryLoop{},
+			loopEdges:              map[*syntax.LoopControl][]any{},
+			joins:                  map[syntax.Expr][]*joinCarry{},
+			carriedBindings:        map[*syntax.Binding]*carrySlot{},
 			consts:                 map[syntax.Expr]constant.Value{},
 			lazyBindings:           map[*syntax.Binding]*LazyDescription{},
 			lazyFields:             map[syntax.Expr]*LazyDescription{},
@@ -855,6 +867,16 @@ type checker struct {
 	// loopCond is the same for a loop condition: loop control in it
 	// would mean different loops to the checker and the generated Go.
 	loopCond int
+	// carryFrames are the loop bodies and statement branches being
+	// checked that may give carried names new values (see carried.go);
+	// nextTransparent marks the next scope pushed as one of them, and
+	// stmtPos tells the if, match or block about to be checked that it
+	// is a statement there.
+	carryFrames     []*carryFrame
+	nextTransparent bool
+	stmtPos         bool
+	// headers are loops' header bindings, which bind new names.
+	headers map[*syntax.Binding]bool
 
 	conversionSerial int
 	// inForce lists the mocks in force at the current point of a test:
@@ -877,6 +899,9 @@ type local struct {
 	node any // the binding's syntax node; nil for parameters
 	decl any // what an identifier refers to (see Info.defs)
 	used bool
+	// carry is the loop that carries this value of the name to its next
+	// iteration, if any (see carried.go).
+	carry *carryLoop
 }
 
 // funcNamed looks up a function by name, as the code being checked
@@ -1133,7 +1158,14 @@ func (c *checker) lookup(name string) *local {
 	return nil
 }
 
-func (c *checker) pushScope() { c.scopes = append(c.scopes, map[string]*local{}) }
+func (c *checker) pushScope() {
+	scope := map[string]*local{}
+	if c.nextTransparent {
+		scope[transparentKey] = &local{used: true}
+		c.nextTransparent = false
+	}
+	c.scopes = append(c.scopes, scope)
+}
 
 func (c *checker) popScope() {
 	for _, l := range c.scopes[len(c.scopes)-1] {
@@ -1171,20 +1203,30 @@ func (c *checker) blockInScope(b *syntax.Block, want Type) Type {
 	// Statements after one that never finishes (e.g. `return`) are
 	// unreachable. Only the first one is reported.
 	diverged, reported := false, false
+	// In a loop body, an if, match or block statement may give the
+	// names the loop carries new values (see carried.go).
+	carrying := c.transparent(len(c.scopes) - 1)
 	for _, s := range b.Stmts {
 		if diverged {
 			c.errorf(stmtPos(s), "unreachable code")
 			reported = true
 			break
 		}
-		if c.stmt(s) == Never {
+		if es, ok := s.(*syntax.ExprStmt); ok && carrying {
+			c.stmtPos = compound(es.X)
+		}
+		t := c.stmt(s)
+		c.stmtPos = false
+		if t == Never {
 			diverged = true
 		}
 	}
 	t := Ok
 	if b.Tail != nil {
 		if !diverged {
+			c.stmtPos = carrying && compound(b.Tail)
 			t = c.exprWant(b.Tail, want)
+			c.stmtPos = false
 		} else if !reported {
 			c.errorf(b.Tail.Position(), "unreachable code")
 		}
@@ -1255,6 +1297,9 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 		}
 		if s.Lazy || s.AsyncScope != nil {
 			t = c.deferredInitializer(s, declared)
+		} else if slot := c.carriedHere(s); declared == nil && slot != nil {
+			// A carried name keeps its type, which guides the new value.
+			t = c.exprWant(s.Value, slot.typ)
 		} else {
 			t = c.exprWant(s.Value, declared)
 		}
@@ -1365,8 +1410,12 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 			c.errorf(e.Pos, "a loop's condition cannot use %s; test in the body instead", word)
 		} else if len(c.loops) == 0 || c.loops[len(c.loops)-1].depth != c.lambdaDepth {
 			c.errorf(e.Pos, "break and continue require a loop in the same function or producer")
-		} else if !e.Continue {
-			c.loops[len(c.loops)-1].broken = true
+		} else {
+			loop := c.loops[len(c.loops)-1]
+			if !e.Continue {
+				loop.broken = true
+			}
+			c.loopEdge(e, loop)
 		}
 		return c.record(e, Never)
 	case *syntax.IntLit:
@@ -1420,6 +1469,11 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 	case *syntax.If:
 		return c.record(e, c.ifExpr(e, want))
 	case *syntax.Block:
+		if j := c.startJoin(); j != nil {
+			t := c.joinBranch(j, 0, func() Type { return c.branchExpr(j, e, want) })
+			c.endJoin(j, e, 1)
+			return t
+		}
 		return c.block(e, want)
 	case *syntax.ScopeExpr:
 		return c.record(e, c.scopeExpr(e, want))
@@ -1894,28 +1948,36 @@ func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin, want Type
 }
 
 func (c *checker) ifExpr(e *syntax.If, want Type) Type {
+	// As a statement in a loop body, the branches may give the names the
+	// loop carries new values (see carried.go).
+	j := c.startJoin()
+	defer c.endJoin(j, e, 2)
 	cond := c.expr(e.Cond)
 	if cond != Bool && cond != Invalid && cond != Never {
 		c.errorf(e.Cond.Position(), "if-condition must be Bool, found %s", cond)
 	}
 	if e.Else != nil && (want == nil || c.unbound(want)) && c.branchNeedsContext(e.Then) && !c.branchNeedsContext(e.Else) {
 		// The then-branch's type comes from the else-branch: `[]`.
-		elseT := c.exprWant(e.Else, nil)
-		thenT := c.block(e.Then, elseT)
+		elseT := c.joinBranch(j, 1, func() Type { return c.branchExpr(j, e.Else, nil) })
+		thenT := c.joinBranch(j, 0, func() Type { return c.branchBlock(j, e.Then, elseT) })
 		return c.unify(e.Pos, "if-branches have", []Type{thenT, elseT}, nil)
 	}
-	thenT := c.block(e.Then, want)
+	thenT := c.joinBranch(j, 0, func() Type { return c.branchBlock(j, e.Then, want) })
 	if e.Else == nil {
 		// Without else, the if is only run for its effect.
 		if isValue(thenT) {
 			c.errorf(e.Then.Pos, "if without else cannot produce a value (found %s); add an else branch or drop the value", thenT)
+		}
+		if j != nil {
+			// Not taking the branch keeps the values.
+			j.reaches[1] = true
 		}
 		return Ok
 	}
 	if (want == nil || c.unbound(want)) && c.branchNeedsContext(e.Else) {
 		want = thenT
 	}
-	elseT := c.exprWant(e.Else, want)
+	elseT := c.joinBranch(j, 1, func() Type { return c.branchExpr(j, e.Else, want) })
 	return c.unify(e.Pos, "if-branches have", []Type{thenT, elseT}, want)
 }
 

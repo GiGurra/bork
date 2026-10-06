@@ -1,0 +1,51 @@
+// A carried value read only to compute its own next value is never
+// observed.
+fn neverObserved(xs: List[Int]) {
+  count = 0
+  for (_ in xs) {
+    count = count + 1
+  }
+}
+
+// Two names that only feed each other.
+fn feedEachOther(xs: List[Int]) {
+  a = 0
+  b = 0
+  for (_ in xs) {
+    a = b + 1
+    b = a
+  }
+}
+
+// A header name only the post clause reads: use for { } instead.
+fn unobservedHeader(stop: Bool) {
+  for (i = 0;; i = i + 1) {
+    if (stop) {
+      break
+    }
+  }
+  for (j = 0;; j = j + 1) {
+    break
+  }
+}
+
+// A value every path overwrites before reading.
+fn overwritten(xs: List[Int]): Int {
+  last = 0
+  for (x in xs) {
+    last = x
+    last = x * 2
+  }
+  last
+}
+
+// Through a temporary too.
+fn throughTemporary(xs: List[Int]) {
+  count = 0
+  for (_ in xs) {
+    next = count + 1
+    count = next
+  }
+}
+
+fn main() {}

@@ -11,6 +11,15 @@ import (
 // been checked against the preceding environment. Simultaneous declarations
 // (parameters and patterns) use bind, which also rejects duplicate names.
 func (c *checker) bindRebinding(name string, pos diag.Pos, t Type, node any) {
+	if b, ok := node.(*syntax.Binding); ok && !c.headers[b] {
+		if l, i := c.lookupAt(name); l != nil && l.carry != nil {
+			c.rebindCarried(b, l, i, t)
+			return
+		} else if l != nil && i < len(c.scopes)-1 && c.misplacedRebinding(name, pos, i) {
+			c.scopes[len(c.scopes)-1][name] = &local{typ: Invalid, decl: node, used: true}
+			return
+		}
+	}
 	scope := c.scopes[len(c.scopes)-1]
 	if previous := scope[name]; previous != nil {
 		c.unusedLocal(previous)
@@ -22,7 +31,9 @@ func (c *checker) bindRebinding(name string, pos diag.Pos, t Type, node any) {
 }
 
 func (c *checker) unusedLocal(l *local) {
-	if l.node == nil || l.used || c.info.unused[l.node] {
+	// Whether a carried value is read is decided over the whole loop
+	// (see CheckCarried).
+	if l.node == nil || l.used || l.carry != nil || c.info.unused[l.node] {
 		return
 	}
 	c.info.unused[l.node] = true

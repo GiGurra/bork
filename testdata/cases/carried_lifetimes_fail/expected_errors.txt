@@ -1,0 +1,2 @@
+main.bork:18:9: the value a break passes out of c belongs to a scope its first value does not, so it could outlive it; give c a first value of that scope
+main.bork:34:7: the next value of c belongs to a scope its first value does not, so it could outlive it; give c a first value of that scope

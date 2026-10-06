@@ -1,0 +1,201 @@
+// Loops carry the names their bodies give new values (carried
+// rebinding, docs/design/loops.md).
+
+pred nonNegative(n: Int) { n >= 0 }
+
+fn needsNonNegative(n: Int where nonNegative): Int { n }
+
+// A for-in loop carries counters; a branch that continues passes its
+// own values on.
+fn stats(xs: List[Int]): String {
+  count = 0
+  total = 0
+  negatives = 0
+  for (x in xs) {
+    if (x < 0) {
+      negatives = negatives + 1
+      continue
+    }
+    count = count + 1
+    total = total + x
+  }
+  s"$count values, total $total, $negatives skipped"
+}
+
+// Nested loops carry through each level; an inner loop may carry a
+// name its outer body binds.
+fn sums(rows: List[List[Int]]) uses io {
+  total = 0
+  for (row in rows) {
+    sum = 0
+    for (x in row) {
+      sum = sum + x
+      total = total + x
+    }
+    println(s"row $sum")
+  }
+  println(s"total $total")
+}
+
+// A branch without else keeps the value.
+fn largest(xs: List[Int]): Int {
+  best = 0
+  for (x in xs) {
+    if (x > best) {
+      best = x
+    }
+  }
+  best
+}
+
+// A while loop carries a name bound before it, visible after it.
+fn whileLoop() uses io {
+  i = 0
+  steps = ""
+  for (i < 5) {
+    steps = steps + toString(i)
+    i = i + 2
+  }
+  println(s"i $i, steps $steps")
+}
+
+// The post clause may give a carried name its next value.
+fn post() uses io {
+  acc = 1
+  for (i = 0; i < 4; i = i + 1, acc = acc * 2) {
+    println(s"i $i acc $acc")
+  }
+  println(s"acc $acc")
+}
+
+// The body may rebind a header name; the post clause sees the value
+// the iteration ends with.
+fn skip() uses io {
+  seen = ""
+  for (i = 0; i < 8; i = i + 1) {
+    if (i == 2) {
+      i = 5
+    }
+    seen = seen + toString(i)
+  }
+  println(seen)
+}
+
+// Match arms, else-if chains and blocks join too; break carries its
+// values out.
+fn classify(xs: List[Int]) uses io {
+  small = 0
+  big = 0
+  other = 0
+  last = 0
+  for (x in xs) {
+    match (x) {
+      0 => { other = other + 1 }
+      n: Int => if (n < 10) {
+        small = small + 1
+      } else if (n < 100) {
+        big = big + 1
+      } else {
+        last = n
+        break
+      }
+    }
+    {
+      last = x
+    }
+  }
+  println(s"small $small big $big other $other last $last")
+}
+
+// for { } with break, and a Seq source.
+fn seqs() uses io {
+  n = 0
+  for (i in Seq.range(0, 10)) {
+    n = n + i
+    if (n > 10) {
+      break
+    }
+  }
+  steps = 0
+  for {
+    steps = steps + 1
+    if (steps == 3) {
+      break
+    }
+  }
+  println(s"n $n steps $steps")
+}
+
+// Each iteration's values are fresh bindings: closures capture them.
+fn closures() uses io {
+  fs: List[() => Int] = []
+  for (i = 0; i < 3; i = i + 1) {
+    fs = fs.append(() => i)
+  }
+  println(fs.map(f => f()))
+}
+
+// A generator's loop carries values across yields.
+fn evens(): Seq[Int] {
+  generate[Int] {
+    n = 0
+    for (n < 6) {
+      yield n
+      n = n + 2
+    }
+  }
+}
+
+// The facts a carried name declares hold in every iteration and after
+// the loop.
+fn invariant(xs: List[Int]) uses io {
+  i: Int where nonNegative = 0
+  for (x in xs) {
+    if (nonNegative(x)) {
+      i = x
+    }
+  }
+  println(needsNonNegative(i))
+}
+
+// A header's first value may use a loop of its own.
+fn headerLoop() uses io {
+  for (i = {
+    s = 0
+    for (x in [1, 2]) {
+      s = s + x
+    }
+    s
+    }; i < 5; i = i + 1) {
+    println(i)
+  }
+}
+
+pred atLeastTen(n: Int) { n >= 10 }
+
+fn needsTen(n: Int where atLeastTen): Int { n }
+
+// A loop left only by its condition leaves its negation known.
+fn afterCondition() uses io {
+  i = 0
+  for (i < 10) {
+    i = i + 1
+  }
+  println(needsTen(i))
+}
+
+fn main() uses io {
+  println(stats([3, -1, 4, -5, 9]))
+  sums([[1, 2], [3]])
+  println(largest([3, 9, 2]))
+  whileLoop()
+  post()
+  skip()
+  classify([0, 5, 50, 7, 500, 1])
+  seqs()
+  closures()
+  println(evens().toList())
+  invariant([1, -2, 3])
+  headerLoop()
+  afterCondition()
+}

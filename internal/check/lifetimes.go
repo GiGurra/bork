@@ -566,6 +566,7 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		}
 		return l.use(x, life)
 	case *Block:
+		defer l.joins(x.Joins)
 		return l.block(x, l.expr)
 	case *ScopeBlock:
 		for _, p := range x.Policies {
@@ -592,6 +593,7 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 			b.done(nil)
 		}
 		b.join(x.Pos(), "if")
+		l.joins(x.Joins)
 		return life
 	case *Match:
 		subject := l.use(x.X, l.expr(x.X))
@@ -608,6 +610,7 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 			b.done(arm.Body)
 		}
 		b.join(x.Pos(), "match")
+		l.joins(x.Joins)
 		return life
 	case *Return:
 		if x.Value != nil {
@@ -640,27 +643,11 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		l.pin(life, x.Pos(), "the generator's yield", nil, true)
 		return nil
 	case *For:
-		if x.Items == nil {
-			l.loopForm(x)
-			return nil
+		if x.Items != nil {
+			l.env[x.Var] = l.use(x.Items, l.expr(x.Items))
+			l.frame[x.Var] = l.cur
 		}
-		l.env[x.Var] = l.use(x.Items, l.expr(x.Items))
-		l.frame[x.Var] = l.cur
-		before := copyGone(l.gone)
-		mark := len(l.bound)
-		outer := l.loop
-		l.loop = x
-		defined := len(l.defined)
-		l.noteVar(x.Var)
-		l.expr(x.Body)
-		l.settle(defined)
-		l.loop = outer
-		for owner, gone := range l.gone {
-			if _, ok := before[owner]; !ok && l.bound[owner] < mark {
-				l.errorf(gone.pos, "a loop cannot consume owned scope %s from outside its body; borrow its scope instead", owner.Name)
-			}
-		}
-		l.gone = before
+		l.loopForm(x)
 		return nil
 	case *LoopControl:
 		return nil
@@ -1311,18 +1298,24 @@ func channelMethod(fn *Func) bool {
 	return ok && r.Name == "Channel"
 }
 
-// loopForm checks a loop without a source. A header name lives as long as
+// loopForm checks a loop. A header name lives as long as
 // its first value; each next value must live as long (it is a value of
 // the same variable, read where the first one could be).
 func (l *lifeChecker) loopForm(x *For) {
-	for i, init := range x.Init {
-		v := x.Header[i]
-		l.env[v] = l.use(init, l.expr(init))
-		l.frame[v] = l.cur
+	for _, c := range x.Carries {
+		if c.Init != nil {
+			l.env[c.Head] = l.use(c.Init, l.expr(c.Init))
+		} else {
+			l.env[c.Head] = l.env[c.Outer]
+		}
+		l.frame[c.Head] = l.cur
 	}
 	defined := len(l.defined)
-	for _, v := range x.Header {
-		l.noteVar(v)
+	if x.Var != nil {
+		l.noteVar(x.Var)
+	}
+	for _, c := range x.Carries {
+		l.noteVar(c.Head)
 	}
 	// The condition and the post clause run every round, like the body.
 	before := copyGone(l.gone)
@@ -1333,32 +1326,66 @@ func (l *lifeChecker) loopForm(x *For) {
 		l.expr(x.Cond)
 	}
 	l.expr(x.Body)
-	var nexts []lifetime
-	for _, post := range x.Post {
-		var life lifetime
-		if post != nil {
-			life = l.use(post, l.expr(post))
-		}
-		nexts = append(nexts, life)
+	type next struct {
+		at   Expr
+		life lifetime
+		what string
 	}
+	nexts := make([][]next, len(x.Carries))
+	for i, c := range x.Carries {
+		l.joined(c.Latch)
+		if c.Post != nil {
+			nexts[i] = append(nexts[i], next{c.Post, l.use(c.Post, l.expr(c.Post)), "the next value"})
+		} else {
+			for _, in := range c.Latch.Joins {
+				nexts[i] = append(nexts[i], next{&VarRef{expr: expr{pos: in.Pos, typ: in.Type}, Var: in}, l.env[in], "the next value"})
+			}
+		}
+		if c.After != nil {
+			// A break passes its value out of the loop.
+			for _, in := range c.After.Joins {
+				if in != c.Head {
+					nexts[i] = append(nexts[i], next{&VarRef{expr: expr{pos: in.Pos, typ: in.Type}, Var: in}, l.env[in], "the value a break passes out"})
+				}
+			}
+		}
+	}
+	l.loop = outer
 	for owner, gone := range l.gone {
 		if _, ok := before[owner]; !ok && l.bound[owner] < mark {
 			l.errorf(gone.pos, "a loop cannot consume owned scope %s from outside its body; borrow its scope instead", owner.Name)
 		}
 	}
 	l.gone = before
-	for i, post := range x.Post {
-		if post == nil {
-			continue
-		}
-		v := x.Header[i]
-		for _, scope := range nexts[i] {
-			if !l.env[v].has(scope) {
-				l.errorf(post.Pos(), "the next value of %s belongs to a scope its first value does not, so it could outlive it; give %s a first value of that scope", v.Name, v.Name)
-				break
+	for i, c := range x.Carries {
+		v := c.Head
+		for _, n := range nexts[i] {
+			for _, scope := range n.life {
+				if !l.env[v].has(scope) {
+					l.errorf(n.at.Pos(), "%s of %s belongs to a scope its first value does not, so it could outlive it; give %s a first value of that scope", n.what, v.Name, v.Name)
+					break
+				}
 			}
 		}
+		if c.After != nil {
+			l.env[c.After], l.frame[c.After] = l.env[v], l.cur
+		}
 	}
-	l.loop = outer
 	l.settle(defined)
+}
+
+// joined gives a VarJoin the lifetime of the values it may have.
+func (l *lifeChecker) joined(v *Var) {
+	var life lifetime
+	for _, in := range v.Joins {
+		life = life.union(l.env[in])
+	}
+	l.env[v], l.frame[v] = life, l.cur
+}
+
+// joins gives the joins after a statement their lifetimes.
+func (l *lifeChecker) joins(js []*Join) {
+	for _, j := range js {
+		l.joined(j.Var)
+	}
 }

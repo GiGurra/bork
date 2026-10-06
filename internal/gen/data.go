@@ -175,6 +175,10 @@ func unreachable() []ast.Stmt {
 // literals on a basic type become an expression switch; and nested
 // patterns become an if-else chain of tests.
 func (g *gen) matchStmt(m *check.Match, k sink) []ast.Stmt {
+	return g.joined(m.Joins, g.matchArms(m, k))
+}
+
+func (g *gen) matchArms(m *check.Match, k sink) []ast.Stmt {
 	st := m.X.Type()
 	stmts, x := g.value(m.X)
 	if x == nil {

@@ -1,0 +1,3 @@
+main.bork:8:5: the next value of i, which the loop at line 7 carries, must be nonNegative, but that is not proven for i (check it first with if (nonNegative(i)) { ... })
+main.bork:18:7: at a break, the value of i, which the loop at line 16 carries, must be nonNegative, but that is not proven for i (check it first with if (nonNegative(i)) { ... })
+main.bork:29:49: the next value of loop variable i must be nonNegative, but that is not proven for i (check it first with if (nonNegative(i)) { ... })

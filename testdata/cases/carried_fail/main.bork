@@ -1,0 +1,89 @@
+fn wrongType(xs: List[Int]): String {
+  total = 0
+  for (x in xs) {
+    total = toString(x)
+  }
+  toString(total)
+}
+
+fn inLambda(xs: List[Int]): Int {
+  total = 0
+  for (x in xs) {
+    f = () => {
+      total = x
+      total
+    }
+    _ = f()
+  }
+  total
+}
+
+fn valueIf(xs: List[Int]): Int {
+  total = 0
+  for (x in xs) {
+    y = if (x > 0) {
+      total = x
+      1
+    } else {
+      2
+    }
+    _ = y
+  }
+  total
+}
+
+fn inScope(xs: List[Int]): Int {
+  total = 0
+  for (x in xs) {
+    scope s {
+      total = x
+    }
+  }
+  total
+}
+
+fn neverObserved(xs: List[Int]) {
+  count = 0
+  for (_ in xs) {
+    count = count + 1
+  }
+}
+
+fn unobservedHeader() {
+  for (i = 0;; i = i + 1) {
+    if (i > 3) {
+      break
+    }
+  }
+  for (j = 0;; j = j + 1) {
+    break
+  }
+}
+
+fn lazyCarried(xs: List[Int]): Int {
+  lazy total = 0
+  for (x in xs) {
+    total = x
+  }
+  total
+}
+
+fn outsideLoop(c: Bool): Int {
+  total = 0
+  if (c) {
+    total = 1
+  }
+  total
+}
+
+fn main() {}
+
+fn nestedInIf(c: Bool, xs: List[Int]): Int {
+  total = 0
+  if (c) {
+    for (x in xs) {
+      total = x
+    }
+  }
+  total
+}

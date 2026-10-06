@@ -329,16 +329,18 @@ func (u *effectUses) expr(x Expr) {
 				u.add(t.Effects, x.Pos(), "sequence traversal")
 			}
 		}
-		for _, init := range x.Init {
-			u.expr(init)
+		for _, c := range x.Carries {
+			if c.Init != nil {
+				u.expr(c.Init)
+			}
 		}
 		if x.Cond != nil {
 			u.expr(x.Cond)
 		}
 		u.block(x.Body)
-		for _, post := range x.Post {
-			if post != nil {
-				u.expr(post)
+		for _, c := range x.Carries {
+			if c.Post != nil {
+				u.expr(c.Post)
 			}
 		}
 	case *LoopControl:

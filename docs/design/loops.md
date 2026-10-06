@@ -225,9 +225,9 @@ block; in a lambda, `lazy`/`async` initializer or generator; and anywhere
 outside a loop body. The error for a branch whose value is used says to move
 the rebinding out, or to write the `if` as a statement.
 
-A for-in's element name (`x`) is per-iteration, not carried: rebinding it in
-the body is an ordinary same-block rebinding, and the next iteration gets the
-next element.
+A for-in's element name (`x`) is per-iteration, not carried. It belongs to
+the loop, not to the body's block, so the body cannot rebind it (bind another
+name), and the next iteration gets the next element.
 
 **Why not only header names?** The lead suggested making header names the
 only carried state. That leaves no way to get a result out of a loop without
@@ -374,12 +374,13 @@ total_3 := _c_total          // after the loop
 Edges assign the binding current at that point to the state variable:
 `continue`, end of body, post clause, and `break`. The post clause and the
 three-clause header use the same state variables. The condition reads the
-iteration's copies. Every loop form compiles to `for { copies; if !cond {
-break }; body; edge }` rather than Go's three-clause `for`. The reason is
-not mutation, since generated code never assigns a bork binding twice. It is
-that carried values come from several edges (`continue`, end of body),
-the post clause must run after whichever edge was taken, and the condition
-must see the iteration's copies. One flat shape serves all three forms. The existing
+iteration's copies, so it is tested at the top of the body. The post clause
+is the Go loop's post statement, which Go runs after the end of the body and
+after `continue` alike: it assigns the state variables the result of a
+function literal that binds copies of them first, so a closure made in the
+post clause captures a copy, never a state variable
+(`_c_i = func() int64 { _c_i := _c_i; return _c_i + 1 }()`). Header names
+are bound before the loop too, for the header names after them. The existing
 loop-exit machinery (scopes opened in the body closed on `break`/`continue`,
 owners, mocks, `return` through range-over-func `Seq` loops) is reused for
 the new forms.
@@ -388,7 +389,9 @@ Joins use the same rule. Before an `if` or `match` statement whose branches
 rebind carried names, a join variable is declared for each. Every branch that
 reaches the end assigns its current binding to it, and after the statement a
 fresh binding copies it (`best_3 := _j_best`). Closures capture branch
-bindings or the fresh copy, never the join variable.
+bindings or the fresh copy, never the join variable. (As built, the join
+variable is itself that fresh binding: it is assigned only inside the
+statement and read only after it, so no closure can see it change.)
 
 Every new statement carries its bork position for the debugger and `//line`
 mapping. A breakpoint on the `for` line hits once per condition check.

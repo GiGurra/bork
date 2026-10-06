@@ -412,16 +412,16 @@ func (s *sourceIndex) walk(x check.Expr) {
 			s.selectVar(x.Var, x.Body.Pos())
 		}
 		s.walk(x.Items)
-		for i, v := range x.Header {
-			if s.contains(v.Pos, len(v.Name)) {
-				s.selectVar(v, x.Body.Pos())
+		for _, c := range x.Carries {
+			if c.Header() && s.contains(c.Head.Pos, len(c.Head.Name)) {
+				s.selectVar(c.Head, x.Body.Pos())
 			}
-			s.walk(x.Init[i])
+			s.walk(c.Init)
 		}
 		s.walk(x.Cond)
 		s.walk(x.Body)
-		for _, post := range x.Post {
-			s.walk(post)
+		for _, c := range x.Carries {
+			s.walk(c.Post)
 		}
 	case *check.ListLit:
 		for _, elem := range x.Elems {
@@ -648,6 +648,9 @@ func definition(x check.Expr) *diag.Pos {
 	switch x := x.(type) {
 	case *check.VarRef:
 		pos = x.Var.Pos
+		if x.Var.Origin.Line != 0 {
+			pos = x.Var.Origin
+		}
 	case *check.FuncRef:
 		pos = x.Inst.Func.Decl.Pos
 	case *check.Call:
