@@ -79,34 +79,6 @@ JSON/YAML syntax errors belong to the format package; typed-conversion errors be
 
 ## Record and variant encoding
 
-Records encode as objects in field order. A named sealed variant uses a `"type"` discriminator and its named fields. A fieldless variant can also decode from its name. Option encodes None as null and Some as the bare value; a missing optional record field decodes as None.
-
-Positional sealed payloads use a `"values"` array in declaration order:
-
-```bork
-import "bork/codec"
-import "bork/json"
-use codec.Defaults
-
-type Reply = sealed { Found(Int, String), Missing } derive (codec.Encode, codec.Decode)
-
-fn main() {
-  println(json.Encode(Reply.Found(3, "count")))
-  println(json.Encode(Option.Some(3)))
-}
-```
-
-Positional variants are tagged, while Option uses the bare value:
-
-```text
-{"type":"Found","values":[3,"count"]}
-3
-```
-
-Decoding checks the exact payload count and reports paths such as `.values[0]`. A variant `One((Int, String))` has one tuple-valued payload; `Pair(Int, String)` has two. See [matching](../language/matching.md) for construction and patterns.
-
-Lazy/computed record fields are omitted by derived codecs; their values are computed again after decoding. See [types](../language/types.md) for field semantics.
-
 Records encode as objects. Sealed types whose alternatives all have no payload (enums) encode as bare strings using `ScreamingSnake` names by default: `SiteAdmin` becomes `"SITE_ADMIN"`. They decode from that string or the existing object form `{"type":"SITE_ADMIN"}`. A sealed type with any payload keeps its object representation and defaults to source names: `{"type":"Item","value":3}`. Fieldless alternatives of such a mixed sealed type also accept their canonical string on decode. Source spellings are accepted only when they equal the canonical name. `Option` retains its null/value representation, and missing optional record fields decode as `None`.
 
 ### Wire names
@@ -133,6 +105,31 @@ type Access = sealed {
 
 Derivation rejects duplicate canonical names within a record or variant namespace, empty names, the YAML merge key `<<`, and a named sealed payload field renamed to the discriminator `type`. Variant names must parse as unchanged YAML string scalars: `true`, `null`, and numeric spellings fail, while YAML 1.2 string spellings such as `ON` are allowed. Derived decode errors use canonical field names, including errors from checked builders. Map keys and tuple indices retain their existing representation.
 
+Positional sealed payloads use a `"values"` array in declaration order:
+
+```bork
+import "bork/codec"
+import "bork/json"
+use codec.Defaults
+
+type Reply = sealed { Found(Int, String), Missing } derive (codec.Encode, codec.Decode)
+
+fn main() {
+  println(json.Encode(Reply.Found(3, "count")))
+  println(json.Encode(Option.Some(3)))
+}
+```
+
+Positional variants are tagged, while Option uses the bare value:
+
+```text
+{"type":"Found","values":[3,"count"]}
+3
+```
+
+Decoding checks the exact payload count and reports paths such as `.values[0]`. A variant `One((Int, String))` has one tuple-valued payload; `Pair(Int, String)` has two. See [matching](../language/matching.md) for construction and patterns.
+
+Lazy/computed record fields are omitted by derived codecs; their values are computed again after decoding. See [types](../language/types.md) for field semantics.
 
 ## Tuples
 
