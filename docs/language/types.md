@@ -108,6 +108,10 @@ fn main() {
 }
 ```
 
+See the runnable [record conversion example](../../examples/record_conversion/main.bork) for defaults,
+renamed and nested overrides, fallible conversions, and a private target with a
+whole-record invariant. Run it with `bork run examples/record_conversion`.
+
 ### Shorthand when the type is known
 
 Where the expected type is already known, `.{ ... }` builds the record without repeating its name:

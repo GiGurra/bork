@@ -1,0 +1,4 @@
+public: UserDto { id: 1, displayName: "Ada", address: AddressDto { city: "London" }, active: true }
+moved: UserDto { id: 1, displayName: "Ada", address: AddressDto { city: "Oslo" }, active: true }
+parsed id: UserDto { id: 42, displayName: "Ada", address: AddressDto { city: "London" }, active: true }
+invalid id: ParseError { input: "oops", message: "invalid syntax" }
