@@ -1,0 +1,22 @@
+import "bork/process"
+import "bork/time"
+
+// LinesChannel attaches the Reader to the scope it pumps in. Cancelling
+// that scope alone stops the pump at once, although the child's scope,
+// which also owns the Reader, keeps running.
+fn main() {
+  println(scope p { run(p) })
+}
+
+fn run(p: Scope) uses io + state + clock: Ok | IoError | Cancelled | OutOfRange {
+  child = process.Start(p, "sh", ["-c", "sleep 30"], stdout: .Pipe)?
+  start = time.Now()
+  got = scope s {
+    cancelAfter(s, 100)
+    lines = child.Stdout().LinesChannel(s)
+    lines.receive(s)
+  }
+  println(got)
+  println(time.Between(start, time.Now())?.nanos < 10000000000)
+  child.Kill()
+}

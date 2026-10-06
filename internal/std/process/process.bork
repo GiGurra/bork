@@ -372,11 +372,30 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
     readerHandle := _borkNewResourceHandle(nil, s)
     var mu sync.Mutex
     var buffered *bufio.Reader
-    stopCloser := func() bool { return true }
+    // Each closer closes the file when its context is done: the handle's,
+    // and those added with "closer". stopCloser stops them all once the
+    // file is finished or taken; it is false if one has begun closing it.
+    var closersMu sync.Mutex
+    var stops []func() bool
+    detached := false
+    addCloser := func(context.Context) {}
     if file != nil {
       buffered = bufio.NewReaderSize(file, 32768)
       origin := file
-      stopCloser = context.AfterFunc(readerHandle.Context(), func() { origin.Close() })
+      addCloser = func(ctx context.Context) {
+        closersMu.Lock()
+        defer closersMu.Unlock()
+        if !detached { stops = append(stops, context.AfterFunc(ctx, func() { origin.Close() })) }
+      }
+      addCloser(readerHandle.Context())
+    }
+    stopCloser := func() bool {
+      closersMu.Lock()
+      defer closersMu.Unlock()
+      detached = true
+      stopped := true
+      for _, stop := range stops { stopped = stop() && stopped }
+      return stopped
     }
     failure := func(err error) any {
       if readerContext := readerHandle.Context(); readerContext.Err() != nil { return Cancelled{reason: context.Cause(readerContext).Error()} }
@@ -388,6 +407,8 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
       file = nil
     }
     readerHandle.Value = func(operation string, limit int64) any {
+      // Not under mu, which a blocked read holds.
+      if operation == "closer" { return addCloser }
       mu.Lock()
       defer mu.Unlock()
       if file == nil {
@@ -656,6 +677,8 @@ fn (output: Reader) Lines() uses io + state: Seq[String | Cancelled | IoError] u
 fn (output: Reader) LinesChannel(s: Scope, capacity: Int where validCapacity = 64) uses io + state: Channel[String | IoError] {
   lines: Channel[String | IoError] = channel(s, capacity)
   owned = attach(output, s)
+  // attach shares the Reader; the pump must still stop when s is cancelled.
+  closeWhenDone(owned, s)
   launch(s, () => {
     for (item in owned.Lines()) {
       match (item) {
@@ -675,6 +698,12 @@ fn (output: Reader) LinesChannel(s: Scope, capacity: Int where validCapacity = 6
     lines.close()
   })
   lines
+}
+
+// closeWhenDone closes the Reader's pipe once s is cancelled or ends,
+// for every owner, which ends a read pending in a task of s.
+fn closeWhenDone(output: Reader, s: Scope) unsafe go {
+  output.handle.(*_borkResourceHandle).Value.(func(string, int64) any)("closer", 0).(func(context.Context))(s.ctx)
 }
 
 // Write writes data to the child's stdin, waiting while the child is not
