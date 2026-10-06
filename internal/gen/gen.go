@@ -741,7 +741,14 @@ func (g *gen) goFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 	if abs, err := filepath.Abs(file); err == nil {
 		file = abs
 	}
-	fmt.Fprintf(&buf, " {%s/*line %s:%d:%d*/%s}\n", g.packageAliases(fd), file, pos.Line, pos.Col+1, g.goBodyAliases(fd))
+	aliases := g.packageAliases(fd)
+	body := g.goBodyAliases(fd)
+	if aliases != "" {
+		// Keep aliases outside the written block so local declarations can shadow them.
+		fmt.Fprintf(&buf, " {%s{/*line %s:%d:%d*/%s}}\n", aliases, file, pos.Line, pos.Col+1, body)
+	} else {
+		fmt.Fprintf(&buf, " {/*line %s:%d:%d*/%s}\n", file, pos.Line, pos.Col+1, body)
+	}
 	return buf.String(), nil
 }
 
@@ -756,6 +763,9 @@ func (g *gen) packageAliases(fd *syntax.FuncDecl) string {
 	}
 	var out strings.Builder
 	seen := map[string]bool{}
+	for _, param := range fd.Params {
+		seen[param.Name] = true
+	}
 	var sc goscanner.Scanner
 	src := []byte(fd.GoBody.Body)
 	sc.Init(token.NewFileSet().AddFile("", -1, len(src)), src, nil, 0)

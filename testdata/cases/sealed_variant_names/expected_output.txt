@@ -1,3 +1,4 @@
+7 8 9
 fmt.A fmt__A {}
 A.B_C("native") A.B_C("imported native") A.B_C("qualified native")
 A_B.C("x") A.B_C("y")
