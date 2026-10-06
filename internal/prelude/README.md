@@ -1,7 +1,10 @@
 # Embedded prelude
 
 Every Bork package sees these files as one prelude package. The compiler
-embeds all `*.bork` files here and parses them in filename order. Positions
+embeds all `*.bork` files here and parses them in filename order. Standard
+packages the prelude imports (`bork/shape`) are loaded with it as ordinary
+packages; a user import of the same path shares them. Their declarations are
+emitted only when used, like the prelude's. Positions
 use `prelude/<filename>` in diagnostics and `bork describe`.
 
 | File | Definitions |
@@ -15,7 +18,8 @@ use `prelude/<filename>` in diagnostics and `bork describe`.
 | [runes.bork](runes.bork) | Unicode rune methods |
 | [maps.bork](maps.bork) | `Entry` and persistent map methods |
 | [bytes.bork](bytes.bork) | Immutable bytes and UTF-8 conversions |
-| [classes.bork](classes.bork) | `Eq`, `Show`, `Ord`, `GoStruct`, and primitive ordering instances |
+| [classes.bork](classes.bork) | `Eq`, `Show`, `Ord`, and primitive ordering instances |
+| [gostruct.bork](gostruct.bork) | `GoStruct` and its source derive template (imports `bork/shape`) |
 | [fanin.bork](fanin.bork) | Ordered task fan-in, races, and cooperative timeouts |
 | [concurrency.bork](concurrency.bork) | Tasks, cancellation, atoms, channels, and cancellable delay |
 | [select.bork](select.bork) | Internal helpers the `select` expression is lowered to |

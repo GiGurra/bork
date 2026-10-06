@@ -99,8 +99,8 @@ func (c *checker) collectDerive(pos diag.Pos, name string, typ Type, written *sy
 	if tuple, ok := typ.(*Record); ok && tuple.Tuple {
 		if standalone {
 			c.errorf(pos, "tuples have implicit codec instances; standalone derive requires a named record or sealed target")
-		} else if IsGoStruct(cl) {
-			c.errorf(pos, "GoStruct cannot be derived for a tuple")
+		} else if cl.ForeignRecord != nil {
+			c.errorf(pos, "%s cannot be derived for a tuple", cl.Name)
 		} else if cl.Template != nil && !IsCodec(cl, "Encode") && !IsCodec(cl, "Decode") {
 			c.errorf(pos, "tuple aliases cannot derive custom classes; derive templates currently require a named record or sealed target")
 		} else {
@@ -121,11 +121,6 @@ func (c *checker) declareDerived() {
 		if request.invalid {
 			continue
 		}
-		if IsGoStruct(request.class) {
-			if r, ok := request.typ.(*Record); !ok || !r.GoStruct {
-				continue
-			}
-		}
 		c.deriveInstance(request)
 	}
 }
@@ -136,7 +131,7 @@ func (c *checker) deriveInstance(request *deriveRequest) {
 	var args []Type
 	for _, p := range typeParamsOf(t) {
 		tp := &TypeParam{Name: p.Name, Decl: p.Decl}
-		if !IsGoStruct(cl) && cl.Template == nil {
+		if cl.Template == nil {
 			tp.Bounds = []*Class{cl}
 		}
 		tps = append(tps, tp)

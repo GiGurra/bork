@@ -88,6 +88,15 @@ func (c *checker) declareDeriveTemplates(files []*syntax.File) {
 				}
 				if valid {
 					class.Template = &DeriveTemplate{Decl: decl, Pkg: c.pkg}
+					class.ForeignRecord = c.foreignRecordMetadata(class)
+					if class.ForeignRecord != nil {
+						for _, method := range class.Methods {
+							switch method.Decl.Name {
+							case "New", "FromGo", "ToGo", "Fields":
+								c.errorf(method.Decl.Pos, "class %s has a ForeignRecord derive template, so its method %s would collide with the generated Go conversion member", class.Name, method.Decl.Name)
+							}
+						}
+					}
 				}
 			}
 		}
@@ -137,6 +146,8 @@ type deriveExpansion struct {
 	helperArgs  []syntax.Expr
 	helperOrder []int
 	patternTest bool
+	// layout also evaluates literals of the shape layout records.
+	layout bool
 }
 
 func (p *deriveExpansion) error(pos diag.Pos, format string, args ...any) {
@@ -301,9 +312,22 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 	case *syntax.IntLit:
 		n, err := strconv.ParseInt(x.Text, 0, 64)
 		return n, err == nil
+	case *syntax.RecordLit:
+		if p.layout {
+			return p.layoutRecord(x)
+		}
+	case *syntax.ListLit:
+		if p.layout {
+			return p.layoutList(x)
+		}
 	case *syntax.Ident:
 		if kind := p.shapeCall(x.Name); kind == "Record" || kind == "Sealed" || kind == "Other" {
 			return shapeEnum(kind), true
+		}
+		if p.layout {
+			if value, known := p.layoutConstant(x); known {
+				return value, true
+			}
 		}
 		value, ok := p.env[x.Name]
 		if origin, present := p.origins[x.Name]; ok && present {
@@ -317,6 +341,11 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 		if id, yes := x.X.(*syntax.Ident); yes && x.Name == "Type" {
 			if runtime, known := p.env[id.Name].(shapeRuntimeType); known {
 				return runtime.typ, true
+			}
+		}
+		if p.layout {
+			if value, known := p.layoutConstant(x); known {
+				return value, true
 			}
 		}
 		value, ok := p.eval(x.X)
@@ -343,6 +372,8 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 				return value.field.Decl != nil && value.field.Decl.Default != nil, true
 			case "Type", "RawType":
 				return value.field.Type, true
+			case "tags":
+				return p.fieldTags(x.Pos, value.field)
 			case "facts":
 				return p.factSequence(x.Pos, value.owner, value.field, value.field.Constraints)
 			}
@@ -427,6 +458,11 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 			return a || b, aok && bok
 		}
 	case *syntax.Call:
+		if selector, ok := x.Fun.(*syntax.Selector); ok {
+			if value, known := p.stringOperation(x, selector); known {
+				return value, true
+			}
+		}
 		if selector, ok := x.Fun.(*syntax.Selector); ok && (selector.Name == "length" || selector.Name == "isEmpty") {
 			if receiver, known := p.eval(selector.X); known {
 				if sequence, yes := receiver.(shapeSequence); yes {
@@ -566,6 +602,8 @@ func (p *deriveExpansion) literal(pos diag.Pos, value any) syntax.Expr {
 		return &syntax.BoolLit{Pos: pos, Value: value}
 	case int64:
 		return &syntax.IntLit{Pos: pos, Text: strconv.FormatInt(value, 10)}
+	case metadataList, metadataRecord, metadataVariant:
+		return p.layoutLiteral(pos, value)
 	default:
 		p.error(pos, "shape metadata cannot escape into runtime code; use its properties inside a derive template")
 		return &syntax.Block{Pos: pos}

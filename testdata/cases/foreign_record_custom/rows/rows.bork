@@ -1,0 +1,58 @@
+import "bork/shape"
+
+// Row maps a record to a database row struct with column-named Go fields.
+class Row[T] {
+  fn table(value: T): String
+}
+
+derive fn column(name: String): String {
+  "Col" + name.capitalize()
+}
+
+derive fn entry[T](field: shape.Field[T]): shape.ForeignField {
+  shape.ForeignField {
+    slot: field.index,
+    name: column(field.name),
+    tags: [shape.Tag { name: "db", value: field.name.toLower() }],
+    option: shape.ForeignOption.Reject
+  }
+}
+
+derive instance row[T]: Row[T] {
+  metadata shape.ForeignRecord = shape.ForeignRecord {
+    fields: [comptime for (field in shape.fields[T]()) comptime if (!field.computed) entry[T](field)]
+  }
+  fn table(value: T): String { shape.name[T]().toLower() + "s" }
+}
+
+// Columns lists each Go field with its tags, in layout order.
+fn Columns[T: Row](): List[String] unsafe go {
+  var out []string
+  for _, f := range _d_T_Row.Fields() {
+    text := f.Name + ":" + f.GoName
+    for _, tag := range f.Tags { text += " " + tag.Name + "=" + tag.Value }
+    out = append(out, text)
+  }
+  return out
+}
+
+// Scan converts a filled Go row struct back, reporting conversion errors.
+fn Scan[T: Row](set: (String) => String): T | GoValueError unsafe go {
+  import "reflect"
+  p := _d_T_Row.New()
+  v := reflect.ValueOf(p).Elem()
+  for i := 0; i < v.NumField(); i++ {
+    tag := v.Type().Field(i).Tag.Get("db")
+    if v.Field(i).Kind() == reflect.String { v.Field(i).SetString(set(tag)) }
+  }
+  out, errors := _d_T_Row.FromGo(p)
+  if len(errors) > 0 { return errors[0] }
+  return out
+}
+
+// Round converts a value to its row struct and back.
+fn Round[T: Row](value: T): T | GoValueError unsafe go {
+  out, errors := _d_T_Row.FromGo(_d_T_Row.ToGo(value))
+  if len(errors) > 0 { return errors[0] }
+  return out
+}

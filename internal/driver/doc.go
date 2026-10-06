@@ -11,7 +11,6 @@ import (
 	"github.com/GiGurra/bork/internal/apidoc"
 	"github.com/GiGurra/bork/internal/check"
 	"github.com/GiGurra/bork/internal/diag"
-	"github.com/GiGurra/bork/internal/prelude"
 	"github.com/GiGurra/bork/internal/std"
 	"github.com/GiGurra/bork/internal/syntax"
 )
@@ -238,7 +237,7 @@ func loadDocTarget(target docTarget, inputs *sourceSnapshot) (*loadedSources, *g
 		}
 	}
 	l := &loader{mod: owner, owners: map[string]module{}, inputs: inputs, diags: diags, state: map[string]int{}}
-	l.files = prelude.Parse(diags)
+	l.preludeFiles(diags)
 	if target.external {
 		cwd, _ := inputs.workingDirectory()
 		file := syntax.Parse(filepath.Join(cwd, "<bork-doc>"), []byte("fn main() {}\n"), diags)

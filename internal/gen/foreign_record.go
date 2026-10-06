@@ -10,7 +10,7 @@ import (
 	"github.com/GiGurra/bork/internal/check"
 )
 
-const goStructSchemaHelpers = `package main
+const foreignSchemaHelpers = `package main
 
 type _borkGoTag struct { Name, Value string }
 type _borkGoStructField struct {
@@ -36,9 +36,11 @@ func _borkGoTags(tag string) []_borkGoTag {
 }
 `
 
-func (g *gen) goStructDictionary(ci *check.ClassInstance) *ast.CompositeLit {
+// foreignDictionary emits the conversion bridge of any class whose derive
+// template declares a shape.ForeignRecord layout.
+func (g *gen) foreignDictionary(ci *check.ClassInstance) *ast.CompositeLit {
 	r := ci.Type.(*check.Record)
-	g.usesGoStruct = true
+	g.usesForeign = true
 	bt := g.typeText(r)
 	errType := g.typeText(g.info.Named["GoValueError"])
 	w := &bindWriter{g: g, b: &check.GoBinding{GoValueError: g.info.Named["GoValueError"]}}
@@ -47,7 +49,7 @@ func (g *gen) goStructDictionary(ci *check.ClassInstance) *ast.CompositeLit {
 	add := func(key, src string) {
 		x, err := parser.ParseExpr(src)
 		if err != nil {
-			panic(fmt.Sprintf("GoStruct %s %s: %v\n%s", r.Name, key, err, src))
+			panic(fmt.Sprintf("%s bridge %s %s: %v\n%s", ci.Class.Name, r.Name, key, err, src))
 		}
 		lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: ast.NewIdent(key), Value: x})
 	}
@@ -93,34 +95,26 @@ func (g *gen) goStructDictionary(ci *check.ClassInstance) *ast.CompositeLit {
 	add("ToGo", "func(value "+bt+") any { return "+g.mirrorHelperName("_toGo_", r)+"(value) }")
 	var fields strings.Builder
 	fields.WriteString("func() []_borkGoStructField { return []_borkGoStructField{\n")
-	for i, f := range r.Fields {
-		if f.Computed {
-			continue
-		}
-		var cons, tags []string
+	for _, i := range r.Foreign.Slots {
+		f := r.Fields[i]
+		var cons []string
 		for _, con := range f.Constraints {
 			cons = append(cons, strconv.Quote(con.String()))
-		}
-		for _, tag := range f.GoTags {
-			tags = append(tags, fmt.Sprintf("{Name:%q,Value:%q}", tag.Name, tag.Value))
 		}
 		def := "nil"
 		if f.Default != nil {
 			def = "func() any { return " + g.fieldDefault(f) + " }"
 		}
 		decoder := "nil"
-		if i < len(ci.GoFieldDecoders) && ci.GoFieldDecoders[i] != nil {
+		if i < len(ci.ForeignDecoders) && ci.ForeignDecoders[i] != nil {
 			g.usesDerive = true
 			g.goType(g.codecType("Value"))
 			g.goType(g.codecType("Field"))
-			d := ci.GoFieldDecoders[i]
+			d := ci.ForeignDecoders[i]
 			body := g.decodeFields([]*check.Field{independentField(f)}, []*check.Dict{d}, bt)
 			decoder = fmt.Sprintf("func(value %s) any { _result := func() any { _obj := %s{fields: []%s{{name:%q,value:value}}}; %s }(); if err,ok:=_result.(%s); ok { return err }; return _result.(%s).%s }", g.typeText(g.codecType("Value")), g.text(g.variantType(g.codecType("Value").(*check.Sealed).Variant("Object"))), g.typeText(g.codecType("Field")), f.Name, body, g.typeText(g.codecType("DecodeError")), bt, g.fieldReadSuffix(f))
 		}
-		tagExpr := "[]_borkGoTag{" + strings.Join(tags, ",") + "}"
-		if !r.GoGenerated {
-			tagExpr = "_borkGoTags(" + strconv.Quote(r.GoFields[i].Tag) + ")"
-		}
+		tagExpr := "_borkGoTags(" + strconv.Quote(r.GoFields[i].Tag) + ")"
 		fmt.Fprintf(&fields, "{_borkDecodeField: _borkDecodeField{Name:%q,Type:%q,Doc:%q,Constraints:[]string{%s},Kind:%s,Optional:%t,HasDefault:%t,Default:%s,Decode:%s},GoName:%q,Tags:%s},\n", f.Name, f.Type.String(), f.Doc, strings.Join(cons, ","), g.decodeKind(f.Type), check.IsOption(f.Type), f.Default != nil, def, decoder, strings.Join(r.GoFields[i].Path, "."), tagExpr)
 	}
 	fields.WriteString("} }")

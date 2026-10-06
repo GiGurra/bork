@@ -29,11 +29,12 @@ import (
 // Package generates a Go `package main` source file.
 func Package(files []*syntax.File, info *check.Info) ([]byte, error) {
 	// Every function of the program's packages is emitted (unsafe go
-	// code may call them); the prelude's only if used.
+	// code may call them); the prelude's, and those of packages only the
+	// prelude imports, only if used.
 	var roots []*check.Func
 	for _, f := range files {
 		for _, fd := range f.Funcs {
-			if fn := info.FuncOf[fd]; fn != nil && !fn.Prelude {
+			if fn := info.FuncOf[fd]; fn != nil && !fn.Prelude && !preludeOnly(fn.Pkg) {
 				roots = append(roots, fn)
 			}
 		}
@@ -218,7 +219,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 			}
 			g.goType(method.Result)
 		}
-		if check.IsGoStruct(class) {
+		if class.ForeignRecord != nil {
 			g.goType(info.Named["GoValueError"])
 		}
 	}
@@ -522,7 +523,7 @@ type gen struct {
 	loops           []loopFrame
 	// tail is the function being generated, if its self calls jump.
 	tail             *tailFrame
-	usesGoStruct     bool
+	usesForeign      bool
 	usesBytes        bool
 	usesIoFailure    bool
 	usesOpaque       bool

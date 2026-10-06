@@ -20,6 +20,10 @@ type Class struct {
 	Prelude  bool
 	Param    *TypeParam
 	Methods  []*Func // each has Class set, and Param as its type parameter
+
+	// ForeignRecord is the template's shape.ForeignRecord metadata. Deriving
+	// a class with one generates a Go struct layout and conversion bridge.
+	ForeignRecord *syntax.InstanceMetadata
 }
 
 func (c *Class) String() string { return c.Name }
@@ -48,7 +52,7 @@ type DeriveCapture struct {
 type ClassInstance struct {
 	Captures        []DeriveCapture
 	Derived         string // target name requested by derive; empty for written instances
-	GoFieldDecoders []*Dict
+	ForeignDecoders []*Dict
 	Name            string
 	Decl            *syntax.InstanceDecl
 	Pkg             *Package
@@ -361,8 +365,8 @@ func (c *checker) declareInstance(id *syntax.InstanceDecl, prelude bool) {
 		}
 	}
 	cl := c.lookupClass(id.Class)
-	if IsGoStruct(cl) {
-		c.errorf(id.ClassPos, "GoStruct instances must be derived for records")
+	if cl != nil && cl.ForeignRecord != nil {
+		c.errorf(id.ClassPos, "%s instances must be derived for records", cl.Name)
 		return
 	}
 	if cl != nil && IsEq(cl) {
@@ -1019,7 +1023,7 @@ type Derived struct {
 
 // derivable reports whether instances of class can be derived.
 func derivable(class *Class) bool {
-	return class.Template != nil || IsCodec(class, "Decode") || IsGoStruct(class)
+	return class.Template != nil || IsCodec(class, "Decode")
 }
 
 // A provisional derivation is available while defaults are checked, but a
@@ -1062,11 +1066,12 @@ func (c *checker) resolveDerived() {
 	}()
 	for _, ci := range c.info.ClassInstances {
 		sourceCodec := ci.Derived != "" && ci.Class.Template != nil && (IsCodec(ci.Class, "Decode") || IsCodec(ci.Class, "Encode"))
-		if !IsGoStruct(ci.Class) && !sourceCodec && (len(ci.Methods) == 0 || ci.Methods[0].Derived == nil) {
+		foreign := ci.Derived != "" && ci.Class.ForeignRecord != nil
+		if !foreign && !sourceCodec && (len(ci.Methods) == 0 || ci.Methods[0].Derived == nil) {
 			continue
 		}
-		if IsGoStruct(ci.Class) {
-			if r, ok := ci.Type.(*Record); !ok || !r.GoStruct {
+		if foreign {
+			if r, ok := ci.Type.(*Record); !ok || r.Foreign == nil || r.Foreign.Class != ci.Class || r.Foreign.Failed {
 				c.discardDerived(ci)
 				continue
 			}
@@ -1083,8 +1088,8 @@ func (c *checker) resolveDerived() {
 			c.discardDerived(ci)
 			continue
 		}
-		if IsGoStruct(ci.Class) {
-			c.resolveGoStructDecoders(ci)
+		if foreign {
+			c.resolveForeignDecoders(ci)
 			continue
 		}
 		if len(ci.Methods) == 0 || ci.Methods[0].Derived == nil {
@@ -1209,7 +1214,7 @@ func (c *checker) foreignPrivateRepresentation(t Type, class *Class, from *Packa
 			}
 		}
 	case *Record:
-		if t.Decl != nil && t.Decl.Private && t.Pkg != from && (IsGoStruct(class) || IsCodec(class, "Decode")) {
+		if t.Decl != nil && t.Decl.Private && t.Pkg != from && (class.ForeignRecord != nil || IsCodec(class, "Decode")) {
 			return t
 		}
 		for _, f := range t.Fields {

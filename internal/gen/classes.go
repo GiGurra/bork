@@ -52,8 +52,8 @@ func (g *gen) classDecl(class *check.Class) ast.Decl {
 			&ast.Field{Names: []*ast.Ident{ast.NewIdent("kind")}, Type: ast.NewIdent("string")},
 			&ast.Field{Names: []*ast.Ident{ast.NewIdent("optional")}, Type: ast.NewIdent("bool")})
 	}
-	if check.IsGoStruct(class) {
-		g.usesGoStruct = true
+	if class.ForeignRecord != nil {
+		g.usesForeign = true
 		g.goType(g.info.Named["GoValueError"])
 		for _, spec := range []struct{ name, typ string }{
 			{"New", "func() any"}, {"FromGo", "func(any) (T, []" + g.typeText(g.info.Named["GoValueError"]) + ")"}, {"ToGo", "func(T) any"}, {"Fields", "func() []_borkGoStructField"},
@@ -141,8 +141,8 @@ func (g *gen) instanceDecl(ci *check.ClassInstance) ast.Decl {
 	g.shapeScope = ci
 	defer func() { g.shapeScope = savedScope }()
 	lit := &ast.CompositeLit{Type: g.classType(ci.Class, ci.Type)}
-	if check.IsGoStruct(ci.Class) {
-		lit = g.goStructDictionary(ci)
+	if ci.Class.ForeignRecord != nil {
+		lit = g.foreignDictionary(ci)
 	}
 	if len(ci.Metadata) > 0 {
 		lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: ast.NewIdent("_metadata"), Value: g.instanceMetadata(ci)})

@@ -1,0 +1,13 @@
+import "bork/shape"
+
+// GoStruct exposes a record to Go reflection through checked conversions.
+class GoStruct[T] {}
+
+// The layout keeps stored fields in declaration order, capitalizes their
+// names, keeps their declared tags, and maps Option to a nil pointer.
+derive instance goStruct[T]: GoStruct[T] {
+  metadata shape.ForeignRecord = shape.ForeignRecord {
+    fields: [comptime for (field in shape.fields[T]()) comptime if (!field.computed)
+      shape.ForeignField { slot: field.index, name: field.name.capitalize(), tags: field.tags, option: shape.ForeignOption.Pointer }]
+  }
+}

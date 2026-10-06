@@ -1,0 +1,25 @@
+import "bork/shape"
+import "example.com/foreign-record-custom/rows"
+
+pred short(s: String) { s.runeCount() <= 3 }
+type User = {
+  name: String where short = "ada"
+  email: String
+  age: Int = 36
+  lazy label: String = name + "!"
+} derive (rows.Row)
+type Box[A] = { id: Int = 7 } derive (rows.Row)
+
+fn main() uses io {
+  user = User { name: "bob", email: "b@example.com" }
+  println(rows.table(user))
+  println(rows.Columns[User]())
+  println(rows.Round(user))
+  println(rows.Scan[User](column => column + "x"))
+  println(rows.Scan[User](column => "y"))
+  layout = shape.metadata[User, rows.Row, shape.ForeignRecord]()
+  println(layout)
+  box: Box[String] = Box {}
+  println(rows.Round(box))
+  println(rows.Columns[Box[Int]]())
+}

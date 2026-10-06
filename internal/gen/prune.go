@@ -18,7 +18,7 @@ import (
 func (g *gen) pruneHelpers(decls, runtime []ast.Decl, goFuncs []string) ([]ast.Decl, []ast.Decl, []string, error) {
 	preserved := map[string]bool{"main": true, "init": true}
 	for _, fn := range g.info.FuncOf {
-		if !fn.Prelude {
+		if !fn.Prelude && !preludeOnly(fn.Pkg) {
 			preserved[g.funcName(fn).Name] = true
 		}
 	}
