@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
@@ -250,6 +251,10 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				bind(node.Name, nil, node)
 				if kind := metadata.kind(node.Items); kind >= deriveFields {
 					metadata.locals[c.lookup(node.Name)] = kind - deriveFields + deriveField
+					if !node.Comptime {
+						c.errorf(node.Pos, "shape metadata cannot be iterated by a runtime for; add comptime")
+						c.diags.Suggest(node.Pos, "type.error", node.Pos, diag.Fix{Message: "add comptime", Edits: []diag.TextEdit{{Start: node.Pos, End: node.Pos, Replacement: "comptime "}}})
+					}
 				}
 				walk(reflect.ValueOf(node.Body), nil)
 				for _, post := range node.Post {

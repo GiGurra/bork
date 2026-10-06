@@ -2240,3 +2240,76 @@ derive fn unused[T](x: T): Int {
 }
 fn main() {}`, "derive expression must be Int, found String")
 }
+
+func TestDeriveTemplateFactDiagnosticsUseRequest(t *testing.T) {
+	t.Parallel()
+	for _, expression := range []string{"required(-1)", "required(n)"} {
+		t.Run(expression, func(t *testing.T) {
+			source := `class C[T] { fn c(x: T, n: Int): Int }; pred positive(x: Int) { x > 0 }
+fn required(value: Int where positive): Int { value }
+derive instance c[T]: C[T] { fn c(x: T, n: Int): Int { ` + expression + ` } }
+type Row = {} derive(C)
+fn main() {}`
+			dir := t.TempDir()
+			path := filepath.Join(dir, "main.bork")
+			if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			_, _, err := Check(dir)
+			if err == nil || !strings.Contains(err.Error(), path+":4:") || !strings.Contains(err.Error(), "derive template at "+path+":3:") {
+				t.Fatalf("expected fact failure at the derive request with template provenance, got %v", err)
+			}
+		})
+	}
+}
+
+func TestDeriveTemplateHelperRequirementFactDiagnosticsUseRequest(t *testing.T) {
+	t.Parallel()
+	for _, expression := range []string{"required(-1)", "required(n)"} {
+		t.Run(expression, func(t *testing.T) {
+			source := `pred positive(x: Int) { x > 0 }; fn required(value: Int where positive): Int { value }
+derive fn helper(n: Int) where positive(` + expression + `): Int { n }
+class C[T] { fn c(x: T, n: Int): Int }; derive instance c[T]: C[T] { fn c(x: T, n: Int): Int { helper(n) } }
+type Row = {} derive(C)
+fn main() {}`
+			dir := t.TempDir()
+			path := filepath.Join(dir, "main.bork")
+			if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			_, _, err := Check(dir)
+			if err == nil || !strings.Contains(err.Error(), path+":4:") || !strings.Contains(err.Error(), "derive template at "+path+":2:") {
+				t.Fatalf("expected helper requirement failure at request with helper provenance, got %v", err)
+			}
+		})
+	}
+}
+
+func TestDeriveTemplateUnrequestedMetadataLoopQuickFix(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+derive fn unused[T](): Int {
+  fields = shape.fields[T]()
+  for (field in fields) { value = field.name }
+  0
+}
+fn main() {}`
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := Check(dir)
+	failure, ok := err.(*DiagError)
+	if !ok {
+		t.Fatalf("expected definition diagnostic, got %v", err)
+	}
+	for _, diagnostic := range failure.Diags.Sorted() {
+		if strings.Contains(diagnostic.Msg, "add comptime") {
+			if len(diagnostic.Fixes) != 1 || len(diagnostic.Fixes[0].Edits) != 1 || diagnostic.Fixes[0].Edits[0].Replacement != "comptime " {
+				t.Fatalf("missing prefix quick fix: %#v", diagnostic)
+			}
+			return
+		}
+	}
+	t.Fatalf("missing runtime metadata iteration diagnostic: %v", err)
+}
