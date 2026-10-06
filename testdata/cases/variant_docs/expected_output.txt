@@ -1,0 +1,3 @@
+["Red:Warm color.\nUsed for alerts.", "Green:", "Blue:", "Other:"]
+["Value:Generic value.", "Empty:"]
+["Value:Generic value.", "Empty:"]

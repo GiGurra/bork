@@ -31,6 +31,7 @@ type Fact[T] = private {
 }
 type Variant[T] = private {
   name: String
+  doc: String
   positional: Bool
   index: Int
   fields: List[Field[T]]
