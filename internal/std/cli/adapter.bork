@@ -12,6 +12,7 @@ type inputField = {
   typeName: String
   kind: String
   optional: Bool
+  variants: List[codec.VariantSchema] = []
   hasDefault: Bool
   defaultFalse: Bool
   defaultText: String
@@ -42,7 +43,7 @@ fn inputFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchem
     // CLI switches default to false independently of the record decoder.
     defaultFalse := field.kind == "bool" && !field.optional && !field.hasDefault
     if defaultFalse { text = "false" }
-    fields = append(fields, inputField{field: field.name, wireName: field.wireName, aliases: field.aliases, words: field.words, typeName: field.typeName, kind: field.kind, optional: field.optional, hasDefault: field.hasDefault || defaultFalse, defaultFalse: defaultFalse, defaultText: text, configDefault: path, validate: func(value codec.Value) any {
+    fields = append(fields, inputField{field: field.name, wireName: field.wireName, aliases: field.aliases, words: field.words, typeName: field.typeName, kind: field.kind, optional: field.optional, variants: field.variants, hasDefault: field.hasDefault || defaultFalse, defaultFalse: defaultFalse, defaultText: text, configDefault: path, validate: func(value codec.Value) any {
       if err, bad := field.validate(value).(codec.DecodeError); bad { return err }
       return _Ok{}
     }})
@@ -130,6 +131,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
     if list { typ = reflect.TypeFor[*[]string]() }
     doc := flag.description
     if field.hasDefault { doc += " (default " + helpDefault(field) + ")" } else if !field.optional { doc += " (required)" }
+    doc += helpChoices(field)
     tag := "optional:\"true\" descr:" + strconv.Quote(strings.TrimSpace(doc))
     if persistent { tag += " persistent:\"true\"" }
     if list { tag += " collection:\"array\"" }
@@ -265,6 +267,22 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
             if err, bad := parsed.(codecs.JsonError); bad { failures = append(failures, codec.DecodeError{path: "." + key, message: err.message}); continue }
             json = parsed.(codec.Value)
           }
+        }
+        // Only bound CLI/env/positional inputs use the closed advertised enum
+        // names. Config and declared defaults retain selected codec semantics.
+        if !value.IsNil() && len(field.variants) != 0 {
+          allowed := map[string]bool{}
+          names := []string{}
+          for _, variant := range field.variants { allowed[variant.name] = true; names = append(names, variant.name); for _, alias := range variant.aliases { allowed[alias] = true } }
+          invalid := false
+          var check func(codec.Value, string)
+          check = func(input codec.Value, path string) {
+            if array, list := input.(codec.Value_Array); list { for j, item := range array.items { check(item, fmt.Sprintf("%s[%d]", path, j)) }; return }
+            if object, tagged := input.(codec.Value_Object); tagged { for _, member := range object.fields { if member.name == "type" { check(member.value, path+".type"); return } }; return }
+            if text, stringInput := input.(codec.Value_String); stringInput && !allowed[text.value] { failures = append(failures, codec.DecodeError{path:path, message:"must be one of: " + strings.Join(names, ", ")}); invalid = true }
+          }
+          check(json, "." + key)
+          if invalid { continue }
         }
         spec := metadata[field.field]
         if spec.strictChoices {

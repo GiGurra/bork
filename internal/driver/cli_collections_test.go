@@ -17,11 +17,13 @@ import "bork/json"
 import "bork/process"
 use codec.Defaults
 use cli.FieldTagsEncode
+type Mode = sealed { Quiet, Loud codec { aliases: ["verbose"] }, Other(String) codec { fallback: true } } derive (codec.Decode, codec.Encode)
 type Leaf = { name: String } derive (codec.Decode)
 pred Positive(value: Int) { value > 0 }
 type PositiveInt = Int where Positive
 pred PositivePorts(value: Option[Map[String, Int]]) { value.map(ports => ports.entries().all(entry => entry.value > 0)).getOr(true) }
 type Options = {
+ modes: List[Mode] = [] cli { collection: cli.Collection.Csv }
  tags: List[String] = [] cli { collection: cli.Collection.Csv } codec { aliases: ["oldTags"] }
  counts: List[PositiveInt] = []
  labels: Option[Map[String, String]] cli { collection: cli.Collection.KeyValue } codec { aliases: ["oldLabels"] }
@@ -92,6 +94,10 @@ fn main() {
 		name, mode              string
 		args, env, want, absent []string
 	}{
+		{"csv enum canonical and alias", "tagged", []string{"--modes", "QUIET,verbose"}, nil, []string{`"modes":["QUIET","LOUD"]`}, nil},
+		{"csv enum unknown rejected", "tagged", []string{"--modes", "QUIET,future"}, nil, []string{".modes[1]", "must be one of: QUIET, LOUD"}, nil},
+		{"csv enum env unknown rejected", "tagged", nil, []string{"BORK_COLLECTION_MODES=QUIET,future"}, []string{".modes[1]", "must be one of: QUIET, LOUD"}, nil},
+		{"csv enum help choices", "tagged", []string{"--help"}, nil, []string{"--modes strings", "choices QUIET, LOUD", "--labels key=value"}, nil},
 		{"persistent collections before and after path", "root", []string{"--tags", "one,two", "leaf", "--labels", "a=one,b=two", "--name", "Ada"}, nil, []string{`"tags":["one","two"]`, `"labels":{"a":"one","b":"two"}`, "Ada"}, nil},
 		{"collection help labels", "normal", []string{"--help"}, nil, []string{"--labels key=value", "--ports key=value", "--switches key=value"}, nil},
 		{"inherited collection help labels", "root", []string{"leaf", "--help"}, nil, []string{"--labels key=value", "--ports key=value"}, nil},
