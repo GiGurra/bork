@@ -1,13 +1,55 @@
 # bork/url
 
-`bork/url` parses and builds immutable URL values using Go's `net/url`.
-Operations are pure. `Parse(text): Url | ParseError` accepts absolute URLs,
-network-path references and relative references. It rejects malformed URLs and
-query strings without returning a partial result.
+`bork/url` parses and builds immutable URL references and repeated query parameters.
+
+```bork
+import "bork/url"
+
+fn main() {
+  value = url.Url { scheme: "https", host: "example.com", path: "/search", query: { "q": ["bork language"] } }
+  println(value.String())
+  match (url.Parse("https://example.com/%zz")) {
+    _: ParseError => println("invalid escape")
+    parsed: url.Url => println(parsed.String())
+  }
+}
+```
+
+```text
+https://example.com/search?q=bork+language
+invalid escape
+```
+
+## API
+
+| Signature | Meaning |
+| --- | --- |
+| `Parse(text: String): Url \| ParseError` | Parse an absolute URL or relative reference; reject malformed queries. |
+| `Build(value: Url): String` | Format fields with URL escaping rules. |
+| `(value: Url) String(): String` | Format the immutable URL. |
+| `(value: Url) Hostname(): String` | Read the host without brackets or port. |
+| `(value: Url) Port(): String` | Read the port, or empty text. |
+| `ParseQuery(text: String): Query \| ParseError` | Decode a query without its leading question mark. |
+| `EncodeQuery(query: Query): String` | Sort keys and encode every value. |
+| `(query: Query) EncodeQuery(): String` | Sort keys and encode every value. |
+| `(text: String) PathEscape(): String` | Escape one path segment. |
+| `(text: String) PathUnescape(): String \| ParseError` | Decode percent escapes while retaining plus. |
+| `(text: String) QueryEscape(): String` | Escape one query component. |
+| `(text: String) QueryUnescape(): String \| ParseError` | Decode percent escapes and plus-as-space. |
 
 ## URL fields and building
 
-`Url` has decoded `scheme`, `host`, `path`, `query`, and `fragment` fields.
+`Url` has these public fields and defaults:
+
+| Field | Default |
+| --- | --- |
+| `scheme: String`, `host: String`, `path: String`, `fragment: String` | `""` |
+| `query: Query` | `{:}` |
+| `user: Option[UserInfo]` | `.None` |
+| `opaque: String`, `rawPath: String`, `rawFragment: String` | `""` |
+| `forceQuery: Bool`, `omitHost: Bool` | `false` |
+
+`UserInfo` has `username: String` and `password: Option[String] = .None`.
 `query` is a `Query` alias for `Map[String, List[String]]`, preserving every value
 of repeated keys. `user: Option[UserInfo]` contains a username and optional
 password, distinguishing absent and empty passwords.
@@ -48,21 +90,45 @@ repeated values and their existing IoError/codec.DecodeError results. Request ke
 raw query String for HTTP forwarding and form decoding. HTTP clients accept the
 formatted `value.String()`.
 
-## Example
+
+## Update a URL
+
+```bork
+import "bork/url"
+
+fn demo() uses io: Ok | ParseError {
+  original = url.Parse("https://example.com/one%2Ftwo?q=first&q=second")?
+  println(original.query.get("q"))
+  println(original.copy(path: "/changed path").String())
+  println("one/two".PathEscape())
+}
+
+fn main() {
+  println(demo())
+}
+```
+
+## Decode query components
 
 ```bork
 import "bork/url"
 
 fn main() {
-  value = url.Url {
-    scheme: "https",
-    host: "example.com",
-    path: "/search",
-    query: { "q": ["bork language"], "page": ["1"] },
-  }
-  println(value.String())
-  println("one/two".PathEscape())
+  println("a+b".PathUnescape())
+  println("a+b".QueryUnescape())
+  println(url.EncodeQuery({ "q": ["a b", "c+d"] }))
 }
 ```
 
-See [examples/url](../../examples/url/main.bork) for parsing and immutable updates.
+```text
+a+b
+a b
+q=a+b&q=c%2Bd
+```
+
+See the [URL example](../../examples/url/main.bork).
+
+
+Run `bork doc bork/url` for the generated reference.
+
+[All standard packages](README.md)

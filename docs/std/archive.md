@@ -1,9 +1,78 @@
 # bork/archive
 
-## Archives
+`bork/archive` reads and writes ZIP and TAR members without extracting them onto disk.
 
-`bork/archive` encodes/decodes ZIP and TAR with immutable `Member` records
-(name, binary data, directory flag). Direct file writers avoid buffering the
+```bork
+import "bork/archive"
+import "bork/encoding"
+
+fn demo() uses io: Ok | IoError {
+  entries = [archive.Member { name: "hello.txt", data: encoding.Utf8("hello"), directory: false }]
+  data = archive.Zip(entries)?
+  println(archive.ReadZip(data)?.map(member => member.name))
+  match (archive.ReadZip(data, maxBytes: 4)) {
+    _: IoError => println("uncompressed data exceeds limit")
+    _: List[archive.Member] => println("read archive")
+  }
+}
+
+fn main() {
+  println(demo())
+}
+```
+
+```text
+["hello.txt"]
+uncompressed data exceeds limit
+Ok
+```
+
+## API
+
+| Signature | Meaning |
+| --- | --- |
+| `Zip(entries: List[Member]): Bytes \| IoError` | Encode ZIP members. |
+| `WriteZip(file: fs.File, entries: List[Member]) uses io: Ok \| IoError` | Write ZIP directly to an open file. |
+| `ReadZip(data: Bytes, maxBytes: Int = 67108864): List[Member] \| IoError` | Decode ZIP with a cumulative uncompressed byte limit. |
+| `ForEachZip(file: fs.File, visit: (Member) => Ok, maxBytes: Int = 67108864) uses io: Ok \| IoError` | Visit ZIP members, buffering one member at a time. |
+| `Tar(entries: List[Member]): Bytes \| IoError` | Encode TAR members. |
+| `WriteTar(file: fs.File, entries: List[Member]) uses io: Ok \| IoError` | Write TAR directly to an open file. |
+| `ReadTar(data: Bytes, maxBytes: Int = 67108864): List[Member] \| IoError` | Decode TAR with a cumulative uncompressed byte limit. |
+| `ForEachTar(file: fs.File, visit: (Member) => Ok, maxBytes: Int = 67108864) uses io: Ok \| IoError` | Visit TAR members from the current file offset. |
+
+`Member` is `{ name: String, data: Bytes, directory: Bool }`; directories
+have empty data. Pure codecs need no effects. File operations use `io` and
+iteration charges the callback's effects; callers retain file ownership.
+
+## Write and iterate a file
+
+```bork
+import "bork/archive"
+import "bork/encoding"
+import "bork/fs"
+
+fn demo(s: Scope) uses io: Ok | fs.Error | IoError {
+  target = fs.TempFile(s)?
+  archive.WriteZip(target, [archive.Member {
+    name: "hello.txt", data: encoding.Utf8("hello"), directory: false
+  }])?
+  source = fs.Open(fs.Path(target), s)?
+  archive.ForEachZip(source, member => println(member.name))?
+}
+
+fn main() {
+  println(scope app { demo(app) })
+}
+```
+
+```text
+hello.txt
+Ok
+```
+
+## Formats and shared limits
+
+Direct file writers avoid buffering the
 entire encoded archive. File iterators buffer one member's data at a time;
 ZIP also holds its central directory metadata. TAR consumes the file's current
 offset; ZIP reads the whole file with random access. File writers use the
@@ -23,23 +92,14 @@ TAR permits omitted trailing zero blocks, following Go's archive reader. Pure AP
 partial data on error; file operations and callbacks may already have produced
 partial output. Stream output never exceeds its configured byte limit.
 
-## Archive API
 
-`bork/archive` represents files and directories as
-`Member { name: String, data: Bytes, directory: Bool }`; directories have empty
-data. `Zip(members)` / `Tar(members)` return `Bytes | IoError`, and
-`ReadZip(bytes, maxBytes = 67108864)` / `ReadTar(...)` return
-`List[Member] | IoError`. `WriteZip(file, members)` / `WriteTar(...)` write
-directly to an `fs.File`; `ForEachZip(file, visit, maxBytes = 67108864)` /
-`ForEachTar(...)` visit one member at a time, buffering its data. File APIs
-declare `uses io` and charge callback effects. Callers retain file ownership.
-TAR and gzip consume the current file offset; ZIP iteration uses random access
-over the whole file. Writers use the current output offset; ZIP files should
-start empty at offset zero. Archives contain relative paths;
-traversal, absolute paths, backslashes, colons, NULs, links and special files are
-errors. No API extracts entries onto disk. Limits are nonnegative, cumulative
-uncompressed data bytes across members (including concatenated gzip members).
-Checksum and malformed input failures return IoError; TAR permits omitted
-trailing zero blocks, as Go does. File writes and callbacks
-may have already happened when a later error is returned. See
-[examples/compress_archive](../../examples/compress_archive/main.bork).
+A negative `maxBytes` returns `IoError`. Choose a smaller limit when accepting
+untrusted archives, and enforce compressed-input, member-count, metadata and
+work limits separately as needed. See [gzip](compress.md) for the corresponding
+compression limit, and the
+[compression and archive example](../../examples/compress_archive/main.bork).
+
+
+Run `bork doc bork/archive` for the generated reference.
+
+[All standard packages](README.md)
