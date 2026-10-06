@@ -126,7 +126,7 @@ fn main() uses io + state {
     work("after nested")
     // Tasks inherit what is bound where they start.
     scope s {
-      launch(s, () => work("task"))
+      fork(s, () => work("task"))
     }
     // An incoming request's values replace the server's own, also
     // where it carries none (a boundary).

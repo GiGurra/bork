@@ -1,2 +1,2 @@
-main.bork:4:3: pure uses state (it calls tasks.TrySpawn), but its signature allows no effects; declare it: uses state
-main.bork:7:27: badCallback uses clock (it calls tasks.TrySpawn, with a lambda that calls time.Sleep), but its signature allows only state; declare it: uses clock + state
+main.bork:4:3: pure uses state (it calls tasks.TryFork), but its signature allows no effects; declare it: uses state
+main.bork:7:26: badCallback uses clock (it calls tasks.TryFork, with a lambda that calls time.Sleep), but its signature allows only state; declare it: uses clock + state

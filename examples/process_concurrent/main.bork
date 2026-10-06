@@ -33,7 +33,7 @@ fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
   println(s"cat exited with ${waiting.Wait()?.code}")
   // LinesChannel turns piped output into a channel a task can receive from.
   ticker = process.Start(s, "/bin/sh", ["-c", "for i in 1 2 3 4; do echo tick $i; sleep 0.05; done"], stdout: .Pipe)?
-  counted = spawn(s, () => count(s, ticker.Stdout().LinesChannel(s), 0))
+  counted = fork(s, () => count(s, ticker.Stdout().LinesChannel(s), 0))
   _ = ticker.Wait()?
   println(s"ticks received: ${await(counted)}")
 }

@@ -63,7 +63,7 @@ fn waiting(child: Scope, x: Int, started: Channel[Int]) uses clock + state: Int 
 test "external cancellation interrupts callbacks already running" {
   scope s {
     started = channel[Int](s, 2)
-    stopper = spawn(s, () => {
+    stopper = fork(s, () => {
       signal = started.receive(s)
       match (signal) { _: Int => cancel(s); _ => panic("expected start signal") }
       true

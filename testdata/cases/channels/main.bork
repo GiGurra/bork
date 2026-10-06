@@ -30,8 +30,8 @@ fn main() {
   results = scope s {
     numbers = channel[Int](s)
     squares = channel[Int](s, 2)
-    launch(s, () => { _ = count(s, numbers, 1, 5) })
-    launch(s, () => { _ = square(s, numbers, squares) })
+    fork(s, () => { _ = count(s, numbers, 1, 5) })
+    fork(s, () => { _ = square(s, numbers, squares) })
     squares.toList(s)
   }
   println(results)

@@ -64,7 +64,7 @@ test "methods and the standard library can be mocked" {
 test "tasks see the mocks in force where they started" {
   mock Fetch(url) { s"task $url" }
   scope s {
-    tasks = ["a", "b", "c"].map(u => spawn(s, () => page(u)))
+    tasks = ["a", "b", "c"].map(u => fork(s, () => page(u)))
     assertEqual(tasks.map(t => await(t)), ["<task a>", "<task b>", "<task c>"])
   }
 }
@@ -73,12 +73,12 @@ test "blocks one after the other have their own mocks" {
   scope s {
     first = {
       mock Fetch(url) { "first" }
-      t = spawn(s, () => page("1"))
+      t = fork(s, () => page("1"))
       await(t)
     }
     second = {
       mock Fetch(url) { "second" }
-      t = spawn(s, () => page("2"))
+      t = fork(s, () => page("2"))
       await(t)
     }
     assertEqual([first, second], ["<first>", "<second>"])
@@ -132,7 +132,7 @@ test "functions without a result, and recorded arguments" {
   sent = mock Notify(user, text) {}
   Notify("ada", "hi")
   scope s {
-    launch(s, () => Notify("bob", "yo"))
+    fork(s, () => Notify("bob", "yo"))
   }
   assertEqual(sent.calls(), ["Notify(\"ada\", \"hi\")", "Notify(\"bob\", \"yo\")"])
 }
@@ -147,7 +147,7 @@ test "a mock in a scope's body lasts until the scope's tasks are done" {
   results = atom(none)
   scope s {
     mock Fetch(url) { s"fake $url" }
-    launch(s, () => {
+    fork(s, () => {
       _ = time.Sleep(s, time.Nanoseconds((30) * 1000000))
       rLate = Fetch("late")
       _ = update(results, rs => rs.append(rLate))
@@ -163,7 +163,7 @@ test "a task that outlives a block gets the mock from outside it" {
   scope s {
     {
       mock Fetch(url) { "inner" }
-      launch(s, () => {
+      fork(s, () => {
         rNow = Fetch("now")
         _ = update(results, rs => rs.append(rNow))
         _ = time.Sleep(s, time.Nanoseconds((30) * 1000000))

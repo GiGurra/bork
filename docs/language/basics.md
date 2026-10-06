@@ -134,6 +134,8 @@ fn main() {
 }
 ```
 
+An expression that gives exactly `Ok`, which has no value, needs no `_`. A union that includes `Ok`, such as `Ok | IoError`, still has to be handled or dropped with `_ =`. A task with no value, `Task[Ok]`, is the one other exception (see [tasks](scopes.md#tasks)).
+
 ## Numbers
 
 `Int` is a 64-bit integer and `Float` is a 64-bit float. Sized types exist for when the width matters: `Int8`, `Int16`, `Int32`, `Uint8` (also called `Byte`), `Uint16`, `Uint32`, `Uint64`, and `Float32`.

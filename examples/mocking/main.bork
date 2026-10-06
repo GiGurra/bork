@@ -34,7 +34,7 @@ fn check(url: String, s: Scope) uses net + clock + state: Health {
 // checkAll checks the urls at the same time, one task each.
 fn checkAll(urls: List[String]) uses net + clock + state: List[Health] {
   scope s {
-    tasks = urls.map(url => spawn(s, () => check(url, s)))
+    tasks = urls.map(url => fork(s, () => check(url, s)))
     tasks.map(t => await(t))
   }
 }

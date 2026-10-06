@@ -291,7 +291,7 @@ func (c *checker) mockBody(s *syntax.MockStmt, target, test *Func) {
 	c.loops, c.producer = savedLoops, savedProducer
 	name := writtenText(s.Target)
 	switch {
-	case fn.Result == Ok && isValue(bodyType):
+	case fn.Result == Ok && isValue(bodyType) && !isOkTask(bodyType):
 		c.errorf(s.Body.Tail.Position(), "value of type %s is not used (%s returns no value)", bodyType, name)
 	case fn.Result != Ok && bodyType == Ok:
 		c.errorf(s.Body.Pos, "the mock of %s must give a value of type %s, but its body ends without one", name, fn.Result)

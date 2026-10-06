@@ -1,1 +1,5 @@
-main.bork:4:14: T of spawn cannot be Ok: a type argument must be a type of values (to run work that gives no value, use launch)
+main.bork:4:9: spawn was removed; use fork(s, () => ...), which starts a task of s and gives a Task[T] (Task[Ok] for work with no value)
+main.bork:6:5: launch was removed; use fork(s, () => ...), which starts a task of s and gives a Task[T] (Task[Ok] for work with no value)
+main.bork:8:5: value of type Task[Int] is not used
+main.bork:10:5: value of type Ok | Cancelled is not used
+main.bork:13:23: T of awaitAll cannot be Ok: a type argument must be a type of values

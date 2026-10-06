@@ -15,7 +15,7 @@ fn main() {
   scope s {
     // An unbuffered channel: each send waits until a receiver takes it.
     greetings = channel[String](s)
-    launch(s, () => {
+    fork(s, () => {
       for (name in ["Ada", "Grace", "Barbara"]) {
         _ = greetings.send(s, s"hello, $name")
       }

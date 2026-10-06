@@ -60,7 +60,7 @@ func TestTimeoutJoinsAndStopsDeadline(t *testing.T) {
   child.Go(func() any { <-child.ctx.Done(); finished.Store(true); return nil })
   return 7
  })
- if _, ok := result.(Cancelled); !ok || !finished.Load() { t.Fatal("deadline did not cancel and join spawned task") }
+ if _, ok := result.(Cancelled); !ok || !finished.Load() { t.Fatal("deadline did not cancel and join forked task") }
  var retained *_Scope
  if _borkFanInTimeout(s, 100, func(child *_Scope) any { retained=child; return 8 }) != 8 { t.Fatal("success lost") }
  time.Sleep(150*time.Millisecond)

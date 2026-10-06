@@ -1,6 +1,6 @@
 fn main() {
   scope s {
-    task = spawn(s, () => 1)
+    task = fork(s, () => 1)
     _: Task[String] = Task { native: task.native, wait: () => "fake" }
     _ = task.copy(wait: () => 2)
     _: Channel[Int] = Channel {}

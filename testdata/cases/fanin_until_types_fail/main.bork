@@ -4,8 +4,8 @@ fn checked(x: Int): Success | Failure { Failure { message: "failed" } }
 fn listFailure(x: Int): Int | List[Int] { [99] }
 fn main() {
   scope s {
-    println([spawn(s, () => checked(1))].awaitAllUntil[Success, Failure](s))
-    println([spawn(s, () => listFailure(1))].awaitAllUntil[Int, List[Int]](s))
+    println([fork(s, () => checked(1))].awaitAllUntil[Success, Failure](s))
+    println([fork(s, () => listFailure(1))].awaitAllUntil[Int, List[Int]](s))
     println(withTimeout(s, 1, child => {}))
   }
 }

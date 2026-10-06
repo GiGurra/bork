@@ -6,7 +6,8 @@ fn noAttach(path: String) uses io: Ok | fs.Error {
   scope app {
     scope job {
       f = fs.Create(path, job)?
-      launch(app, () => use(f))
+      fork(app, () => use(f))
+      Ok
     }
   }
 }

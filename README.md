@@ -145,7 +145,7 @@ Printing inside `greeting` would be an error: `greeting uses io (it calls printl
 
 ### Scopes and tasks
 
-Files, connections, and tasks belong to a scope. A task is a piece of work that runs concurrently, started with `spawn`. When the scope ends, its files are closed and its tasks have finished, whether the work succeeded or not. Using a file after its scope has ended is a compile error.
+Files, connections, and tasks belong to a scope. A task is a piece of work that runs concurrently, started with `fork`. When the scope ends, its files are closed and its tasks have finished, whether the work succeeded or not. Using a file after its scope has ended is a compile error.
 
 ```bork
 import "bork/fs"
@@ -158,7 +158,7 @@ fn size(path: String) uses io: Int | fs.Error {
 
 fn main() {
   sizes = scope s {
-    tasks = ["a.txt", "b.txt"].map(path => spawn(s, () => size(path)))
+    tasks = ["a.txt", "b.txt"].map(path => fork(s, () => size(path)))
     tasks.map(t => await(t))
   }
   println(sizes)

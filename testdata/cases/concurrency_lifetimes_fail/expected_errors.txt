@@ -1,3 +1,5 @@
 main.bork:4:3: function leak cannot return this value: it belongs to scope s, which ends on line 6
 main.bork:11:9: t may be released: it belongs to scope s, which ended on line 10
-main.bork:18:24: the lambda may not live as long as scope outer (it depends on scope s), but spawn may keep it until outer closes; to give a task of outer a resource of a shorter scope, attach it first: r2 = attach(r, outer)
+main.bork:18:23: the lambda may not live as long as scope outer (it depends on scope s), but fork may keep it until outer closes; to give a task of outer a resource of a shorter scope, attach it first: r2 = attach(r, outer)
+main.bork:26:3: function leakOk cannot return this value: it belongs to scope s, which ends on line 28
+main.bork:33:9: t may be released: it belongs to scope s, which ended on line 32

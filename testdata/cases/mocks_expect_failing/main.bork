@@ -78,7 +78,7 @@ test "nor when a task of its scope fails" {
   scope s {
     calls = mock Fetch(url) { url }
     calls.expect(times: 5)
-    launch(s, () => assertEqual(Fetch("a"), "b"))
+    fork(s, () => assertEqual(Fetch("a"), "b"))
   }
 }
 

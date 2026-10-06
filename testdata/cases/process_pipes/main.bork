@@ -56,7 +56,7 @@ fn streaming(s: Scope, directory: String) uses io + state: Ok | IoError | Cancel
 
 fn separate(s: Scope) uses io + state: Ok | IoError | Cancelled {
   child = process.Start(s, "/bin/sh", ["-c", "for i in 1 2 3; do echo out $i; echo err $i >&2; done"], stdout: .Pipe, stderr: .Pipe)?
-  errors = spawn(s, () => child.Stderr().ReadAll())
+  errors = fork(s, () => child.Stderr().ReadAll())
   out = child.Stdout().ReadAll()?
   err = await(errors)?
   println(encoding.ParseUtf8(out))

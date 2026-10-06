@@ -33,10 +33,10 @@ test "race cancels and joins losers without cancelling the parent" {
 test "awaitFirst leaves losing tasks in their owner scope" {
   scope s {
     gate = channel[Int](s, 0)
-    pending = spawn(s, () => gate.receive(s))
-    ready = spawn(s, () => 7)
+    pending = fork(s, () => gate.receive(s))
+    ready = fork(s, () => 7)
     // Both tasks have the same result type for this wait.
-    immediate = spawn(s, () => { value: Int | Cancelled | Closed = await(ready); value })
+    immediate = fork(s, () => { value: Int | Cancelled | Closed = await(ready); value })
     result = [pending, immediate].awaitFirst(s)
     match (result) { Option.Some(value) => assertEqual(value, 7); _ => panic("expected ready task") }
     assertEqual(gate.send(s, 9), {})
@@ -44,11 +44,11 @@ test "awaitFirst leaves losing tasks in their owner scope" {
   }
 }
 
-test "timeout includes callback-spawned tasks and preserves parent cancellation" {
+test "timeout includes callback-forked tasks and preserves parent cancellation" {
   scope s {
     finished = atom(false)
     result = withTimeout(s, 100, child => {
-      launch(child, () => {
+      fork(child, () => {
         waited = delay(child, 10000)
         match (waited) { c: Cancelled => assertEqual(c.reason, "deadline exceeded"); _ => panic("expected deadline") }
         assertEqual(update(finished, old => true), true)
@@ -95,7 +95,7 @@ test "selection does not consume losing channels and drains closed buffers" {
 test "selection receives from an unbuffered channel" {
   scope s {
     ch = channel[Int](s, 0)
-    task = spawn(s, () => ch.send(s, 8))
+    task = fork(s, () => ch.send(s, 8))
     assertEqual(select { n = ch.receive(s) => n }, 8)
     assertEqual(await(task), {})
   }

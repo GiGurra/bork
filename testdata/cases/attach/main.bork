@@ -20,7 +20,7 @@ fn main() {
       // A task of app may outlive job: attach keeps conn open until
       // app closes too.
       shared = attach(conn, app)
-      launch(app, () => {
+      fork(app, () => {
         _ = time.Sleep(app, time.Nanoseconds((10) * 1000000))
         println(query(shared, "in a task of app"))
       })

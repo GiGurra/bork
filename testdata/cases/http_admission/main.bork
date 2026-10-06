@@ -76,7 +76,7 @@ fn immediate(policy: http.Admission) uses io + net + clock + state {
       http.Text(200, "ok")
       }, admission: Option.Some(policy)))
     url = s"http://${http.Address(server)}"
-    active = spawn(app, () => http.Get(url, app))
+    active = fork(app, () => http.Get(url, app))
     _ = entered.receive(app)
     showRejected(http.Get(url, app))
     println("no waiting", load(server))
@@ -89,12 +89,12 @@ fn immediate(policy: http.Admission) uses io + net + clock + state {
 fn raceTransfer(server: http.Server in app, entered: Channel[Bool] in app, permits: Channel[Bool] in app, app: Scope, remaining: Int) uses net + clock + state {
   if (remaining == 0) { return }
   url = s"http://${http.Address(server)}"
-  active = spawn(app, () => http.Get(s"$url/held", app))
+  active = fork(app, () => http.Get(s"$url/held", app))
   _ = entered.receive(app)
   scope request {
-    queued = spawn(request, () => http.Get(url, request))
+    queued = fork(request, () => http.Get(url, request))
     waitQueued(app, server, 1)
-    release = spawn(app, () => permits.send(app, true))
+    release = fork(app, () => permits.send(app, true))
     cancel(request)
     _ = await(queued)
     _ = await(release)
@@ -119,11 +119,11 @@ fn main() {
     policy = http.Admission { maxInFlight: 1, maxQueued: 2, queueTimeoutMs: 5000, retryAfterMs: 1 }
     server = mustServer(http.Listen("127.0.0.1:0", app, handler, admission: Option.Some(policy)))
     url = s"http://${http.Address(server)}"
-    first = spawn(app, () => http.Get(s"$url/first", app))
+    first = fork(app, () => http.Get(s"$url/first", app))
     println(entered.receive(app))
-    second = spawn(app, () => http.Get(s"$url/second", app))
+    second = fork(app, () => http.Get(s"$url/second", app))
     waitQueued(app, server, 1)
-    third = spawn(app, () => http.Get(s"$url/third", app))
+    third = fork(app, () => http.Get(s"$url/third", app))
     waitQueued(app, server, 2)
     println("bounded", load(server))
     showRejected(http.Get(s"$url/rejected", app))
@@ -134,10 +134,10 @@ fn main() {
     println(entered.receive(app))
     _ = permits.send(app, true)
     println(status(await(first)), status(await(second)), status(await(third)), load(server))
-    active = spawn(app, () => http.Get(s"$url/active", app))
+    active = fork(app, () => http.Get(s"$url/active", app))
     _ = entered.receive(app)
     scope request {
-      queued = spawn(request, () => http.Get(s"$url/cancelled", request))
+      queued = fork(request, () => http.Get(s"$url/cancelled", request))
       waitQueued(app, server, 1)
       cancel(request)
       println("queued cancellation", match (await(queued)) { _: Cancelled => true, _ => false })
@@ -153,7 +153,7 @@ fn main() {
     handler: http.Handler = (request, s) => { _ = entered.send(app, true); _ = permits.receive(app); http.Text(200, "ok") }
     server = mustServer(http.Listen("127.0.0.1:0", app, handler, admission: Option.Some(http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 5, status: 429 })))
     url = s"http://${http.Address(server)}"
-    active = spawn(app, () => http.Get(url, app))
+    active = fork(app, () => http.Get(url, app))
     _ = entered.receive(app)
     showRejected(http.Get(url, app))
     println("after timeout", load(server))
@@ -181,9 +181,9 @@ fn main() {
       http.Text(200, "stopped")
       }, admission: Option.Some(http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 5000 })))
     url = s"http://${http.Address(server)}"
-    active = spawn(app, () => http.Get(url, app))
+    active = fork(app, () => http.Get(url, app))
     _ = entered.receive(app)
-    queued = spawn(app, () => http.Get(url, app))
+    queued = fork(app, () => http.Get(url, app))
     waitQueued(app, server, 1)
     closeScope(owner)
     _ = await(active)
@@ -220,7 +220,7 @@ fn main() {
         maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 1000, retryAfterMs: 9223372036854,
     })))
     url = s"http://${http.Address(server)}"
-    active = spawn(app, () => http.Get(url, app))
+    active = fork(app, () => http.Get(url, app))
     _ = entered.receive(app)
     rawOwner = openScope(app)
     _ = openUnread(http.Address(server), rawOwner.scope)

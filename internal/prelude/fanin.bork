@@ -46,7 +46,7 @@ fn (tasks: List[Task[B | E]]) awaitAllUntil[B, E](s: Scope) uses state: List[B] 
 }
 
 // race starts work in its own cancellation scope. The first result cancels
-// the remaining work; all workers and their spawned tasks finish before return.
+// the remaining work; all workers and the tasks they fork finish before return.
 fn race[T](s: Scope, works: List[(Scope) => T]) uses state: Option[T] | Cancelled unsafe go {
   if len(works) == 0 { return Option_None[T]{} }
   child := _scopeWith(s.ctx)
@@ -64,7 +64,7 @@ fn race[T](s: Scope, works: List[(Scope) => T]) uses state: Option[T] | Cancelle
 }
 
 // withTimeout bounds a child operation cooperatively. The deadline includes
-// tasks the callback spawns. Returned resources stay owned until s closes.
+// tasks the callback forks. Returned resources stay owned until s closes.
 fn withTimeout[T](s: Scope, ms: Int, work: (Scope) => T) uses clock + state: T | Cancelled unsafe go {
   return _borkFanInTimeout(s, ms, func(child *_Scope) any { return work(child) })
 }

@@ -20,7 +20,7 @@ fn main() {
     println("both started")
     _ = release.send(s, 1); _ = release.send(s, 2)
     reader = () => first
-    tasks = [1, 2, 3].map(n => spawn(s, () => reader()))
+    tasks = [1, 2, 3].map(n => fork(s, () => reader()))
     println(tasks.map(t => await(t)))
     println(reader()); println(first); println(second)
     alias = first; println(alias)

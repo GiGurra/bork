@@ -12,7 +12,7 @@ fn use(c: Conn) uses io {
 fn afterClose(app: Scope) uses io + state {
   b = openScope(app)
   c = connect(b.scope)
-  t = spawn(b.scope, () => 1)
+  t = fork(b.scope, () => 1)
   closeScope(b)
   use(c)
   println(toString(await(t)))
@@ -74,9 +74,9 @@ fn siblings(app: Scope) uses io + state {
   a = openScope(app)
   old = connect(a.scope)
   b = openScope(app)
-  launch(b.scope, () => use(old))
+  fork(b.scope, () => use(old))
   shared = attach(old, b.scope)
-  launch(b.scope, () => use(shared))
+  fork(b.scope, () => use(shared))
   closeScope(a)
   closeScope(b)
 }
@@ -85,9 +85,9 @@ fn siblings(app: Scope) uses io + state {
 fn enclosing(app: Scope) uses io + state {
   b = openScope(app)
   c = connect(b.scope)
-  launch(app, () => use(c))
+  fork(app, () => use(c))
   s = b.scope
-  launch(app, () => println(toString(s)))
+  fork(app, () => println(toString(s)))
   closeScope(b)
 }
 
@@ -166,12 +166,12 @@ fn keeps(b: OwnedScope, c: Conn in b) uses state: Conn {
 
 // Owner parameters do not outlive other parameters' scopes.
 fn ownerParam(b: OwnedScope, app: Scope, pool: Conn) uses io + state {
-  launch(b.scope, () => use(pool))
+  fork(b.scope, () => use(pool))
   closeScope(b)
 }
 
 fn ownerParamIn(b: OwnedScope in app, app: Scope, pool: Conn in app) uses io + state {
-  launch(b.scope, () => use(pool))
+  fork(b.scope, () => use(pool))
   closeScope(b)
 }
 
@@ -231,7 +231,7 @@ fn extraArgs(app: Scope) uses io + state {
   a = openScope(app)
   ra = connect(a.scope)
   q = keep(openScope(app), a.scope)
-  launch(q.scope, () => use(ra))
+  fork(q.scope, () => use(ra))
   closeScope(a)
   closeScope(q)
 }

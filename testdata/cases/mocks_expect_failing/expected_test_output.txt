@@ -26,7 +26,7 @@ FAIL  the unmet expectations of every mock in a block are reported
 FAIL  a scoped mock's expectations are not checked when its block fails
       main.bork:73:5: expected "b", got "a"
 FAIL  nor when a task of its scope fails
-      main.bork:81:21: expected "b", got "a"
+      main.bork:81:19: expected "b", got "a"
 FAIL  an expectation after the mock ended
       main.bork:90:3: an expectation on the mock of Fetch came after it ended, so it could never be checked; declare expectations while the mock is in force
 FAIL  a matcher that panics

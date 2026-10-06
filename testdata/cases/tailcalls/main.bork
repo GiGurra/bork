@@ -41,7 +41,7 @@ ambient depth: Int
 
 fn rounds(n: Int) uses io + state + tailrec: Ok | Cancelled {
   scope s {
-    t = spawn(s, () => n * 2)
+    t = fork(s, () => n * 2)
     if (n % 250000 == 0) {
       println(s"round $n: ${await(t)}")
     }

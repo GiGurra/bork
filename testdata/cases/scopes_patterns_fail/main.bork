@@ -4,7 +4,7 @@ type Holder = { items: List[Task[Int]] }
 
 fn fromList(): Int {
   f = scope s {
-    xs = [spawn(s, () => 1)]
+    xs = [fork(s, () => 1)]
     match (xs) {
       [a, ...] => () => await(a)
       [] => () => 0
@@ -15,7 +15,7 @@ fn fromList(): Int {
 
 fn fromField(): Int {
   f = scope s {
-    h = Holder { items: [spawn(s, () => 2)] }
+    h = Holder { items: [fork(s, () => 2)] }
     match (h) {
       Holder { items: [a, ...] } => () => await(a)
       Holder { items: [] } => () => 0

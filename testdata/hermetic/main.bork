@@ -73,7 +73,7 @@ test "a lambda that leaves the mock's block" {
 test "a mock at the start of the test covers its tasks" {
   mock Get(url) { "fake" }
   scope s {
-    t = spawn(s, () => page("a"))
+    t = fork(s, () => page("a"))
     assertEqual(await(t), "<fake>")
   }
 }

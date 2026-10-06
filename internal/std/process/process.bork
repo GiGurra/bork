@@ -679,7 +679,7 @@ fn (output: Reader) LinesChannel(s: Scope, capacity: Int where validCapacity = 6
   owned = attach(output, s)
   // attach shares the Reader; the pump must still stop when s is cancelled.
   closeWhenDone(owned, s)
-  launch(s, () => {
+  fork(s, () => {
     for (item in owned.Lines()) {
       match (item) {
         line: String => {

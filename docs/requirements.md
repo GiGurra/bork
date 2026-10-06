@@ -1218,7 +1218,7 @@ scope maint {
 ### To settle with concurrency
 
 - **Cancellation and deadlines through scopes.** A request scope is the natural carrier for what Go's `context.Context` does today: when a request is cancelled, its scope closes, its resources are released, and its goroutines stop.
-- **Structured concurrency (decided, implemented):** goroutines started inside a scope finish before the scope ends, so they can use its resources with no extra attaching. `spawn(s, () => work())` starts a task of scope `s` and gives a `Task[T]`; `await(task)` waits for its result; `launch(s, () => ...)` starts work that gives no value. When a scope ends, however its block ends, it cancels itself, waits for its tasks, and then runs its finalizers. A task that panics panics `await`, or, if no one awaited it, the scope's routine when the scope closes. Lifetimes apply as to any value of a scope: a task cannot be returned from its scope or used after it, and its work may only use what lives as long as the scope. 
+- **Structured concurrency (decided, implemented):** goroutines started inside a scope finish before the scope ends, so they can use its resources with no extra attaching. `fork(s, () => work())` starts a task of scope `s` and gives a `Task[T]`; `await(task)` waits for its result. Work that gives no value gives a `Task[Ok]` (so `T` of `fork`, `await` and `tasks.TryFork` may be `Ok`, unlike other type arguments, and work that never returns, `() => panic(...)`, also gives a `Task[Ok]`). A `Task[Ok]` may be dropped like an `Ok`: `fork(s, () => { ... })` is a statement, with no `_ =`, and the scope still joins the task and reports its panic. Only exactly `Task[Ok]` is relaxed; a `Task[Int]`, or a union such as `Task[Ok] | TaskLimitReached | Cancelled`, must be used. (`fork` replaced `spawn` and `launch`, whose names were found ambiguous; both are reported as `migration.spawn` and `migration.launch` with a fix to `fork`.) When a scope ends, however its block ends, it cancels itself, waits for its tasks, and then runs its finalizers. A task that panics panics `await`, or, if no one awaited it, the scope's routine when the scope closes. Lifetimes apply as to any value of a scope: a task cannot be returned from its scope or used after it, and its work may only use what lives as long as the scope. 
 - **Finalizer failures and scope policies (implemented):** every finalizer of a scope runs, even when others fail; what failed (finalizers, and tasks that failed without being awaited) is raised as one panic once the scope has closed (`finalizer 4 failed; and then: finalizer 2 failed`). How a scope ends is configured with policies, values of the prelude's sealed type `ScopePolicy`, given after `with`: `scope s with taskTimeout(100), cleanupTimeout(500), logFailures() { ... }`. By default a scope waits for its tasks and finalizers for as long as it takes, and raises failures. `taskTimeout(ms)` bounds the wait for the tasks to stop after the scope is cancelled, overriding whatever cleanup time a task would take on its own: tasks still running then are *orphaned* (they keep running, and may find the scope's resources closed), while the scope's finalizers still run, on its own routine. `cleanupTimeout(ms)` bounds the wait for each finalizer; one that takes longer is orphaned, and the scope goes on closing. `logFailures()` logs failures at error level (through Go's `log/slog`) instead of raising them; a failing orphaned task is always logged so. Orphaning is logged at warning level.
 - **Attaching (implemented):** a task of an outer scope may outlive the scope a resource was opened in. `shared = attach(conn, app)` keeps `conn` open until `app` closes too: a resource closes when the last scope it is attached to closes (reference counting, per resource). `attach` is allowed only where the resource is provably alive, and gives it as a value of `app`, which a task of `app` can use. Without it, handing the resource to such a task is a lifetime error that suggests `attach`. Resources made in `unsafe go` register how they close with `s.Own(...)`, which is what makes them attachable.
 - **Channels (implemented; [design](design/channels.md)):** `channel[T](s)` (unbuffered), `channel[T](s, n)` (a fixed buffer, `n` proven `validCapacity`) and `unboundedChannel[T](s)` (a buffer that grows, so sends never wait) make a channel owned by scope `s`, which closes it when it closes (so, like a task, a channel cannot leave its scope). Operations are methods. Those that wait take the scope they wait in: `ch.send(s, x)` gives `Ok | Closed | Cancelled`, `ch.receive(s)` gives `T | Closed | Cancelled`, and both give `Cancelled` once that scope or the channel's own is cancelled, even if they could complete, including while they wait. `trySend(x)` (`Ok | Full | Closed`) and `tryReceive()` (`Option[T] | Closed`) never wait and do not check cancellation. A fixed buffer grows as it fills, up to its capacity. `close()` is idempotent and final: later sends, and senders waiting at the time, give `Closed`; receivers get the buffered values in order, then `Closed`. `length()` and `capacity()` (`None` when unbounded) describe the buffer. `values(s)` is a `Seq[T] uses state` that receives until the channel closes or `s` is cancelled (`for (x in ch.values(s))`), and `toList(s)` gives `List[T] | Cancelled`. `produce(s, capacity, work)` runs `work` with a new channel as a task of `s` and closes the channel when it returns; `merge(s, channels)` passes the values of every channel on to one, closed when all are. Values are received in the order sent, waiting senders and receivers are served first come first served, and selection among ready channels is uniformly random. The removed free functions `send`, `receive`, `closeChannel` and `received` are reported with the method to use.
@@ -1243,7 +1243,7 @@ See [Multiple listeners](std/http.md#multiple-listeners).
 HTTP admission before body buffering, typed overload/deadline
 failures, and shared retry budgets are described in
 [the backpressure design](design/backpressure.md) (bork-l0kn5g). Ordinary
-spawn/launch keep their current signatures; the explicit bounded task pool below
+`fork` keeps its signature; the explicit bounded task pool below
 is implemented. HTTP retries are opt-in, limited by a shared
 budget and remaining deadline. HTTP admission and typed client failure results are implemented; retry APIs remain planned.
 
@@ -1251,13 +1251,13 @@ budget and remaining deadline. HTTP admission and typed client failure results a
 
 `bork/tasks` adds explicit capacity shared across submitting scopes.
 `tasks.Open(s, maxTasks: n)` creates a scope-owned Pool with a proven positive
-limit. TrySpawn returns `Task[T] | TaskLimitReached | Cancelled`, and TryLaunch
-returns `Ok | TaskLimitReached | Cancelled`; both charge state plus callback
-effects and never wait. Rejected callbacks are not called. A task holds its slot
+limit. TryFork returns `Task[T] | TaskLimitReached | Cancelled` (`Task[Ok]` for
+an Ok callback, which the caller may drop once admitted); it charges state plus
+callback effects and never waits. Rejected callbacks are not called. A task holds its slot
 until the callback ends or panics, and its explicit scope owns and joins it.
 The compiler checks that pool and captures outlive that task scope. Resource
 attachment extends pool ownership without moving existing tasks. Ordinary
-spawn/launch and parallel collections retain their APIs and do not consume an
+`fork` and parallel collections retain their APIs and do not consume an
 implicit pool. See [the package documentation](std/tasks.md). HTTP admission also limits work before body reads and queues waiters in bounded
 FIFO order, rejecting with 429/503 and Retry-After. AdmissionState exposes load.
 Clients return Response, Overloaded (retaining the original 429/503 response),
@@ -1278,7 +1278,7 @@ promptly, and keeping a task running from moving its ownership.
 |---------------|--------------------------|--------------|
 | A request creates a pool that must survive the request | Give the acquiring function the application's scope, or `attach(pool, app)` while the pool is live and return that attached value | Already supported; the caller must supply the application's capability |
 | Stream an old file into a new file, release the old file, then keep writing the new one | Open the destination in an enclosing scope, open the source in a nested scope, copy, then leave the source block | Already supported; choose the destination owner before the copy |
-| Prepare a connection in a setup scope, then run a worker after setup ends | Attach the connection to the worker's enclosing scope before `spawn` there; capture the attached value | Already supported; setup's tasks still finish with setup |
+| Prepare a connection in a setup scope, then run a worker after setup ends | Attach the connection to the worker's enclosing scope before `fork` there; capture the attached value | Already supported; setup's tasks still finish with setup |
 | Transfer an already running task out of a request | Start it in the longer-lived scope initially, with captures proven to live that long | Moving the task handle cannot migrate its captured scopes, channels, cancellation points, or failures |
 | Repeatedly acquire the next lock before releasing the previous lock, or rotate sessions with at most two live connections | An enclosing scope keeps every attached acquisition until that scope ends | Prompt release of each old acquisition is missing; retaining all generations changes lock behavior and grows live resources |
 
@@ -1542,9 +1542,9 @@ The set is small and fixed in v0.1: `io`, `net`, `clock`, `random`, `state`, and
 
 - **Some functions have two or more effects:** `delay(s, ms)`, `cancelAfter(s, ms)`, and `time.Sleep`, `time.After` and `time.Tick` are `clock + state` (they wait, and they observe or cause cancellation); `process.Run`, `Start` and the Process methods that wait or signal (`Wait`, `TryWait`, `Signal`, `Stop`, `Kill`) are `io + state`; the `bork/sql` functions are `io + net`, since a database may be a local file or a server; and the `bork/net` socket functions are `net + state` (`Listen`, `Wait`, `Bind`, `Resolve`), or `net + state + clock` where they read, write, or dial with a deadline.
 - **Pure means deterministic, with no outside action.** Calling a function that uses nothing twice with the same arguments gives the same result, and has no observable effect beyond allocating memory, logging, and maybe panicking. That is why reading an atom, or checking whether a scope was cancelled, is `state`: the answer can change between two calls. One known exception: an unordered map (`m.unordered()`) lists its entries in an order that differs between runs, and listing it stays pure. Seeding that order per program would close the gap, if it turns out to matter.
-- **Memo/task observations account for effects at creation.** Task.wait observes work charged at spawn. The proposed [lazy value](design/lazy.md) read similarly keeps type T and charges initializer effects at declaration/construction, although the first read can run that work. Such access is a stable memo observation, not permission to treat the initializer as a repeatable pure call. Compile-time predicate evaluation must never force a runtime lazy cell, including through an otherwise pure accessor or validator.
+- **Memo/task observations account for effects at creation.** Task.wait observes work charged at fork. The proposed [lazy value](design/lazy.md) read similarly keeps type T and charges initializer effects at declaration/construction, although the first read can run that work. Such access is a stable memo observation, not permission to treat the initializer as a repeatable pure call. Compile-time predicate evaluation must never force a runtime lazy cell, including through an otherwise pure accessor or validator.
 - **The compiler's built-ins:** `println` and `assertSnapshot` (which writes snapshot files under `--update`) are `io`, and `toString`, `panic`, the conversions, `assert`, and `assertEqual` are pure.
-- **Making things is pure.** `atom(x)`, `channel(s, n)`, `spawn`, `launch`, `await`, `attach`, `onClose`, `scope` blocks and their policies, `http.Address`, `http.Text`, path functions such as `fs.Join`, JSON, CSV, strings, lists, and maps use nothing on their own. (`spawn` and `onClose` take on the effects of the work they are given; see open parameters below.)
+- **Making things is pure.** `atom(x)`, `channel(s, n)`, `fork`, `await`, `attach`, `onClose`, `scope` blocks and their policies, `http.Address`, `http.Text`, path functions such as `fs.Join`, JSON, CSV, strings, lists, and maps use nothing on their own. (`fork` and `onClose` take on the effects of the work they are given; see open parameters below.)
 - **`panic` is pure.** It signals a bug, not an effect. The same goes for what the runtime does on its own when a scope ends: logging an orphaned task, or a failure under `logFailures()`, and the timing of `taskTimeout` and `cleanupTimeout`. These are runtime diagnostics, not actions of the code.
 - **Logging is not tracked.** Writing logs with `bork/log` (`log.Info`, `log.Debug`, `log.Log`, ...) is allowed in any function, pure ones and predicates included, with no `uses`. It is also the way to trace a pure function while debugging. `log.Configure` is `io`, though: it decides for the whole program where logs go (stdout, say), so it belongs in `main`, and pure code cannot turn logging into printing. A log line added deep in a call chain should not ripple a declaration up through every caller, and logs do not change what a program computes. When compile-time evaluation runs a predicate that logs, the log output is discarded.
 - **Randomness is its own effect**, `random`, beside `clock`: both make a function nondeterministic without touching anything outside the process. The standard library has no random numbers yet; the `unsafe go` check below uses the effect.
@@ -1596,7 +1596,7 @@ names.forEach(n => println(n))                              // this call uses io
 
 The prelude's list, `Option`, and map methods have open function parameters; `update` and `swap` take strictly pure ones.
 
-**Records of functions made in Go carry their effects.** The prelude's `Atom` and `Channel` are records whose fields are functions made by `unsafe go` (`currentFn`, `sendFn`, ...), visible to any code that has the record. Their types must say what they do, `currentFn: () uses state => T`, or a program could call `store.currentFn()` with no `uses state`. The general rule: an `unsafe go` function that returns or builds function values types them with their effects, as part of the signature bork trusts. (`Task`'s `wait: () => T` stays pure: the work's effects were charged at `spawn`.)
+**Records of functions made in Go carry their effects.** The prelude's `Atom` and `Channel` are records whose fields are functions made by `unsafe go` (`currentFn`, `sendFn`, ...), visible to any code that has the record. Their types must say what they do, `currentFn: () uses state => T`, or a program could call `store.currentFn()` with no `uses state`. The general rule: an `unsafe go` function that returns or builds function values types them with their effects, as part of the signature bork trusts. (`Task`'s `wait: () => T` stays pure: the work's effects were charged at `fork`.)
 
 ### Lambdas, methods, and classes
 
@@ -1625,7 +1625,7 @@ The prelude's list, `Option`, and map methods have open function parameters; `up
 
 ### Tasks and scopes
 
-- **`spawn`, `launch`, `onClose`, and `http.Listen` take open functions,** so a call is charged with the effects of the work it starts, even though the work runs on another goroutine or later. "This function can cause X" is the question a reviewer asks, and structured concurrency means the work belongs to a scope the caller holds.
+- **`fork`, `onClose`, and `http.Listen` take open functions,** so a call is charged with the effects of the work it starts, even though the work runs on another goroutine or later. "This function can cause X" is the question a reviewer asks, and structured concurrency means the work belongs to a scope the caller holds.
 - **Scope operations that observe or change cancellation are `state`:** `cancel`, `cancelled`, `checkpoint`, and with `clock`, `delay` and `cancelAfter`. Opening a scope, its policies, and `attach` are pure.
 - **A request handler's type shows what it does:** `http.Listen` takes `handler: (Request, Scope) => Response`, which is open, so `Listen(addr, s, handler(store))` uses `net + clock + state` plus whatever the handler uses.
 
@@ -1804,7 +1804,7 @@ Each test has its own mocks. They belong to the goroutine that runs the test
 and are inherited by every goroutine started from it, at the moment it is
 started:
 
-- **Tasks** (`spawn`, `launch`), servers started with `http.Listen` and their
+- **Tasks** (`fork`), servers started with `http.Listen` and their
   request handlers, and goroutines started by `unsafe go` code (a raw `go`
   statement, or a Go library's) all see the mocks in force where they were
   started, and keep seeing them while they run.
@@ -1910,7 +1910,7 @@ checked as if it were that function's body:
 | An `unsafe go` function or a binding to a Go function (`time.Now`, `http.Get`) | yes | the dispatch point is the bork declaration, so the Go code is simply not called |
 | Pure functions, `pred`, and `rule` | no | their answers are facts; see *Contracts* |
 | Another package's unexported functions | no | mock the exported function that calls them |
-| The prelude's functions and methods (`spawn`, `atom`, list and string methods, ...) and the compiler's built-ins (`println`, `toString`, `assert`, ...) | no | they implement the language; mock the function that calls them |
+| The prelude's functions and methods (`fork`, `atom`, list and string methods, ...) and the compiler's built-ins (`println`, `toString`, `assert`, ...) | no | they implement the language; mock the function that calls them |
 | Class methods and instances (`Show`, `Decode`, ...) | no | instances are resolved per type; mock the function that uses them |
 | Generic functions and methods | yes (bork-7gpl00) | one generic mock answers every instantiation; see below |
 | `main` and tests | no | `main` cannot be called; tests are roots |
@@ -2312,7 +2312,7 @@ WithBind = ( Ident | Ident "." Ident ) ":" Expr .
 - **A named function used as a value is bound where it is named.**
   `events.forEach(audit)` reads `traceId` and `principal` at that point, like
   `events.forEach(e => audit(e))`. The same holds for method references.
-- **So tasks inherit the bindings.** `spawn(s, () => audit(e))` captures them
+- **So tasks inherit the bindings.** `fork(s, () => audit(e))` captures them
   when the lambda is made, whatever goroutine runs it, and `http.Listen`'s
   handler captures what is bound where the server starts. Per-request values
   are bound by the handler (`handle` above), so each request has its own.
@@ -2763,7 +2763,7 @@ keeping private representations such as HTTP certificate keys inaccessible.
 - **Generic Go functions and types** (`slices.Index`, `atomic.Pointer[T]`): instantiate them from bork type arguments?
 - **Go constants and variables** (`math.MaxInt32`, `os.Args`): bind them as zero-parameter functions?
 - **Full mirrors:** require a mirror converted to Go to list every exported field?
-- **Opaque values and effects:** should every binding that takes an opaque *pointer* type need `uses state`, rather than trusting the declaration? And should opaque values that are not safe for concurrent use be kept out of `spawn`?
+- **Opaque values and effects:** should every binding that takes an opaque *pointer* type need `uses state`, rather than trusting the declaration? And should opaque values that are not safe for concurrent use be kept out of `fork`?
 - **Dependency tooling:** a `bork deps` helper to add or update pinned user manifests (bork-gnyc4e).
 
 ## 4. Errors and results (in progress, to be tried out)

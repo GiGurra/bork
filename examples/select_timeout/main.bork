@@ -12,7 +12,7 @@ fn ms(n: Int): time.Duration { time.Nanoseconds(n * 1_000_000) }
 // output does not depend on how fast the machine is.)
 fn ask(s: Scope, question: String, delay: Int, patience: Int) uses clock + state: String | TimedOut | Closed | Cancelled {
   answers = channel[String](s, 1)
-  launch(s, () => {
+  fork(s, () => {
     _ = time.Sleep(s, ms(delay))
     _ = answers.send(s, s"$question: 42")
   })

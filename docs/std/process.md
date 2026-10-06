@@ -138,7 +138,7 @@ import "bork/process"
 
 fn both(s: Scope) uses io + state: Ok | IoError | Cancelled {
   child = process.Start(s, "make", stdout: .Pipe, stderr: .Pipe)?
-  errors = spawn(s, () => child.Stderr().ReadAll())
+  errors = fork(s, () => child.Stderr().ReadAll())
   output = child.Stdout().ReadAll()?
   println(output.length())
   println(await(errors)?.length())

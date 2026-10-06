@@ -319,7 +319,7 @@ fn main() {
       _ = release.receive(app)
       http.Text(200, budget(s))
     }))
-    active = spawn(app, () => http.Get(s"http://${http.Address(server)}", app, timeoutMs: 30000))
+    active = fork(app, () => http.Get(s"http://${http.Address(server)}", app, timeoutMs: 30000))
     _ = entered.receive(app)
     cancelAfter(app, 10000)
     _ = release.send(app, true)
@@ -332,7 +332,7 @@ fn main() {
       if (request.path == "/held") { _ = entered.send(app, true); _ = release.receive(app) }
       http.Text(200, "ok")
       }, admission: Option.Some(http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 1000 })))
-    active = spawn(app, () => http.Get(s"http://${http.Address(server)}/held", app))
+    active = fork(app, () => http.Get(s"http://${http.Address(server)}/held", app))
     _ = entered.receive(app)
     println("queued deadline", queuedDeadline(http.Address(server)))
     println("queue released", http.AdmissionState(server))

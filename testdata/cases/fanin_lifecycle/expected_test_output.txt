@@ -1,6 +1,6 @@
 ok    race cancels and joins losers without cancelling the parent
 ok    awaitFirst leaves losing tasks in their owner scope
-ok    timeout includes callback-spawned tasks and preserves parent cancellation
+ok    timeout includes callback-forked tasks and preserves parent cancellation
 ok    successful timeout resources remain open until the parent closes
 ok    selection does not consume losing channels and drains closed buffers
 ok    selection receives from an unbuffered channel

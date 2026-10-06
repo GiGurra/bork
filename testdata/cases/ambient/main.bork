@@ -76,7 +76,7 @@ fn shout(s: String where short): String {
 }
 
 fn awaited(s: Scope) needs await: String {
-  t = spawn(s, () => 1)
+  t = fork(s, () => 1)
   s"${await} ${toString(await(t))}"
 }
 
@@ -98,7 +98,7 @@ fn main() uses io + state {
     println([User { name: "Ed" }].map(User.label))
     // Tasks inherit them, as lambdas.
     scope s {
-      t = spawn(s, () => tag("task"))
+      t = fork(s, () => tag("task"))
       println(await(t))
     }
     println(goTag("call"))

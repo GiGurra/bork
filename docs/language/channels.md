@@ -35,7 +35,7 @@ When the scope ends, it closes the channel and drops anything still buffered.
 fn main() {
   scope s {
     numbers = channel[Int](s)
-    launch(s, () => {
+    fork(s, () => {
       _ = numbers.send(s, 1)
       _ = numbers.send(s, 2)
       numbers.close()

@@ -78,7 +78,7 @@ println(choose(1,identity(c.value)));println(choose(identity(c.value),1))
 println(choose(1,identity[Option[Int]](c.value)))
 println(choose(1,{y:Option[Int]=.Some(2);y}))}`, ""},
 
-		{"optional lifetime escape", `fn escape():Option[Task[Int]] {scope s {spawn(s,()=>1)}}
+		{"optional lifetime escape", `fn escape():Option[Task[Int]] {scope s {fork(s,()=>1)}}
 fn main() {println(escape())}`, "belongs to scope s"},
 		{"callback effects", `fn take(f:Option[()=>Int]) uses io {println(f)}
 fn main() {take(()=>{println("effect");1})}`, "uses io"},

@@ -25,7 +25,7 @@ fn main() {
   // the scope's finalizers still run.
   scope s with taskTimeout(10) {
     onClose(s, () => println("the scope's finalizer still runs"))
-    launch(s, () => {
+    fork(s, () => {
       stubborn(200)
       println("never seen: the program ends first")
     })

@@ -45,7 +45,7 @@ fn main() {
         pool = tasks.Open(app, maxTasks: 6)
         budget = http.OpenRetryBudget(app, capacity: 4, refillMs: 60000,
           clock: .Some(time.FixedClock(.{ unixNanos: 0 })))
-        callers = range(0, 6).map(i => task(tasks.TrySpawn(pool, app, () => {
+        callers = range(0, 6).map(i => task(tasks.TryFork(pool, app, () => {
           value = response(http.Retry(app, budget, operation: attempt => {
             _ = update(calls, n => n + 1)
             http.Get(url, attempt)

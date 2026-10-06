@@ -38,7 +38,7 @@ func _borkFanInAbort(s *_Scope) {
 }
 
 // A private child remains owned by its caller, so returned resources stay
-// alive. Joining here still propagates failures in callback-spawned tasks.
+// alive. Joining here still propagates failures in callback-forked tasks.
 func _borkFanInJoin(s *_Scope) {
  // taskTimeout limits scope closure, not the join promised by this call.
  s.running.Wait()

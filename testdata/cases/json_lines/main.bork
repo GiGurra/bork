@@ -64,7 +64,7 @@ fn exercise(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied 
   concurrentPath = fs.Join([root, "concurrent.jsonl"])
   scope writing {
     writer = json.CreateLines(concurrentPath, writing)?
-    range(0, 32).forEach(value => launch(writing, () => { _ = json.Write(writer, value) }))
+    range(0, 32).forEach(value => fork(writing, () => { _ = json.Write(writer, value) }))
   }
   println(countLines(json.OpenLines(concurrentPath, s)?))
 }

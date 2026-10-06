@@ -6,7 +6,7 @@ test "shared fields force once in the reader context" {
   calls = mock fetch() { 11 }
   calls.expect(times: 1)
   scope s {
-    tasks = [1, 2, 3].map(n => spawn(s, () => shared.value))
+    tasks = [1, 2, 3].map(n => fork(s, () => shared.value))
     assertEqual(tasks.map(t => await(t)), [11, 11, 11])
   }
   assertEqual(value.value, 11)

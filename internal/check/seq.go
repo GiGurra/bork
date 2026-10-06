@@ -20,7 +20,7 @@ func (c *checker) generate(e *syntax.Generate) Type {
 	body := c.block(e.Body, Ok)
 	effects := c.used
 	c.used, c.loops, c.producer = outer, loops, producer
-	if body != Ok && body != Never && body != Invalid {
+	if body != Ok && body != Never && body != Invalid && !isOkTask(body) {
 		c.errorf(e.Body.Pos, "a generator body must have type Ok, found %s", body)
 	}
 	if effects&EffOpen != 0 {
@@ -82,7 +82,7 @@ func (c *checker) forExpr(e *syntax.For) Type {
 	loop.broken = ctx.broken
 	c.popScope()
 	c.endCarry(loop)
-	if body != Ok && body != Never && body != Invalid {
+	if body != Ok && body != Never && body != Invalid && !isOkTask(body) {
 		c.errorf(e.Body.Pos, "a loop body must have type Ok, found %s", body)
 	}
 	return Ok
@@ -130,7 +130,7 @@ func (c *checker) loopExpr(e *syntax.For) Type {
 	body := c.loopBodyCarrying(loop, e.Body)
 	c.loops = c.loops[:len(c.loops)-1]
 	loop.broken = ctx.broken
-	if body != Ok && body != Never && body != Invalid {
+	if body != Ok && body != Never && body != Invalid && !isOkTask(body) {
 		c.errorf(e.Body.Pos, "a loop body must have type Ok, found %s", body)
 	}
 	c.checkPost(e, loop)

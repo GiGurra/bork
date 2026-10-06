@@ -247,6 +247,9 @@ func (l *lifeChecker) function(fn *Func) {
 // result checks that a function's or lambda's result does not belong to
 // a scope opened inside it.
 func (l *lifeChecker) result(x Expr, life lifetime, what string) {
+	if l.dropped(x) {
+		return
+	}
 	for _, s := range life {
 		s = unhandle(s)
 		if s, ok := s.(*ScopeBlock); ok && l.within(s, l.cur) {
@@ -615,7 +618,7 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		return life
 	case *Return:
 		if x.Value != nil {
-			l.result(x.Value, l.use(x.Value, l.value(x.Value, "return")), l.what())
+			l.result(x.Value, l.tail(x.Value, l.value(x.Value, "return")), l.what())
 			l.verifyResult(x.Value)
 		}
 		return nil
@@ -773,6 +776,30 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 }
 
 // what names the current frame, for messages.
+// dropped reports whether x is a Task[Ok] that the current function or
+// lambda drops, as it gives no value: the task's scope joins it.
+func (l *lifeChecker) dropped(x Expr) bool {
+	if !isOkTask(x.Type()) {
+		return false
+	}
+	switch f := l.cur.(type) {
+	case *Func:
+		return f.Result == Ok
+	case *Lambda:
+		ft, ok := f.Type().(*FuncType)
+		return ok && ft.Result == Ok
+	}
+	return false
+}
+
+// tail uses the value x a function or lambda gives, unless it drops it.
+func (l *lifeChecker) tail(x Expr, life lifetime) lifetime {
+	if l.dropped(x) {
+		return nil
+	}
+	return l.use(x, life)
+}
+
 func (l *lifeChecker) what() string {
 	if fn, ok := l.cur.(*Func); ok {
 		if fn.Test != nil {
@@ -837,7 +864,11 @@ func (l *lifeChecker) stmt(s Stmt) {
 			l.info.VarLifetimes[s.Var] = l.lifeText(l.env[s.Var])
 		}
 	case *ExprStmt:
-		l.use(s.X, l.expr(s.X))
+		life := l.expr(s.X)
+		if !isOkTask(s.X.Type()) {
+			// A dropped Task[Ok] is not used: its scope joins it.
+			l.use(s.X, life)
+		}
 	case *Trust:
 		l.use(s.Call, l.expr(s.Call))
 	case *Mock:
@@ -887,7 +918,7 @@ func (l *lifeChecker) lambda(x *Lambda) lifetime {
 	}
 	var used lifetime
 	l.captures = append(l.captures, &used)
-	l.result(x.Body, l.use(x.Body, l.expr(x.Body)), "the lambda")
+	l.result(x.Body, l.tail(x.Body, l.expr(x.Body)), "the lambda")
 	l.settle(mark)
 	l.captures = l.captures[:len(l.captures)-1]
 	l.cur, l.open, l.loop = saved, savedOpen, savedLoop
@@ -918,7 +949,7 @@ func (l *lifeChecker) mock(m *Mock) {
 		l.env[p] = lifetime{p}
 		l.noteVar(p)
 	}
-	life := l.use(m.Func.Body, l.expr(m.Func.Body))
+	life := l.tail(m.Func.Body, l.expr(m.Func.Body))
 	l.settle(mark)
 	l.result(m.Func.Body, life, l.what())
 	l.pin(life, m.Pos, "the mock of "+m.Text, nil, true)
@@ -1107,7 +1138,7 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 			keeper := "the function given scope " + scopeName(a)
 			if fn != nil {
 				keeper = fn.Decl.Name + ", given scope " + scopeName(a) + ","
-				if fn.Prelude && (fn.Decl.Name == "launch" || fn.Decl.Name == "spawn") {
+				if fn.Prelude && fn.Decl.Name == "fork" {
 					keeper = "the task of " + scopeName(a) + " started"
 				}
 			}
@@ -1118,7 +1149,7 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 					callee = fn.Decl.Name
 				}
 				hint := ""
-				if fn != nil && fn.Prelude && (callee == "launch" || callee == "spawn") {
+				if fn != nil && fn.Prelude && callee == "fork" {
 					hint = fmt.Sprintf("; to give a task of %s a resource of a shorter scope, attach it first: r2 = attach(r, %s)", scopeName(a), scopeName(a))
 				}
 				l.errorf(b.Pos(), "%s may not live as long as scope %s (it depends on %s), but %s may keep it until %s closes%s", describe(b), scopeName(a), l.scopeText(short), callee, scopeName(a), hint)

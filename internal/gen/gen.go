@@ -2023,7 +2023,7 @@ func (g *gen) returnStmt(e *check.Return) []ast.Stmt {
 	if call, ok := e.Value.(*check.Call); ok && g.tailJump(call) {
 		return g.jump(call)
 	}
-	if g.fnResult == check.Ok && e.Value.Type() == check.Ok {
+	if g.fnResult == check.Ok && (e.Value.Type() == check.Ok || check.IsOkTask(e.Value.Type())) {
 		return append(g.effect(e.Value), g.returning()...)
 	}
 	stmts, x := g.value(e.Value)
