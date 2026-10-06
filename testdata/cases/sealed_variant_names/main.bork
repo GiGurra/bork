@@ -1,0 +1,23 @@
+type A_B = sealed { C(String) }
+type A = sealed { B_C(String) }
+type Plain = sealed { Item(String) }
+type Plain_Item = { value: String }
+type Generic_A[T] = sealed { B(T) }
+type Generic[T] = sealed { A_B(T) }
+
+fn wrap[T](value: T): Generic_A[(T,)] { Generic_A.B((value,)) }
+fn unwrap[T](value: Generic_A[(T,)]): T {
+  match (value) {
+    Generic_A.B(pair) => pair.0
+  }
+}
+
+fn main() {
+  println(A_B.C("x"), A.B_C("y"))
+  println(Plain.Item("z"), Plain_Item { value: "record" })
+  println(Generic_A.B((1, "x")), Generic.A_B((2, "y")))
+  println(wrap("tuple"), unwrap(wrap("roundtrip")))
+  match (A_B.C("matched")) {
+    A_B.C(value) => println(value)
+  }
+}

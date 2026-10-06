@@ -66,7 +66,7 @@ func (g *gen) goBodyAliases(fd *syntax.FuncDecl) string {
 				for _, v := range sealed.Variants {
 					if v.Name == variant {
 						g.goType(sealed)
-						generated = typeName(member, pkg).Name
+						generated = variantName(v).Name
 						break
 					}
 				}

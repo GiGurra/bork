@@ -1,0 +1,5 @@
+A_B.C("x") A.B_C("y")
+Plain.Item("z") Plain_Item { value: "record" }
+Generic_A.B((1, "x")) Generic.A_B((2, "y"))
+Generic_A.B(("tuple",)) roundtrip
+matched
