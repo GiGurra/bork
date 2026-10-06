@@ -42,7 +42,7 @@ func TestEditorHidesCompilerPrelude(t *testing.T) {
 	seen := map[string]bool{}
 	for _, symbol := range symbols {
 		seen[symbol.Name] = true
-		if symbol.Name == "SelectHandle" || strings.HasPrefix(symbol.Name, "compiler") && symbol.Name != "compilerSelectLocal" {
+		if symbol.Name == "SelectHandle" || symbol.Name == "TaskHandle" || symbol.Name == "ChannelHandle" || strings.HasPrefix(symbol.Name, "compiler") && symbol.Name != "compilerSelectLocal" {
 			t.Errorf("compiler helper completion: %s", symbol.Name)
 		}
 	}

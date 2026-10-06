@@ -213,7 +213,7 @@ func TestDocBuiltin(t *testing.T) {
 				t.Errorf("missing builtin API %q (html=%v)", want, html)
 			}
 		}
-		for _, hidden := range []string{"compilerSelect", "compilerCallerLocation", "SelectHandle", "_bork", "unsafe Go", "## bork/"} {
+		for _, hidden := range []string{"compilerSelect", "compilerCallerLocation", "SelectHandle", "TaskHandle", "ChannelHandle", "_bork", "unsafe Go", "## bork/"} {
 			if strings.Contains(text, hidden) {
 				t.Errorf("internal API %q leaked (html=%v)", hidden, html)
 			}

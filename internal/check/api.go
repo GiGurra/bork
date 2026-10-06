@@ -64,7 +64,11 @@ func packageAPI(pkg *Package, files []*syntax.File, path string, builtin bool) *
 	}
 	for name, e := range pkg.types {
 		if visible(name) {
-			add("type", name, "", apiType(e.decl, sources), e.decl.Pos)
+			signature := apiType(e.decl, sources)
+			if builtin && e.decl.Private {
+				signature = "type " + name + apiParams(e.decl.TypeParams) + " = private { ... }"
+			}
+			add("type", name, "", signature, e.decl.Pos)
 		}
 	}
 	for name, fn := range pkg.Funcs {

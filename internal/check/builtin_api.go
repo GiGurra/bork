@@ -10,7 +10,7 @@ import (
 // PreludeVisible reports which prelude names belong to the user-facing API.
 // Compiler helpers remain available to lowered expressions and prelude code.
 func PreludeVisible(name string) bool {
-	return name != "" && !strings.HasPrefix(name, "_") && !strings.HasPrefix(name, "compiler") && name != "SelectHandle"
+	return name != "" && !strings.HasPrefix(name, "_") && !strings.HasPrefix(name, "compiler") && name != "SelectHandle" && name != "TaskHandle" && name != "ChannelHandle"
 }
 
 // BuiltinAPI includes both checked prelude declarations and compiler primitives.
@@ -92,7 +92,7 @@ func CompilerBuiltinDeclarations() []APIDeclaration {
 				result = "List[T]"
 			}
 			signature = "fn " + name + "[T](scope: Scope, providers...): " + result + " | provider errors"
-			doc = "Builds a value from provider functions or instances bundles. Effects, ambient requirements and error alternatives follow the selected providers. assembleAll collects every provider of T; assembleRecord assembles each field of T."
+			doc = "T must be a concrete, non-union type. Requires a Scope and one or more provider functions or instances bundles. Effects, ambient requirements and error alternatives follow the selected providers. assembleAll collects every provider of T; assembleRecord assembles each field of T."
 		}
 		out = append(out, APIDeclaration{Kind: "function", Name: name, Signature: signature, Documentation: doc})
 	}

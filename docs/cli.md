@@ -163,7 +163,8 @@ signatures and comments; compiler-internal helpers are omitted. It works
 outside a project and uses the built-ins embedded in the running compiler.
 Compiler-provided signatures use `value` for any value type and `values...`
 for zero or more independently typed arguments. Square brackets around a
-parameter indicate that it is optional.
+parameter indicate that it is optional. Private built-in records show
+`private { ... }` in place of their implementation fields.
 
 The compiler checks each package before writing any output. Signatures retain
 facts and `where` clauses, effects (`uses`), ambient requirements (`needs`),
