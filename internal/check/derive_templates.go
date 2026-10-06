@@ -135,7 +135,6 @@ type shapeEnum string
 type deriveExpansion struct {
 	c           *checker
 	template    *DeriveTemplate
-	target      Type
 	instance    *ClassInstance
 	active      map[*syntax.FuncDecl]bool
 	scope       *Package
@@ -1027,7 +1026,7 @@ func (c *checker) expandDeriveMethod(request *deriveRequest, ci *ClassInstance, 
 	saved := c.pkg
 	c.pkg = template.Pkg
 	defer func() { c.pkg = saved }()
-	expansion := &deriveExpansion{c: c, template: template, target: head, env: map[string]any{template.Decl.TypeParams[0].Name: head}, budget: &deriveBudget{remaining: 100000}, names: map[string]bool{}}
+	expansion := &deriveExpansion{c: c, template: template, env: map[string]any{template.Decl.TypeParams[0].Name: head}, budget: &deriveBudget{remaining: 100000}, names: map[string]bool{}}
 	fd := &syntax.FuncDecl{Pos: source.Pos, End: source.End, Name: source.Name, Instance: ci.Decl}
 	fd.Params = expansion.clone(reflect.ValueOf(source.Params)).Interface().([]*syntax.Param)
 	if source.Result != nil {
@@ -1066,14 +1065,14 @@ func (c *checker) expandDeriveBodies() {
 		c.pkg = template.Pkg
 		for _, method := range instance.Methods {
 			start := c.diags.Len()
-			plan := &deriveExpansion{c: c, template: template, target: instance.Type, instance: instance, typeFacts: map[string][]*Constraint{template.Decl.TypeParams[0].Name: instance.Constraints}, active: map[*syntax.FuncDecl]bool{}, scope: instance.Pkg, env: map[string]any{template.Decl.TypeParams[0].Name: instance.Type}, budget: &deriveBudget{remaining: 100000}, names: map[string]bool{}}
+			plan := &deriveExpansion{c: c, template: template, instance: instance, typeFacts: map[string][]*Constraint{template.Decl.TypeParams[0].Name: instance.Constraints}, active: map[*syntax.FuncDecl]bool{}, scope: instance.Pkg, env: map[string]any{template.Decl.TypeParams[0].Name: instance.Type}, budget: &deriveBudget{remaining: 100000}, names: map[string]bool{}}
 			for _, param := range method.Decl.Params {
 				plan.names[param.Name] = true
 			}
 			method.Decl.Body = plan.expr(method.Decl.Body).(*syntax.Block)
 			c.diags.DeriveContext(start, instance.Decl.Pos)
 		}
-		metadataPlan := &deriveExpansion{c: c, template: template, target: instance.Type, instance: instance, typeFacts: map[string][]*Constraint{template.Decl.TypeParams[0].Name: instance.Constraints}, active: map[*syntax.FuncDecl]bool{}, scope: instance.Pkg, env: map[string]any{template.Decl.TypeParams[0].Name: instance.Type}, budget: &deriveBudget{remaining: 100000}, names: map[string]bool{}}
+		metadataPlan := &deriveExpansion{c: c, template: template, instance: instance, typeFacts: map[string][]*Constraint{template.Decl.TypeParams[0].Name: instance.Constraints}, active: map[*syntax.FuncDecl]bool{}, scope: instance.Pkg, env: map[string]any{template.Decl.TypeParams[0].Name: instance.Type}, budget: &deriveBudget{remaining: 100000}, names: map[string]bool{}}
 		c.declareInstanceMetadata(instance, template.Decl.Metadata, metadataPlan)
 		c.pkg = saved
 	}
