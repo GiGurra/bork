@@ -40,7 +40,7 @@ func TestEditorTypeQueriesPreserveSourceIndexes(t *testing.T) {
 }
 
 func TestEditorTypeQueryCallArgument(t *testing.T) {
-	info := executionAuditProgram(t, `pred above(x: Int, minimum: Int) { x > minimum }
+	info := executionAuditProgram(t, `pred above(x: Int, threshold: Int) { x > threshold }
 fn minimum(): Int { 0 }
 fn main() {}`)
 	diags := &diag.List{}
