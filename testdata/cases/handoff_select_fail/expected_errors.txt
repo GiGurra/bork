@@ -1,0 +1,8 @@
+main.bork:15:20: r cannot be handed over: only a resource of a known type can be (not a type parameter)
+main.bork:23:23: c cannot be handed over: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; only a resource acquired here, or received from a handoff named by a variable, can be handed over
+main.bork:35:47: a was handed over to handoff conns at line 35, which ends its use here
+main.bork:39:19: a may have been handed over to handoff conns at line 35, which ends its use here
+main.bork:45:29: a loop cannot hand over b, which was acquired outside its body
+main.bork:52:27: c cannot be handed over: the task of app started at line 50 may still use it; hand it over before that
+main.bork:61:36: e was handed over to handoff conns at line 59, which ends its use here
+main.bork:70:25: d was handed over to handoff conns at line 69, which ends its use here

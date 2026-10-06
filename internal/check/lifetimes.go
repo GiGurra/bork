@@ -1122,7 +1122,8 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 	// So do a select expression's: what it receives is a value of the
 	// channel's lifetime.
 	if fn != nil && fn.Prelude && strings.HasPrefix(fn.Decl.Name, "compilerSelect") {
-		if fn.Decl.Name == "compilerSelectReceived" || fn.Decl.Name == "compilerSelectValue" {
+		switch fn.Decl.Name {
+		case "compilerSelectReceived", "compilerSelectValue", "compilerSelectHandoffReceived":
 			return args[1]
 		}
 		return args[0]

@@ -31,6 +31,21 @@ fn value(s: Scope, ch: Channel[Int]) uses state: Int {
   }
 }
 
+type Conn = resource
+
+type Other = resource
+
+// A handoff's arm hands over and a channel's sends, and the resource must
+// be the handoff's type.
+fn arms(s: Scope, conns: Handoff[Conn], numbers: Channel[Int], c: Conn, o: Other) uses state {
+  _ = select {
+    conns.send(s, c) => {}
+    numbers.handOver(s, 1) => {}
+    conns.handOver(s, o) => {}
+    _ => {}
+  }
+}
+
 fn main() {}
 
 fn scopes(ch: Channel[Int]) uses state {

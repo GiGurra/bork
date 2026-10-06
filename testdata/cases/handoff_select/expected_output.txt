@@ -1,0 +1,24 @@
+open a
+handed a over
+a: served
+close a
+open blocker
+open b
+b: kept
+blocker: served
+close blocker
+open filler
+open c
+c: number 7
+open d
+close d
+d was not received
+no more
+open e
+handed e to spare
+e: served
+close e
+app ends
+close c
+close filler
+close b

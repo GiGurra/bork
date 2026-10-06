@@ -1107,14 +1107,27 @@ const _errMoveFinished = "the target scope has finished closing"
 // _tryMoveResource is _moveResource, giving why it cannot move r (and
 // then changing nothing) instead of panicking.
 func _tryMoveResource(r any, from, to *_Scope) string {
+	why, kept := _moveRegistration(r, from, to)
+	if why == "" {
+		_moveBinding(r, from, to, kept)
+	}
+	return why
+}
+
+// _moveRegistration is the first half of a move: it moves only r's
+// registration, so that to closes it (and a move can still be undone
+// without a trace), and reports whether from has another registration of
+// it. _moveBinding completes the move.
+func _moveRegistration(r any, from, to *_Scope) (string, bool) {
 	o, _ := r.(interface{ _ownerOf() *_Owner })
 	if o == nil || o._ownerOf() == nil {
-		return "the resource was not opened with an owner (s.Own)"
+		return "the resource was not opened with an owner (s.Own)", false
 	}
-	why, kept := o._ownerOf().move(from, to)
-	if why != "" {
-		return why
-	}
+	return o._ownerOf().move(from, to)
+}
+
+// _moveBinding makes r's cancellation follow to instead of from.
+func _moveBinding(r any, from, to *_Scope, kept bool) {
 	if h, ok := r.(interface{ _borkRebind(*_Scope) }); ok {
 		h._borkRebind(to)
 	}
@@ -1124,7 +1137,6 @@ func _tryMoveResource(r any, from, to *_Scope) string {
 	if h, ok := r.(interface{ _borkUnbind(*_Scope) }); ok && !kept {
 		h._borkUnbind(from)
 	}
-	return ""
 }
 
 // _releaseResource releases r's registration with s: it closes, unless

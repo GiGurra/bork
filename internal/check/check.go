@@ -898,6 +898,10 @@ type checker struct {
 	needsFix *pendingNeeds
 	// assemblyFuncs resolves generated references to bundled declarations.
 	assemblyFuncs map[string]*Func
+	// assemblyResolvers resolve generated references whose declaration
+	// depends on what was checked before them (a select arm's helper, on
+	// its channel's type).
+	assemblyResolvers map[string]func() *Func
 	// appliedWhere holds the written types whose where clauses
 	// constraints were made from (see unappliedWheres).
 	appliedWhere map[*syntax.TypeExpr]bool
@@ -983,7 +987,7 @@ type local struct {
 // sees only the prelude). A qualified name ("money.add") is looked up in
 // an imported package, which must export it.
 func (c *checker) funcNamed(name string) (*Func, bool) {
-	if fn := c.assemblyFuncs[name]; fn != nil {
+	if fn := c.assemblyFunc(name); fn != nil {
 		return fn, true
 	}
 	if c.inPrelude {
@@ -1004,6 +1008,14 @@ func (c *checker) funcNamed(name string) (*Func, bool) {
 	}
 	fn, ok := c.preludePkg.Funcs[name]
 	return fn, ok
+}
+
+// assemblyFunc resolves a generated reference, or gives nil.
+func (c *checker) assemblyFunc(name string) *Func {
+	if resolve := c.assemblyResolvers[name]; resolve != nil {
+		return resolve()
+	}
+	return c.assemblyFuncs[name]
 }
 
 // qualified splits a qualified name "money.add" into the imported
@@ -1964,7 +1976,7 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 		return Invalid
 	}
 	name := id.Name
-	if c.assemblyFuncs[name] != nil {
+	if c.assemblyFunc(name) != nil {
 		name = fn.Decl.Name
 	}
 	return c.callFunc(e, name, fn, e.Args, nil, e.TypeArgs, want)

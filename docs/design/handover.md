@@ -151,11 +151,26 @@ Alternatives considered:
 - **`Channel[Owned[R]]`.** Same type-level split, but every operation
   would wrap and unwrap.
 
-## Not in this design
+## Select arms
 
-- `select` arms over a `Handoff` (receive or hand over). The select
-  expression would need a move that happens only if its arm is chosen.
-  Follow-up ticket.
+A `select` takes a handoff's `h.receive(s)` and `h.handOver(s, r)` arms
+(bork-hu1nam). A receive arm's value is the receiver's own, as for
+`receive`. A hand-over arm checks `r` as `handOver` does where the arm is
+written, but moves it only if the arm is the one completed: the checker
+marks `r` handed over where that arm's body starts, so the other arms'
+bodies (the `_` arm and a `Cancelled` outcome included) still own it, and
+after the `select` it is possibly handed over. At run time the move
+happens with the channel locked, before the value can be received, and
+only when the send completes. A sender that turns out to have no live
+receiver after all moves it back. A hand-over to a closed handoff
+releases `r`, as `handOver` does. A move that fails (an orphaned
+task's source scope has finished) fails the sender, not the receiver.
+The locks nest channel → owner → scope → resource handle, and nothing
+takes a channel's lock while it holds one of the others: a scope's
+finalizers and an owner's `closeFn` run with neither lock held, and
+cancellation callbacks run on their own goroutines.
+
+## Not in this design
 - `tryHandOver`, an unbounded `Handoff`, `produce`/`merge` for handoffs.
 - Values holding a resource (a record with a `Conn` field): `move` does
   not move them either.

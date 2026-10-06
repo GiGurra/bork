@@ -469,6 +469,46 @@ func (l *lifeChecker) handOverCall(x *Call) lifetime {
 	return nil
 }
 
+// selectHandOverArm checks a select's arm h.handOver(s, r): r must be
+// movable here, as for handOver, but it moves only if the arm is the one
+// completed, which selectHandedOver records. Until then r is the
+// sender's, and nothing keeps it: it pins nothing.
+func (l *lifeChecker) selectHandOverArm(x *Call) lifetime {
+	args, reported := l.evalArgs(x)
+	r := x.Args[2]
+	if _, ok := r.Type().(*Resource); !ok {
+		l.errorf(r.Pos(), "%s cannot be handed over: only a resource of a known type can be (not a type parameter)", describe(r))
+		return args[0]
+	}
+	if reported[2] {
+		return args[0]
+	}
+	if o, ok := l.movable(r, handOverVerb, "only a resource acquired here, or received from a handoff named by a variable, can be handed over"); ok {
+		x.MoveFrom = o.hs[0].from
+	}
+	return args[0]
+}
+
+// selectHandedOver records, where a select's hand-over arm's body
+// starts, that the arm's resource r was handed over: a move of it to the
+// handoff, as handOver's.
+func (l *lifeChecker) selectHandedOver(x *Call) lifetime {
+	l.evalArgs(x)
+	ch, r := x.Args[1], x.Args[2]
+	o := l.originOf(r)
+	if !o.known {
+		return nil
+	}
+	to := "handoff " + describe(ch)
+	if d := describe(ch); d == "this value" {
+		to = "the handoff"
+	}
+	for _, h := range o.hs {
+		l.moved[h] = movedAt{pos: x.Pos(), to: to, handOver: true}
+	}
+	return nil
+}
+
 // evalArgs checks the arguments of x in the order they are evaluated,
 // and gives their lifetimes, by parameter, and which were reported as
 // unusable (moved or released).
@@ -554,6 +594,10 @@ func (l *lifeChecker) movable(r Expr, v verbs, hint string) (resOrigin, bool) {
 // handoff's scope at run time): it was handed over, so the receiver is
 // its only holder. nil for any other call.
 func (l *lifeChecker) received(x *Call) *handle {
+	// A select's receive arm: compilerSelectHandoffReceived(outcome, h).
+	if x.Func != nil && x.Func.Prelude && x.Func.Decl.Name == "compilerSelectHandoffReceived" && len(x.Args) == 2 {
+		return l.handoffHandle(x.Args[1], x.Pos(), l.loop)
+	}
 	if !handoffMethod(x.Func) || x.Func.Decl.Name != "receive" || len(x.Args) == 0 {
 		return nil
 	}

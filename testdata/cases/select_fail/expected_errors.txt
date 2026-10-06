@@ -1,9 +1,12 @@
-main.bork:3:9: a select arm is a channel operation, ch.receive(s) or ch.send(s, x), optionally named (n = ch.receive(s)), or _ for when none is ready
-main.bork:5:7: a select needs at least one channel operation arm: n = ch.receive(s) => ... or ch.send(s, x) => ...
+main.bork:3:9: a select arm is a channel operation, ch.receive(s) or ch.send(s, x), or a handoff's h.receive(s) or h.handOver(s, r), optionally named (n = ch.receive(s)), or _ for when none is ready
+main.bork:5:7: a select needs at least one channel operation arm: n = ch.receive(s) => ..., ch.send(s, x) => ... or h.handOver(s, r) => ...
 main.bork:11:5: a select has at most one _ arm
 main.bork:14:13: a select arm's operation takes its arguments by position
 main.bork:14:19: a select arm's operation takes its arguments by position
 main.bork:20:16: the value sent must be Int, found String
-main.bork:23:9: a select arm's operation must be a channel's receive or send, but this is Int
+main.bork:23:9: a select arm's operation must be on a Channel or a Handoff, but this is Int
 main.bork:29:3: function value returns Int, but its body produces Int | Cancelled
-main.bork:38:16: the scope a select arm waits in must be a Scope, found Int
+main.bork:42:5: a select arm sends only on a Channel; to a Handoff, hand the resource over (h.handOver(s, r)): this is Handoff[Conn]
+main.bork:43:5: a select arm hands over only to a Handoff; on a Channel, send (ch.send(s, x)): this is Channel[Int]
+main.bork:44:23: the resource handed over must be Conn, found Other
+main.bork:53:16: the scope a select arm waits in must be a Scope, found Int
