@@ -9,9 +9,12 @@ Definitions also check predicate names and arity, concrete expression types,
 known effects, and closed dictionary requirements even when no target requests
 them. Effects follow the ordinary rules: a call of a known function or helper
 uses what it declares, plus what its open callback arguments use. A callback
-must fit the effects of a function type written with `uses`. Helper signature
-callbacks without `uses` remain open. Code in a staged branch is checked as if
-the branch were selected. A native `comptime` block may use only `build`.
+must fit the effects of a function type written with `uses`, and one returned as
+an open result may use only what the open parameters use. Helper signature
+callbacks without `uses` remain open. Some targets select no copy of a staged
+`comptime if`, `match` or `for` body, so its calls are charged only by
+expansion; callbacks in it must still fit their contexts. A native `comptime`
+block may use only `build`.
 Calls whose callee depends on the target are left to its expansion. Checking an
 unused definition never runs `comptime` code or captures `build` or `embed` files.
 Known parameter facts participate in dictionary selection. Requirements that

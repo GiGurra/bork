@@ -553,6 +553,15 @@ derive fn unused[T](): String { work = (item: Int) => "ok"; consume[Int](work) }
 		{"reference as open result", `fn noisy(value: Int) uses io: String { println("io"); "ok" }
 derive fn unused(): (Int) => String { noisy }`, "noisy uses io"},
 		{"open value as closed result", `derive fn unused[A](work: (A) => String): (A) uses nothing => String { work }`, "it can only be passed to an open parameter"},
+		{"pure open result value called", `derive fn relay[A](work: (A) => String): (A) => String { work }
+derive fn unused[T](value: T): (T) => String { w = relay[T](item => "ok"); _ = w(value); w }`, ""},
+		{"pure open result value to closed parameter", `derive fn relay[A](work: (A) => String): (A) => String { work }
+derive fn consume[A](run: (A) uses nothing => String): String { "ok" }
+derive fn unused[T](): String { w = relay[T](item => "ok"); consume[T](w) }`, ""},
+		{"block open argument", `derive fn consume[A](run: (A) => String): String { "ok" }
+derive fn unused[T]() uses io: String { consume[T]({ x => { println("io"); "a" } }) }`, ""},
+		{"if open argument", `derive fn consume[A](run: (A) => String): String { "ok" }
+derive fn unused[T](flag: Bool) uses io: String { consume[T](if (flag) { x => { println("io"); "a" } } else { x => "b" }) }`, ""},
 		{"comptime", `derive fn unused(): String { text = comptime { println("io"); "ok" }; text }`, "comptime requires pure code, found uses io"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -569,9 +578,12 @@ derive fn unused(): (Int) => String { noisy }`, "noisy uses io"},
 			}
 		})
 	}
-	// Staged branches are checked as if selected, like their types.
+	// Some targets select no copy of a staged body, so its charges stay with
+	// the expansion. Values in it must still fit their own contexts.
 	checkPreludeSource(t, `derive fn unused[T](value: T): String { comptime if (false) { println("io") }; "ok" }
-fn main() {}`, "unused uses io")
+fn main() {}`, "")
+	checkPreludeSource(t, `derive fn unused[T](): String { comptime if (true) { work: (Int) => String = item => { println("io"); "ok" }; _ = work }; "ok" }
+fn main() {}`, "this lambda uses io")
 	checkPreludeSource(t, `derive fn unused[T](): String { text = comptime { "ok" }; text }
 fn main() {}`, "")
 }
@@ -3745,12 +3757,23 @@ derive instance show[T]: Show[T] {
  fn show(value: T): String { println("io"); "ok" }
 }
 fn main() {}`, "show uses io (it calls println), but class Show allows no effects")
+	// Metadata values are evaluated by expansion and charge nothing here.
+	checkPreludeSource(t, `class Tagged[T] { fn tag(value: T): String }
+derive instance tagged[T]: Tagged[T] {
+ metadata (Int) => String = item => { println("io"); "t" }
+ fn tag(value: T): String { "t" }
+}
+fn main() {}`, "")
 	// Staged per-field code and dependent method calls keep their effects
 	// for the expansion; independent charges stay within the declared uses.
 	source := `import "bork/shape"
 class Trace[T] { fn trace(value: T) uses io: String }
 fn note(text: String) uses io: String { println(text); text }
 derive fn each[A](work: (A) => String, value: A): String { work(value) }
+class Apply[T] { fn apply(value: T, work: (T) => String): String }
+derive instance apply[T]: Apply[T] {
+ fn apply(value: T, work: (T) => String): String { work(value) }
+}
 derive instance trace[T]: Trace[T] {
  fn trace(value: T) uses io: String {
   names = [comptime for (field in shape.fields[T]()) note(field.name)]
@@ -3758,14 +3781,36 @@ derive instance trace[T]: Trace[T] {
   each[T](item => note("each"), value) + s"$count"
  }
 }
-type Row = { a: Int, b: String } derive (Trace)
-fn main() { println(trace(Row { a: 1, b: "x" })) }`
+type Row = { a: Int, b: String } derive (Trace, Apply)
+fn main() {
+ println(trace(Row { a: 1, b: "x" }))
+ println(apply(Row { a: 1, b: "x" }, row => { println("apply"); row.b }))
+}`
 	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
 	if err != nil {
 		t.Fatal(err)
 	}
 	output, err := exec.Command(executable).CombinedOutput()
-	if err != nil || string(output) != "a\nb\neach\neach2\n" {
+	if err != nil || string(output) != "a\nb\neach\neach2\napply\nx\n" {
+		t.Fatalf("run: %v\n%s", err, output)
+	}
+}
+
+// A staged branch that the requested target does not select charges nothing.
+func TestDeriveTemplateUnselectedStagedEffects(t *testing.T) {
+	t.Parallel()
+	staged := `import "bork/shape"
+class C[T] { fn c(x: T): String }
+derive instance c[T]: C[T] {
+ fn c(x: T): String {
+  comptime if (shape.kind[T]() == shape.Record) { "record" } else { println("io"); "other" }
+ }
+}
+type Row = { a: Int } derive (C)
+fn main() { println(c(Row { a: 1 })) }`
+	if executable, err := buildFixtureOutput(t, validatorFixture(t, staged)); err != nil {
+		t.Fatal(err)
+	} else if output, err := exec.Command(executable).CombinedOutput(); err != nil || string(output) != "record\n" {
 		t.Fatalf("run: %v\n%s", err, output)
 	}
 }

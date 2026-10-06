@@ -71,14 +71,16 @@ func (c *checker) declareDeriveTemplates(files []*syntax.File) {
 								valid = false
 							}
 							written := plan.clone(reflect.ValueOf(param.Type)).Interface().(*syntax.TypeExpr)
-							if actual := c.resolveType(written); !identical(actual, expected.Params[i]) {
+							// Class signatures are opened: compare callbacks written without uses alike.
+							if actual := c.openParamAt(c.resolveType(written), written); !identical(actual, expected.Params[i]) {
 								c.errorf(param.Pos, "template parameter %s must match its class signature", param.Name)
 								valid = false
 							}
 						}
 						result := Ok
 						if method.Result != nil {
-							result = c.resolveType(plan.clone(reflect.ValueOf(method.Result)).Interface().(*syntax.TypeExpr))
+							written := plan.clone(reflect.ValueOf(method.Result)).Interface().(*syntax.TypeExpr)
+							result = c.openAt(c.resolveType(written), written)
 						}
 						if !identical(result, expected.Result) || c.effectsOf(method.Uses) != expected.Effects || method.Needs != nil || method.Requires != nil {
 							c.errorf(method.Pos, "template method %s must match its class result, effects and requirements", method.Name)
@@ -1036,14 +1038,14 @@ func (c *checker) expandDeriveMethod(request *deriveRequest, ci *ClassInstance, 
 		expansion.error(source.Pos, "template method %s must match its class signature", source.Name)
 	} else {
 		for i, param := range fd.Params {
-			if actual := c.resolveType(param.Type); !identical(actual, method.Params[i]) {
+			if actual := c.openParamAt(c.resolveType(param.Type), param.Type); !identical(actual, method.Params[i]) {
 				expansion.error(param.Pos, "template parameter %s has type %s; its class requires %s", param.Name, actual, method.Params[i])
 			}
 		}
 	}
 	result := Type(Ok)
 	if fd.Result != nil {
-		result = c.resolveType(fd.Result)
+		result = c.openAt(c.resolveType(fd.Result), fd.Result)
 	}
 	if !identical(result, method.Result) {
 		expansion.error(source.Pos, "template method %s returns %s; its class requires %s", source.Name, result, method.Result)

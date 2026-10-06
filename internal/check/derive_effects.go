@@ -81,6 +81,17 @@ func (e *deriveEffects) nested(body func()) *effectUses {
 	return inner
 }
 
+// staged checks a comptime-selected or repeated body. Some targets select no
+// copy of it, so its charges stay with the expansion; a lambda or value in it
+// must still fit its own context, as its types must.
+func (e *deriveEffects) staged(staged bool, body func()) {
+	if !staged {
+		body()
+		return
+	}
+	e.nested(body)
+}
+
 // concrete charges what the ordinary checker charged an expression island.
 func (e *deriveEffects) concrete(expr syntax.Expr, used Effects) {
 	if used != 0 {
@@ -94,13 +105,32 @@ func (e *deriveEffects) markOpen(call *syntax.Call, params []*deriveTypeTerm, na
 	for i, argument := range call.Args {
 		parameter := deriveTermArgument(call, i, params, names)
 		if deriveOpenTerm(parameter) {
-			e.open[argument] = true
+			e.markValue(argument)
 		} else if parameter != nil && parameter.head == "List" && len(parameter.args) == 1 && deriveOpenTerm(parameter.args[0]) {
 			if list, ok := argument.(*syntax.ListLit); ok {
 				for _, element := range list.Elems {
-					e.open[element] = true
+					e.markValue(element)
 				}
 			}
+		}
+	}
+}
+
+// markValue marks an open argument and the values its blocks and branches
+// produce, which all reach the open parameter.
+func (e *deriveEffects) markValue(expr syntax.Expr) {
+	e.open[expr] = true
+	switch expr := expr.(type) {
+	case *syntax.Block:
+		e.markValue(expr.Tail)
+	case *syntax.If:
+		if expr.Then != nil {
+			e.markValue(expr.Then.Tail)
+		}
+		e.markValue(expr.Else)
+	case *syntax.Match:
+		for _, arm := range expr.Arms {
+			e.markValue(arm.Body)
 		}
 	}
 }
@@ -114,7 +144,8 @@ func (e *deriveEffects) call(call *syntax.Call, signature *deriveCallSignature, 
 	}
 	if local := e.c.lookup(id.Name); local != nil {
 		// A call of a function value charges that value's effects.
-		e.uses.add(e.value(id, symbolic), call.Pos, id.Name)
+		effects, _ := e.value(id, symbolic)
+		e.uses.add(effects, call.Pos, id.Name)
 		return
 	}
 	if signature == nil {
@@ -129,11 +160,12 @@ func (e *deriveEffects) call(call *syntax.Call, signature *deriveCallSignature, 
 		parameter := deriveTermArgument(call, i, params, names)
 		var effects Effects
 		if deriveOpenTerm(parameter) {
-			effects = e.value(argument, symbolic)
+			effects, _ = e.value(argument, symbolic)
 		} else if parameter != nil && parameter.head == "List" && len(parameter.args) == 1 && deriveOpenTerm(parameter.args[0]) {
 			if list, ok := argument.(*syntax.ListLit); ok {
 				for _, element := range list.Elems {
-					effects |= e.value(element, symbolic)
+					element, _ := e.value(element, symbolic)
+					effects |= element
 				}
 			}
 		}
@@ -147,38 +179,43 @@ func (e *deriveEffects) call(call *syntax.Call, signature *deriveCallSignature, 
 	}
 }
 
-// value gives the known effects a function value carries when called. An
-// unknown value charges nothing; its expansion checks the call.
-func (e *deriveEffects) value(expr syntax.Expr, symbolic *deriveSymbolicTypes) Effects {
+// value gives the effects a function value carries when called, and whether
+// they are known. An unknown value charges nothing; its expansion checks it.
+func (e *deriveEffects) value(expr syntax.Expr, symbolic *deriveSymbolicTypes) (Effects, bool) {
 	switch expr := expr.(type) {
 	case *syntax.Lambda:
 		if inner := e.lambdas[expr]; inner != nil {
-			return inner.used
+			return inner.used, true
 		}
 	case *syntax.Call:
-		return e.results[expr]
+		effects, known := e.results[expr]
+		return effects, known
+	case *syntax.Block:
+		if len(expr.Stmts) == 0 {
+			return e.value(expr.Tail, symbolic)
+		}
 	case *syntax.Ident:
 		local := e.c.lookup(expr.Name)
 		if local == nil {
 			if fn, found := e.c.funcNamed(expr.Name); found {
-				return fn.Effects &^ EffOpen
+				return fn.Effects &^ EffOpen, true
 			}
 			if helper, _ := e.c.deriveHelperNamed(e.c.pkg, expr.Name); helper != nil {
-				return deriveWrittenEffects(helper.Uses)
+				return deriveWrittenEffects(helper.Uses), true
 			}
-			return 0
+			return 0, false
 		}
-		if effects := e.values[local]; effects != 0 {
-			return effects
+		if effects, known := e.values[local]; known {
+			return effects, true
 		}
 		if term := symbolic.expr(expr); term != nil && term.head == "function" {
-			return term.effects
+			return term.effects, true
 		}
 		if function, ok := local.typ.(*FuncType); ok {
-			return function.Effects
+			return function.Effects, true
 		}
 	}
-	return 0
+	return 0, false
 }
 
 func (e *deriveEffects) describe(expr syntax.Expr) string {
@@ -219,7 +256,11 @@ func (e *deriveEffects) valueFits(expr syntax.Expr, want Type, symbolicWant *der
 	} else {
 		return
 	}
-	e.fits(expr, e.value(expr, symbolic), allowed, func(missing Effects) (diag.Pos, string) {
+	used, known := e.value(expr, symbolic)
+	if !known {
+		return
+	}
+	e.fits(expr, used, allowed, func(missing Effects) (diag.Pos, string) {
 		return expr.Position(), e.describe(expr) + " uses " + missing.String()
 	})
 }
@@ -234,7 +275,11 @@ func (e *deriveEffects) fits(expr syntax.Expr, used, allowed Effects, describe f
 	}
 	if missing := used &^ (allowed | EffOpen); missing != 0 {
 		pos, what := describe(missing)
-		e.c.diags.AddCode(pos, "effect.missing", "%s, but the function type expected here allows %s", what, allowedText(allowed))
+		if allowed&EffOpen != 0 {
+			e.c.diags.AddCode(pos, "effect.missing", "%s, but an open result can only use what the open parameters use; to allow more, write the parameters' and the result's effects", what)
+		} else {
+			e.c.diags.AddCode(pos, "effect.missing", "%s, but the function type expected here allows %s", what, allowedText(allowed))
+		}
 	} else if used&EffOpen != 0 && allowed&EffOpen == 0 {
 		e.c.diags.AddCode(expr.Position(), "effect.missing", "this function value uses what an open parameter uses, which its caller chooses: it can only be passed to an open parameter, or returned as an open result")
 	}

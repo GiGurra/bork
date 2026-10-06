@@ -77,7 +77,7 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 			}
 			// Build and embed calls register captured files during ordinary
 			// checking. Definition checking reads them without capturing inputs.
-			if fn.Effects&EffBuild != 0 || buildIntrinsic(fn) || embedIntrinsic(fn) {
+			if buildIntrinsic(fn) || embedIntrinsic(fn) {
 				return false
 			}
 			for _, arg := range expr.TypeArgs {
@@ -296,8 +296,10 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				return
 			case *syntax.If:
 				walk(reflect.ValueOf(node.Cond), Bool, deriveNativeTerm(Bool, nil))
-				walk(reflect.ValueOf(node.Then), want, symbolicWant)
-				walk(reflect.ValueOf(node.Else), want, symbolicWant)
+				effects.staged(node.Comptime, func() {
+					walk(reflect.ValueOf(node.Then), want, symbolicWant)
+					walk(reflect.ValueOf(node.Else), want, symbolicWant)
+				})
 				return
 			case *syntax.Match:
 				walk(reflect.ValueOf(node.X), nil, nil)
@@ -306,7 +308,7 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 					// locals and descriptor identities keep their known types.
 					c.scopes = append(c.scopes, map[string]*local{})
 					bindPattern(arm.Pattern)
-					walk(reflect.ValueOf(arm.Body), want, symbolicWant)
+					effects.staged(node.Comptime, func() { walk(reflect.ValueOf(arm.Body), want, symbolicWant) })
 					c.scopes = c.scopes[:len(c.scopes)-1]
 				}
 				return
@@ -346,7 +348,7 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				}
 				bind(node.Name, actual, node)
 				symbolic.locals[c.lookup(node.Name)] = symbolicActual
-				if value := effects.value(node.Value, &symbolic); node.Type == nil && value != 0 {
+				if value, known := effects.value(node.Value, &symbolic); node.Type == nil && known {
 					effects.values[c.lookup(node.Name)] = value
 				}
 				kind := metadata.kind(node.Value)
@@ -391,7 +393,7 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 						c.diags.Suggest(node.Pos, "type.error", node.Pos, diag.Fix{Message: "add comptime", Edits: []diag.TextEdit{{Start: node.Pos, End: node.Pos, Replacement: "comptime "}}})
 					}
 				}
-				walk(reflect.ValueOf(node.Body), nil, nil)
+				effects.staged(node.Comptime, func() { walk(reflect.ValueOf(node.Body), nil, nil) })
 				for _, post := range node.Post {
 					check(post.Value, nil)
 				}
