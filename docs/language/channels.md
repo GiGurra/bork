@@ -355,4 +355,4 @@ fn main() {
 
 ---
 
-Previous: [Scopes and tasks](scopes.md) · Next: [Compile-time evaluation](comptime.md) · [All pages](../README.md#the-language)
+Previous: [Scopes and tasks](scopes.md) · Next: [Packages and type classes](packages.md) · [All pages](../README.md#the-language)

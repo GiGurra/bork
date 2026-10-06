@@ -1,7 +1,6 @@
 package driver
 
 import (
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -324,21 +323,11 @@ func TestParseDocPage(t *testing.T) {
 	}
 }
 
-// Existing exact duplicates are temporary exceptions, scoped to their page and
-// content. Page owners remove the prose; PR 9 removes this allowlist.
-var docDuplicateAllowlist = map[string]map[string]bool{
-	"docs/std/http.md": {
-		"f4448c9043fb81d950b83ac3cef17028a7deee7f464bbbddb5a14dcdde5224c9": true,
-		"da5d5ffa8ba58ef740b01ba0973896f8da2a0de6232d1dd4fa981cbe79bb1b69": true,
-		"3fb25cbf6c173674b7da14e842b88b3885fb790571bb0e4f611aa283e4decb89": true,
-	},
-}
-
 var nonParagraph = regexp.MustCompile(`^(#{1,6}\s|[-*+]\s|[0-9]+[.)]\s|[|>]|---+$|Previous:|Next:)`)
 
 // docStructure checks prose paragraphs without stripping inline code: two
 // paragraphs describing different inline expressions must remain distinct.
-func docStructure(text string, allowed map[string]bool) error {
+func docStructure(text string) error {
 	seen := map[string]int{}
 	var paragraph []string
 	start, footer := 0, false
@@ -350,10 +339,7 @@ func docStructure(text string, allowed map[string]bool) error {
 		value := strings.Join(strings.Fields(strings.Join(paragraph, " ")), " ")
 		paragraph = nil
 		if previous, ok := seen[value]; ok {
-			hash := fmt.Sprintf("%x", sha256.Sum256([]byte(value)))
-			if !allowed[hash] {
-				return fmt.Errorf("line %d: paragraph duplicates line %d", start, previous)
-			}
+			return fmt.Errorf("line %d: paragraph duplicates line %d", start, previous)
 		}
 		seen[value] = start
 		return nil
@@ -408,7 +394,7 @@ func TestDocStructure(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := docStructure(string(source), docDuplicateAllowlist[name]); err != nil {
+		if err := docStructure(string(source)); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
@@ -424,7 +410,7 @@ func TestDocStructureGuards(t *testing.T) {
 		"Previous: [A](a.md)\n\nMore prose.\n",
 		"Previous: [A](a.md)\n\n```bork\nfn main() {}\n```\n",
 	} {
-		if err := docStructure(text, nil); err == nil {
+		if err := docStructure(text); err == nil {
 			t.Errorf("accepted invalid structure: %q", text)
 		}
 	}
@@ -433,18 +419,11 @@ func TestDocStructureGuards(t *testing.T) {
 		"# Heading\n\n# Heading\n\n- item\n\n- item\n",
 		"One paragraph.\n\n```text\nOne paragraph.\nPrevious: example\n```\n\nPrevious: [A](a.md) · Next: [B](b.md)\n\n",
 	} {
-		if err := docStructure(text, nil); err != nil {
+		if err := docStructure(text); err != nil {
 			t.Errorf("valid structure: %v", err)
 		}
 	}
-	text := "An exception.\n\nAn exception.\n"
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte("An exception.")))
-	if err := docStructure(text, map[string]bool{hash: true}); err != nil {
-		t.Fatal(err)
-	}
-	if err := docStructure(text+"\nA new repeat.\n\nA new repeat.\n", map[string]bool{hash: true}); err == nil {
-		t.Fatal("exception hid a new duplicate")
-	}
+
 }
 
 func TestFindReaderPages(t *testing.T) {
