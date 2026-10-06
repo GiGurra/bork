@@ -1,5 +1,6 @@
 import "bork/codec"
 import "bork/json"
+import "bork/yaml"
 use codec.Defaults
 
 type Row = { userID: String, httpURLPort: Int codec { name: "port" } } codec { naming: codec.Naming.Snake } derive (codec.Encode, codec.Decode)
@@ -33,6 +34,13 @@ fn main() {
   round[Box[Row]]("{\"item_value\":{\"user_id\":\"u\",\"port\":8}}")
   round[Limits]("{\"lower-bound\":0,\"upper-bound\":4}")
   round[Limits]("{\"lower-bound\":5,\"upper-bound\":4}")
+  for (field in codec.Schema[Row]().getOr(codec.RecordSchema { fields: [] }).fields) {
+    println(s"${field.name} -> ${field.wireName}")
+  }
+  match (yaml.Encode(Row { userID: "u", httpURLPort: 8 })) {
+    text: String => { println(text.trim()); println(yaml.Decode[Row](text)) }
+    error: yaml.Error => println(error)
+  }
   for (policy in [codec.Naming.Verbatim, codec.Naming.Camel, codec.Naming.Pascal, codec.Naming.Snake, codec.Naming.Kebab, codec.Naming.ScreamingSnake]) {
     println(codec.WireName("httpURLPort", policy))
   }
