@@ -4,6 +4,10 @@ inputs:
   cache-name:
     description: Cache writer name, distinct for each parallel job or shard.
     required: true
+  cache-family:
+    description: Optional prefix shared by writers whose build cache content matches, such as race.
+    required: false
+    default: ''
 outputs:
   cache-key:
     description: Primary cache key for a successful main run to save.
@@ -34,6 +38,8 @@ runs:
     # Restore everywhere, but callers save only successful main runs after
     # their tests/builds. PR snapshots would evict the warm main caches.
     # A commit-specific key retains new builds even when go.sum is unchanged.
+    # Fall back to the same family first: a normal snapshot holds no race
+    # builds, so restoring one leaves a race shard to compile everything.
     - uses: actions/cache/restore@v4
       id: cache
       with:
@@ -43,5 +49,6 @@ runs:
         key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ inputs.cache-name }}-${{ github.sha }}
         restore-keys: |
           go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ inputs.cache-name }}-
+          go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ inputs.cache-family || inputs.cache-name }}-
           go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
           go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-
