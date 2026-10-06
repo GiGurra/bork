@@ -51,7 +51,7 @@ Names below belong to `http`. All client calls return `Result = Response | Overl
 | `Overloaded` | `{ retryAfter: Option[time.Duration], response: Response }` |
 | `DeadlineExceeded` | `{ message: String }` |
 
-A zero timeout adds no per-call deadline; the scope and its ancestors still cancel the call. A positive timeout caps it, including response-body reads. Completed 429/503 responses become `Overloaded`, retaining the body and headers; other HTTP statuses are ordinary `Response` values. Transport or request-construction failures are `IoError`. Cancellation and deadline expiry have their own result types. Calls never retry automatically.
+A zero timeout adds no per-call deadline; the scope and its ancestors still cancel the call. A positive timeout caps it, including response-body reads. Completed 429/503 responses become `Overloaded`, retaining the body and headers; other HTTP statuses are ordinary `Response` values. Transport or request-construction failures are `IoError`. Cancellation and deadline expiry have their own result types. The library adds no automatic overload retry; Go's transport can replay eligible requests after connection failures and follows its normal redirect policy. Use Retry only when repeating the operation is safe.
 
 A malformed URL exercises the failure branch without an external service:
 
