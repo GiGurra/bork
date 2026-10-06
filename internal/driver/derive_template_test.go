@@ -2621,3 +2621,195 @@ fn main() {}`, "shape descriptor has no member nonexistent")
 derive fn unused[T](): String { callback: (shape.Field[T]) => String = field => field.name; "ok" }
 fn main() {}`, "")
 }
+
+func TestDeriveTemplateIndependentFieldValidation(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred positive(n: Int) { n > 0 }
+pred atLeast(n: Int, lo: Int) { n >= lo }
+fn needsPositive(n: Int where positive): String { toString(n) }
+class Probe[T] { fn probe(n: Int): String }
+derive instance probe[T]: Probe[T] {
+ fn probe(n: Int): String {
+  probes: List[(Int) => String] = [comptime for (field in shape.fields[T]()) comptime if (field.name == "n")
+   raw => match (field.validate(raw)) {
+    value: field.RawType => needsPositive(value)
+    error: shape.ValidationError => s"${error.path}:${error.obligation.map(o => o.index).getOr(-1)}"
+   }]
+  probes.get(0).map(callback => callback(n)).getOr("missing probe")
+ }
+}
+type Row = { limit: Int = 10, n: Int where atLeast(limit) and positive } derive(Probe)
+fn main() { println(probe[Row](2)); println(probe[Row](-1)) }`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "2\n:1\n" {
+		t.Fatalf("independent field validation: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplateIndependentFieldValidationWrongValue(t *testing.T) {
+	checkPreludeSource(t, `import "bork/shape"
+class Probe[T] { fn probe(): String }
+derive instance probe[T]: Probe[T] { fn probe(): String {
+ results = [comptime for (field in shape.fields[T]()) field.validate("wrong")]
+ toString(results)
+} }
+type Row = { n: Int } derive(Probe)
+fn main() {}`, "field.validate requires Int, found String")
+}
+
+func TestDeriveTemplateUnrequestedFieldValidationContract(t *testing.T) {
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](field: shape.Field[T]): String { field.validate(); "ok" }
+fn main() {}`, "shape descriptor validate takes 1 argument(s) and no type arguments")
+}
+
+func TestDeriveTemplateIndependentFieldValidationNestedPath(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred positive(n: Int) { n > 0 }
+class Probe[T] { fn probe(values: List[Int]): String }
+derive instance probe[T]: Probe[T] { fn probe(values: List[Int]): String {
+ checks: List[(List[Int]) => String] = [comptime for (field in shape.fields[T]())
+  raw => match (field.validate(raw)) {
+   _: field.RawType => "ok"
+   error: shape.ValidationError => error.path
+  }]
+ checks.get(0).map(callback => callback(values)).getOr("missing")
+} }
+type Row = { values: List[Int where positive] } derive(Probe)
+fn main() { println(probe[Row]([1, 2])); println(probe[Row]([1, -1])) }`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "ok\n[1]\n" {
+		t.Fatalf("nested field validation: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplateRawFieldTypeDoesNotPromiseFacts(t *testing.T) {
+	checkPreludeSource(t, `import "bork/shape"
+pred positive(n: Int) { n > 0 }
+fn needsPositive(n: Int where positive): String { toString(n) }
+class Produce[T] { fn produce(n: Int): T }
+instance produceInt: Produce[Int] { fn produce(n: Int): Int { n } }
+class Probe[T] { fn probe(n: Int): String }
+derive instance probe[T]: Probe[T] { fn probe(n: Int): String {
+ checks: List[(Int) => String] = [comptime for (field in shape.fields[T]())
+ raw => needsPositive(produce[field.RawType](raw))]
+ checks.get(0).map(callback => callback(n)).getOr("missing")
+} }
+type Row = { n: Int where positive } derive(Probe)
+fn main() {}`, "positive")
+}
+
+func TestDeriveTemplateValidationRejectsFailureTypeOverlap(t *testing.T) {
+	checkPreludeSource(t, `import "bork/shape"
+pred valid(value: shape.ValidationError) { value.path != "" }
+class Probe[T] { fn probe(): String }
+derive instance probe[T]: Probe[T] { fn probe(): String {
+ results = [comptime for (field in shape.fields[T]()) field.validate(shape.ValidationError {path: "", message: "value"})]
+ toString(results)
+} }
+type Row = { error: shape.ValidationError where valid } derive(Probe)
+fn main() {}`, "field.validate requires a value type distinct from shape.ValidationError")
+	checkPreludeSource(t, `import "bork/shape"
+class Probe[T] { fn probe(): String }
+derive instance probe[T]: Probe[T] { fn probe(): String { toString(shape.builder[shape.ValidationError]().finish()) } }
+type Row = {} derive(Probe)
+fn main() {}`, "shape.builder requires a target distinct from shape.ValidationError")
+}
+
+func TestDeriveTemplateIndependentFieldValidationPositionalProvenance(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred positive(n: Int) { n > 0 }
+class Probe[T] { fn probe(n: Int): String }
+derive instance probe[T]: Probe[T] { fn probe(n: Int): String {
+ checks: List[(Int) => String] = [comptime for (field in shape.fields[(Int, Int where positive)]()) comptime if (field.index == 1)
+  raw => match (field.validate(raw)) {
+   _: field.RawType => "ok"
+   error: shape.ValidationError => s"${error.path}:${error.obligation.map(o => o.field).getOr("missing")}"
+  }]
+ checks.get(0).map(callback => callback(n)).getOr("missing")
+} }
+type Row = {} derive(Probe)
+fn main() { println(probe[Row](-1)) }`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != ":[1]\n" {
+		t.Fatalf("positional field-validation provenance: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplateIndependentFieldValidationGenericRendererCycle(t *testing.T) {
+	checkPreludeSource(t, `import "bork/shape"
+type Cell = {}
+instance render: Show[Cell] { fn show(cell: Cell): String { Value } }
+pred valid[A](value: A) { s"$value" != "invalid" }
+class Probe[T] { fn probe(): Bool }
+derive instance probe[T]: Probe[T] { fn probe(): Bool {
+ checks = [comptime for (field in shape.fields[T]()) field.validate(field.default())]
+ checks.length() == 1
+} }
+type Row[A] = { items: List[A where valid] = [] } derive(Probe)
+lazy Value: String = { _ = probe[Row[Cell]](); "valid" }
+fn main() {}`, "dependency cycle")
+}
+
+func TestDeriveTemplateIndependentFieldCheckFailureTypedValue(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred valid(value: shape.ValidationError) { value.path != "" }
+class Probe[T] { fn probe(raw: shape.ValidationError): String }
+derive instance probe[T]: Probe[T] { fn probe(raw: shape.ValidationError): String {
+ checks: List[(shape.ValidationError) => String] = [comptime for (field in shape.fields[T]())
+  value => match (field.check(value)) { Ok => "ok", _: shape.ValidationError => "bad" }]
+ checks.get(0).map(callback => callback(raw)).getOr("missing")
+} }
+type Row = { error: shape.ValidationError where valid } derive(Probe)
+fn main() {
+ println(probe[Row](shape.ValidationError {path: "good", message: "value"}))
+ println(probe[Row](shape.ValidationError {path: "", message: "value"}))
+}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "ok\nbad\n" {
+		t.Fatalf("failure-typed field check: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplateIndependentFieldCheckGenericRoot(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred valid[A](value: A) { s"$value" != "invalid" }
+class Probe[T] { fn probe(value: T): String }
+derive instance probe[T]: Probe[T] { fn probe(value: T): String {
+ checks: List[String] = [comptime for (field in shape.fields[T]())
+  match (field.check(field.read(value))) { Ok => "ok", _: shape.ValidationError => "bad" }]
+ checks.get(0).getOr("missing")
+} }
+type Row[A] = { value: A where valid } derive(Probe)
+fn rawRow[A](value: A): Row[A] unsafe go { return Row[A]{value: value} }
+fn main() { println(probe(rawRow("valid"))); println(probe(rawRow("invalid"))) }`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "ok\nbad\n" {
+		t.Fatalf("generic-root field check: %s, %v", output, err)
+	}
+}

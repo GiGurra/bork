@@ -117,7 +117,7 @@ func (c *checker) checkDeriveDefinitions(files []*syntax.File) {
 				}
 				if written, ok := node.(*syntax.TypeExpr); ok && written.Name != "" {
 					projected := false
-					if owner, member, qualified := strings.Cut(written.Name, "."); qualified && member == "Type" && locals[owner] {
+					if owner, member, qualified := strings.Cut(written.Name, "."); qualified && (member == "Type" || member == "RawType") && locals[owner] {
 						projected = true
 					}
 					if typeNames[written.Name] || projected {

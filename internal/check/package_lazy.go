@@ -197,6 +197,9 @@ func (dependencies packageDependencies) specializedTree(root Expr, bound map[*Ty
 			if node.Builtin == BuiltinShapeFinish && node.Construction != nil {
 				dependencies.construction(node.Construction, bound)
 			}
+			if node.Builtin == BuiltinShapeValidate && node.Validation != nil {
+				dependencies.validation(node.Validation, bound)
+			}
 			if node.Builtin == BuiltinToString || node.Builtin == BuiltinPrintln || node.Builtin == BuiltinDbg {
 				for _, value := range node.Args {
 					dependencies.render(subst(value.Type(), bound), map[Type]bool{})
@@ -258,6 +261,9 @@ func (dependencies packageDependencies) tree(root Expr) {
 		case *CallBuiltin:
 			if node.Builtin == BuiltinShapeFinish && node.Construction != nil {
 				dependencies.construction(node.Construction, nil)
+			}
+			if node.Builtin == BuiltinShapeValidate && node.Validation != nil {
+				dependencies.validation(node.Validation, nil)
 			}
 			if node.Builtin == BuiltinToString || node.Builtin == BuiltinPrintln || node.Builtin == BuiltinDbg {
 				for _, value := range node.Args {
@@ -577,4 +583,11 @@ func packageInstanceRuntimeReads(info *Info, instance *Instance) bool {
 		}
 	}
 	return false
+}
+
+func (dependencies packageDependencies) validation(layout *ShapeFieldValidation, bound map[*TypeParam]Type) {
+	subject := subst(layout.Field.Type, bound)
+	for _, constraint := range substConstraints(layout.Constraints, bound) {
+		dependencies.constraint(constraint, subject)
+	}
 }

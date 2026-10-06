@@ -167,6 +167,7 @@ const (
 	BuiltinAssemble
 	BuiltinAssertIsFailure
 	BuiltinShapeFinish
+	BuiltinShapeValidate
 )
 
 var builtins = map[string]Builtin{
@@ -325,6 +326,7 @@ type Info struct {
 	shapeReadOwners        map[*syntax.Selector]Type
 	shapeTypeFacts         map[*syntax.TypeExpr][]*Constraint
 	shapeDefaults          map[*syntax.Call]*Field
+	shapeValidations       map[*syntax.Call]*shapeValidationCall
 	assemblyNames          map[any]string
 	interpolatorCalls      map[*syntax.Interp]*syntax.Call
 	interpolatorValidators map[*syntax.Interp]*Dict
@@ -1824,6 +1826,9 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 		if result, handled := c.shapeBuildCall(e, operation); handled {
 			return result
 		}
+	}
+	if operation := c.info.shapeValidations[e]; operation != nil {
+		return c.shapeValidateCall(e, operation)
 	}
 	if project := c.info.shapeProjects[e]; project != nil {
 		actual := c.expr(e.Args[0])

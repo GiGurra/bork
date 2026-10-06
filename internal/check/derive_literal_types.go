@@ -439,7 +439,7 @@ func deriveConcreteType(typ *syntax.TypeExpr, typeNames map[string]bool) bool {
 	if typeNames[typ.Name] {
 		return false
 	}
-	if _, member, projected := strings.Cut(typ.Name, "."); projected && member == "Type" {
+	if _, member, projected := strings.Cut(typ.Name, "."); projected && (member == "Type" || member == "RawType") {
 		return false
 	}
 	for _, elem := range typ.Tuple {

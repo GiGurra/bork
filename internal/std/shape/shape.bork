@@ -5,6 +5,11 @@ type Kind = sealed {
   Sealed
   Other
 }
+// During expansion a field has Type (with independent facts), RawType
+// (without its field facts), and validate(value), which returns the checked
+// field value or ValidationError. check(value) returns Ok or ValidationError
+// and also supports heads which might equal the failure type. Sibling and owner
+// invariants remain deferred.
 type Field[T] = private {
   name: String
   positional: Bool

@@ -2599,6 +2599,11 @@ func (f *factChecker) declaredMember(x Expr, m Type) []known {
 			out = append(out, f.knownOf(con, noParams)...)
 		}
 	case *CallBuiltin:
+		if x.Builtin == BuiltinShapeValidate && x.Validation != nil && x.Validation.ReturnValue && identical(x.Validation.Field.Type, m) {
+			for _, con := range x.Validation.Constraints {
+				out = append(out, f.knownOf(con, noParams)...)
+			}
+		}
 		if x.Builtin == BuiltinShapeFinish && x.Construction != nil && identical(x.Construction.Owner, m) {
 			for _, con := range x.Construction.Constraints {
 				out = append(out, f.knownOf(con, noParams)...)

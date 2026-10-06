@@ -73,6 +73,10 @@ func (p *deriveExpansion) builderCreation(call *syntax.Call, variant *Variant, h
 		}
 		fields = record.Fields
 	}
+	if shapeValidationErrorOverlap(target, p.c.pkgs["bork/shape"].TypeNamed("ValidationError")) {
+		p.error(call.Pos, "shape.builder requires a target distinct from shape.ValidationError")
+		return &syntax.Block{Pos: call.Pos}
+	}
 	if !p.accessible(target, call.Pos) || !p.charge(call.Pos, 12+8*len(fields)) {
 		return &syntax.Block{Pos: call.Pos}
 	}

@@ -323,7 +323,7 @@ func (m *deriveMetadataTypes) checkMember(selector *syntax.Selector) {
 	switch kind {
 	case deriveField:
 		switch selector.Name {
-		case "name", "doc", "index", "positional", "computed", "hasDefault", "facts", "Type", "read", "default":
+		case "name", "doc", "index", "positional", "computed", "hasDefault", "facts", "Type", "RawType", "read", "default", "validate", "check":
 			valid = true
 		}
 	case deriveVariant:
@@ -372,7 +372,7 @@ func (m *deriveMetadataTypes) checkCall(call *syntax.Call) {
 	arity := -1
 	switch kind {
 	case deriveField:
-		if selector.Name == "read" {
+		if selector.Name == "read" || selector.Name == "validate" || selector.Name == "check" {
 			arity = 1
 		}
 		if selector.Name == "default" {
@@ -397,7 +397,7 @@ func (m *deriveMetadataTypes) checkCall(call *syntax.Call) {
 		}
 		return
 	}
-	if kind >= deriveField && kind <= deriveFact && (m.scalar(selector) != nil || m.kind(selector) != 0 || selector.Name == "Type") {
+	if kind >= deriveField && kind <= deriveFact && (m.scalar(selector) != nil || m.kind(selector) != 0 || (selector.Name == "Type" || selector.Name == "RawType")) {
 		m.c.errorf(call.Pos, "shape descriptor member %s is a property, not a callable method", selector.Name)
 	}
 }

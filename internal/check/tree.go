@@ -245,6 +245,7 @@ type CallBuiltin struct {
 	Conv         *Conversion
 	Expected     string
 	Construction *ShapeConstruction
+	Validation   *ShapeFieldValidation
 }
 
 // CallValue is a call of a function value: `f(x)`, `r.handler(x)`.

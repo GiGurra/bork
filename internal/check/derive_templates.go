@@ -343,7 +343,7 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 				return value.field.Computed, true
 			case "hasDefault":
 				return value.field.Decl != nil && value.field.Decl.Default != nil, true
-			case "Type":
+			case "Type", "RawType":
 				return value.field.Type, true
 			case "facts":
 				return p.factSequence(x.Pos, value.owner, value.field, value.field.Constraints)
@@ -689,6 +689,9 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 					}
 				}
 			}
+			if expanded := p.fieldValidation(x, selector); expanded != nil {
+				return expanded
+			}
 			if expanded := p.builderOperation(x, selector); expanded != nil {
 				return expanded
 			}
@@ -893,18 +896,21 @@ func (p *deriveExpansion) clone(value reflect.Value) reflect.Value {
 		if written, ok := out.Interface().(*syntax.TypeExpr); ok {
 			typ, yes := p.env[written.Name].(Type)
 			var projected *Field
-			if owner, member, ok := strings.Cut(written.Name, "."); ok && member == "Type" {
-				if runtime, known := p.env[owner].(shapeRuntimeType); known {
+			if owner, member, ok := strings.Cut(written.Name, "."); ok && (member == "Type" || member == "RawType") {
+				if runtime, known := p.env[owner].(shapeRuntimeType); known && member == "Type" {
 					typ, yes = runtime.typ, true
 				}
-				if variant, known := p.env[owner].(shapeVariant); known {
+				if variant, known := p.env[owner].(shapeVariant); known && member == "Type" {
 					view := p.variantView(variant.variant)
 					if view != nil {
 						typ, yes = view, true
 					}
 				}
 				if field, known := p.env[owner].(shapeField); known {
-					typ, yes, projected = field.field.Type, true, field.field
+					typ, yes = field.field.Type, true
+					if member == "Type" {
+						projected = field.field
+					}
 					if origin, known := p.origins[owner]; known {
 						p.c.noteDeriveSource(written.Pos, owner, origin, "variable")
 					}

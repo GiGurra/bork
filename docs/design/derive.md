@@ -215,7 +215,10 @@ The proposal adds AST forms and meaning, not a new keyword inventory.
 | variant.project(x) | Runtime Option of a typed, read-only view of the matching payload |
 | variant.Type | Payload view type projection for annotations and helper arguments |
 | variant.name, variant.positional, variant.index | Declared tag, payload kind and ordinal |
-| field.Type | Type projection usable in type arguments/annotations during expansion |
+| field.Type | Type projection retaining independent facts for dictionary selection and proven inputs |
+| field.RawType | The stored value type without the destination field's facts; no unchecked record representation |
+| field.validate(value) | Validate independent field obligations; return the typed value or shape.ValidationError |
+| field.check(value) | Check the same obligations without returning a field value; return Ok or shape.ValidationError |
 | field.name, field.index, field.doc, field.computed | Declared metadata; slots have index, no wire name |
 | field.facts, shape.facts[T](), variant.facts | Opaque typed obligations with source/path metadata |
 | field.hasDefault, field.default() | Presence and typed runtime default provider |
@@ -284,8 +287,14 @@ code cannot invent a proof by returning a raw unchecked record.
 
 Facts are callable typed obligations with resolved predicates, arguments,
 dictionaries, sibling references and traversal paths, plus display text.
-They are not parsed predicate strings. A field validator exposed through
-metadata checks only independent field obligations. It cannot promise
+They are not parsed predicate strings. The generic field.validate operation,
+also used by metadata callbacks, checks only independent field obligations.
+field.RawType permits an erased input annotation without claiming the destination
+field facts. Successful validation supplies the independent facts on that value;
+it supplies no fact about an incomplete owner. Success types must be provably
+distinct from ValidationError, including through union members. For unresolved
+root parameters or failure-typed fields, field.check supplies an unambiguous
+Ok-or-error result without promising a typed field value. It cannot promise
 sibling/type invariants before a complete value exists. An independent check
 may return a typed field value; it never returns an incomplete record as T.
 Private construction is permitted only in its owning package and within the

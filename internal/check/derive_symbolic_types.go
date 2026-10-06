@@ -133,7 +133,7 @@ func (s *deriveSymbolicTypes) annotation(node *syntax.TypeExpr, names map[string
 	if s.names[node.Name] {
 		return &deriveTypeTerm{head: node.Name, dependent: true}
 	}
-	if _, member, projection := strings.Cut(node.Name, "."); projection && member == "Type" {
+	if _, member, projection := strings.Cut(node.Name, "."); projection && (member == "Type" || member == "RawType") {
 		return &deriveTypeTerm{head: node.Name, dependent: true}
 	}
 	children := func(nodes []*syntax.TypeExpr) []*deriveTypeTerm {

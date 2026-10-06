@@ -161,7 +161,7 @@ func (c *checker) checkDeriveScopes(method *syntax.FuncDecl, localNames, typeNam
 					c.errorf(node.Pos, "undefined local in derive definition: %s", node.Name)
 				}
 			case *syntax.TypeExpr:
-				if owner, member, projected := strings.Cut(node.Name, "."); projected && member == "Type" && localNames[owner] {
+				if owner, member, projected := strings.Cut(node.Name, "."); projected && (member == "Type" || member == "RawType") && localNames[owner] {
 					if origin, present := env[owner]; present {
 						c.noteDeriveSource(node.Pos, owner, origin, "variable")
 					} else {

@@ -424,6 +424,9 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		if operation := l.info.shapeBuildCalls[x]; operation != nil && operation.layout != nil {
 			return l.shapeBuild(x, at, operation)
 		}
+		if operation := l.info.shapeValidations[x]; operation != nil {
+			return l.shapeValidate(x, at, operation)
+		}
 		if project := l.info.shapeProjects[x]; project != nil {
 			return l.shapeProjection(x, at, project)
 		}
