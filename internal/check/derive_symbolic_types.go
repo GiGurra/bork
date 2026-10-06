@@ -15,6 +15,7 @@ type deriveTypeTerm struct {
 	native    Type
 	args      []*deriveTypeTerm
 	dependent bool
+	effects   Effects
 }
 
 type deriveSymbolicTypes struct {
@@ -73,6 +74,7 @@ func deriveNativeTerm(typ Type, bound map[*TypeParam]*deriveTypeTerm) *deriveTyp
 			args = append(args, deriveNativeTerm(p, bound))
 		}
 		term = deriveTerm("function", append(args, deriveNativeTerm(typ.Result, bound))...)
+		term.effects = typ.Effects
 	case *Union:
 		var args []*deriveTypeTerm
 		for _, m := range typ.Members {
@@ -150,7 +152,9 @@ func (s *deriveSymbolicTypes) annotation(node *syntax.TypeExpr, names map[string
 		return deriveTerm("union", children(node.Union)...)
 	}
 	if node.Func != nil {
-		return deriveTerm("function", append(children(node.Func.Params), s.annotation(node.Func.Result, names))...)
+		term := deriveTerm("function", append(children(node.Func.Params), s.annotation(node.Func.Result, names))...)
+		term.effects = deriveWrittenEffects(node.Func.Uses)
+		return term
 	}
 	switch node.Name {
 	case "List", "Map":
@@ -299,9 +303,9 @@ func (s *deriveSymbolicTypes) call(call *syntax.Call) ([]*deriveTypeTerm, *deriv
 		lexical.names = nil // Caller formals apply only to the already-resolved actual terms.
 		params, names := make([]*deriveTypeTerm, len(helper.Params)), make([]string, len(helper.Params))
 		for i, p := range helper.Params {
-			params[i], names[i] = lexical.annotation(p.Type, bound), p.Name
+			params[i], names[i] = s.c.deriveOpenSignatureTerm(lexical.annotation(p.Type, bound), p.Type, true), p.Name
 		}
-		return params, lexical.annotation(helper.Result, bound), names
+		return params, s.c.deriveOpenSignatureTerm(lexical.annotation(helper.Result, bound), helper.Result, false), names
 	}
 	fn, found := s.c.funcNamed(id.Name)
 	if !found || fn.Pkg != nil && fn.Pkg.Path == "bork/shape" {

@@ -6,7 +6,14 @@ Each request expands the template for its target, then checks the resulting
 Bork code with the ordinary type, effect, fact and lifetime rules.
 
 Definitions also check predicate names and arity, concrete expression types,
-and closed dictionary requirements even when no target requests them.
+known effects, and closed dictionary requirements even when no target requests
+them. Effects follow the ordinary rules: a call of a known function or helper
+uses what it declares, plus what its open callback arguments use. A callback
+must fit the effects of a function type written with `uses`. Helper signature
+callbacks without `uses` remain open. Code in a staged branch is checked as if
+the branch were selected. A native `comptime` block may use only `build`.
+Calls whose callee depends on the target are left to its expansion. Checking an
+unused definition never runs `comptime` code or captures `build` or `embed` files.
 Known parameter facts participate in dictionary selection. Requirements that
 depend on a target's type or predicate callback remain checks of its expansion.
 
