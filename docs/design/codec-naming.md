@@ -77,7 +77,7 @@ role:
 - **Words.** A name is split into words with today's cli/env rule: a break
   before an upper-case letter that follows a lower-case letter or a digit, or
   that starts a new capitalised word (`httpURLPort` gives http, url, port;
-  `ipv4Addr` gives ipv4, addr). The rule moves to one function,
+  `ipv4Addr` gives ipv4, addr; flags stay `apiURL` → `--api-url`). The rule moves to one function,
   `codec.words`, which cli and env then call.
 - **Joining.** Each policy joins the words: `httpUrlPort`, `HttpUrlPort`,
   `http_url_port`, `http-url-port`, `HTTP_URL_PORT`. Acronym case is not kept,
@@ -213,8 +213,21 @@ Agreed with worker boacli, who owns the CLI changes.
   field name.
 - **Aliases** become hidden long flags and env names. They get no automatic
   shorts and no deprecation warning, and they join the existing duplicate
-  name check before any env or config access.
-- **Config keys** are the wire name and aliases. If a config file has both the
+  name check before any env or config access. How they combine with the
+  canonical name's mapping:
+  - **Auto:** alias names are derived like Auto names, with `flagPrefix` and
+    `envPrefix`.
+  - **Named:** the canonical name is exact, and the aliases are still derived
+    with prefixes.
+  - **Disabled:** that source's aliases are disabled too.
+- **Enrichers** see aliases as `FieldSpec.aliases` (long and env), so a
+  rename can also change or drop them.
+- **Conflicts.** Giving the canonical flag and an alias flag (or setting both
+  env names) is an error, as in Decode. An empty env value still counts as
+  absent.
+- **Config keys** are the wire name and aliases. So a snake-case policy
+  changes the accepted keys, from `httpPort` to `http_port`. This is opt-in,
+  and docs/std/cli.md will say so when it is implemented. If a config file has both the
   wire name and an alias for the same field, that is an error, as in Decode.
 - **Positional fields.** An override only changes the name shown in help.
 - **Nested flattening** (planned in cli): an override renames that field's own
