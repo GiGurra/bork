@@ -148,7 +148,7 @@ func (c *checker) checkDeriveDefinitions(files []*syntax.File) {
 					c.noteDeriveSource(identifier.Pos, identifier.Name, helper.Pos, "function")
 					return
 				}
-				if c.packageBindingNamed(identifier.Name) != nil || c.ambientNamed(identifier.Name) != nil || c.providerBundleNamed(identifier.Name) != nil {
+				if c.packageBindingNamed(identifier.Name) != nil || c.ambientNamed(identifier.Name) != nil {
 					return
 				}
 				if alias, member, qualified := strings.Cut(identifier.Name, "."); qualified {

@@ -25,7 +25,7 @@ func (c *checker) checkDeriveScopes(method *syntax.FuncDecl, localNames, typeNam
 			return
 		}
 		_, builtin := builtins[name]
-		if _, present := env[name]; present || typeNames[name] || builtin || c.pkg.Funcs[name] != nil || c.pkg.deriveHelpers[name] != nil || c.pkg.imports[name] != nil || c.pkg.bindings[name] != nil || c.pkg.ambients[name] != nil || c.pkg.providers[name] != nil || c.isTypeName(name) {
+		if _, present := env[name]; present || typeNames[name] || builtin || c.pkg.Funcs[name] != nil || c.pkg.deriveHelpers[name] != nil || c.pkg.imports[name] != nil || c.pkg.bindings[name] != nil || c.pkg.ambients[name] != nil || c.isTypeName(name) {
 			c.errorf(pos, "%s is already defined in an enclosing derive scope", name)
 		}
 		env[name] = pos

@@ -94,6 +94,7 @@ func (g *gen) deriveDecode(fn *check.Func) string {
 // decodeFields decodes the fields of a record (or variant) from _obj,
 // and returns the value built from them.
 type constructionInvariant struct {
+	fieldPath   func(*check.Field) string
 	positional  bool
 	typ         check.Type
 	constraints []*check.Constraint

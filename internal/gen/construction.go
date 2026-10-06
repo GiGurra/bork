@@ -15,6 +15,9 @@ import (
 func (g *gen) constructionChecks(fields []*check.Field, owner check.Type, invariants []constructionInvariant, errorType check.Type, provenance ...func(*check.Field, *check.Constraint) []ast.Expr) string {
 	var b strings.Builder
 	fieldPath := func(field *check.Field) string {
+		if len(invariants) > 0 && invariants[0].fieldPath != nil {
+			return invariants[0].fieldPath(field)
+		}
 		if len(invariants) > 0 && invariants[0].positional {
 			return ".values[" + field.Name + "]"
 		}
@@ -72,13 +75,21 @@ func (g *gen) constructionChecks(fields []*check.Field, owner check.Type, invari
 
 	for _, inv := range invariants {
 		for _, con := range inv.constraints {
-			if cond := g.constraintCond(con, ast.NewIdent("_out"), inv.typ); cond != nil {
-				setup, path, message := g.constraintFailure(con, ast.NewIdent("_out"), inv.typ, stringLit(""))
-				fmt.Fprintf(&b, "if !(%s) {\n", g.text(cond))
-				for _, stmt := range setup {
-					b.WriteString(g.text(stmt) + "\n")
+			root := ast.Expr(ast.NewIdent("_out"))
+			if _, sealed := inv.typ.(*check.Sealed); sealed {
+				root = &ast.CallExpr{Fun: g.goType(inv.typ), Args: []ast.Expr{root}}
+			}
+			stmts := g.atFailurePath(root, inv.typ, splitPath(con.Path), stringLit(""), func(value ast.Expr, typ check.Type, base ast.Expr) []ast.Stmt {
+				cond := g.constraintCond(con, value, typ)
+				if cond == nil {
+					return nil
 				}
-				b.WriteString(g.text(&ast.ReturnStmt{Results: []ast.Expr{failure(nil, con, path, message)}}) + "\n}\n")
+				setup, path, message := g.constraintFailure(con, value, typ, base)
+				ret := &ast.ReturnStmt{Results: []ast.Expr{failure(nil, con, path, message)}}
+				return []ast.Stmt{&ast.IfStmt{Cond: &ast.UnaryExpr{Op: token.NOT, X: paren(cond)}, Body: &ast.BlockStmt{List: append(setup, ret)}}}
+			})
+			for _, stmt := range stmts {
+				b.WriteString(g.text(stmt) + "\n")
 			}
 		}
 	}

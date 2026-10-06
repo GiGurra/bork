@@ -839,16 +839,17 @@ func (c *checker) inFile(f *syntax.File) {
 }
 
 type checker struct {
-	files                 []*syntax.File
-	tupleDerives          []*ClassInstance
-	tupleBindingMode      bool
-	patternTest           bool
-	derives               []*deriveRequest
-	deriveCalls           map[*syntax.Call]*Func
-	deriveHelperSerial    int
-	deriveSpecializations map[string]*Func
-	deriveBounds          deriveBounds
-	deriveDiscovery       *deriveDiscovery
+	files                     []*syntax.File
+	tupleDerives              []*ClassInstance
+	tupleBindingMode          bool
+	patternTest               bool
+	derives                   []*deriveRequest
+	deriveCalls               map[*syntax.Call]*Func
+	deriveHelperSerial        int
+	deriveSpecializations     map[string]*Func
+	deriveSpecializationCosts map[string]deriveSpecializationCost
+	deriveBounds              deriveBounds
+	deriveDiscovery           *deriveDiscovery
 	// Only compilation retains source identities; read-only queries do not.
 	recordPredicateRefs bool
 	bindingFiles        map[string]*syntax.File

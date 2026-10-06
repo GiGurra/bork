@@ -35,7 +35,7 @@ func (g *gen) shapeFinish(call *check.CallBuiltin, argument ast.Expr) ast.Expr {
 		if field.Default != nil {
 			fmt.Fprintf(&body, "%s = %s\n", variable, g.fieldDefault(field))
 		} else {
-			body.WriteString(g.constructionError(errorType, strconv.Quote("."+field.Name), strconv.Quote("is missing")))
+			body.WriteString(g.constructionError(errorType, strconv.Quote(layout.FieldPath(field)), strconv.Quote("is missing")))
 		}
 		body.WriteString("}\n")
 		initializers = append(initializers, fmt.Sprintf("%s: %s", name(field.Name).Name, g.text(g.fieldResolved(ast.NewIdent(variable), field))))
@@ -50,7 +50,7 @@ func (g *gen) shapeFinish(call *check.CallBuiltin, argument ast.Expr) ast.Expr {
 		constraints = append(constraints, layout.Variant.Constraints...)
 	}
 	constraints = append(constraints, layout.Constraints...)
-	body.WriteString(g.constructionChecks(layout.Fields, layout.Owner, []constructionInvariant{{typ: layout.Owner, constraints: constraints}}, errorType, g.shapeObligation(layout)))
+	body.WriteString(g.constructionChecks(layout.Fields, layout.Owner, []constructionInvariant{{typ: layout.Owner, constraints: constraints, fieldPath: layout.FieldPath}}, errorType, g.shapeObligation(layout)))
 	body.WriteString("return _out\n")
 	source := fmt.Sprintf("func(_state %s) %s {\n%s\n}", g.typeText(call.Args[0].Type()), g.typeText(call.Type()), body.String())
 	function, err := parser.ParseExprFrom(token.NewFileSet(), "", source, 0)
@@ -73,6 +73,9 @@ func (g *gen) shapeObligation(layout *check.ShapeConstruction) func(*check.Field
 		constraints = append(constraints, layout.Constraints...)
 		if field != nil {
 			fieldName = field.Name
+			if strings.HasPrefix(layout.FieldPath(field), "[") {
+				fieldName = layout.FieldPath(field)
+			}
 			constraints = field.Constraints
 		}
 		index := -1
@@ -85,9 +88,13 @@ func (g *gen) shapeObligation(layout *check.ShapeConstruction) func(*check.Field
 		owner := layout.Owner.String()
 		switch target := layout.Owner.(type) {
 		case *check.Record:
-			owner = target.Pkg.Path + ":" + owner
+			if target.Pkg != nil {
+				owner = target.Pkg.Path + ":" + owner
+			}
 		case *check.Sealed:
-			owner = target.Pkg.Path + ":" + owner
+			if target.Pkg != nil {
+				owner = target.Pkg.Path + ":" + owner
+			}
 		}
 		obligation := g.info.PackageNamed("bork/shape").TypeNamed("Obligation")
 		value := &ast.CompositeLit{Type: g.goType(obligation), Elts: []ast.Expr{

@@ -7,6 +7,7 @@ type Kind = sealed {
 }
 type Field[T] = private {
   name: String
+  positional: Bool
   index: Int
   doc: String
   computed: Bool
@@ -22,6 +23,7 @@ type Fact[T] = private {
 }
 type Variant[T] = private {
   name: String
+  positional: Bool
   index: Int
   fields: List[Field[T]]
   facts: List[Fact[T]]

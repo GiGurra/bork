@@ -1689,7 +1689,7 @@ derive instance build[T]:Build[T]{fn build(n:Int):T|shape.ValidationError{
 type Row={n:Int where positive} derive(Build)
 fn main(){match(build[Row](-1)){
  error:shape.ValidationError=>match(error.obligation){
-  .Some{value:fact}=>{println(fact.field);println(fact.index);println(fact.source.contains("main.bork:"));println(fact.owner.contains("Row"))}
+  .Some(fact)=>{println(fact.field);println(fact.index);println(fact.source.contains("main.bork:"));println(fact.owner.contains("Row"))}
   .None=>println("missing provenance")
  }
  _:Row=>println("unexpected success")
@@ -1838,5 +1838,154 @@ fn main(){println(probe[Row]())}`
 	output, err := exec.Command(executable).CombinedOutput()
 	if err != nil || string(output) != "2\n" {
 		t.Fatalf("head proof: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplatePositionalMetadataAndView(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+class Render[T]{fn render(x:T):String}
+derive instance render[T]:Render[T]{fn render(x:T):String{
+ parts:List[String]=[comptime for(v in shape.variants[T]()) {
+  fields:List[String]=[comptime for(f in v.fields) s"${f.positional}:${f.index}:${f.name}"]
+  v.project(x).map(view=>{
+   values:List[String]=[comptime for(f in v.fields) toString(f.read(view))]
+   s"${v.positional}:${fields.join(",")}:${values.join(",")}"
+  }).getOr("")
+ }]
+ parts.join("|")
+}}
+type Choice[A]=sealed{Pair(Int,A),Named{value:A},Empty} derive(Render)
+fn main(){println(render(Choice[String].Pair(2,"ok")));println(render(Choice[Int].Named{value:4}))}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "true:true:0:,true:1::2,ok||\n|false:false:0:value:4|\n" {
+		t.Fatalf("positional views: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplatePositionalBuilder(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred positive(n:Int){n>0}
+class Build[T]{fn build(n:Int):T|shape.ValidationError}
+derive instance build[T]:Build[T]{fn build(n:Int):T|shape.ValidationError{
+ result:List[T|shape.ValidationError]=[comptime for(v in shape.variants[T]()) comptime if(v.positional) {
+  initial=v.builder()
+  steps:List[(initial.Type)=>initial.Type]=[comptime for(f in v.fields) (state:initial.Type)=>state.set(f,n)]
+  steps.fold(initial,(state,step)=>step(state)).finish()
+ }]
+ result.get(0).getOr(shape.ValidationError{path:"",message:"missing positional payload"})
+}}
+type Choice=sealed{Pair(Int where positive,Int),Empty} derive(Build)
+fn main(){println(build[Choice](2));match(build[Choice](-1)) {e:shape.ValidationError=>{println(e.path);println(e.obligation.map(o=>o.field).getOr("missing"))},_:Choice=>println("unexpected success")}}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "Choice.Pair(2, 2)\n[0]\n[0]\n" {
+		t.Fatalf("positional construction: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplateTupleBuilderFacts(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred positive(n:Int){n>0}
+class Probe[T]{fn probe(n:Int):String}
+derive instance probe[T]:Probe[T]{fn probe(n:Int):String{
+ initial=shape.builder[(Int where positive,Int)]()
+ steps:List[(initial.Type)=>initial.Type]=[comptime for(f in shape.fields[(Int where positive,Int)]()) (state:initial.Type)=>state.set(f,n)]
+ match(steps.fold(initial,(state,step)=>step(state)).finish()) {
+  error:shape.ValidationError=>s"${error.path}:${error.obligation.map(o=>o.field).getOr("owner")}:error"
+  _=>"success"
+ }
+}}
+type Row={} derive(Probe)
+fn main(){println(probe[Row](2));println(probe[Row](-1))}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "success\n[0]:[0]:error\n" {
+		t.Fatalf("tuple builder facts: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplateBuilderNestedHeadFacts(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred positive(n:Int){n>0}
+class Build[T]{fn build(n:Int):String}
+derive instance build[T]:Build[T]{fn build(n:Int):String{
+ initial=shape.builder[Box[Int where positive]]()
+ steps:List[(initial.Type)=>initial.Type]=[comptime for(f in shape.fields[Box[Int]]()) (state:initial.Type)=>state.set(f,n)]
+ match(steps.fold(initial,(state,step)=>step(state)).finish()) {
+  error:shape.ValidationError=>error.path
+  _=>"success"
+ }
+}}
+type Box[A]={value:A}
+type Row={} derive(Build)
+fn main(){println(build[Row](2));println(build[Row](-1))}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "success\n.value\n" {
+		t.Fatalf("nested head facts: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplateMemoizedHelperWorkBudget(t *testing.T) {
+	fields := make([]string, 256)
+	for i := range fields {
+		fields[i] = fmt.Sprintf("field%d:Int", i)
+	}
+	source := `import "bork/shape"
+class Label[T]{fn label(x:T):String}
+derive fn names[A](x:A):String {
+ labels:List[String]=[comptime for(f in shape.fields[A]()) f.name]
+ labels.join(",")
+}
+derive instance labels[T]:Label[T]{fn label(x:T):String {
+ words:List[String]=[comptime for(f in shape.fields[T]()) names[T](x)]
+ words.join("|")
+}}
+type Row={` + strings.Join(fields, ",") + `} derive(Label)
+fn main(){}`
+	checkPreludeSource(t, source, "compile-time work limit")
+}
+
+func TestDeriveTemplateBuilderSealedHeadFacts(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred positive(n:Int){n>0}
+type Choice[A]=sealed{Full{item:A},Empty}
+type Positive=Choice[Int where positive]
+class Build[T]{fn build(n:Int):String}
+derive instance build[T]:Build[T]{fn build(n:Int):String{
+ results:List[String]=[comptime for(v in shape.variants[Positive]()) comptime if(v.name=="Full") {
+  initial=v.builder()
+  steps:List[(initial.Type)=>initial.Type]=[comptime for(f in v.fields) (state:initial.Type)=>state.set(f,n)]
+  match(steps.fold(initial,(state,step)=>step(state)).finish()) {error:shape.ValidationError=>error.path,_=>"success"}
+ }]
+ results.get(0).getOr("missing")
+}}
+type Row={} derive(Build)
+fn main(){println(build[Row](2));println(build[Row](-1))}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "success\n.item\n" {
+		t.Fatalf("sealed nested head facts: %s, %v", output, err)
 	}
 }

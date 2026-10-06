@@ -100,7 +100,19 @@ type shapeField struct {
 	owner   Type
 	variant *Variant
 }
-type shapeVariant struct{ variant *Variant }
+
+func (field shapeField) positional() bool {
+	if field.variant != nil {
+		return field.variant.Positional
+	}
+	record, ok := field.owner.(*Record)
+	return ok && record.Tuple
+}
+
+type shapeVariant struct {
+	variant     *Variant
+	constraints []*Constraint
+}
 type shapeSequence struct {
 	items   []any
 	element Type
@@ -136,6 +148,17 @@ type deriveBudget struct {
 	remaining   int
 	depth       int
 	depthFailed bool
+	frames      []*deriveBudgetFrame
+}
+
+type deriveBudgetFrame struct{ start, peak int }
+
+func (budget *deriveBudget) observeDepth(depth int) {
+	for _, frame := range budget.frames {
+		if relative := depth - frame.start; relative > frame.peak {
+			frame.peak = relative
+		}
+	}
 }
 
 func (p *deriveExpansion) enter(pos diag.Pos) bool {
@@ -150,6 +173,7 @@ func (p *deriveExpansion) enter(pos diag.Pos) bool {
 		return false
 	}
 	p.budget.depth++
+	p.budget.observeDepth(p.budget.depth)
 	return true
 }
 
@@ -302,7 +326,12 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 		case shapeField:
 			switch x.Name {
 			case "name":
+				if value.positional() {
+					return "", true
+				}
 				return value.field.Name, true
+			case "positional":
+				return value.positional(), true
 			case "index":
 				return int64(value.index), true
 			case "doc":
@@ -323,6 +352,8 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 				return view, view != nil
 			case "name":
 				return value.variant.Name, true
+			case "positional":
+				return value.variant.Positional, true
 			case "index":
 				return int64(value.variant.Index), true
 			case "fields":
@@ -459,7 +490,7 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 			}
 			result := make([]any, len(sealed.Variants))
 			for i, variant := range sealed.Variants {
-				result[i] = shapeVariant{variant}
+				result[i] = shapeVariant{variant: variant, constraints: headFacts}
 			}
 			return shapeSequence{items: result, element: p.descriptorType("Variant", target)}, true
 		case "kind":
@@ -645,7 +676,7 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 			if selector.Name == "builder" {
 				if value, known := p.eval(selector.X); known {
 					if variant, yes := value.(shapeVariant); yes {
-						return p.builderCreation(x, variant.variant)
+						return p.builderCreation(x, variant.variant, variant.constraints)
 					}
 				}
 			}

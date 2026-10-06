@@ -56,7 +56,9 @@ provider, and exclude computed fields: those require the complete owner and
 are available through `field.read(value)`.
 
 `shape.variants[T]()` describes sealed alternatives, with `name`, `index`, and
-`fields`. `variant.project(value)` checks the tag and returns an `Option`
+`fields`, plus a `positional` payload flag. Positional fields expose their slot
+`index`, `positional: true`, and an empty `name`; internal numeric labels are
+never object keys. `variant.project(value)` checks the tag and returns an `Option`
 containing a read-only payload view. It evaluates the input once per projection.
 `variant.Type` supplies that view's type for annotations and helper arguments.
 A payload field's `read` requires the matching variant's view; the complete
@@ -87,7 +89,8 @@ Each selected field must accept `input`'s type. The template may branch on
 metadata to supply different typed expressions for different fields.
 `finish()` returns the owner or `shape.ValidationError`. It reports duplicate
 inputs, supplies declared defaults for missing stored inputs, and rejects other
-missing inputs. It validates stored facts, initializes computed cells, checks
+missing inputs. Positional slots use paths such as `[0]`; format-specific
+envelopes are added by codec libraries. It validates stored facts, initializes computed cells, checks
 computed and sibling-dependent facts, then checks variant and owner invariants,
 including constrained type arguments. Only success exposes the promised owner.
 

@@ -18,6 +18,23 @@ type ShapeConstruction struct {
 	Constraints []*Constraint
 }
 
+// FieldPath names semantic slots without treating numeric storage labels as
+// object keys. Format libraries add their own envelope path during mapping.
+func (layout *ShapeConstruction) FieldPath(field *Field) string {
+	positional := layout.Variant != nil && layout.Variant.Positional
+	if record, ok := layout.Owner.(*Record); ok {
+		positional = record.Tuple
+	}
+	if positional {
+		for i, candidate := range layout.Fields {
+			if candidate == field {
+				return fmt.Sprintf("[%d]", i)
+			}
+		}
+	}
+	return "." + field.Name
+}
+
 type shapeRuntimeType struct{ typ Type }
 
 type shapeBuildCall struct {
@@ -30,7 +47,7 @@ type shapeBuildCall struct {
 	charged   bool
 }
 
-func (p *deriveExpansion) builderCreation(call *syntax.Call, variant *Variant) syntax.Expr {
+func (p *deriveExpansion) builderCreation(call *syntax.Call, variant *Variant, headFacts ...[]*Constraint) syntax.Expr {
 	var target Type
 	var constraints []*Constraint
 	var fields []*Field
@@ -40,6 +57,9 @@ func (p *deriveExpansion) builderCreation(call *syntax.Call, variant *Variant) s
 			return &syntax.Block{Pos: call.Pos}
 		}
 		target, fields = variant.Parent, variant.Fields
+		if len(headFacts) > 0 {
+			constraints = headFacts[0]
+		}
 	} else {
 		if len(call.TypeArgs) != 1 || len(call.Args) != 0 {
 			p.error(call.Pos, "shape.builder takes one target type and no arguments")
@@ -195,6 +215,11 @@ func (c *checker) shapeBuildCall(call *syntax.Call, operation *shapeBuildCall) (
 		}
 		return newUnion([]Type{layout.Owner, c.pkgs["bork/shape"].TypeNamed("ValidationError")}), true
 	}
+	// Structurally equal tuple spellings have fresh field objects. Their slot
+	// ordinals identify the same owner member, unlike nominal field identities.
+	if tuple, ok := layout.Owner.(*Record); ok && tuple.Tuple && identical(operation.owner, layout.Owner) {
+		operation.field = findField(layout.Fields, operation.field.Name)
+	}
 	value := c.exprWant(call.Args[0], operation.field.Type)
 	if !identical(operation.owner, layout.Owner) || operation.variant != layout.Variant {
 		c.errorf(call.Pos, "builder.set requires a field from its exact owner and payload")
@@ -268,7 +293,7 @@ func (l *lowerer) shapeBuild(source *syntax.Call, at expr, operation *shapeBuild
 	duplicate := layout.Storage.Fields[index]
 	selected := &Select{expr: expr{pos: source.Pos, typ: String}, X: oldRef, Name: duplicate.Name, Field: duplicate}
 	empty := &Const{expr: selected.expr, Value: constant.MakeString("")}
-	path := &Const{expr: selected.expr, Value: constant.MakeString("." + operation.field.Name)}
+	path := &Const{expr: selected.expr, Value: constant.MakeString(layout.FieldPath(operation.field))}
 	first := &If{expr: selected.expr, Cond: &Binary{expr: expr{pos: source.Pos, typ: Bool}, Op: syntax.Eq, X: selected, Y: empty}, Then: &Block{expr: selected.expr, Tail: path}, Else: selected}
 	optional := previous.Type().(*Sealed)
 	dups := &Match{expr: selected.expr, X: previous, Arms: []*MatchArm{

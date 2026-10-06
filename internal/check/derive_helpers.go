@@ -213,6 +213,11 @@ func (p *deriveExpansion) evalBlock(block *syntax.Block) (any, bool) {
 	return p.eval(block.Tail)
 }
 
+// Local typed-function memoization preserves logical expansion work and peak
+// depth. A provisional function can serve recursive references, but only a
+// successful complete expansion receives a reusable cost receipt.
+type deriveSpecializationCost struct{ work, depth int }
+
 func (p *deriveExpansion) runtimeHelper(call *syntax.Call, helper *syntax.FuncDecl, pkg *Package) syntax.Expr {
 	child, valid := p.helperPlan(call, helper, pkg)
 	if !valid || p.instance == nil {
@@ -244,7 +249,21 @@ func (p *deriveExpansion) runtimeHelper(call *syntax.Call, helper *syntax.FuncDe
 		p.c.deriveSpecializations = map[string]*Func{}
 	}
 	fn := p.c.deriveSpecializations[key]
+	if receipt, hit := p.c.deriveSpecializationCosts[key]; hit {
+		if !p.charge(call.Pos, receipt.work) {
+			return &syntax.Block{Pos: call.Pos}
+		}
+		depth := p.budget.depth + receipt.depth
+		if depth > 256 {
+			p.error(call.Pos, "derive template expansion exceeds its compile-time depth limit")
+			return &syntax.Block{Pos: call.Pos}
+		}
+		p.budget.observeDepth(depth)
+	}
 	if fn == nil {
+		before, errors := p.budget.remaining, p.c.diags.Len()
+		frame := &deriveBudgetFrame{start: p.budget.depth}
+		p.budget.frames = append(p.budget.frames, frame)
 		fd := &syntax.FuncDecl{Pos: helper.Pos, End: helper.End, Name: p.generatedName("helper", p.instance.Pkg), Uses: helper.Uses, Needs: helper.Needs, Requires: nil}
 		fn = &Func{Decl: fd, Pkg: p.instance.Pkg, TemplatePkg: pkg, TemplateScope: p.instance, TypeParams: p.instance.TypeParams, Result: Ok}
 		p.c.deriveSpecializations[key] = fn
@@ -271,6 +290,15 @@ func (p *deriveExpansion) runtimeHelper(call *syntax.Call, helper *syntax.FuncDe
 		p.c.pkg = saved
 		p.c.info.ExpandedFunctions = append(p.c.info.ExpandedFunctions, fn)
 		p.failed = p.failed || child.failed
+		p.budget.frames = p.budget.frames[:len(p.budget.frames)-1]
+		if !child.failed && p.c.diags.Len() == errors {
+			if p.c.deriveSpecializationCosts == nil {
+				p.c.deriveSpecializationCosts = map[string]deriveSpecializationCost{}
+			}
+			p.c.deriveSpecializationCosts[key] = deriveSpecializationCost{work: before - p.budget.remaining, depth: frame.peak}
+		} else {
+			delete(p.c.deriveSpecializations, key)
+		}
 	}
 	generated := &syntax.Call{Start: call.Start, Pos: call.Pos, End: call.End, Fun: &syntax.Ident{Pos: call.Start, Name: fn.Decl.Name}, Args: runtimeArgs}
 	for _, parameter := range fn.TypeParams {
