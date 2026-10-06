@@ -17,6 +17,9 @@ type inputField = {
   defaultFalse: Bool
   defaultText: String
   configDefault: String
+  groups: List[nestedGroup] = []
+  path: List[String] = []
+  aliasPaths: List[List[String]] = []
   validate: (codec.Value) uses nothing => Ok | codec.DecodeError
 }
 type nativeBuilder = (String, String, List[FieldSpec], List[inputField], List[String], (String) uses nothing => codec.Value | codecs.JsonError, (String) uses nothing => String, List[Completion], (Completion, CompletionRequest) uses io + net + clock + random + state => Suggestions | Error, Scope) uses nothing => adapter | Error
@@ -29,11 +32,16 @@ fn inputFields[T: codec.Decode](name: String): List[inputField] | Error {
   inputFieldsWithSchema[T](codec.Schema[T](), name)
 }
 fn inputFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchema], name: String): List[inputField] | Error unsafe go {
-  record, supported := _borkOptionGet(recordSchema)
+  flattened := flattenRecordSchema(recordSchema, name)
+  if failure, bad := flattened.(Error); bad { return failure }
+  cliRecord := flattened.(cliSchema)
+  record, supported := _borkOptionGet(cliRecord.record)
   schema := record.fields
   if !supported { return Error{errors: []codec.DecodeError{{path: name, message: "CLI options require a derived record decoder"}}} }
   fields := []inputField{}
   for _, field := range schema {
+    leafPath, aliasPaths := []string{}, [][]string{}
+    for _, leaf := range cliRecord.leaves { if leaf.field == field.name { leafPath, aliasPaths = leaf.path, leaf.aliases; break } }
     text, path := "", ""
     if provider, found := _borkOptionGet(field.defaultValue); found {
       value := provider()
@@ -43,7 +51,7 @@ fn inputFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchem
     // CLI switches default to false independently of the record decoder.
     defaultFalse := field.kind == "bool" && !field.optional && !field.hasDefault
     if defaultFalse { text = "false" }
-    fields = append(fields, inputField{field: field.name, wireName: field.wireName, aliases: field.aliases, words: field.words, typeName: field.typeName, kind: field.kind, optional: field.optional, variants: field.variants, hasDefault: field.hasDefault || defaultFalse, defaultFalse: defaultFalse, defaultText: text, configDefault: path, validate: func(value codec.Value) any {
+    fields = append(fields, inputField{field: field.name, wireName: field.wireName, aliases: field.aliases, words: field.words, typeName: field.typeName, kind: field.kind, optional: field.optional, variants: field.variants, hasDefault: field.hasDefault || defaultFalse, defaultFalse: defaultFalse, defaultText: text, configDefault: path, groups: cliRecord.groups, path: leafPath, aliasPaths: aliasPaths, validate: func(value codec.Value) any {
       if err, bad := field.validate(value).(codec.DecodeError); bad { return err }
       return _Ok{}
     }})
@@ -130,7 +138,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
     list := strings.HasPrefix(field.kind, "list:") || keyValue
     if list { typ = reflect.TypeFor[*[]string]() }
     doc := flag.description
-    if field.hasDefault { doc += " (default " + helpDefault(field) + ")" } else if !field.optional { doc += " (required)" }
+    if field.hasDefault { doc += " (default " + helpDefault(field) + ")" } else if !field.optional { doc += " (" + helpRequired(field) + ")" }
     doc += helpChoices(field)
     tag := "optional:\"true\" descr:" + strconv.Quote(strings.TrimSpace(doc))
     if persistent { tag += " persistent:\"true\"" }
@@ -203,6 +211,8 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
       }
       config := map[string]codec.Value{}
       configNames := map[string]string{}
+      configGroups := map[string]bool{}
+      configExtras := map[string]flatConfigEntry{}
       var err error
       for _, path := range files {
         extension := strings.ToLower(filepath.Ext(path))
@@ -213,25 +223,47 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
           if err, bad := parsed.(codecs.JsonError); bad { return fmt.Errorf("%s", err.message) }
           object, ok := parsed.(codec.Value_Object)
           if !ok { if isYaml { return fmt.Errorf("CLI config must be a YAML object") }; return fmt.Errorf("CLI config must be a JSON object") }
-          values := target.(*map[string]codec.Value)
-          seen := map[string]string{}
-          for _, entry := range object.fields {
-            owner, known := configOwners[entry.name]
-            if !known { return fmt.Errorf("unknown CLI config field %q", entry.name) }
-            if first, duplicate := seen[owner]; duplicate { return fmt.Errorf("CLI config field %q is the same field as %q", entry.name, first) }
-            seen[owner] = entry.name
-            if !metadata[owner].config { return fmt.Errorf("CLI config field %q is disabled", entry.name) }
-            (*values)[owner] = entry.value
-            configNames[owner] = entry.name
+          flattened := flattenConfigFields(object.fields, schema)
+          if failure, bad := flattened.(Error); bad { return fmt.Errorf("%s: %s", failure.errors[0].path, failure.errors[0].message) }
+          for _, entry := range flattened.([]flatConfigEntry) {
+            if entry.group {
+              _, object := entry.value.(codec.Value_Object)
+              configGroups[entry.field] = object
+              for source := range config { if strings.HasPrefix(source, entry.field+".") { delete(config, source); delete(configNames, source) } }
+              for source := range configExtras { if strings.HasPrefix(source, entry.field+".") { delete(configExtras, source) } }
+              for source := range configGroups { if strings.HasPrefix(source, entry.field+".") { delete(configGroups, source) } }
+              continue
+            }
+            if entry.extra { configExtras[entry.field] = entry; continue }
+            if !metadata[entry.field].config { return fmt.Errorf("CLI config field %q is disabled", entry.key) }
+            config[entry.field] = entry.value
+            configNames[entry.field] = entry.key
           }
           return nil
         })
         if err != nil { break }
       }
       if err != nil { return Error{errors: []codec.DecodeError{{path: name, message: err.Error()}}} }
+      activeGroups := map[string]bool{}
+      active := []string{}
+      nullGroups := []string{}
+      if len(schema) != 0 { for _, group := range schema[0].groups {
+        enabled := !group.optional || configGroups[group.field]
+        parentEnabled := true
+        for parent, enabled := range activeGroups { if strings.HasPrefix(group.field, parent+".") && !enabled { parentEnabled = false } }
+        supplied := false
+        for i, field := range schema { if strings.HasPrefix(field.field, group.field+".") { _, configured := config[field.field]; if configured || !shadow.Elem().Field(i).IsNil() { supplied = true } } }
+        if configured, present := configGroups[group.field]; present && !configured && !supplied { enabled = false; if parentEnabled { nullGroups = append(nullGroups, group.field) } } else if supplied { enabled = true }
+        enabled = enabled && parentEnabled
+        activeGroups[group.field] = enabled
+        if enabled { active = append(active, group.field) }
+      } }
       jsonFields := []codec.Field{}
       failures := []codec.DecodeError{}
       for i, field := range schema {
+        enabled := true
+        for group, active := range activeGroups { if strings.HasPrefix(field.field, group+".") && !active { enabled = false } }
+        if !enabled { continue }
         if errors := collectionFailures[field.field]; len(errors) != 0 { failures = append(failures, errors...); continue }
         key := inputKey(field)
         value := shadow.Elem().Field(i)
@@ -304,6 +336,12 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
           }
         }
         jsonFields = append(jsonFields, codec.Field{name: key, value: json})
+      }
+      if !partial {
+        extras := []flatConfigEntry{}
+        for _, entry := range configExtras { extras = append(extras, entry) }
+        sort.Slice(extras, func(i, j int) bool { return extras[i].key < extras[j].key })
+        jsonFields = rebuildNestedFields(jsonFields, schema, active, nullGroups, extras)
       }
       return inputCollection{fields: jsonFields, errors: failures}
   }

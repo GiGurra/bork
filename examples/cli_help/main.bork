@@ -1,6 +1,7 @@
 import "bork/codec"
 import "bork/cli"
 use codec.Defaults
+use cli.FieldTagsEncode
 type Level = sealed { Info, Debug } derive (codec.Decode)
 type Db = { host: String = "localhost", port: Int = 5432 } derive (codec.Decode)
 type Options = {
@@ -13,7 +14,7 @@ type Options = {
   // Logging level.
   level: Level = Level.Info
   // Database settings as JSON.
-  db: Db = .{}
+  db: Db = .{} cli { flatten: false }
   // API token supplied through the environment.
   token: String
 } derive (codec.Decode)

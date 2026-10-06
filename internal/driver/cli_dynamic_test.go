@@ -250,10 +250,11 @@ func TestCLIDynamicRecordDecoders(t *testing.T) {
 	source := `import "bork/codec"
 import "bork/cli"
 use codec.Defaults
+use cli.FieldTagsEncode
 pred positive(port: Int) { port > 0 }
 pred after(value: Int, start: Int) { value > start }
 type Service = { port: Int where positive } derive (codec.Decode)
-type Options = { service: Service, start: Int, end: Int where after(start), suggest: Option[String] } derive (codec.Decode)
+type Options = { service: Service cli { flatten: false }, start: Int, end: Int where after(start), suggest: Option[String] } derive (codec.Decode)
 fn complete(request: cli.CompletionRequest, s: Scope): cli.Suggestions | cli.Error {
  service = match (request.partial.Get[Service]("service")) {
   value: Service => value

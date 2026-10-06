@@ -1,0 +1,19 @@
+import "bork/cli"
+import "bork/codec"
+import "bork/json"
+use codec.Defaults
+use cli.FieldTagsEncode
+
+type Db = { host: String = "localhost", port: Int = 5432 } derive (codec.Decode, codec.Encode)
+type Options = {
+  db: Db
+  optional: Option[Db]
+  raw: Option[Db] cli { flatten: false }
+} derive (codec.Decode, codec.Encode)
+
+fn main() {
+  match (cli.Run[Options]("nested", "Nested database options", (options, s) => println(json.Encode(options)))) {
+    Ok => {}
+    error: cli.Error => eprintln(error.Render("nested"))
+  }
+}

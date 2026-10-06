@@ -76,6 +76,7 @@ func TestCLIConfigFiles(t *testing.T) {
 
 import "bork/cli"
 use codec.Defaults
+use cli.FieldTagsEncode
 pred validPort(n: Int) { n > 0 && n < 65536 }
 pred nonempty(s: String) { s.byteLength() > 0 }
 type Nested = { enabled: Bool } derive (codec.Decode)
@@ -85,7 +86,7 @@ type Options = {
  port: Int where validPort = 8080
  verbose: Bool = true
  tags: List[String] = ["default"]
- nested: Nested = Nested { enabled: true }
+ nested: Nested = Nested { enabled: true } cli { flatten: false }
 } derive (codec.Decode)
 fn main() {
  println(cli.Run[Options]("app", "Example", (options, s) => {

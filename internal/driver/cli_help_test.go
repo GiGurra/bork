@@ -12,6 +12,7 @@ func TestCLIHelpSchema(t *testing.T) {
 import "bork/cli"
 import "bork/process"
 use codec.Defaults
+use cli.FieldTagsEncode
 use customDecoder
 type Level = sealed { Info, Debug } derive (codec.Decode)
 type Db = { host: String = "localhost", port: Int = 5432 } derive (codec.Decode)
@@ -36,8 +37,8 @@ type Options = {
  ids: List[Int] = [1, 2]
  enabled: Bool = false
  level: Level = Level.Info
- db: Db = .{}
- box: Box[Int] = .{ value: 1 }
+ db: Db = .{} cli { flatten: false }
+ box: Box[Int] = .{ value: 1 } cli { flatten: false }
  config: Option[String] = Option.Some("missing.json")
  optional: Option[Int] = Option.None
  custom: Custom = .{ value: "default" }
