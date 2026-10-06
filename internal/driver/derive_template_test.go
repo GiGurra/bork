@@ -3358,7 +3358,7 @@ fn main() {
 	if err != nil {
 		t.Fatalf("field schemas: %s, %v", output, err)
 	}
-	for _, expected := range []string{`kind: "number", optional: false`, `kind: "list:string", optional: false`, `kind: "list:number", optional: true`, `kind: "json", optional: false`} {
+	for _, expected := range []string{`kind: "number", optional: false`, `kind: "list:string", optional: false`, `kind: "list:number", optional: true`, `kind: "map:number", optional: false`} {
 		if !strings.Contains(string(output), expected) {
 			t.Fatalf("want %q in %s", expected, output)
 		}
