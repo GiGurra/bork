@@ -20,6 +20,7 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 	c.used = 0
 	c.scopes = append(c.scopes, map[string]*local{})
 	metadata := deriveMetadataTypes{c: c, locals: map[*local]deriveDescriptor{}, typeNames: typeNames}
+	symbolic := deriveSymbolicTypes{c: c, metadata: &metadata, names: typeNames, locals: map[*local]*deriveTypeTerm{}}
 	bind := func(name string, typ Type, node any) {
 		if typ == nil {
 			typ = Invalid
@@ -32,6 +33,7 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 			typ = c.resolveType(param.Type)
 		}
 		bind(param.Name, typ, param)
+		symbolic.locals[c.lookup(param.Name)] = symbolic.annotation(param.Type, nil)
 		if kind := metadata.annotation(param.Type); kind != 0 {
 			metadata.locals[c.lookup(param.Name)] = kind
 		}
@@ -110,6 +112,7 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 	if deriveConcreteType(method.Result, typeNames) {
 		result = c.resolveType(method.Result)
 	}
+	symbolicResult := symbolic.annotation(method.Result, nil)
 	var bindPattern func(syntax.Pattern)
 	bindPattern = func(pattern syntax.Pattern) {
 		switch pattern := pattern.(type) {
@@ -160,6 +163,9 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				for _, stmt := range node.Stmts {
 					walk(reflect.ValueOf(stmt), nil)
 				}
+				if node == method.Body {
+					symbolic.check(node.Tail, symbolicResult)
+				}
 				walk(reflect.ValueOf(node.Tail), want)
 				c.scopes = c.scopes[:len(c.scopes)-1]
 				return
@@ -193,6 +199,8 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 						metadata.locals[c.lookup(parameter.Name)] = kind
 					}
 				}
+				outerSymbolicResult := symbolicResult
+				symbolicResult = nil
 				outerResult := result
 				result = nil
 				if context != nil && context.Result != Ok {
@@ -200,6 +208,7 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				}
 				walk(reflect.ValueOf(node.Body), result)
 				result = outerResult
+				symbolicResult = outerSymbolicResult
 				c.scopes = c.scopes[:len(c.scopes)-1]
 				return
 			case *syntax.If:
@@ -219,9 +228,16 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				}
 				return
 			case *syntax.Return:
+				symbolic.check(node.Value, symbolicResult)
 				walk(reflect.ValueOf(node.Value), result)
 				return
 			case *syntax.Binding:
+				symbolicDeclared := symbolic.annotation(node.Type, nil)
+				symbolic.check(node.Value, symbolicDeclared)
+				symbolicActual := symbolic.expr(node.Value)
+				if node.Type != nil {
+					symbolicActual = symbolicDeclared
+				}
 				var declared Type
 				if node.Type != nil && deriveConcreteType(node.Type, typeNames) {
 					declared = c.resolveType(node.Type)
@@ -242,6 +258,7 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 					actual = declared
 				}
 				bind(node.Name, actual, node)
+				symbolic.locals[c.lookup(node.Name)] = symbolicActual
 				kind := metadata.kind(node.Value)
 				if kind == 0 {
 					kind = metadata.annotation(node.Type)
@@ -278,6 +295,10 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				}
 				metadata.checkMember(node)
 			case *syntax.Call:
+				symbolicParams, _, symbolicNames := symbolic.call(node)
+				for i, argument := range node.Args {
+					symbolic.check(argument, deriveTermArgument(node, i, symbolicParams, symbolicNames))
+				}
 				if concrete(node) {
 					check(node, want)
 					return

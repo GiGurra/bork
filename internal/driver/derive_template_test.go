@@ -2431,3 +2431,85 @@ fn main() {}`, "parameter item must be Int here, found String")
 derive fn unused(): List[Int] { result = id[Int]([1]); result }
 fn main() {}`, "")
 }
+
+func TestDeriveTemplateUnrequestedSymbolicCompositeTypes(t *testing.T) {
+	checkPreludeSource(t, `derive fn unused[T](value: List[T]): Map[String, T] { value }
+fn main() {}`, "derive expression must be Map[String, T], found List[T]")
+	checkPreludeSource(t, `derive fn unused[T](value: List[Map[String, T]]): List[List[T]] { result = value; result }
+fn main() {}`, "derive expression must be List[List[T]], found List[Map[String, T]]")
+	checkPreludeSource(t, `derive fn unused[T](value: List[T]): List[T] { value }
+fn main() {}`, "")
+	checkPreludeSource(t, `derive fn unused[T](value: T): List[T] { value }
+fn main() {}`, "")
+}
+
+func TestDeriveTemplateUnrequestedSymbolicCallTypes(t *testing.T) {
+	checkPreludeSource(t, `fn consume[A](value: Map[String, A]): String { "ok" }
+derive fn unused[T](value: List[T]): String { consume[T](value) }
+fn main() {}`, "derive expression must be Map[String, T], found List[T]")
+	checkPreludeSource(t, `fn id[A](value: A): A { value }
+derive fn unused[T](value: List[T]): Map[String, T] { result = id[List[T]](value); result }
+fn main() {}`, "derive expression must be Map[String, T], found List[T]")
+	checkPreludeSource(t, `derive fn id[A](value: A): A { value }
+derive fn unused[T](value: List[T]): Map[String, T] { result = id[List[T]](value); result }
+fn main() {}`, "derive expression must be Map[String, T], found List[T]")
+	checkPreludeSource(t, `fn consume[A](value: Map[String, A]): String { "ok" }
+derive fn unused[T](value: Map[String, T]): String { consume[T](value: value) }
+fn main() {}`, "")
+}
+
+func TestDeriveTemplateUnrequestedSymbolicUnionTypes(t *testing.T) {
+	checkPreludeSource(t, `derive fn unused[T](value: List[T] | Map[String, T]): List[T] | Map[String, T] { value }
+fn main() {}`, "")
+	checkPreludeSource(t, `derive fn unused[T](value: List[T] | Map[String, T]): Map[String, T] | List[T] { value }
+fn main() {}`, "")
+	checkPreludeSource(t, `derive fn unused[T](value: List[T]): Map[String, T] | List[T] { value }
+fn main() {}`, "")
+	checkPreludeSource(t, `derive fn unused[T](value: List[T] | Map[String, T]): Map[String, T] { value }
+fn main() {}`, "derive expression must be Map[String, T], found union[List[T], Map[String, T]]")
+}
+
+func TestDeriveTemplateUnrequestedSymbolicLiteralContext(t *testing.T) {
+	checkPreludeSource(t, `derive fn unused[T](value: T): (Int8, T) { (1, value) }
+fn main() {}`, "")
+	checkPreludeSource(t, `fn consume[A](value: (Int8, A)): String { "ok" }
+derive fn unused[T](value: T): String { consume[T]((1, value)) }
+fn main() {}`, "")
+	checkPreludeSource(t, `derive fn unused[T](value: T): (Float32, T) { (1.0, value) }
+fn main() {}`, "")
+}
+
+func TestDeriveTemplateUnrequestedSymbolicUnknownHelperActual(t *testing.T) {
+	checkPreludeSource(t, `derive fn id[A](value: A): A { value }
+derive fn unused[T](value: Seq[T]): Seq[T] { id[Seq[T]](value) }
+fn main() {}`, "")
+	checkPreludeSource(t, `type A = { name: String }
+derive fn id[A](value: A): A { value }
+derive fn unused[T](value: Seq[T]): Seq[T] { id[Seq[T]](value) }
+fn main() {}`, "")
+}
+
+func TestDeriveTemplateUnrequestedSymbolicHelperLexicalTypes(t *testing.T) {
+	dir := t.TempDir()
+	sources := map[string]string{
+		"bork.mod": "module example.com/derive\n",
+		"author/helpers.bork": `type T = { n: Int }
+derive fn Consume[A](value: T): String { "ok" }`,
+		"main.bork": `import "example.com/derive/author"
+derive fn unused[T](value: List[T]): String { author.Consume[T](value) }
+fn main() {}`,
+	}
+	for path, source := range sources {
+		path = filepath.Join(dir, path)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(source), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, _, err := Check(dir)
+	if err == nil || !strings.Contains(err.Error(), "derive expression must be T, found List[T]") {
+		t.Fatalf("expected lexical helper parameter mismatch, got %v", err)
+	}
+}
