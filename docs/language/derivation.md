@@ -5,6 +5,8 @@ The template has one target parameter and implements the class's methods.
 Each request expands the template for its target, then checks the resulting
 Bork code with the ordinary type, effect, fact and lifetime rules.
 
+## Your first template
+
 ```bork
 import "bork/shape"
 
@@ -39,6 +41,79 @@ An empty sequence produces an empty list. Ordinary `for` and `if` retain their
 runtime meaning; the prefix states which stage should select or repeat code.
 A runtime loop over descriptors reports an error offering to add `comptime`.
 
+## A small record encoder
+
+This class turns a record into `name=value` lines. It delegates each stored
+field to `Show`; the compiler infers those dictionary requirements for generic
+records. Computed fields are omitted. The staged kind check rejects targets
+that are not records.
+
+```bork
+import "bork/shape"
+
+class Lines[T] { fn lines(value: T): String }
+
+derive instance lines[T]: Lines[T] {
+  fn lines(value: T): String {
+    comptime if (shape.kind[T]() == shape.Record) {
+      parts: List[String] = [comptime for (field in shape.fields[T]()) comptime if (!field.computed)
+        field.name + "=" + toString(field.read(value))]
+      parts.join("\n")
+    } else {
+      shape.fail("Lines requires a record")
+    }
+  }
+}
+
+type Item = { name: String, count: Int } derive (Lines)
+
+fn main() {
+  println(lines(Item { name: "tea", count: 2 }))
+}
+```
+
+The program prints:
+
+```text
+name=tea
+count=2
+```
+
+String formatting comes from `Show`; this is a text format, without JSON
+escaping. For structured serialization use [bork/codec](../std/codec.md).
+To see the rejection, request the same template for a sealed type:
+
+```bork fails
+import "bork/shape"
+
+class Lines[T] { fn lines(value: T): String }
+
+derive instance lines[T]: Lines[T] {
+  fn lines(value: T): String {
+    comptime if (shape.kind[T]() == shape.Record) {
+      parts: List[String] = [comptime for (field in shape.fields[T]()) comptime if (!field.computed)
+        field.name + "=" + toString(field.read(value))]
+      parts.join("\n")
+    } else {
+      shape.fail("Lines requires a record")
+    }
+  }
+}
+
+type Choice = sealed { Yes, No } derive (Lines)
+```
+
+```text
+Lines requires a record
+```
+
+## Advanced template reference
+
+The sections below explain how `bork/shape` descriptors participate in expansion
+and validation.
+
+### Fields, facts and defaults
+
 `shape.fields[T]()` returns record fields in declaration order. A field exposes
 `name`, `positional`, `index`, `doc`, `computed`, `hasDefault`, and `tags`, the
 field's declared `go { name: "value" }` tags in order as a `List[shape.Tag]`. `field.read(value)` expands
@@ -62,6 +137,8 @@ inspecting `hasDefault` does not call it. Test `hasDefault` before using the
 provider, and exclude computed fields: those require the complete owner and
 are available through `field.read(value)`.
 
+### Sealed variants
+
 `shape.variants[T]()` describes sealed alternatives, with `name`, `doc`, `index`,
 and `fields`, plus a `positional` payload flag. Variant `doc` joins consecutive
 `//` lines immediately above the variant with newlines; it is empty when no
@@ -73,6 +150,8 @@ containing a read-only payload view. It evaluates the input once per projection.
 A payload field's `read` requires the matching variant's view; the complete
 sealed value and other variants' views do not suffice. Source code cannot
 construct or update these views. Computed fields read through the proven owner.
+
+### Validated builders
 
 `shape.builder[T]()` creates private immutable storage for a record;
 `variant.builder()` does the same for one sealed payload. A builder's `.Type`
@@ -118,6 +197,8 @@ fact's position in its source group; whole-owner facts have an empty field.
 Missing and duplicate inputs have no predicate obligation. This diagnostic
 metadata cannot establish a proof or construct an unchecked owner.
 
+### Staged selection and helpers
+
 `shape.kind[T]()` selects `shape.Record`, `shape.Sealed`, or
 `shape.Other` in `comptime if` or `comptime match`. `shape.name[T]()` and
 `shape.owner[T]()` expose the target's source name and defining package path.
@@ -152,6 +233,8 @@ it belongs to the type's or class's package, and other packages import the
 resulting instance with `use`. The class name itself is not an instance import.
 
 The [derive_labels example](../../examples/derive_labels/README.md) is runnable.
+
+### Instance metadata
 
 Instances and templates can associate typed metadata with the selected dictionary.
 Declare `metadata Type = expression` alongside the methods. The expression is
