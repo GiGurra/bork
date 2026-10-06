@@ -430,6 +430,9 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		if operation := l.info.shapeValidations[x]; operation != nil {
 			return l.shapeValidate(x, at, operation)
 		}
+		if l.info.shapeExhaustions[x] {
+			return &CallBuiltin{expr: at, Builtin: BuiltinPanic, Name: "shape.exhausted", Args: []Expr{&Const{expr: expr{pos: x.Pos, typ: String}, Value: constant.MakeString("unreachable sealed projection continuation")}}}
+		}
 		if project := l.info.shapeProjects[x]; project != nil {
 			return l.shapeProjection(x, at, project)
 		}

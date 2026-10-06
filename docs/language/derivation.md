@@ -177,3 +177,9 @@ Tuple encoding uses the same template's array branch; `shape.positional[T]()`
 identifies those ordered slots. Implicit tuple dictionaries retain their normal
 per-slot instance selection. `codec.Decode` and tuple decoding still use their
 existing compiler paths during the source migration.
+
+`shape.exhausted[T](value)` closes a staged sequence of sealed projections.
+The compiler requires an immutable owner parameter and a preceding unconditional
+projection for every declared variant whose `Some` arm cannot continue. A
+projection under a runtime condition, or of another value, does not count. The
+operation returns `Never`, so complete sealed encoders need no fallback value.

@@ -333,7 +333,7 @@ derive instance encodeShape[T]: Encode[T] {
             Option.None => {}
           }
         }
-        Value.Null
+        shape.exhausted[T](x)
       }
       shape.Other => shape.fail("Encode requires a record or sealed target")
     }

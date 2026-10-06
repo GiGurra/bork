@@ -64,3 +64,6 @@ fn positional[T](): Bool unsafe go { panic("shape.positional requires a derive t
 // metadata reads associated metadata from the selected instance. C is a class
 // handle, and M is the resolved type key. Missing metadata returns None.
 fn metadata[T, C, M](): Option[M] unsafe go { panic("shape.metadata requires compiler dictionary selection") }
+
+// exhausted closes a complete sequence of returning projections of one owner.
+fn exhausted[T](value: T): Never unsafe go { panic("shape.exhausted requires certified derive projections") }

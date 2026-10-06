@@ -3342,3 +3342,57 @@ fn main() {
 		}
 	}
 }
+
+func TestDeriveTemplateExhaustion(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+class Render[T] { fn render(x: T): String }
+derive instance renderer[T]: Render[T] {
+ fn render(x: T): String {
+  comptime for (variant in shape.variants[T]()) {
+   match (variant.project(x)) {
+    Option.Some(payload) => { _ = payload; return variant.name }
+    Option.None => {}
+   }
+  }
+  shape.exhausted[T](x)
+ }
+}
+type Choice = sealed { One { n: Int }, Empty } derive(Render)
+fn main() { println(render(Choice.One { n: 1 })); println(render(Choice.Empty)) }`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "One\nEmpty\n" {
+		t.Fatalf("exhaustion: %s, %v", output, err)
+	}
+	for _, tc := range []struct{ name, body, want string }{
+		{"missing variant", `comptime for (variant in shape.variants[T]()) { comptime if (variant.name == "One") { match (variant.project(x)) { Option.Some(payload) => { _ = payload; return variant.name }, Option.None => {} } } }`, "has not handled variant Empty"},
+		{"nonreturning arm", `comptime for (variant in shape.variants[T]()) { match (variant.project(x)) { Option.Some(payload) => { _ = payload }, Option.None => {} } }`, "has not handled variant One"},
+		{"earlier guarded arm", `comptime for (variant in shape.variants[T]()) { match (variant.project(x)) { Option.Some(payload: variant.Type where enabled(allowed)) => { _ = payload }, Option.Some(payload) => { _ = payload; return variant.name }, Option.None => {} } }`, "has not handled variant One"},
+		{"conditional projection", `if (allowed) { comptime for (variant in shape.variants[T]()) { match (variant.project(x)) { Option.Some(payload) => { _ = payload; return variant.name }, Option.None => {} } } }`, "has not handled variant One"},
+		{"different owner", `comptime for (variant in shape.variants[T]()) { match (variant.project(other)) { Option.Some(payload) => { _ = payload; return variant.name }, Option.None => {} } }`, "has not handled variant One"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			checkPreludeSource(t, `import "bork/shape"
+pred enabled[U](value: U, flag: Bool) { _ = value; flag }
+class Render[T] { fn render(x: T, other: T, allowed: Bool): String }
+derive instance renderer[T]: Render[T] {
+ fn render(x: T, other: T, allowed: Bool): String {
+  _ = other
+  _ = allowed
+ `+tc.body+`
+ shape.exhausted[T](x)
+ }
+}
+type Choice = sealed { One, Empty } derive(Render)
+fn main() {}`, tc.want)
+		})
+	}
+	checkPreludeSource(t, `import "bork/shape"
+type Choice = sealed { Empty }
+fn stop(x: Choice): Never { shape.exhausted[Choice](x) }
+fn main() {}`, "inside a derive template")
+}

@@ -322,6 +322,7 @@ type Info struct {
 	shapeBuilderLayouts    map[*Record]*ShapeConstruction
 	shapeBuilderPlans      map[string]*ShapeConstruction
 	shapeProjects          map[*syntax.Call]*shapeProjection
+	shapeExhaustions       map[*syntax.Call]bool
 	shapeViewReads         map[*syntax.Selector]*shapeViewRead
 	shapeViews             map[*Variant]*Record
 	shapeReadOwners        map[*syntax.Selector]Type
@@ -1823,6 +1824,9 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 }
 
 func (c *checker) call(e *syntax.Call, want Type) Type {
+	if result, handled := c.shapeExhaustionCall(e); handled {
+		return result
+	}
 	if result, handled := c.shapeMetadataCall(e); handled {
 		return result
 	}
