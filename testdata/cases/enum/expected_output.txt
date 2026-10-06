@@ -1,0 +1,17 @@
+[Color.Red, Color.DarkBlue, Color.Teal]
+DARK_BLUE
+cyan
+Option.Some(Color.DarkBlue)
+Option.Some(Color.Teal)
+Option.None
+Color.Red
+UnknownName { name: "purple", expected: ["RED", "DARK_BLUE", "cyan"] }
+Option.Some(0) Option.Some(1) Option.Some(2)
+true
+Option.Some(Info { names: ["RED", "DARK_BLUE", "cyan"], docs: ["Warm color.", "", ""], hasFallback: false })
+[Box.Full, Box.Empty]
+[Box.Full, Box.Empty]
+Option.Some(Mode.SlowMode)
+fast-mode
+Color.Red
+DecodeError { path: ".type", message: "unknown variant \"purple\" of Color; expected one of RED, DARK_BLUE, cyan" }
