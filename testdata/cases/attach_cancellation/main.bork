@@ -6,8 +6,8 @@ import "bork/signal"
 
 fn echo(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError | Cancelled {
   match (net.ReadLine(conn, 1000)) {
-    line: String => { written = net.WriteLine(conn, line, 1000)?; echo(conn, s) }
-    end: net.Eof => checkpoint(s)
+    line: String => { _ = net.WriteLine(conn, line, 1000)?; echo(conn, s) }
+    _: net.Eof => checkpoint(s)
     stopped: Cancelled => stopped
     error: IoError | ParseError => IoError { path: "echo", message: toString(error) }
   }
@@ -15,7 +15,7 @@ fn echo(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError |
 
 fn roundTrip(conn: net.Connection, text: String) uses net + state + clock: String {
   match (net.WriteLine(conn, text, 1000)) {
-    n: Int => match (net.ReadLine(conn, 1000)) {
+    _: Int => match (net.ReadLine(conn, 1000)) {
       line: String => line
       _ => "read failed"
     }
