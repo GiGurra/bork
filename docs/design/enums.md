@@ -52,16 +52,17 @@ fn main() {
 A strict service keeps the same shared type and narrows it with a fact alias:
 
 ```bork
-pred known(c: Color): Bool { !(c is .Other(_)) }
-type KnownColor = Color where known
+type KnownColor = Color where enum.known
 
-// json.Decode[KnownColor] rejects "purple" with a DecodeError.
+// json.Decode[KnownColor] rejects "purple":
+// .: unknown name "purple" of Color; expected one of Red, Green, Blue
 ```
 
 ## Terms
 
 - **Enum-shaped**: a sealed type whose variants all have no payload, except
-  at most one fallback. Generic parameters are allowed if no variant uses them.
+  at most one fallback. Phantom type parameters are allowed;
+  `enum.values[Box[Int]]()` lists that instantiation's values.
 - **External name**: the one string a variant has outside code. It is the
   source name unless the type's naming policy or a variant override from
   [codec naming](codec-naming.md) changes it. Codec, CLI, env and enum tooling
@@ -83,8 +84,15 @@ Today `Color.Red` encodes as `{"type":"Red"}`; decode already accepts `"Red"`.
   their fieldless variants (`{"type":"Empty"}`), so one type has one shape.
 
 This is a wire change for existing programs that encode fieldless-only types.
-Every other ecosystem in the comparison writes enums as bare strings, and
-bork is pre-1.0, so the note recommends changing it without an opt-out.
+Bare strings are what Jackson, kotlinx, serde, enumeratum-circe, protobuf JSON
+and TypeScript unions produce (circe's default sealed-trait derivation writes
+`{"Red":{}}`). Bork is pre-1.0, so the note recommends changing it without an
+opt-out.
+
+YAML: a lowercase policy can produce wire names such as `true`, `null` or
+`on`, which a YAML reader turns into Bool or Null. Such a wire name is a
+compile-time error on the variant ("not a plain YAML string; add a name").
+That is simpler than decoding scalars by their text.
 
 ### 2. Opting in: a typed tag on the variant
 
@@ -96,9 +104,13 @@ Other(String) codec { fallback: true }
 
 - No new keyword; the same group already carries `aliases` and name overrides.
 - It is explicit: a variant named `Unknown` gets no special meaning.
-- The checker exposes it to templates as `variant.fallback: Bool` on
-  `shape.Variant`, a closed, typed descriptor property like `computed`.
-  Codec and enum templates read the descriptor; neither names the other.
+- Templates read it like any tag: `variant.tagged[codec.VariantTags]()`
+  ([codec naming](codec-naming.md)). `bork/enum` imports `bork/codec` for
+  this, since external names and aliases are codec concepts too. There is no
+  separate `shape`-level flag.
+- The checker validates the `codec` tag group's fallback rules (below), as #408
+  already does for names and aliases. That is the one place the compiler knows
+  the flag.
 
 Alternatives considered (rejected):
 
@@ -112,15 +124,16 @@ Alternatives considered (rejected):
 ### 3. Rules for the fallback
 
 - At most one fallback per sealed type. A second is an error on that variant.
-- Payload:
-  - `String` (one positional slot) on an enum-shaped type. It holds the input
-    name verbatim; encode writes it back verbatim.
-  - `codec.Value` (one positional slot) on any sealed type. It holds the whole
-    unknown input (the tagged object, or the bare string) and encode writes
-    that value back. This gives open tagged unions the same pass-through.
-  - Anything else is an error that lists the two allowed forms.
-- The fallback must not have named fields, defaults, a variant `where`, or
-  its own wire name or aliases.
+- Payload: exactly one positional `String` slot, on an enum-shaped type. It
+  holds the input name verbatim; encode writes it back verbatim. Anything else
+  is an error. (A `codec.Value` fallback for tagged unions is a later step;
+  see below.)
+- The fallback must not have named fields, defaults, a user-written variant
+  `where`, or its own wire name or aliases. Its only fact is the generated one
+  in section 4.
+- Inputs: a bare string, or the legacy `{"type": "purple"}` object with no
+  other members, falls back. Any other shape (a number, an object with extra
+  members) is a decode error, so nothing is silently dropped.
 - Order of lookup on decode: external names, then aliases, then fallback.
   Matching is exact (case-sensitive), as in codec naming.
 - A fallback never appears in `enum.values`, CLI choices or completions.
@@ -131,10 +144,11 @@ Alternatives considered (rejected):
 `"Red"` and come back as `Color.Red`: same wire, different value.
 
 Recommendation: the compiler adds an invariant to the fallback variant: its
-`String` payload is not an external name or alias of the type. Construction
+`String` payload is not one of the type's wire names or aliases, as computed
+from the type's naming policy and the variants' `codec` tags. Construction
 follows the usual fact rules, so a literal `Color.Other("Red")` is a compile
 error and a runtime string needs a guard or `enum.parse`. Decoding can never
-violate it. `codec.Value` payloads get the matching rule on their tag.
+violate it.
 
 The cheaper alternative is to normalize: `enum.parse` and decode never produce
 it, and code that constructs it gets what it wrote. That is simpler but leaves
@@ -147,10 +161,16 @@ wire.
   it. That is the point; adding a fallback lists every match that must change.
 - Strict decoding stays the default: a type without a fallback rejects unknown
   names with `unknown variant "purple" of Color; expected one of Red, Green, Blue`.
-- A type with a fallback is lenient everywhere it is decoded. A consumer that
-  must reject uses a fact alias (`Color where known`, above); derived decoders
-  already check facts. No per-call decode options are needed.
-- Known gap: a match on `KnownColor` still needs the `.Other` arm, because
+- A type with a fallback is lenient wherever codec decodes it: JSON, YAML,
+  CSV, env, SQL and config files. The CLI is the exception (section 7).
+- A consumer that must reject uses a fact alias with the generic predicate
+  `enum.known` (`Color where enum.known`, above). Derived decoders already
+  check facts. The error keeps the "expected one of" list.
+- Gap: a strict service can narrow a top-level value or a field of its own
+  type. It cannot narrow `Order.color` inside a DTO it shares with lenient
+  services without a second DTO type. If that matters, the fix is a selectable
+  strict decoder instance (`use`), not a per-call option (human decision 4).
+- Gap: a match on `KnownColor` still needs the `.Other` arm, because
   exhaustiveness does not use facts. That is a separate, general feature.
 
 ### 6. Enum tooling: `bork/enum`
@@ -158,6 +178,8 @@ wire.
 A new std package with one class and a source derivation template built on
 `shape.variants`. It applies to enum-shaped types; any other target fails with
 `shape.fail("enum.Enum requires variants without payloads (plus one fallback)")`.
+A type with private (lower-case) variants is also rejected, since `values`
+and `byName` would hand them to other packages.
 
 ```bork
 class Enum[T] {
@@ -166,18 +188,21 @@ class Enum[T] {
   fn byName(name: String): Option[T]        // external names and aliases only
   fn parse(name: String): T | UnknownName   // byName, then the fallback
   fn index(value: T): Option[Int]           // declaration position; None for the fallback
-  fn hasFallback(): Bool
 }
 type UnknownName = { name: String, expected: List[String] }
+pred known[T: Enum](value: T) { ... }       // value is not the fallback
 ```
 
 - `byName` is strict even when a fallback exists; `parse` is total for a type
-  with a fallback. `isKnown(name)` is `byName(name).isSome()`, so it is not a
-  separate method.
+  with a fallback. `isKnown(name)` is `byName(name).isSome()`, and
+  `hasFallback` is in `enum.Info`, so neither is a separate method.
+- `known` needs predicates with class bounds; if the checker can't do that
+  yet, the template generates a per-type predicate instead.
 - `index` is the declaration position. It is **not** a stable id: reordering
   variants changes it. Stable numeric ids (protobuf-style) are deferred until a
   binary format needs them.
-- The template also publishes `metadata enum.Info` (names, docs, fallback flag),
+- The template also publishes `metadata enum.Info` (names, docs, whether there
+  is a fallback),
   so runtime code and other templates can read it with `shape.metadata`
   without a value of the type.
 - Methods are called the class way (`enum.values[Color]()`, `enum.name(c)`),
@@ -186,12 +211,14 @@ type UnknownName = { name: String, expected: List[String] }
 ### 7. Codec and CLI integration
 
 - The codec templates handle enum-shaped targets themselves (bare string
-  in and out, fallback), reading `shape.variants` and `variant.fallback`.
+  in and out, fallback), reading `shape.variants` and the `codec` tags.
   `codec.Decode` does not require `enum.Enum`.
 - The derived decoder of an enum-shaped type publishes
-  `FieldSchema { kind: "string", choices: [...] }`: a new `choices` list of
-  external names with variant docs, fallback excluded.
-- bork/cli (boacli) reads `choices` for completion, help and strict
+  `FieldSchema { kind: "string", variants: [...] }`: a new
+  `List[codec.VariantSchema { name, doc }]` of wire names and variant docs,
+  fallback excluded. (`DefaultSchema.choices` already means something else.)
+  Variant docs need a new `doc` property on `shape.Variant`.
+- bork/cli reads `variants` for completion, help and strict
   validation: `--level debug` with names from the same policy as JSON.
 - On the CLI an unknown name is rejected even when the type has a fallback:
   a person typing a flag wants an error, not pass-through. A field can opt
@@ -204,16 +231,17 @@ type UnknownName = { name: String, expected: List[String] }
 | Scala enumeratum | `values`, `withName` (throws), `withNameOption`, case-insensitive variants | No built-in; manual `Unknown(value)` entry and custom codec | Only with hand-written codec |
 | Scala 3 enums | `values`, `valueOf` (throws), `ordinal` | None | No |
 | circe | `deriveEnumerationCodec` | Decode failure | No |
-| Rust serde | No built-in values list (strum adds `iter`, `FromStr`) | `#[serde(other)]` on a unit variant | No: the name is dropped |
+| Rust serde | No built-in values list (strum adds `iter`, `FromStr`) | `#[serde(other)]` on a unit variant drops the name; `#[serde(untagged)] Other(String)` (serde 1.0.181+) keeps it | Only with `untagged` |
 | Protobuf | Numbers and names in descriptors | proto3/open enums keep the number; Java exposes `UNRECOGNIZED`; closed enums move it to unknown fields | Yes, by number |
 | Kotlin | `entries`, `valueOf` (throws), `ordinal` | kotlinx: `coerceInputValues` uses a default; Jackson: `@JsonEnumDefaultValue` | No |
 | TypeScript | String unions; values only via `as const` arrays | `"red" \| (string & {})` widens the type | Yes, but nothing is checked |
-| **Bork (proposed)** | `enum.values`, `byName`, `parse`, `name`, `index` | Typed `fallback` variant holding `String` or `codec.Value` | Yes, by name; strictness via fact alias |
+| **Bork (proposed)** | `enum.values`, `byName`, `parse`, `name`, `index` | Typed `fallback` variant holding the `String` | Yes, by name; strictness via fact alias |
 
 What bork takes from each:
 
 - enumeratum: separate strict lookup (`byName`) and parse; no exceptions.
-- serde: the variant-level marker, but keeping the value, which serde drops.
+- serde: the variant-level marker, keeping the value as `untagged` does, but
+  with one explicit flag instead of a general untagged mechanism.
 - protobuf: the open-vs-closed distinction, decided per type, with pass-through.
   Bork carries the name rather than a number, because JSON/YAML carry names.
 - Kotlin/Scala 3: declaration-order `values` and an `index`, documented as
@@ -225,15 +253,19 @@ What bork takes from each:
 
 1. **Wire form**: enum-shaped types encode as bare strings; decode errors list
    the expected names. Golden and doc updates.
-2. **Fallback**: `variant.fallback` on shape descriptors, checker rules
-   (one fallback, payload forms), codec encode/decode, the known-name invariant.
-   Depends on codec naming's tag groups landing first; if they slip, this PR
-   adds the `codec { fallback: true }` group alone, with the same syntax.
-3. **`bork/enum`**: class, template, `enum.Info` metadata, docs page
-   (`docs/std/enum.md`), example.
-4. **Schema choices**: `FieldSchema.choices` for bork/cli to consume.
-5. Later, separately: `codec.Value` fallback for payload-carrying sealed types,
-   if (2) gets long.
+2. **Fallback**: checker rules for the `codec` fallback tag (one fallback,
+   payload, YAML-safe names), codec encode/decode, the known-name invariant.
+   Depends on codec naming's tag groups (#408). If those slip, this step
+   brings the tag-group grammar itself: parser, fmt, LSP and editor grammars,
+   following docs/syntax-changes.md.
+3. **`bork/enum`**: class, template, `enum.known`, `enum.Info` metadata, docs
+   page (`docs/std/enum.md`), example.
+4. **Schema variants**: `shape.Variant.doc` and `FieldSchema.variants` for
+   bork/cli to consume.
+5. Later: a `codec.Value` fallback for payload-carrying sealed types. It holds
+   the whole unknown object and re-encodes it. A known tag with a bad payload
+   is still an error, and an object without `type` or a non-object is not
+   captured.
 
 Each step has golden cases for decode, encode, round trip, fallback,
 fact-alias strictness and diagnostics, plus `TestDocSnippets` coverage.
@@ -246,6 +278,7 @@ fact-alias strictness and diagnostics, plus `TestDocSnippets` coverage.
 - Fact-aware exhaustiveness (`KnownColor` matches without `.Other`).
 - Member syntax such as `Color.values()`.
 - Fallbacks for records' unknown fields (codec naming's unknown-members topic).
+- Enum-keyed maps (`Map[Color, V]`); codec maps take `String` keys today.
 
 ## Decisions for the human
 
@@ -255,8 +288,9 @@ fact-alias strictness and diagnostics, plus `TestDocSnippets` coverage.
    different spelling.
 3. **Fallback holding a known name**: compiler invariant (recommended) or
    leave it to the programmer.
-4. **Strict consumers via fact alias** (recommended) rather than per-call
-   decode options.
-5. **`codec.Value` fallback** for payload-carrying sealed types: in scope now,
-   or later.
+4. **Strict consumers via fact alias** (`Color where enum.known`,
+   recommended). Accept the gap for shared DTOs for now, or add a selectable
+   strict decoder instance too.
+5. **`codec.Value` fallback** for payload-carrying sealed types: later
+   (recommended), or in this epic.
 6. **CLI rejects unknown names** even for types with a fallback (recommended).
