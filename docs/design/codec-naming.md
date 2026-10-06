@@ -172,7 +172,7 @@ type TypeTags = {
   omit: Omit = Omit.Never
 }
 type FieldTags = { name: Option[String] = Option.None, aliases: List[String] = [], omit: Option[Omit] = Option.None }
-type VariantTags = { name: Option[String] = Option.None, aliases: List[String] = [] }
+type VariantTags = { name: Option[String] = Option.None, aliases: List[String] = [], fallback: Bool = false }
 type Unknown = sealed { Ignore, Reject }
 type Omit = sealed { Never, None, Default, NoneOrDefault }
 ```
@@ -229,8 +229,16 @@ forward compatibility. To keep the two designs consistent:
 
 - Lookup by name for wire purposes uses the variant's wire name and aliases.
   Bork source names stay available for code.
-- A fallback variant receives a tag that matches no wire name or alias. It
-  re-encodes the tag it received, unchanged.
+- Each variant has one external name, its wire name. Codec, CLI and enum
+  tooling (`enum.name`, `byName`) all use it.
+- The fallback variant is marked with `Unknown(String) codec { fallback: true }`.
+  It receives any tag that matches no wire name or alias, and re-encodes that
+  tag unchanged. These are compile-time errors: more than one fallback, a
+  fallback whose payload is not a single String, and a name or aliases on the
+  fallback.
+- A sealed type whose variants all have no payload encodes as a bare string
+  (`"red"`), not `{"type":"red"}`. That is the `enums` design. Decode already
+  accepts a bare string tag, and the naming policy applies to the string.
 - CLI choices for an enum field show the wire names.
 
 ## Schema changes
