@@ -77,3 +77,7 @@ install missing modules: run `bork deps download` first.
 
 `bork clean` preserves the shared Go module cache. `bork clean --all` also drops
 Bork's script resolution graphs. Use `go clean -modcache` to clear Go's cache.
+
+---
+
+Previous: [Packages and type classes](packages.md) · Next: [Compile-time evaluation](comptime.md) · [All pages](../README.md#the-language)

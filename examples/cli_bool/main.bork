@@ -1,0 +1,31 @@
+import "bork/cli"
+import "bork/codec"
+import "bork/process"
+use codec.Defaults
+
+// Bool switches can be omitted; an explicit default still takes precedence.
+type Options = {
+  verbose: Bool
+  color: Bool = true
+  trace: Option[Bool]
+} derive (codec.Decode)
+
+fn main() {
+  match (cli.Run[Options]("switches", "Bool defaults", (options, s) => {
+    println(s"verbose=${options.verbose}, color=${options.color}, trace=${options.trace}")
+  })) {
+    error: cli.Error => { eprintln(error.Render("switches")); process.Exit(2) }
+    Ok => {}
+  }
+}
+
+test "an omitted switch is false" {
+  match (cli.Parse[Options]("switches", "", [])) {
+    options: Options => {
+      assertEqual(options.verbose, false)
+      assertEqual(options.color, true)
+      assertEqual(options.trace, Option.None)
+    }
+    other => { panic(s"Expected options, got $other") }
+  }
+}

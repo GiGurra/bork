@@ -102,6 +102,8 @@ A single file works too: `bork run hello.bork`, or `bork script hello.bork` for 
 - [The language](docs/README.md#the-language): one page per area.
 - [The bork command](docs/cli.md): every command and setting.
 - [Examples](docs/examples.md): runnable programs, from `wc` to an HTTP service.
+- [Quick references](docs/README.md#quick-references): cheat sheet, cookbook, FAQ, and language comparisons.
+- For agents: [llms.txt](https://gigurra.github.io/bork/llms.txt) indexes the reader docs; [llms-full.txt](https://gigurra.github.io/bork/llms-full.txt) contains them in full.
 - [Contributing and design notes](docs/contributing.md).
 
 ## License

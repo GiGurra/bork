@@ -77,9 +77,9 @@ def navigation(root, repo_url, revision):
             if url == "std/README.md":
                 packages = [{"Overview": url}]
                 for package, package_url in index_links((docs / url).read_text()):
-                    # The table is the API index. Contributor links and bork/build's
+                    # The table and cookbook links are the API index. Contributor links and bork/build's
                     # alias into the language guide remain links in the overview.
-                    if package.startswith("bork/") and package_url.endswith(".md"):
+                    if package_url.endswith(".md") and not package_url.startswith("../"):
                         packages.append({package: "std/" + package_url})
                 section.append({label: packages})
             else:

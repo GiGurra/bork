@@ -81,3 +81,7 @@ Inline directives are errors anywhere under a `bork.mod`, including regular sour
 ## Startup and caching
 
 Scripts use the normal [compile cache](../cli.md#the-compile-cache), enabled by default on Linux and macOS. A warm run reuses checked/generated results and the Go executable build. Changes to the script, module configuration or captured build inputs invalidate the applicable cached result. Program arguments and runtime I/O still run every time.
+
+---
+
+Next: [Basics](basics.md) · [All pages](../README.md#the-language)

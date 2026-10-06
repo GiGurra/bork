@@ -255,4 +255,4 @@ cross-package provider tuples.
 
 ---
 
-Previous: [Typed interpolation](interpolators.md) · Next: [Calling Go](go-interop.md) · [All pages](../README.md#the-language)
+Previous: [Channels](channels.md) · Next: [Libraries](libraries.md) · [All pages](../README.md#the-language)
