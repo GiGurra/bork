@@ -64,7 +64,7 @@ fn compilerSelectLike(): Int { 3 }
 // break and continue in an arm control the loop around the select.
 fn sum(s: Scope, numbers: Channel[Int], stop: Channel[Bool]) uses state: Int {
   total = atom(0)
-  for (_ in Seq.range(0, 100)) {
+  for {
     _ = select {
       n = numbers.receive(s) => match (n) {
         x: Int => {

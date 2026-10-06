@@ -193,6 +193,34 @@ An arm is `ch.receive(s) => body` or `ch.send(s, x) => body`, optionally naming 
 
 The body is ordinary code of the function around it: it can `return`, use `?`, or `break` and `continue` a loop around the `select`. The `select` gives the value of the arm that ran, or `Cancelled` if the scope it waits in is cancelled first, so its type is the arms' types and `Cancelled`. When arms give different types, say which type you want, for example as the function's result.
 
+A `for { }` around a `select` handles operations as they come, until an arm breaks out:
+
+```bork
+fn main() {
+  scope s {
+    jobs = channel[String](s, 3)
+    _ = jobs.send(s, "build")
+    _ = jobs.send(s, "test")
+    for {
+      _ = select {
+        j = jobs.receive(s) => match (j) {
+          job: String => println(s"job $job")
+          Closed => break
+        }
+        _ => break
+      }
+    }
+    println("idle")
+  }
+}
+```
+
+```text
+job build
+job test
+idle
+```
+
 `select` is a keyword only where an expression starts and `{` follows, so `select` is still usable as a name.
 
 ### Timeouts and tickers

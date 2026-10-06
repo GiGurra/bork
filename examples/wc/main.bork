@@ -28,7 +28,7 @@ fn add(a: Counts, b: Counts): Counts {
   Counts { lines: a.lines + b.lines, words: a.words + b.words, bytes: a.bytes + b.bytes }
 }
 
-fn padLeft(text: String, width: Int): String {
+fn padLeft(text: String, width: Int) uses tailrec: String {
   if (text.byteLength() >= width) { text } else { padLeft(" " + text, width) }
 }
 
