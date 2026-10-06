@@ -38,13 +38,14 @@ fn demo() uses io + net + clock + state: Ok | sql.Error | IoError | http.Overloa
   scope app {
     // The list is intentionally out of dependency order. Config and Database
     // each build once; the server stops before its database closes.
-    service = assemble[Service](app, ServiceProviders)?
+    service = assemble[Service](app, newService, ServiceProviders)?
     response = http.Get(s"http://${http.Address(service.server)}/", app)?
     println(response.body)
   }
 }
 
-ServiceProviders = (newService, openDb, newConfig)
+// newService retains a scope-bound argument, so assembly takes it inline.
+ServiceProviders = (openDb, newConfig)
 
 fn main() {
   match (demo()) {
@@ -60,7 +61,7 @@ fn main() {
 test "a fixture can replace configuration" {
   scope app {
     fixture = Config { database: ":memory:", address: "127.0.0.1:0" }
-    assembled = assemble[Service](app, (ServiceProviders.0, ServiceProviders.1, () => fixture))
+    assembled = assemble[Service](app, newService, (ServiceProviders.0, () => fixture))
     match (assembled) {
       service: Service => match (http.Get(s"http://${http.Address(service.server)}/", app)) {
         response: http.Response => assertEqual(response.body, "hello from assembled bork")
