@@ -247,8 +247,11 @@ forward compatibility. To keep the two designs consistent:
 - The fallback variant is marked with `Unknown(String) codec { fallback: true }`.
   It receives any tag that matches no wire name or alias, and re-encodes that
   tag unchanged. These are compile-time errors: more than one fallback, a
-  fallback whose payload is not a single String, and a name or aliases on the
-  fallback.
+  name or aliases on the fallback, and a fallback whose payload is not a
+  single String (for enum-shaped types) or a single `codec.Value` (for
+  payload-carrying types, pending the human; see
+  [enums.md](https://github.com/GiGurra/bork/pull/409)). The type's invariant
+  says that a fallback's String is never a wire name or alias.
 - A sealed type whose variants all have no payload encodes as a bare string
   (`"red"`), not `{"type":"red"}`. That is the `enums` design. Decode already
   accepts a bare string tag, and the naming policy applies to the string.
