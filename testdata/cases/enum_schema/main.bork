@@ -1,0 +1,59 @@
+import "bork/codec"
+use codec.Defaults
+
+type Color = sealed {
+  Other(String) codec { fallback: true }
+  // Warm color.
+  Red codec { aliases: ["red", "legacy"] }
+  DarkBlue
+} derive (codec.Decode)
+type Mode[T] = sealed { SiteAdmin codec { name: "root", aliases: ["admin"] } } codec { naming: codec.Naming.Kebab } derive (codec.Decode)
+type Mixed = sealed { Empty, Some(Int) } derive (codec.Decode)
+
+type Custom = sealed { HiddenOne; HiddenTwo }
+instance customDecoder: codec.Decode[Custom] {
+  metadata codec.FieldSchema = codec.FieldSchema {
+    kind: "string", optional: false,
+    variants: [codec.VariantSchema { name: "manual", doc: "Selected decoder.", aliases: ["legacy"] }]
+  }
+  fn decode(input: codec.Value): Custom | codec.DecodeError {
+    match (input) {
+      codec.Value.String { value } => if (value == "manual" || value == "legacy") { Custom.HiddenOne } else { codec.DecodeError { path: "", message: "unknown manual choice" } }
+      _ => codec.DecodeError { path: "", message: "expected manual name" }
+    }
+  }
+}
+type Opaque = sealed { Hidden }
+instance opaqueDecoder: codec.Decode[Opaque] {
+  fn decode(input: codec.Value): Opaque | codec.DecodeError { _ = input; Opaque.Hidden }
+}
+type Options = {
+  color: Color
+  optional: Option[Color]
+  colors: List[Color]
+  optionalColors: Option[List[Color]]
+  mode: Mode[Int]
+  mixed: Mixed
+  plain: String
+  custom: Custom
+  customList: List[Custom]
+  opaque: Opaque
+} derive (codec.Decode)
+
+fn main() {
+  println(codec.FieldInfo[Color]())
+  println(codec.FieldInfo[Option[Color]]())
+  println(codec.FieldInfo[List[Color]]())
+  println(codec.FieldInfo[Option[List[Color]]]())
+  println(codec.FieldInfo[Mode[String]]())
+  println(codec.FieldInfo[Mixed]())
+  println(codec.FieldInfo[Custom]())
+  println(codec.FieldInfo[Option[Custom]]())
+  println(codec.FieldInfo[Opaque]())
+  match (codec.Schema[Options]()) {
+    Option.Some(schema) => for (field in schema.fields) {
+      println(field.name, field.kind, field.optional, field.variants)
+    }
+    Option.None => println("missing record metadata")
+  }
+}

@@ -1,0 +1,19 @@
+FieldSchema { kind: "string", optional: false, variants: [VariantSchema { name: "RED", doc: "Warm color.", aliases: ["red", "legacy"] }, VariantSchema { name: "DARK_BLUE", doc: "", aliases: [] }] }
+FieldSchema { kind: "string", optional: true, variants: [VariantSchema { name: "RED", doc: "Warm color.", aliases: ["red", "legacy"] }, VariantSchema { name: "DARK_BLUE", doc: "", aliases: [] }] }
+FieldSchema { kind: "list:string", optional: false, variants: [VariantSchema { name: "RED", doc: "Warm color.", aliases: ["red", "legacy"] }, VariantSchema { name: "DARK_BLUE", doc: "", aliases: [] }] }
+FieldSchema { kind: "list:string", optional: true, variants: [VariantSchema { name: "RED", doc: "Warm color.", aliases: ["red", "legacy"] }, VariantSchema { name: "DARK_BLUE", doc: "", aliases: [] }] }
+FieldSchema { kind: "string", optional: false, variants: [VariantSchema { name: "root", doc: "", aliases: ["admin"] }] }
+FieldSchema { kind: "json", optional: false, variants: [] }
+FieldSchema { kind: "string", optional: false, variants: [VariantSchema { name: "manual", doc: "Selected decoder.", aliases: ["legacy"] }] }
+FieldSchema { kind: "string", optional: true, variants: [VariantSchema { name: "manual", doc: "Selected decoder.", aliases: ["legacy"] }] }
+FieldSchema { kind: "json", optional: false, variants: [] }
+color string false [VariantSchema { name: "RED", doc: "Warm color.", aliases: ["red", "legacy"] }, VariantSchema { name: "DARK_BLUE", doc: "", aliases: [] }]
+optional string true [VariantSchema { name: "RED", doc: "Warm color.", aliases: ["red", "legacy"] }, VariantSchema { name: "DARK_BLUE", doc: "", aliases: [] }]
+colors list:string false [VariantSchema { name: "RED", doc: "Warm color.", aliases: ["red", "legacy"] }, VariantSchema { name: "DARK_BLUE", doc: "", aliases: [] }]
+optionalColors list:string true [VariantSchema { name: "RED", doc: "Warm color.", aliases: ["red", "legacy"] }, VariantSchema { name: "DARK_BLUE", doc: "", aliases: [] }]
+mode string false [VariantSchema { name: "root", doc: "", aliases: ["admin"] }]
+mixed json false []
+plain string false []
+custom string false [VariantSchema { name: "manual", doc: "Selected decoder.", aliases: ["legacy"] }]
+customList list:string false [VariantSchema { name: "manual", doc: "Selected decoder.", aliases: ["legacy"] }]
+opaque json false []
