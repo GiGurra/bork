@@ -1,0 +1,6 @@
+import "bork/codec"
+import again "bork/codec"
+type Row = { value: Int codec { name: "first" } again { name: "second" } }
+type Empty = {} codec {} again {}
+type Mode = sealed { First codec { name: "A" } again { name: "B" }, Second }
+fn main() {}

@@ -1,0 +1,3 @@
+main.bork:3:49: tag package bork/codec is declared twice (codec and again)
+main.bork:4:26: tag package bork/codec is declared twice (codec and again)
+main.bork:5:48: tag package bork/codec is declared twice (codec and again)
