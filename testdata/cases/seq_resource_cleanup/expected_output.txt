@@ -1,0 +1,41 @@
+resource break before 0 0
+1
+Ok
+resource break after 1 1 1
+resource take before 0 0
+[1]
+Ok
+resource take after 1 1 1
+resource first before 0 0
+Option.Some(1)
+Ok
+resource first after 1 1 1
+resource error before 0 0
+1
+Stopped {}
+resource error after 1 1 1
+resource full before 0 0
+[1, 2, 3]
+Ok
+resource full after 1 1 1
+file break before 0 0
+one
+Ok
+file break after 1 1 1
+file take before 0 0
+["one"]
+Ok
+file take after 1 1 1
+file first before 0 0
+Option.Some("one")
+Ok
+file first after 1 1 1
+file error before 0 0
+one
+Stopped {}
+file error after 1 1 1
+file full before 0 0
+["one", "two", "three"]
+Ok
+file full after 1 1 1
+Ok

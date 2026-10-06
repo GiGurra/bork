@@ -1,0 +1,117 @@
+import "bork/encoding"
+import "bork/fs"
+
+type Handle = resource
+type Stopped = {}
+
+fn openHandle(s: Scope, closed: Atom[Int]) uses state: Handle unsafe go {
+  return Handle{handle: int64(1), owner: s.Own(func() {
+    closed.updateFn(func(n int64) int64 { return n + 1 })
+  })}
+}
+fn readHandle(handle: Handle): Int unsafe go { return handle.handle.(int64) }
+
+// The handle is opened inside the generator and stays live across each yield.
+fn numbers(opened: Atom[Int], closed: Atom[Int], scopeClosed: Atom[Int]): Seq[Int] uses state {
+  generate[Int] {
+    scope producer {
+      onClose(producer, () => { _ = update(scopeClosed, n => n + 1) })
+      handle = openHandle(producer, closed)
+      _ = update(opened, n => n + 1)
+      for (n in range(0, 3)) {
+        yield n + readHandle(handle)
+      }
+    }
+  }
+}
+
+// Observe the actual file close, keeping fs.Open's original cleanup intact.
+// Counting only scope exit would not prove the file descriptor was closed.
+fn observeClose(file: fs.File, closed: Atom[Int]) uses io + state unsafe go {
+  import "os"
+  import "errors"
+  raw := file.handle.(*os.File)
+  closeFile := file.owner.closeFn
+  file.owner.closeFn = func() {
+    closeFile()
+    if _, err := raw.Stat(); !errors.Is(err, os.ErrClosed) {
+      panic("file was not closed")
+    }
+    closed.updateFn(func(n int64) int64 { return n + 1 })
+  }
+}
+
+// Stream from the open file without owning or closing it here.
+fn readLines(file: fs.File) uses io: Seq[String] uses io unsafe go {
+  import "os"
+  import "bufio"
+  raw := file.handle.(*os.File)
+  return _Seq[string]{run: func(yield func(string) bool) {
+    scanner := bufio.NewScanner(raw)
+    for scanner.Scan() {
+      if !yield(scanner.Text()) { return }
+    }
+    if err := scanner.Err(); err != nil { panic(err) }
+  }}
+}
+
+// The generator owns its file in a local scope, rather than the consumer's.
+fn fileLines(path: String, opened: Atom[Int], closed: Atom[Int], scopeClosed: Atom[Int]): Seq[String | fs.Error] uses io + state {
+  generate[String | fs.Error] {
+    scope producer {
+      onClose(producer, () => { _ = update(scopeClosed, n => n + 1) })
+      match (fs.Open(path, producer)) {
+        file: fs.File => {
+          _ = update(opened, n => n + 1)
+          observeClose(file, closed)
+          for (line in readLines(file)) { yield line }
+        }
+        error: fs.Error => { yield error }
+      }
+    }
+  }
+}
+
+fn stop(): Ok | Stopped { Stopped {} }
+fn consume[T](mode: String, xs: Seq[T] uses io + state) uses io + state: Ok | Stopped {
+  match (mode) {
+    "break" => { for (value in xs) { println(value); break } }
+    "take" => { println(xs.take(1).toList()) }
+    "first" => { println(xs.first()) }
+    "error" => { for (value in xs) { println(value); stop()? } }
+    _ => { println(xs.toList()) }
+  }
+  Ok
+}
+
+fn testFiles() uses io + state: Ok | fs.Error {
+  scope app {
+    directory = fs.TempDir(app, pattern: "generator-cleanup-")?
+    path = fs.Join([fs.DirectoryPath(directory), "lines.txt"])
+    fs.Write(path, encoding.Utf8("one\ntwo\nthree\n"))?
+    for (mode in ["break", "take", "first", "error", "full"]) {
+      opened = atom(0)
+      closed = atom(0)
+      scopeClosed = atom(0)
+      lines = fileLines(path, opened, closed, scopeClosed)
+      println("file", mode, "before", current(opened), current(closed))
+      println(consume(mode, lines))
+      // Check before app exits: its cleanup cannot hide generator leaks.
+      println("file", mode, "after", current(opened), current(closed), current(scopeClosed))
+    }
+  }
+  Ok
+}
+
+fn main() {
+  for (mode in ["break", "take", "first", "error", "full"]) {
+    opened = atom(0)
+    closed = atom(0)
+    scopeClosed = atom(0)
+    values = numbers(opened, closed, scopeClosed)
+    println("resource", mode, "before", current(opened), current(closed))
+    println(consume(mode, values))
+    println("resource", mode, "after", current(opened), current(closed), current(scopeClosed))
+  }
+  println(testFiles())
+}
