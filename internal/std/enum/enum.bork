@@ -34,6 +34,7 @@ derive fn CheckEnum[T](): Ok {
 derive fn EnumInfo[T](): Info {
   comptime if (!codec.EnumShape[T]()) {
     shape.fail("enum.Enum requires variants without payloads")
+    panic("invalid enum derivation")
   } else {
     CheckEnum[T]()
     Info {
@@ -41,7 +42,6 @@ derive fn EnumInfo[T](): Info {
       docs: [comptime for (variant in shape.variants[T]()) variant.doc],
       hasFallback: false
     }
-
   }
 }
 
@@ -58,15 +58,16 @@ derive instance enumShape[T]: Enum[T] {
   fn values(): List[T] {
     comptime if (!codec.EnumShape[T]()) {
       shape.fail("enum.Enum requires variants without payloads")
+      panic("invalid enum derivation")
     } else {
       CheckEnum[T]()
       [comptime for (variant in shape.variants[T]()) BuildValue[T](variant)]
-
     }
   }
   fn name(value: T): String {
     comptime if (!codec.EnumShape[T]()) {
       shape.fail("enum.Enum requires variants without payloads")
+      panic("invalid enum derivation")
     } else {
       CheckEnum[T]()
       comptime for (variant in shape.variants[T]()) {
@@ -76,36 +77,36 @@ derive instance enumShape[T]: Enum[T] {
         }
       }
       shape.exhausted[T](value)
-
     }
   }
   fn byName(input: String): Option[T] {
     comptime if (!codec.EnumShape[T]()) {
       shape.fail("enum.Enum requires variants without payloads")
+      panic("invalid enum derivation")
     } else {
       CheckEnum[T]()
       comptime for (variant in shape.variants[T]()) {
         if (input == codec.VariantWireName[T](variant)) { return Option.Some(BuildValue[T](variant)) }
       }
       Option.None
-
     }
   }
   fn parse(input: String): T | UnknownName {
     comptime if (!codec.EnumShape[T]()) {
       shape.fail("enum.Enum requires variants without payloads")
+      panic("invalid enum derivation")
     } else {
       CheckEnum[T]()
       comptime for (variant in shape.variants[T]()) {
         if (input == codec.VariantWireName[T](variant)) { return BuildValue[T](variant) }
       }
       UnknownName { name: input, expected: [comptime for (variant in shape.variants[T]()) codec.VariantWireName[T](variant)] }
-
     }
   }
   fn index(value: T): Option[Int] {
     comptime if (!codec.EnumShape[T]()) {
       shape.fail("enum.Enum requires variants without payloads")
+      panic("invalid enum derivation")
     } else {
       CheckEnum[T]()
       comptime for (variant in shape.variants[T]()) {
@@ -115,7 +116,6 @@ derive instance enumShape[T]: Enum[T] {
         }
       }
       shape.exhausted[T](value)
-
     }
   }
 }

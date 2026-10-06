@@ -1,0 +1,23 @@
+import "bork/codec"
+import "bork/enum"
+import "bork/json"
+use codec.Defaults
+
+// A hand-written instance can classify a payload variant as unknown.
+// Derived payload/fallback support is a subsequent enum implementation step.
+type Color = sealed { Red; Other(String) }
+instance colors: enum.Enum[Color] {
+  fn values(): List[Color] { [Color.Red] }
+  fn name(value: Color): String { match (value) { .Red => "RED"; .Other(input) => input } }
+  fn byName(input: String): Option[Color] { if (input == "RED") { Option.Some(Color.Red) } else { Option.None } }
+  fn parse(input: String): Color | enum.UnknownName { if (input == "RED") { Color.Red } else { Color.Other(input) } }
+  fn index(value: Color): Option[Int] { match (value) { .Red => Option.Some(0); .Other(_) => Option.None } }
+}
+type KnownColor = Color where enum.Known derive (codec.Decode)
+
+fn main() {
+  println(enum.Known(Color.Red))
+  println(enum.Known(Color.Other("purple")))
+  println(json.Decode[KnownColor]("\"Red\""))
+  println(json.Decode[KnownColor]("{\"type\":\"Other\",\"values\":[\"purple\"]}"))
+}

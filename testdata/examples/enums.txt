@@ -1,0 +1,7 @@
+[Color.Red, Color.DarkBlue, Color.Teal]
+DARK_BLUE
+Option.Some(Color.DarkBlue)
+UnknownName { name: "purple", expected: ["RED", "DARK_BLUE", "cyan"] }
+Option.Some(2)
+"DARK_BLUE"
+Color.DarkBlue
