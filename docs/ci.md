@@ -162,3 +162,5 @@ the cache fixture compiler retains `cacheTestGate=enabled`.
 CI runs in one concurrency group per workflow and ref, cancelling in-progress
 runs on every ref including `main`: a newer push supersedes older runs, so only
 the latest commit is tested.
+
+<!-- Temporary docs-only CI verification; this draft PR will be closed. -->
