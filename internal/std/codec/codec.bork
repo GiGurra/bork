@@ -324,7 +324,7 @@ derive instance encodeShape[T]: Encode[T] {
         comptime for (variant in shape.variants[T]()) {
           comptime if (!variant.positional) {
             comptime for (field in variant.fields) {
-              comptime if (FieldWireName[T](field) == "type") {
+              comptime if (wireNamesHave(FieldNames[T](field), "type")) {
                 shape.fail("named sealed payload field 'type' collides with the codec discriminator")
               }
             }
@@ -448,21 +448,25 @@ derive fn DecodeRecord[T](json: Value): T | DecodeError {
   } else {
     match (json) {
       Value.Object { fields } => {
+        match (checkInputNames(fields, [comptime for (field in shape.fields[T]()) FieldNames[T](field)], [], RejectUnknown[T]())) {
+          error: DecodeError => return error
+          Ok => {}
+        }
         _ = fields
         steps: List[(initial.Type) => initial.Type | DecodeError] = [comptime for (field in shape.fields[T]())
           (state: initial.Type) => {
             comptime if (field.computed) {
-              if (inputField(fields, FieldWireName[T](field)).isSome()) {
-                DecodeError { path: s".${FieldWireName[T](field)}", message: "computed field is read-only" }
+              if (inputNamedField(fields, FieldNames[T](field)).isSome()) {
+                DecodeError { path: s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}", message: "computed field is read-only" }
               } else { state }
             } else {
-              input: Option[Value] | DecodeError = match (inputField(fields, FieldWireName[T](field))) {
+              input: Option[Value] | DecodeError = match (inputNamedField(fields, FieldNames[T](field))) {
                 Option.Some(value) => Option.Some(value)
                 Option.None => {
                   comptime if (field.hasDefault) { Option.None } else {
                     info = shape.metadata[field.RawType, Decode, FieldSchema]().getOr(FieldSchema { kind: "json", optional: false })
                     if (info.optional) { Option.Some(Value.Null) } else {
-                      DecodeError { path: s".${FieldWireName[T](field)}", message: "is missing" }
+                      DecodeError { path: s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}", message: "is missing" }
                     }
                   }
                 }
@@ -471,7 +475,7 @@ derive fn DecodeRecord[T](json: Value): T | DecodeError {
                 error: DecodeError => error
                 Option.None => state
                 Option.Some(value) => match (decode[field.RawType](value)) {
-                  error: DecodeError => atPath(error, s".${FieldWireName[T](field)}")
+                  error: DecodeError => atPath(error, s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}")
                   decoded: field.RawType => state.set(field, decoded)
                 }
               }
@@ -485,7 +489,7 @@ derive fn DecodeRecord[T](json: Value): T | DecodeError {
         match (assembled) {
           error: DecodeError => error
           pending: initial.Type => match (pending.finish()) {
-            error: shape.ValidationError => DecodeError { path: remapWirePath(error.path, [comptime for (field in shape.fields[T]())(field.name, FieldWireName[T](field))]), message: error.message }
+            error: shape.ValidationError => DecodeError { path: remapWirePath(error.path, [comptime for (field in shape.fields[T]())(field.name, inputWireName(fields, FieldWireName[T](field), FieldNames[T](field)))]), message: error.message }
             value: T => value
           }
         }
@@ -523,12 +527,17 @@ derive fn DecodeSealed[T](json: Value): T | DecodeError {
       comptime for (variant in shape.variants[T]()) {
         comptime if (!variant.positional) {
           comptime for (field in variant.fields) {
-            comptime if (FieldWireName[T](field) == "type") {
+            comptime if (wireNamesHave(FieldNames[T](field), "type")) {
               shape.fail("named sealed payload field 'type' collides with the codec discriminator")
             }
           }
         }
-        if (name == VariantWireName[T](variant)) {
+        if (VariantNames[T](variant).includes(name)) {
+          comptime if (variant.positional) {
+            match (checkInputNames(fields, [], ["type", "values"], RejectUnknown[T]())) { error: DecodeError => return error, Ok => {} }
+          } else {
+            match (checkInputNames(fields, [comptime for (field in variant.fields) FieldNames[T](field)], ["type"], RejectUnknown[T]())) { error: DecodeError => return error, Ok => {} }
+          }
           initial = variant.builder()
           comptime if (variant.positional) {
             items: List[Value] | DecodeError = match (inputField(fields, "values")) {
@@ -570,17 +579,17 @@ derive fn DecodeSealed[T](json: Value): T | DecodeError {
             steps: List[(initial.Type) => initial.Type | DecodeError] = [comptime for (field in variant.fields)
               (state: initial.Type) => {
                 comptime if (field.computed) {
-                  if (inputField(fields, FieldWireName[T](field)).isSome()) {
-                    DecodeError { path: s".${FieldWireName[T](field)}", message: "computed field is read-only" }
+                  if (inputNamedField(fields, FieldNames[T](field)).isSome()) {
+                    DecodeError { path: s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}", message: "computed field is read-only" }
                   } else { state }
                 } else {
-                  input: Option[Value] | DecodeError = match (inputField(fields, FieldWireName[T](field))) {
+                  input: Option[Value] | DecodeError = match (inputNamedField(fields, FieldNames[T](field))) {
                     Option.Some(value) => Option.Some(value)
                     Option.None => {
                       comptime if (field.hasDefault) { Option.None } else {
                         info = shape.metadata[field.RawType, Decode, FieldSchema]().getOr(FieldSchema { kind: "json", optional: false })
                         if (info.optional) { Option.Some(Value.Null) } else {
-                          DecodeError { path: s".${FieldWireName[T](field)}", message: "is missing" }
+                          DecodeError { path: s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}", message: "is missing" }
                         }
                       }
                     }
@@ -589,7 +598,7 @@ derive fn DecodeSealed[T](json: Value): T | DecodeError {
                     error: DecodeError => error
                     Option.None => state
                     Option.Some(value) => match (decode[field.RawType](value)) {
-                      error: DecodeError => atPath(error, s".${FieldWireName[T](field)}")
+                      error: DecodeError => atPath(error, s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}")
                       decoded: field.RawType => state.set(field, decoded)
                     }
                   }
@@ -603,7 +612,7 @@ derive fn DecodeSealed[T](json: Value): T | DecodeError {
             return match (assembled) {
               error: DecodeError => error
               pending: initial.Type => match (pending.finish()) {
-                error: shape.ValidationError => DecodeError { path: remapWirePath(error.path, [comptime for (field in variant.fields)(field.name, FieldWireName[T](field))]), message: error.message }
+                error: shape.ValidationError => DecodeError { path: remapWirePath(error.path, [comptime for (field in variant.fields)(field.name, inputWireName(fields, FieldWireName[T](field), FieldNames[T](field)))]), message: error.message }
                 value: T => value
               }
             }

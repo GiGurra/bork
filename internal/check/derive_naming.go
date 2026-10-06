@@ -25,6 +25,85 @@ func (p *deriveExpansion) namingCall(call *syntax.Call) (any, bool) {
 		return nil, false
 	}
 	switch member {
+	case "wireNamesHave":
+		if len(call.Args) != 2 {
+			return nil, false
+		}
+		value, known := p.eval(call.Args[0])
+		list, ok := value.(metadataList)
+		target, targetKnown := p.eval(call.Args[1])
+		name, nameOK := target.(string)
+		if !known || !ok || !targetKnown || !nameOK {
+			return nil, false
+		}
+		for _, item := range list.items {
+			if !p.tick(call.Pos) {
+				return nil, false
+			}
+			if item == name {
+				return true, true
+			}
+		}
+		return false, true
+	case "wireNames", "wireAliasesAllowed":
+		if len(call.Args) != 2 {
+			return nil, false
+		}
+		first, firstKnown := p.eval(call.Args[0])
+		second, secondKnown := p.eval(call.Args[1])
+		if !firstKnown || !secondKnown {
+			return nil, false
+		}
+		if member == "wireNames" {
+			name, ok := first.(string)
+			aliases, aliasesOK := second.(metadataList)
+			if !ok || !aliasesOK || !p.charge(call.Pos, len(aliases.items)+len(name)) {
+				return nil, false
+			}
+			return metadataList{items: append([]any{name}, aliases.items...), element: String}, true
+		}
+		aliases, ok := first.(metadataList)
+		variant, variantOK := second.(bool)
+		if !ok || !variantOK {
+			return nil, false
+		}
+		for _, item := range aliases.items {
+			name, ok := item.(string)
+			if !ok || !p.charge(call.Pos, len(name)) {
+				return nil, false
+			}
+			if name == "" || name == "<<" || variant && !naming.YAMLString(name) {
+				return false, true
+			}
+		}
+		return true, true
+	case "wireNamespacesUnique":
+		if len(call.Args) != 1 {
+			return nil, false
+		}
+		value, known := p.eval(call.Args[0])
+		namespaces, ok := value.(metadataList)
+		if !known || !ok {
+			return nil, false
+		}
+		seen := map[string]bool{}
+		for _, item := range namespaces.items {
+			names, ok := item.(metadataList)
+			if !ok {
+				return nil, false
+			}
+			for _, item := range names.items {
+				name, ok := item.(string)
+				if !ok || !p.charge(call.Pos, len(name)) {
+					return nil, false
+				}
+				if seen[name] {
+					return false, true
+				}
+				seen[name] = true
+			}
+		}
+		return true, true
 	case "wireNameAllowed", "variantNameAllowed":
 		if len(call.Args) != 1 {
 			return nil, false
@@ -35,30 +114,6 @@ func (p *deriveExpansion) namingCall(call *syntax.Call) (any, bool) {
 			return nil, false
 		}
 		return name != "" && name != "<<" && (member != "variantNameAllowed" || naming.YAMLString(name)), true
-	case "wireNamesUnique":
-		if len(call.Args) != 1 {
-			return nil, false
-		}
-		value, known := p.eval(call.Args[0])
-		names, ok := value.(metadataList)
-		if !known || !ok {
-			return nil, false
-		}
-		seen := map[string]bool{}
-		for _, item := range names.items {
-			name, ok := item.(string)
-			if !ok {
-				return nil, false
-			}
-			if !p.charge(call.Pos, len(name)) {
-				return nil, false
-			}
-			if seen[name] {
-				return false, true
-			}
-			seen[name] = true
-		}
-		return true, true
 	case "Words":
 		if len(call.Args) != 1 {
 			return nil, false
