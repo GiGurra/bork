@@ -101,4 +101,5 @@ def on_page_markdown(markdown, page, config, files):
 def on_post_build(config):
     write_outputs(Path(config["site_dir"]), Path(config.config_file_path).parent,
                   config["site_url"], config["repo_url"],
-                  os.environ.get("BORK_DOCS_REVISION", "main"))
+                  os.environ.get("BORK_DOCS_REVISION", "main"),
+                  config.get("extra", {}).get("llms_source_overrides"))

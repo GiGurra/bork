@@ -73,6 +73,24 @@ class LlmsTests(unittest.TestCase):
                 self.assertIn(f"]({url})", outputs["llms.txt"])
             self.assertIn(f"{REPO}/blob/revision/README.md", outputs["llms.txt"])
 
+    def test_expanded_source_overrides(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            pages = self.make_sources(root)
+            expanded = '# Full builtin API\n\n' + ('All function signatures.\n' * 2852)
+            expanded += '\n[Types](../language/types.md#records)\n'
+            overrides = {"docs/std/builtins.md": expanded}
+            outputs = gen_llms.generate(root, SITE, REPO, "revision", overrides)
+            full = outputs["llms-full.txt"]
+            self.assertEqual(full.count('All function signatures.\n'), 2852)
+            self.assertIn(f'[Types]({SITE}language/types/#records)', full)
+            self.assertIn(f'[Full builtin API]({SITE}std/builtins/)', outputs["llms.txt"])
+            self.assertEqual((root / 'docs/std/builtins.md').read_text(), pages['docs/std/builtins.md'])
+            self.assertNotIn('All builtins.\n', full)
+            self.assertEqual(outputs, gen_llms.generate(root, SITE, REPO, "revision", overrides))
+            with self.assertRaisesRegex(ValueError, 'not reader pages'):
+                gen_llms.generate(root, SITE, REPO, "revision", {'docs/std/typo.md': expanded})
+
     def test_link_spellings_and_code_preservation(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -109,9 +127,13 @@ class LlmsTests(unittest.TestCase):
             root = Path(temp)
             self.make_sources(root)
             hook = Path(__file__).with_name("docs_site.py").resolve()
+            provider = root / "expanded_builtin.py"
+            provider.write_text('def on_config(config):\n'
+                                '    config["extra"]["llms_source_overrides"] = {"docs/std/builtins.md": "# Builtins\\n\\nExpanded API for agents.\\n"}\n'
+                                '    return config\n', encoding="utf-8")
             config = root / "mkdocs.yml"
             config.write_text(f'site_name: Fixture\nsite_url: {SITE}\nrepo_url: {REPO}\n'
-                              f'hooks:\n  - {hook}\nvalidation:\n  nav:\n    omitted_files: ignore\n'
+                              f'hooks:\n  - {hook}\n  - {provider}\nvalidation:\n  nav:\n    omitted_files: ignore\n'
                               'markdown_extensions:\n  - fenced_code\n  - toc\n', encoding="utf-8")
             built = subprocess.run([sys.executable, "-m", "mkdocs", "build", "--strict", "-f", str(config)],
                                    capture_output=True, text=True)
@@ -134,6 +156,7 @@ class LlmsTests(unittest.TestCase):
                         html = Links()
                         html.feed(target.read_text(encoding="utf-8"))
                         self.assertIn(unquote(parsed.fragment), html.ids, url)
+            self.assertIn("Expanded API for agents.", (root / "site/llms-full.txt").read_text())
             self.assertFalse((root / "docs/llms.txt").exists())
 
 

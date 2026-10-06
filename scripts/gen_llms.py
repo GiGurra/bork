@@ -92,16 +92,25 @@ def rewrite_links(markdown, page, root, site_url, repo_url, revision):
     return "".join(result)
 
 
-def generate(root, site_url, repo_url, revision):
-    """Return the index and untruncated full reference, in stable source order."""
+def generate(root, site_url, repo_url, revision, source_overrides=None):
+    """Return complete references; build hooks may supply expanded source Markdown.
+
+    Override keys are repository-relative reader paths, such as
+    docs/std/builtins.md. Each value replaces the complete source page.
+    """
+    overrides = source_overrides or {}
+    pages = reader_pages(root)
+    unknown = overrides.keys() - {page.relative_to(root).as_posix() for page in pages}
+    if unknown:
+        raise ValueError(f"source overrides are not reader pages: {sorted(unknown)}")
     index = ["# bork\n\n> A programming language for backend services.\n\n",
              f"[Complete reader reference]({site_url.rstrip('/')}/llms-full.txt)\n\n## Reader pages\n\n"]
     full = ["# bork complete reader reference\n\n",
             "Generated from the canonical reader documentation. Each source section is included in full.\n\n"]
-    for page in reader_pages(root):
-        source = page.read_text(encoding="utf-8")
-        title = next((line[2:].strip() for line in source.splitlines() if line.startswith("# ")), page.stem)
+    for page in pages:
         relative = page.relative_to(root).as_posix()
+        source = overrides[relative] if relative in overrides else page.read_text(encoding="utf-8")
+        title = next((line[2:].strip() for line in source.splitlines() if line.startswith("# ")), page.stem)
         url = resolve_link(page.name, page, root, site_url, repo_url, revision)
         index.append(f"- [{title}]({url})\n")
         full.append(f"---\n\n## Source: {relative}\n\n[{title}]({url})\n\n")
@@ -110,8 +119,8 @@ def generate(root, site_url, repo_url, revision):
     return {"llms.txt": "".join(index), "llms-full.txt": "".join(full)}
 
 
-def write_outputs(output, root, site_url, repo_url, revision):
-    artifacts = generate(root, site_url, repo_url, revision)
+def write_outputs(output, root, site_url, repo_url, revision, source_overrides=None):
+    artifacts = generate(root, site_url, repo_url, revision, source_overrides)
     output.mkdir(parents=True, exist_ok=True)
     for name, content in artifacts.items():
         (output / name).write_text(content, encoding="utf-8", newline="\n")
