@@ -208,7 +208,6 @@ func checkLoadedProgramTracked(loaded *loadedSources, module *goModuleInputs, co
 	if diags.Len() > 0 {
 		return nil, &DiagError{Diags: diags}
 	}
-	info.PublishDerivePlans()
 	return &compiledProgram{files: files, info: info, inputs: loaded.Inputs, module: module, assets: assets, context: context, evaluator: foreignEvaluation}, nil
 }
 

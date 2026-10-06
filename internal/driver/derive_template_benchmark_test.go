@@ -24,12 +24,9 @@ type Item = {
 	}
 	source.WriteString("} derive(Labels)\n")
 	prefix := source.String()
-	for _, mode := range []string{"cold", "unchanged", "body-edit", "body-edit-uncached"} {
+	for _, mode := range []string{"cold", "unchanged", "body-edit"} {
 		b.Run(mode, func(b *testing.B) {
-			if mode == "body-edit-uncached" {
-				b.Setenv("BORK_CACHE", "off")
-			}
-			newSession := func() *Session { return &Session{plans: &derivePlanCache{entries: map[string][]byte{}}} }
+			newSession := NewSession
 			dir := b.TempDir()
 			path := filepath.Join(dir, "main.bork")
 			write := func(n int) {
@@ -59,7 +56,6 @@ type Item = {
 				}
 			}
 			stats := session.Stats()
-			b.ReportMetric(float64(stats.DerivePlanHits), "plan-hits")
 			b.ReportMetric(float64(stats.ProofMisses), "native-batches")
 		})
 	}
@@ -83,11 +79,8 @@ derive instance labels[T]: Labels[T] {
 	for i := 0; i < 200; i++ {
 		fmt.Fprintf(&models, "type Item%d = { id: Int, name: String, enabled: Bool, tags: List[String], retries: Int = 3, comment: Option[String] = Option.None } derive(codec.Encode, codec.Decode, Labels)\n", i)
 	}
-	for _, mode := range []string{"emit-cached", "emit-uncached", "watch-cached", "watch-uncached"} {
+	for _, mode := range []string{"emit", "watch"} {
 		b.Run(mode, func(b *testing.B) {
-			if strings.HasSuffix(mode, "uncached") {
-				b.Setenv("BORK_CACHE", "off")
-			}
 			dir := b.TempDir()
 			if err := os.WriteFile(filepath.Join(dir, "models.bork"), []byte(models.String()), 0600); err != nil {
 				b.Fatal(err)
@@ -98,7 +91,7 @@ derive instance labels[T]: Labels[T] {
 					b.Fatal(err)
 				}
 			}
-			session := &Session{plans: &derivePlanCache{entries: map[string][]byte{}}, watch: strings.HasPrefix(mode, "watch")}
+			session := &Session{watch: mode == "watch"}
 			compile := func() {
 				var err error
 				if session.watch {
@@ -121,8 +114,6 @@ derive instance labels[T]: Labels[T] {
 				compile()
 			}
 			stats := session.Stats()
-			b.ReportMetric(float64(stats.DerivePlanHits-before.DerivePlanHits)/float64(b.N), "plan-hits/op")
-			b.ReportMetric(float64(stats.DerivePlanDeclines-before.DerivePlanDeclines)/float64(b.N), "plan-declines/op")
 			b.ReportMetric(float64(stats.ProofMisses-before.ProofMisses)/float64(b.N), "native-batches/op")
 		})
 	}

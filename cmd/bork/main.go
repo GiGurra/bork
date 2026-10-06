@@ -321,7 +321,7 @@ func main() {
 					if err != nil {
 						fail(err)
 					}
-					fmt.Printf("Removed %d results, %d derive plans, %d staged trees and %d temporary files (%d bytes).\n", report.Results, report.Plans, report.Stages, report.Temporaries, report.Bytes)
+					fmt.Printf("Removed %d results, %d staged trees and %d temporary files (%d bytes).\n", report.Results, report.Stages, report.Temporaries, report.Bytes)
 					if report.Dependencies != 0 {
 						fmt.Printf("Removed %d resolved script dependency graphs.\n", report.Dependencies)
 					}

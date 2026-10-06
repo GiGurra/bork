@@ -251,12 +251,7 @@ type Info struct {
 	// Structural source plans belong to request-wide state, including
 	// specializations discovered while temporary initializer scopes restore
 	// their checker state.
-	deriveTupleEncoders   map[string]*ClassInstance
-	DerivePlans           DerivePlanStats
-	derivePlanStore       DerivePlanStore
-	derivePlanPending     []pendingDerivePlan
-	derivePlanSource      string
-	derivePlanSourceReady bool
+	deriveTupleEncoders map[string]*ClassInstance
 	// Funcs holds the functions visible to the root package by name: its
 	// own, and the prelude's that it does not replace.
 	Funcs map[string]*Func
@@ -555,9 +550,6 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 		},
 	}
 	c.appliedWhere = map[*syntax.TypeExpr]bool{}
-	if provider, ok := goTypes.(derivePlanProvider); ok {
-		c.info.derivePlanStore = provider.DerivePlanStore()
-	}
 	c.declarePackages(files, root)
 	c.goOpaque = map[string]Type{}
 	c.goTypes = loadGoTypes(files, goTypes)
