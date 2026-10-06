@@ -229,6 +229,14 @@ func (s *sourceIndex) walk(x check.Expr) {
 	if x == nil {
 		return
 	}
+	// A select expression's lowered code calls prelude helpers at the
+	// positions of what was written; describe what was written instead.
+	if call, ok := x.(*check.Call); ok && call.Func.Prelude && strings.HasPrefix(call.Func.Decl.Name, "compilerSelect") {
+		for _, a := range call.Args {
+			s.walk(a)
+		}
+		return
+	}
 	token, i := s.token(x.TokenPos())
 	if i < 0 {
 		at := x.TokenPos()

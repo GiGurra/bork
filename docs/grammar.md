@@ -8,7 +8,7 @@
 - **Shebang:** a first-line `#!...` is retained as a comment and selects script mode; other lines cannot contain a shebang.
 - **Comments:** `// to end of line` and `/* block */`. They are kept by the lexer and formatter; consecutive `//` lines directly above a field also become its doc comment.
 - **Identifiers:** a letter followed by letters, digits, or `_`. Identifiers cannot start with `_`, which is reserved for the compiler.
-- **Keywords:** `fn`, `pred`, `type`, `sealed`, `match`, `if`, `else`, `return`, `true`, `false`, `unsafe`, `where`, `and`, `or`, `trust`, `rule`, `generate`, `yield`, `for`, `break`, `continue`. `import`, `use`, `class`, `instance`, `test`, `instances`, `scope`, `with`, `resource`, `private`, `derive`, `uses`, `nothing`, `in`, `ambient`, `logged`, `propagated`, `needs`, and `providers` are keywords only where they start a declaration, a scope block (or its policy), a with block (`with (` where an expression starts), a resource type, a derive list or declaration, a list of effects or needs, or the scope a parameter belongs to, and can otherwise be used as names (a function named `with` cannot be called as `with(...)` where an expression starts). `is` is contextual between a value and a pattern, at comparison precedence; declarations, calls and selectors named `is` remain valid. `comptime` is contextual only before `{` where an expression starts. `lazy` is contextual before a local or package binding name, and before a record field name. `async` is a keyword only at a local binding head, `async(scopeExpression) name = expr`; ordinary calls and names `async` remain legal. `mock` is a keyword only at the start of a statement or after a binding's `=`, followed by a name.
+- **Keywords:** `fn`, `pred`, `type`, `sealed`, `match`, `if`, `else`, `return`, `true`, `false`, `unsafe`, `where`, `and`, `or`, `trust`, `rule`, `generate`, `yield`, `for`, `break`, `continue`. `import`, `use`, `class`, `instance`, `test`, `instances`, `scope`, `with`, `resource`, `private`, `derive`, `uses`, `nothing`, `in`, `ambient`, `logged`, `propagated`, `needs`, and `providers` are keywords only where they start a declaration, a scope block (or its policy), a with block (`with (` where an expression starts), a resource type, a derive list or declaration, a list of effects or needs, or the scope a parameter belongs to, and can otherwise be used as names (a function named `with` cannot be called as `with(...)` where an expression starts). `is` is contextual between a value and a pattern, at comparison precedence; declarations, calls and selectors named `is` remain valid. `select` is a keyword only where an expression starts and `{` follows. `comptime` is contextual only before `{` where an expression starts. `lazy` is contextual before a local or package binding name, and before a record field name. `async` is a keyword only at a local binding head, `async(scopeExpression) name = expr`; ordinary calls and names `async` remain legal. `mock` is a keyword only at the start of a statement or after a binding's `=`, followed by a name.
 - **`_`** on its own is the wildcard pattern.
 - **Integer literals:** decimal (`10_000`), hex (`0xFF`), binary (`0b1010`), or octal (`0o17`), with `_` allowed between digits, as in Go.
 - **Float literals:** `1.5`, `2e10`, `1.5e-3`. A `.` must be followed by a digit (so `5.copy(...)` is a selector).
@@ -122,7 +122,7 @@ Argument   = [ Ident ":" ] Expr .
 
 Primary    = IntLit | FloatLit | RuneLit | StringLit | InterpString | TypedInterp | "true" | "false" | Ident
            | "." [ Ident ]
-           | "(" Expr ")" | TupleLit | Block | If | Match | Return | Lambda | ListLit | MapLit | ScopeExpr | Generate | Yield | For | LoopControl | WithExpr .
+           | "(" Expr ")" | TupleLit | Block | If | Match | Select | Return | Lambda | ListLit | MapLit | ScopeExpr | Generate | Yield | For | LoopControl | WithExpr .
 (* A bare leading "." must be followed by RecordLit: .{ field: value }.
    .Variant and .Variant { field: value } need an expected sealed type;
    .{ field: value } needs an expected record type. Variant patterns may also omit their owner using scrutinee context. *)
@@ -146,6 +146,9 @@ Match      = "match" "(" Expr ")" "{" [ Arm { Sep Arm } [ Sep ] ] "}" .
 Arm        = Pattern "=>" Expr .
 TupleLit   = "(" Expr "," [ Expr { "," Expr } [ "," ] ] ")" .
 TuplePat   = "(" Pattern "," [ Pattern { "," Pattern } [ "," ] ] ")" .
+Select     = "select" "{" [ SelectArm { Sep SelectArm } [ Sep ] ] "}" .  (* "select" before "{" where an expression starts *)
+SelectArm  = ( [ ( Ident | "_" ) "=" ] Expr | "_" ) "=>" Expr .
+                                             (* n = ch.receive(s) => n; out.send(s, x) => Ok; _ => "none ready" *)
 Pattern    = TuplePat | "(" Pattern ")" | "_"                             (* anything *)
            | Literal                         (* 1, -1, 1.5, 'a', "a", true *)
            | "[" [ ListElems ] "]"            (* [], [x], [first, ...rest], [0, ...] *)
@@ -328,9 +331,8 @@ a direct `List[(Scope) => T]` parameter opens its callback effects, while
 can forward open callback values when their type parameter does not occur
 in the result. List results and nested list parameters remain closed.
 `withTimeout(s, ms, child => work(child))` returns `T | Cancelled`;
-`withTimeoutDo` accepts an Ok callback. Typed channel selection is
-`[channel.receiveCase(value => event(value))].select(s)`, returning
-`Option[Event] | Cancelled`. These add no keywords or syntax.
+`withTimeoutDo` accepts an Ok callback. These add no keywords or syntax.
+Selection among channels is the `select` expression (see the grammar).
 
 Transparent async local bindings start a task immediately: `async(scopeExpression) name [ : T ] = expr`.
 The scope expression evaluates once, and every read awaits the shared result of

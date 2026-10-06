@@ -21,7 +21,7 @@ index fca90f6..39dfeb3 100644
 +  bork = {
 +    install_info = {
 +      location = 'editors/tree-sitter-bork',
-+      revision = 'adc07af5a5efbd6801f091042d31190c14e08265',
++      revision = 'a6b7fe0e69c92660d8770f47acdd0cd57878739a',
 +      url = 'https://github.com/GiGurra/bork',
 +    },
 +    tier = 3,
@@ -31,17 +31,17 @@ index fca90f6..39dfeb3 100644
        revision = 'ee641d15390183d7535777947ce0f2f1fbcee69f',
 diff --git a/runtime/queries/bork/folds.scm b/runtime/queries/bork/folds.scm
 new file mode 100644
-index 0000000..dac97f6
+index 0000000..0a1baa8
 --- /dev/null
 +++ b/runtime/queries/bork/folds.scm
 @@ -0,0 +1,4 @@
-+[(block) (record_type) (record_literal) (match_expression) (class_declaration)
++[(block) (record_type) (record_literal) (match_expression) (select_expression) (class_declaration)
 + (instance_declaration) (providers_declaration) (instances_declaration)
 + (list_literal) (map_literal) (tuple_literal) (tuple_type) (tuple_pattern)
 + (go_body) (comment)] @fold
 diff --git a/runtime/queries/bork/highlights.scm b/runtime/queries/bork/highlights.scm
 new file mode 100644
-index 0000000..acdea7f
+index 0000000..c5a8d73
 --- /dev/null
 +++ b/runtime/queries/bork/highlights.scm
 @@ -0,0 +1,40 @@
@@ -75,7 +75,7 @@ index 0000000..acdea7f
 + "generate" "yield" "for" "break" "continue" "if" "else" "return" "match"
 + "import" "use" "class" "instance" "instances" "providers" "test" "private"
 + "derive" "uses" "needs" "ambient" "logged" "propagated" "lazy" "async"
-+ "scope" "with" "in" "resource" "go" "comptime" "mock"] @keyword
++ "scope" "with" "in" "resource" "go" "comptime" "mock" "select"] @keyword
 +["&" "^" "<<" ">>" "+" "-" "*" "/" "%" "!" "&&" "||" "==" "!=" "<" "<=" ">" ">=" "|>" "|" "=>" "=" "?"] @operator
 +["(" ")" "[" "]" "{" "}"] @punctuation.bracket
 +["," ";" ":" "."] @punctuation.delimiter
@@ -87,13 +87,13 @@ index 0000000..acdea7f
 +(test_field_pattern name: (identifier) @variable.member)
 diff --git a/runtime/queries/bork/indents.scm b/runtime/queries/bork/indents.scm
 new file mode 100644
-index 0000000..29db71d
+index 0000000..52d93a4
 --- /dev/null
 +++ b/runtime/queries/bork/indents.scm
 @@ -0,0 +1,7 @@
 +[(block) (record_literal) (record_type) (list_literal) (map_literal)
 + (tuple_literal) (tuple_type) (tuple_pattern)
-+ (parameters) (type_arguments) (match_expression) (class_declaration)
++ (parameters) (type_arguments) (match_expression) (select_expression) (class_declaration)
 + (instance_declaration) (providers_declaration) (instances_declaration)] @indent.begin
 +["}" ")" "]"] @indent.end @indent.branch
 +(comment) @indent.ignore
@@ -108,10 +108,10 @@ index 0000000..5bc64d4
 + (#set! injection.language "go"))
 diff --git a/runtime/queries/bork/locals.scm b/runtime/queries/bork/locals.scm
 new file mode 100644
-index 0000000..109350d
+index 0000000..8238aaa
 --- /dev/null
 +++ b/runtime/queries/bork/locals.scm
-@@ -0,0 +1,20 @@
+@@ -0,0 +1,22 @@
 +(block) @local.scope
 +(function_declaration) @local.scope
 +(parameter name: (identifier) @local.definition)
@@ -123,10 +123,12 @@ index 0000000..109350d
 +(scope_expression) @local.scope
 +(mock_expression) @local.scope
 +(match_arm) @local.scope
++(select_arm) @local.scope
 +(receiver name: (identifier) @local.definition)
 +(lambda_expression parameter: (identifier) @local.definition)
 +(for_expression name: (identifier) @local.definition)
 +(scope_expression name: (identifier) @local.definition)
++(select_arm name: (identifier) @local.definition)
 +(mock_parameters name: (identifier) @local.definition)
 +(pattern name: (identifier) @local.definition)
 +(field_pattern name: (identifier) @local.definition !pattern)

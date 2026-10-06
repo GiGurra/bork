@@ -281,11 +281,15 @@ type Info struct {
 	comptimeSyntax       []*syntax.Comptime
 	comptimeCaptureDecls map[*syntax.Comptime][]any
 	// Embeds lists compile-time asset requests in source order.
-	Embeds                 []*Embedded
-	embedCalls             map[*syntax.Call]*Embedded
-	BuildReads             []*BuildRead
-	buildCalls             map[*syntax.Call]*BuildRead
-	assemblyCalls          map[*syntax.Call]*assemblyExpansion
+	Embeds        []*Embedded
+	embedCalls    map[*syntax.Call]*Embedded
+	BuildReads    []*BuildRead
+	buildCalls    map[*syntax.Call]*BuildRead
+	assemblyCalls map[*syntax.Call]*assemblyExpansion
+	// selects holds the blocks select expressions are lowered to.
+	selects map[*syntax.Select]*syntax.Block
+	// selectMatches are the matches selects are lowered to.
+	selectMatches          map[*syntax.Match]bool
 	assemblyTypes          map[*syntax.TypeExpr]Type
 	assemblyNames          map[any]string
 	ProviderBundles        []*ProviderBundle
@@ -428,6 +432,8 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 			GoBindings:             map[*Func]*GoBinding{},
 			GoImportNames:          checkGoImports(files, diags, goTypes),
 			assemblyCalls:          map[*syntax.Call]*assemblyExpansion{},
+			selects:                map[*syntax.Select]*syntax.Block{},
+			selectMatches:          map[*syntax.Match]bool{},
 			interpolatorCalls:      map[*syntax.Interp]*syntax.Call{},
 			interpolatorValidators: map[*syntax.Interp]*Dict{},
 			interpolatorFactories:  map[*syntax.Interp]*syntax.Call{},
@@ -825,6 +831,7 @@ type checker struct {
 	initializerContext *initializerContext
 	lambdaDepth        int
 	assemblySerial     int
+	selectSerial       int
 	producer           *producerContext
 	loops              []int
 	conversionSerial   int
@@ -869,6 +876,10 @@ func (c *checker) funcNamed(name string) (*Func, bool) {
 	}
 	if fn, ok := c.pkg.Funcs[name]; ok {
 		return fn, true
+	}
+	// The prelude's select helpers are for the select expression only.
+	if strings.HasPrefix(name, "compilerSelect") {
+		return nil, false
 	}
 	fn, ok := c.preludePkg.Funcs[name]
 	return fn, ok
@@ -1400,6 +1411,8 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 		return c.record(e, c.isExpr(e))
 	case *syntax.Match:
 		return c.record(e, c.match(e, want))
+	case *syntax.Select:
+		return c.record(e, c.selectExpr(e, want))
 	case *syntax.Try:
 		return c.record(e, c.try(e))
 	}

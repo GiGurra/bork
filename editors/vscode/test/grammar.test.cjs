@@ -161,6 +161,13 @@ test('lazy is contextual at binding heads', () => {
  assert.ok(!scopes(ls, 3, 'lazy').includes('keyword.control.bork'));
 });
 
+test('select is contextual before its arms', () => {
+ const ls = tokenize('x = select {\n  n = ch.receive(s) => n\n}\nselect = 1\nprintln(select)');
+ has(ls, 0, 'select', 'keyword.control.bork');
+ assert.ok(!scopes(ls, 3, 'select').includes('keyword.control.bork'));
+ assert.ok(!scopes(ls, 4, 'select').includes('keyword.control.bork'));
+});
+
 test('async is contextual at binding heads', () => {
  const ls = tokenize('async(s) value: Int = compute()\nasync(owner(s)) other = value\nfn async(x: Int): Int { x }\nprintln(async(1))');
  has(ls, 0, 'async', 'keyword.control.bork');

@@ -137,6 +137,59 @@ fn f(g: (Int) => Int): Int { g(1) }`
 	}
 }
 
+func TestParseSelect(t *testing.T) {
+	src := `fn f(): Int {
+	select {
+		v = in.receive(s) => v
+		_ = out.send(s, 1) => 2
+		done.receive(s) => 3
+		_ => 4
+	}
+}`
+	diags := &diag.List{}
+	f := Parse("t.bork", []byte(src), diags)
+	if diags.Len() != 0 {
+		t.Fatalf("unexpected errors: %s", diags.Error())
+	}
+	sel, ok := f.Funcs[0].Body.Tail.(*Select)
+	if !ok {
+		t.Fatalf("body is %T, want a select", f.Funcs[0].Body.Tail)
+	}
+	if len(sel.Arms) != 4 {
+		t.Fatalf("got %d arms", len(sel.Arms))
+	}
+	want := []struct {
+		name string
+		op   bool
+	}{{"v", true}, {"", true}, {"", true}, {"", false}}
+	for i, a := range sel.Arms {
+		if a.Name != want[i].name || (a.Op != nil) != want[i].op {
+			t.Errorf("arm %d: name %q, op %v", i, a.Name, a.Op != nil)
+		}
+	}
+}
+
+func TestSelectIsStillAName(t *testing.T) {
+	src := `fn select(select: Int): Int { select = select + 1; select }`
+	diags := &diag.List{}
+	f := Parse("t.bork", []byte(src), diags)
+	if diags.Len() != 0 {
+		t.Fatalf("unexpected errors: %s", diags.Error())
+	}
+	if len(f.Funcs) != 1 || f.Funcs[0].Name != "select" {
+		t.Fatalf("unexpected functions: %+v", f.Funcs)
+	}
+	// In a scope's policy, the '{' after select is the scope's body.
+	diags = &diag.List{}
+	f = Parse("t.bork", []byte("fn f() { scope s with select { g() } }"), diags)
+	if diags.Len() != 0 {
+		t.Fatalf("unexpected errors: %s", diags.Error())
+	}
+	if _, ok := f.Funcs[0].Body.Tail.(*ScopeExpr); !ok {
+		t.Fatalf("body is %T, want a scope", f.Funcs[0].Body.Tail)
+	}
+}
+
 func TestParseUsesErrors(t *testing.T) {
 	for src, want := range map[string]string{
 		"fn f() uses {}":              "expected an effect name or nothing after uses",

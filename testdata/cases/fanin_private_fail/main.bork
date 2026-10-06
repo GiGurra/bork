@@ -4,8 +4,7 @@ fn main() {
     _: Task[String] = Task { native: task.native, wait: () => "fake" }
     _ = task.copy(wait: () => 2)
     _: Channel[Int] = Channel {}
-    existing = channel[Int](s, 1)
-    arm = existing.receiveCase(value => 1)
-    _: ReceiveCase[Int] = ReceiveCase { native: arm.native, decode: arm.decode }
+    // The functions a select is lowered to cannot be named.
+    _ = compilerSelect(1, true)
   }
 }

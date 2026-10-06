@@ -1,0 +1,1 @@
+main.bork:3:3: pure uses state (it calls select), but its signature allows no effects; declare it: uses state

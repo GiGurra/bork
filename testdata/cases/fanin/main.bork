@@ -1,20 +1,4 @@
 type Failure = { message: String }
-type Event = sealed { Number { value: Int }, Text { value: String }, End, Stopped { reason: String } }
-
-fn numberEvent(value: Int | Cancelled | Closed): Event {
-  match (value) {
-    n: Int => Event.Number { value: n }
-    c: Cancelled => Event.Stopped { reason: c.reason }
-    _ => Event.End
-  }
-}
-fn textEvent(value: String | Cancelled | Closed): Event {
-  match (value) {
-    text: String => Event.Text { value: text }
-    c: Cancelled => Event.Stopped { reason: c.reason }
-    _ => Event.End
-  }
-}
 fn work(s: Scope, n: Int) uses clock + state: Int | Cancelled {
   delay(s, n)?
   n
@@ -44,16 +28,5 @@ fn main() {
     println(genericUnion(withTimeout(s, 1000000, canceledValue)).reason)
     timeout: (Scope, Int, (Scope) uses nothing => Cancelled) uses clock + state => Cancelled = withTimeout
     println(timeout(s, 1000000, canceledValue).reason)
-    numbers = channel[Int](s, 1)
-    words = channel[String](s, 1)
-    assertEqual(words.send(s, "hello"), {})
-    arms = [numbers.receiveCase(numberEvent), words.receiveCase(textEvent)]
-    println(arms.select(s))
-    assertEqual(numbers.send(s, 42), {})
-    println(arms.select(s))
-    words.close()
-    println([words.receiveCase(textEvent)].select(s))
-    none: List[ReceiveCase[Event]] = []
-    println(none.select(s))
   }
 }

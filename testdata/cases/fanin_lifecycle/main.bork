@@ -1,3 +1,11 @@
+fn label(value: Int | String | Closed): String {
+  match (value) {
+    n: Int => toString(n)
+    text: String => text
+    _ => "end"
+  }
+}
+
 fn loser(child: Scope, started: Channel[Int], finished: Atom[Bool]) uses clock + state: Int | Cancelled {
   assertEqual(started.send(child, 1), {})
   waited = delay(child, 10000)
@@ -69,17 +77,18 @@ test "selection does not consume losing channels and drains closed buffers" {
     b = channel[String](s, 1)
     assertEqual(a.send(s, 4), {})
     assertEqual(b.send(s, "hello"), {})
-    numbers = a.receiveCase(v => match (v) { n: Int => toString(n); _ => "end" })
-    words = b.receiveCase(v => match (v) { text: String => text; _ => "end" })
-    chosen = [numbers, words].select(s)
+    chosen = select {
+      n = a.receive(s) => label(n)
+      text = b.receive(s) => label(text)
+    }
     match (chosen) {
-      Option.Some { value } => if (value == "hello") { assertEqual(a.receive(s), 4) } else { assertEqual(value, "4"); assertEqual(b.receive(s), "hello") }
+      value: String => if (value == "hello") { assertEqual(a.receive(s), 4) } else { assertEqual(value, "4"); assertEqual(b.receive(s), "hello") }
       _ => panic("expected selected value")
     }
     assertEqual(a.send(s, 5), {})
     a.close()
-    assertEqual([numbers].select(s), Option.Some { value: "5" })
-    assertEqual([numbers].select(s), Option.Some { value: "end" })
+    assertEqual(select { n = a.receive(s) => label(n) }, "5")
+    assertEqual(select { n = a.receive(s) => label(n) }, "end")
   }
 }
 
@@ -87,8 +96,7 @@ test "selection receives from an unbuffered channel" {
   scope s {
     ch = channel[Int](s, 0)
     task = spawn(s, () => ch.send(s, 8))
-    arm = ch.receiveCase(v => match (v) { n: Int => n; _ => -1 })
-    assertEqual([arm].select(s), Option.Some { value: 8 })
+    assertEqual(select { n = ch.receive(s) => n }, 8)
     assertEqual(await(task), {})
   }
 }
@@ -97,16 +105,13 @@ test "selection is cancelled by an arm's channel scope and by the wait scope" {
   scope outer {
     scope source {
       ch = channel[Int](source, 0)
-      arm = ch.receiveCase(v => match (v) { n: Int => n; _ => -1 })
       cancel(source)
-      match ([arm].select(outer)) { c: Cancelled => assertEqual(c.reason, "cancelled"); _ => panic("expected cancellation") }
+      match (select { n = ch.receive(outer) => n }) { c: Cancelled => assertEqual(c.reason, "cancelled"); _ => panic("expected cancellation") }
     }
     ch = channel[Int](outer, 0)
     scope wait {
       cancel(wait)
-      arm = ch.receiveCase(v => match (v) { n: Int => n; _ => -1 })
-      result = [arm].select(wait)
-      match (result) { c: Cancelled => assertEqual(c.reason, "cancelled"); _ => panic("expected cancellation") }
+      match (select { n = ch.receive(wait) => n }) { c: Cancelled => assertEqual(c.reason, "cancelled"); _ => panic("expected cancellation") }
     }
   }
 }

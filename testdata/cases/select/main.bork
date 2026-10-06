@@ -1,0 +1,169 @@
+import "bork/time"
+
+type TimedOut = {}
+
+fn ms(n: Int): time.Duration {
+  time.Nanoseconds(n * 1_000_000)
+}
+
+// An arm's body is code of the enclosing function: return leaves it.
+fn firstWord(s: Scope, words: Channel[String], numbers: Channel[Int]) uses state: String | Cancelled {
+  select {
+    w = words.receive(s) => match (w) {
+      word: String => return word
+      Closed => "words closed"
+    }
+    n = numbers.receive(s) => s"number $n"
+  }
+}
+
+// A select's value is its arms' value, or Cancelled.
+fn next(s: Scope, numbers: Channel[Int]) uses clock + state: Int | Closed | TimedOut | Cancelled {
+  replyBy = time.After(s, ms(20))
+  select {
+    n = numbers.receive(s) => n
+    _ = replyBy.receive(s) => TimedOut {}
+  }
+}
+
+// ? passes its cancellation on.
+fn label(s: Scope, numbers: Channel[Int]) uses state: String | Cancelled {
+  text = select {
+    n = numbers.receive(s) => s"$n"
+    _ => "none"
+  }?
+  s"got $text"
+}
+
+// Arms take context literals from the expected type.
+fn peek(s: Scope, numbers: Channel[Int]) uses state: Option[Int] | Closed | Cancelled {
+  select {
+    n = numbers.receive(s) => .Some { value: n? }
+    _ => .None {}
+  }
+}
+
+type Point = { x: Int, y: Int }
+
+// A value sent in an arm is checked as the channel's type, so context
+// literals and empty lists know theirs.
+fn contextSends(s: Scope) uses state: List[String | Cancelled] {
+  options = channel[Option[Int]](s, 1)
+  lists = channel[List[Int]](s, 1)
+  points = channel[Point](s, 1)
+  [
+    select { options.send(s, .None {}) => "option" },
+    select { lists.send(s, []) => "list" },
+    select { points.send(s, .{ x: 1, y: 2 }) => "point" },
+  ]
+}
+
+// Only the prelude's helpers are hidden, not a function of the same prefix.
+fn compilerSelectLike(): Int { 3 }
+
+// break and continue in an arm control the loop around the select.
+fn sum(s: Scope, numbers: Channel[Int], stop: Channel[Bool]) uses state: Int {
+  total = atom(0)
+  for (_ in Seq.range(0, 100)) {
+    _ = select {
+      n = numbers.receive(s) => match (n) {
+        x: Int => {
+          _ = update(total, t => t + x)
+          continue
+        }
+        Closed => break
+      }
+      _ = stop.receive(s) => break
+    }
+  }
+  current(total)
+}
+
+fn main() {
+  scope s {
+    words = channel[String](s, 1)
+    numbers = channel[Int](s, 1)
+    _ = numbers.send(s, 7)
+    println(firstWord(s, words, numbers))
+    println(peek(s, numbers))
+    println(contextSends(s))
+    println(compilerSelectLike())
+    _ = words.send(s, "hello")
+    println(firstWord(s, words, numbers))
+    words.close()
+    println(firstWord(s, words, numbers))
+
+    println(next(s, numbers))
+    _ = numbers.send(s, 3)
+    println(next(s, numbers))
+    println(label(s, numbers))
+
+    // A send arm, and _ for when no operation is ready.
+    out = channel[Int](s, 1)
+    println(select {
+      out.send(s, 1) => "sent"
+      _ => "full"
+    })
+    println(select {
+      result = out.send(s, 2) => s"sent: $result"
+      _ => "full"
+    })
+    println(select {
+      x = out.receive(s) => s"received $x"
+      _ => "nothing"
+    })
+    println(select {
+      x = out.receive(s) => s"received $x"
+      _ => "nothing"
+    })
+
+    // Operands are evaluated once, in order, before waiting.
+    log: Atom[List[String]] = atom([])
+    note = (text: String) => {
+      _ = update(log, xs => xs.append(text))
+    }
+    pick = (ch: Channel[Int], name: String) => {
+      note(name)
+      ch
+    }
+    _ = numbers.send(s, 1)
+    println(select {
+      a = pick(numbers, "first").receive(s) => a
+      b = pick(out, "second").receive(s) => b
+    })
+    println(current(log))
+
+    // Loops over a select.
+    feed = channel[Int](s)
+    stop = channel[Bool](s)
+    launch(s, () => {
+      for (i in Seq.range(1, 5)) {
+        _ = feed.send(s, i)
+      }
+      _ = stop.send(s, true)
+    })
+    println(sum(s, feed, stop))
+
+    // A closed channel's receive is always ready.
+    done = channel[Bool](s)
+    done.close()
+    println(select {
+      d = done.receive(s) => d
+    })
+  }
+  // Cancellation of an arm's scope gives Cancelled, even with a _ arm.
+  scope s {
+    ch = channel[Int](s, 1)
+    _ = ch.send(s, 1)
+    scope inner {
+      cancel(inner)
+      println(select {
+        x = ch.receive(inner) => x
+        _ => 0
+      })
+    }
+    println(withTimeout(s, 10, c => select {
+      x = channel[Int](c).receive(c) => x
+    }))
+  }
+}

@@ -260,6 +260,10 @@ func (u *effectUses) expr(x Expr) {
 			return
 		}
 		name := x.Func.QualifiedName(u.from)
+		if strings.HasPrefix(name, "compilerSelect") {
+			// The lowered code of a select expression.
+			name = "select"
+		}
 		u.add(x.Func.Effects&^EffOpen, x.Pos(), name)
 		if isOpen(x.Func.Result) {
 			return // the function it gives carries its arguments' effects

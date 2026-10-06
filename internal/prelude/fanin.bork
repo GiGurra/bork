@@ -73,29 +73,3 @@ fn withTimeout[T](s: Scope, ms: Int, work: (Scope) => T) uses clock + state: T |
 fn withTimeoutDo(s: Scope, ms: Int, work: (Scope) => Ok) uses clock + state: Ok | Cancelled unsafe go {
   return _borkFanInTimeout(s, ms, func(child *_Scope) any { work(child); return _borkOk() })
 }
-
-// receiveCase keeps each arm typed, mapping its value or status to a common
-// result type R. It is private so its native handle and decoder stay paired.
-type ReceiveCase[R] = private {
-  native: ChannelHandle,
-  decode: (SelectPayload) uses nothing => R,
-}
-
-fn (ch: Channel[T]) receiveCase[T, R](mapResult: (T | Cancelled | Closed) uses nothing => R): ReceiveCase[R] unsafe go {
-  return ReceiveCase[R]{native: ch.native, decode: func(payload SelectPayload) R { return mapResult(payload.handle) }}
-}
-
-// select receives from exactly one arm; losing channels are untouched. Empty
-// lists give None; several ready arms are chosen at random.
-fn (arms: List[ReceiveCase[R]]) select[R](s: Scope) uses state: Option[R] | Cancelled unsafe go {
-  if len(arms) == 0 { return Option_None[R]{} }
-  native := make([]_borkChanArm, len(arms))
-  for i, arm := range arms { native[i] = _borkChanArm{ch: arm.native.handle.(*_borkChan), scope: s.ctx} }
-  index, status, value := _borkChanSelect(native, true)
-  switch status {
-  case _borkChanCancelled: return value
-  case _borkChanClosed: value = Closed{}
-  }
-  payload := SelectPayload{handle: value, owner: arms[index].native.owner}
-  return Option_Some[R]{value: arms[index].decode(payload)}
-}

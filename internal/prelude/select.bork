@@ -1,0 +1,56 @@
+// The select expression is lowered to these functions, which programs
+// cannot name. A SelectHandle holds a select's arm, or its outcome.
+type SelectHandle = resource
+
+fn compilerSelectReceive[T](ch: Channel[T], s: Scope): SelectHandle unsafe go {
+  return SelectHandle{handle: _borkChanArm{ch: ch.native.handle.(*_borkChan), scope: s.ctx}}
+}
+
+// compilerSelectValue gives x, checked as a value of ch's type, so a
+// context literal sent in a select knows its type.
+fn compilerSelectValue[T](ch: Channel[T], x: T): T { x }
+
+fn compilerSelectSend[T](ch: Channel[T], s: Scope, x: T): SelectHandle unsafe go {
+  return SelectHandle{handle: _borkChanArm{ch: ch.native.handle.(*_borkChan), send: true, value: x, scope: s.ctx}}
+}
+
+// compilerSelect completes one of the arms, waiting unless wait is false,
+// and gives an outcome whose index is the arm's, the number of arms when
+// none was ready, and one more when a scope was cancelled.
+fn compilerSelect(arms: List[SelectHandle], wait: Bool) uses state: SelectHandle unsafe go {
+  native := make([]_borkChanArm, len(arms))
+  for i, arm := range arms {
+    native[i] = arm.handle.(_borkChanArm)
+  }
+  index, status, value := _borkChanSelect(native, wait)
+  switch status {
+  case _borkChanNotReady:
+    index = len(arms)
+  case _borkChanCancelled:
+    index = len(arms) + 1
+  }
+  return SelectHandle{handle: &_borkChanSelected{index: index, status: status, value: value}}
+}
+
+fn compilerSelectIndex(outcome: SelectHandle): Int unsafe go {
+  return int64(outcome.handle.(*_borkChanSelected).index)
+}
+
+fn compilerSelectReceived[T](outcome: SelectHandle, ch: Channel[T]): T | Closed unsafe go {
+  selected := outcome.handle.(*_borkChanSelected)
+  if selected.status == _borkChanClosed {
+    return Closed{}
+  }
+  return selected.value
+}
+
+fn compilerSelectSent(outcome: SelectHandle): Ok | Closed unsafe go {
+  if outcome.handle.(*_borkChanSelected).status == _borkChanClosed {
+    return Closed{}
+  }
+  return _borkOk()
+}
+
+fn compilerSelectCancelled(outcome: SelectHandle): Cancelled unsafe go {
+  return outcome.handle.(*_borkChanSelected).value.(Cancelled)
+}

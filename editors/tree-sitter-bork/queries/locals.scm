@@ -9,10 +9,12 @@
 (scope_expression) @local.scope
 (mock_expression) @local.scope
 (match_arm) @local.scope
+(select_arm) @local.scope
 (receiver name: (identifier) @local.definition)
 (lambda_expression parameter: (identifier) @local.definition)
 (for_expression name: (identifier) @local.definition)
 (scope_expression name: (identifier) @local.definition)
+(select_arm name: (identifier) @local.definition)
 (mock_parameters name: (identifier) @local.definition)
 (pattern name: (identifier) @local.definition)
 (field_pattern name: (identifier) @local.definition !pattern)

@@ -10,7 +10,3 @@ Cancelled { reason: "deadline exceeded" }
 Ok
 callback
 callback
-Option.Some { value: Event.Text { value: "hello" } }
-Option.Some { value: Event.Number { value: 42 } }
-Option.Some { value: Event.End }
-Option.None

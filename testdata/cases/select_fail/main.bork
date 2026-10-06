@@ -1,0 +1,40 @@
+fn shapes(s: Scope, ch: Channel[Int]) uses state {
+  _ = select {
+    x = ch.length() => x
+  }
+  _ = select {
+    _ => 1
+  }
+  _ = select {
+    x = ch.receive(s) => 1
+    _ => 2
+    _ => 3
+  }
+  _ = select {
+    ch.send(s: s, x: 1) => 1
+  }
+}
+
+fn types(s: Scope, ch: Channel[Int], n: Int) uses state {
+  _ = select {
+    ch.send(s, "text") => 1
+  }
+  _ = select {
+    x = n.receive(s) => 1
+  }
+}
+
+// A select's value includes Cancelled.
+fn value(s: Scope, ch: Channel[Int]) uses state: Int {
+  select {
+    ch.receive(s) => 1
+  }
+}
+
+fn main() {}
+
+fn scopes(ch: Channel[Int]) uses state {
+  _ = select {
+    ch.receive(1) => 1
+  }
+}
