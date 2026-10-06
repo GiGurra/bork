@@ -38,3 +38,17 @@ func TestEditorTypeQueriesPreserveSourceIndexes(t *testing.T) {
 		t.Fatal("editor query changed source indexes")
 	}
 }
+
+func TestEditorTypeQueryCallArgument(t *testing.T) {
+	info := executionAuditProgram(t, `pred above(x: Int, minimum: Int) { x > minimum }
+fn minimum(): Int { 0 }
+fn main() {}`)
+	diags := &diag.List{}
+	query := syntax.Parse("query.bork", []byte("type Query = Int where above(minimum())\n"), diags)
+	if diags.Len() != 0 {
+		t.Fatal(diags.Error())
+	}
+	if typ := EditorType(info, info.Funcs["minimum"].Pkg, query.Types[0].Alias); typ != Invalid {
+		t.Fatalf("nonconstant predicate argument should be rejected, got %s", typ)
+	}
+}

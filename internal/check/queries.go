@@ -224,7 +224,7 @@ func VisibleMethods(info *Info, from *Package, t Type) []MethodDescription {
 }
 
 func queryChecker(info *Info, from *Package) *checker {
-	c := &checker{info: info, pkg: from, diags: &diag.List{}}
+	c := &checker{deriveHelperState: &deriveHelperState{}, info: info, pkg: from, diags: &diag.List{}}
 	for _, fn := range info.FuncOf {
 		if fn.Prelude {
 			c.preludePkg = fn.Pkg
