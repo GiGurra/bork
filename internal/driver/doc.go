@@ -3,6 +3,7 @@ package driver
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -94,7 +95,7 @@ func Doc(path string, opts DocOptions) ([]byte, error) {
 	}
 	for _, analysis := range programs {
 		program := analysis.program
-		if !program.inputs.current() || !program.assets.current() || !editorNamesCurrent(analysis, ctx) {
+		if !program.inputs.current() || !program.assets.current() || !docNamesCurrent(analysis, ctx) {
 			return nil, fmt.Errorf("documentation inputs changed; retry bork doc")
 		}
 	}
@@ -105,6 +106,25 @@ func Doc(path string, opts DocOptions) ([]byte, error) {
 		return apidoc.HTML(packages), nil
 	}
 	return apidoc.Markdown(packages), nil
+}
+
+// Documentation rechecks external package names in its captured module. The
+// editor cache additionally requires standard names, since external metadata
+// cannot qualify for reuse across requests.
+func docNamesCurrent(a *EditorAnalysis, context *goContext) bool {
+	for _, input := range a.usage.names {
+		if input.inputs != nil {
+			if !input.inputs.current() {
+				return false
+			}
+			continue
+		}
+		names := (goPackages{module: a.program.module, context: context}).Names(input.paths)
+		if !maps.Equal(names, input.names) {
+			return false
+		}
+	}
+	return true
 }
 
 func docTargets(path string, all bool, reader *sourceSnapshot) ([]docTarget, error) {

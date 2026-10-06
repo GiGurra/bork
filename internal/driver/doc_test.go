@@ -2,6 +2,7 @@ package driver
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -147,5 +148,43 @@ func TestDocPositionalVariants(t *testing.T) {
 		if !bytes.Contains(out, []byte(want)) {
 			t.Fatalf("missing %q: %s", want, out)
 		}
+	}
+}
+
+func TestDocStandardPackagesWithGoDependencies(t *testing.T) {
+	for _, path := range []string{"bork/cli", "bork/crypto", "bork/sql", "bork/uuid", "bork/yaml"} {
+		t.Run(path, func(t *testing.T) {
+			out, err := Doc(path, DocOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Contains(out, []byte("## "+path)) {
+				t.Fatalf("missing package heading: %s", out)
+			}
+		})
+	}
+}
+
+func TestDocExternalGoNamesCurrent(t *testing.T) {
+	root := t.TempDir()
+	writeFixtureFile(t, root, "go.mod", "module example.com/docnames\ngo 1.23\n")
+	writeFixtureFile(t, root, "names.go", "package original\n")
+	module := &goModuleInputs{mod: []byte(fmt.Sprintf("module borkdoc\ngo 1.23\nrequire example.com/docnames v0.0.0\nreplace example.com/docnames => %q\n", filepath.ToSlash(root)))}
+	context := captureGoContextWithOptions(goContextOptions{settings: []string{"GO111MODULE=on", "GOPACKAGESDRIVER=off"}})
+	usage := &goUsage{}
+	names := (goPackages{module: module, context: context, usage: usage}).Names([]string{"example.com/docnames"})
+	if names["example.com/docnames"] != "original" || len(usage.names) != 1 || usage.names[0].standard {
+		t.Fatalf("external name capture: %v, %+v", names, usage.names)
+	}
+	analysis := &EditorAnalysis{program: &compiledProgram{module: module}, usage: usage}
+	if !docNamesCurrent(analysis, context) {
+		t.Fatal("unchanged external Go names rejected")
+	}
+	if editorNamesCurrent(analysis, context) {
+		t.Fatal("external Go names qualified for editor cache reuse")
+	}
+	writeFixtureFile(t, root, "names.go", "package changed\n")
+	if docNamesCurrent(analysis, context) {
+		t.Fatal("changed external Go names accepted")
 	}
 }
