@@ -231,3 +231,20 @@ test "storage failures return a generic response" {
     }
   }
 }
+
+test "setup failure returns before opening a listener" {
+  statements = mock sql.Exec(connection, query, params) {
+    sql.Error { operation: "exec", message: "cannot create table" }
+  }
+  statements.expect(times: 1)
+  listeners = mock http.Listen(addr, s, handler, drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs) {
+    IoError { path: addr, message: "listener must not start" }
+  }
+  listeners.expect(times: 0)
+  scope app {
+    match (start(Config { address: "127.0.0.1:0", database: ":memory:" }, app)) {
+      error: sql.Error => assertEqual(error, sql.Error { operation: "exec", message: "cannot create table" })
+      _ => assert(false)
+    }
+  }
+}

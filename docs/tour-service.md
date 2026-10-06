@@ -256,7 +256,7 @@ SIGINT and SIGTERM cancel root scopes by default. `http.WaitAny` returns when th
 
 ## Test handlers directly
 
-Run `bork test examples/service_tour`. The source contains tests that open an in-memory SQLite database and call `route` with constructed requests and a nested request scope. They cover successful persistence, malformed JSON, empty and oversized titles, method/path errors, rollback, storage-error privacy, configuration validation, database startup failure, listener startup failure, and port reuse after scope cleanup. These tests need no running HTTP server or external database, except the listener-specific tests, which bind available localhost ports.
+Run `bork test examples/service_tour`. The source contains tests that open an in-memory SQLite database and call `route` with constructed requests and a nested request scope. They cover successful persistence, malformed JSON, empty and oversized titles, method/path errors, rollback, storage-error privacy, configuration validation, database startup failure, table-setup failure, listener startup failure, and port reuse after scope cleanup. These tests need no running HTTP server or external database, except the listener-specific tests, which bind available localhost ports.
 
 The demo adds an end-to-end check through the real HTTP listener, and the examples test compares its output with the checked transcript. Direct tests pinpoint handler behavior; the demo checks that the pieces work together.
 
