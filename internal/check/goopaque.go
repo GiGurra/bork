@@ -327,10 +327,10 @@ func (c *checker) checkOpaqueInstance(inst *Instance, pos diag.Pos, args []synta
 			return false
 		}
 	}
-	if fn.Prelude && fn.Decl.Name == "attach" && len(inst.TypeArgs) == 1 {
+	if fn.Prelude && (fn.Decl.Name == "attach" || fn.Decl.Name == "move") && len(inst.TypeArgs) == 1 {
 		_, ok := inst.TypeArgs[0].(*Resource)
 		if !ok {
-			c.errorf(pos, "attach takes a resource (a value of a resource type, such as File), found %s", inst.TypeArgs[0])
+			c.errorf(pos, "%s takes a resource (a value of a resource type, such as File), found %s", fn.Decl.Name, inst.TypeArgs[0])
 			return false
 		}
 	}

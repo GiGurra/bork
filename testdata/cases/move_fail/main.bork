@@ -1,0 +1,224 @@
+type Conn = resource
+
+fn connect(name: String, s: Scope) uses io: Conn unsafe go {
+  return Conn{handle: name, owner: s.Own(func() {})}
+}
+
+fn query(c: Conn, q: String): String unsafe go {
+  return q
+}
+
+fn other(a: Conn, b: Conn): Conn { b }
+
+fn pair(a: Conn, b: Conn): String unsafe go {
+  return ""
+}
+
+fn keep(c: Conn in ch, ch: Channel[Conn]) uses state {
+  _ = ch.trySend(c)
+}
+
+fn rewrap(c: Conn, s: Scope): Conn { c }
+
+fn pumped(s: Scope) uses io: Conn {
+  c = connect("p", s)
+  launch(s, () => println(query(c, "pump")))
+  c
+}
+
+type Holder = { conn: Conn }
+
+type Scopes = { a: Scope, b: Scope }
+
+fn slow(): ScopePolicy {
+  taskTimeout(10)
+}
+
+fn finish(b: OwnedScope, s: Scope) uses state: Scope {
+  closeScope(b)
+  s
+}
+
+fn after(c: Conn, s: Scope): Scope {
+  s
+}
+
+fn root(): Scope unsafe go {
+  return nil
+}
+
+// Go code that may keep a value from an earlier call.
+fn stash[T](x: T): T unsafe go {
+  return x
+}
+
+fn wrap[T](x: T): T {
+  stash(x)
+}
+
+// It may make a new value of T with make: what it gives is borrowed.
+fn made[T](make: () => T): T {
+  make()
+}
+
+fn borrowed(c: Conn, w: Scope) {
+  _ = move(c, w)
+}
+
+fn main() {
+  scope app {
+    scope s {
+      a = connect("a", s)
+      holder = Holder { conn: a }
+      f = () => query(a, "f")
+      moved = move(a, app)
+      println(query(a, "after"))
+      println(query(holder.conn, "holder"))
+      println(f())
+      println(query(moved, "ok"))
+    }
+    scope s {
+      b = connect("b", s)
+      if (query(b, "x") != "") {
+        _ = move(b, app)
+      }
+      println(query(b, "maybe"))
+    }
+    scope s {
+      c = connect("c", s)
+      launch(s, () => println(query(c, "task")))
+      _ = move(c, app)
+    }
+    scope s {
+      ch = channel[Conn](s, 1)
+      d = connect("d", s)
+      _ = ch.send(s, d)
+      _ = move(d, app)
+      e = connect("e", s)
+      keep(e, ch)
+      _ = move(e, app)
+      got = ch.receive(s)
+      match (got) {
+        r: Conn => { _ = move(r, app) }
+        _ => {}
+      }
+    }
+    scope s {
+      decoy = connect("decoy", s)
+      g = connect("g", app)
+      x = other(decoy, g)
+      _ = move(x, s)
+      y = rewrap(decoy, s)
+      _ = move(y, app)
+      w = made(() => decoy)
+      _ = move(w, app)
+      z = pumped(s)
+      _ = move(z, app)
+    }
+    scope s {
+      q = connect("q", s)
+      scope inner with slow() {
+        launch(inner, () => println(query(q, "orphan")))
+      }
+      _ = move(q, app)
+      r = connect("r", s)
+      b = openScope(s, [taskTimeout(10)])
+      launch(b.scope, () => println(query(r, "orphan")))
+      closeScope(b)
+      _ = move(r, app)
+      setScopePolicy(s, taskTimeout(10))
+      t = connect("t", s)
+      if (query(t, "") != "" && query(move(t, app), "") != "") {
+        println("")
+      }
+      println(query(t, "maybe moved"))
+      u = connect("u", s)
+      async(s) v = query(u, "async")
+      _ = move(u, app)
+      println(v)
+      o2 = connect("o2", s)
+      onClose(s, () => println(query(o2, "on close")))
+      _ = move(o2, app)
+      c2 = openScope(s)
+      cc = connect("cc", c2.scope)
+      _ = move(cc, finish(c2, app))
+      dd = connect("dd", s)
+      _ = move(dd, after(move(dd, app), app))
+      ee = connect("ee", app)
+      _ = wrap(ee)
+      ff = connect("ff", app)
+      gg = wrap(ff)
+      _ = move(gg, s)
+      c3 = openScope(s)
+      hh = connect("hh", s)
+      closeScope(c3)
+      _ = move(hh, c3.scope)
+      ii = connect("ii", s)
+      _ = move(ii, root())
+    }
+    scope s {
+      jj = connect("jj", s)
+      scope inner with cleanupTimeout(10) {
+        onClose(inner, () => println(query(jj, "slow finalizer")))
+      }
+      _ = move(jj, app)
+      scope inner {
+        _: (Scope, ScopePolicy) => Ok = setScopePolicy
+      }
+      kk = connect("kk", s)
+      for (n in [1, 2]) {
+        if (n == 1) {
+          launch(s, () => println(query(kk, "task")))
+          break
+        }
+      }
+      _ = move(kk, app)
+      local = {
+        sc = s
+        connect("local", sc)
+      }
+      _ = move(local, app)
+    }
+    // Two scope variables of one lifetime (a record's) may be two scopes.
+    scope s {
+      both = Scopes { a: s, b: app }
+      sa = both.a
+      sb = both.b
+      x1 = connect("x1", sa)
+      x2 = connect("x2", sb)
+      xx = if (query(x1, "") != "") { x1 } else { x2 }
+      _ = move(xx, app)
+    }
+    scope s {
+      seq = generate[Conn] {
+        own = connect("own", s)
+        yield own
+        scope inner { _ = move(own, inner) }
+      }
+      println(seq.toList().length())
+    }
+    scope s {
+      h = connect("h", s)
+      _ = move(h, s)
+      i = connect("i", s)
+      j = connect("j", app)
+      k = if (query(i, "") != "") { i } else { j }
+      _ = move(k, app)
+      l = connect("l", s)
+      _ = () => move(l, app)
+      [1, 2].forEach(n => {
+        _ = move(l, app)
+      })
+      m = connect("m", s)
+      for (n in [1, 2]) {
+        _ = n
+        _ = move(m, app)
+      }
+      o = connect("o", s)
+      _: (Conn, Scope) => Conn = move
+      println(pair(o, move(o, app)))
+      p = connect("p", s)
+      println(pair(b: p, a: move(p, app)))
+    }
+  }
+}

@@ -1435,10 +1435,10 @@ timeouts instead). An already cancelled resource cannot be revived. Any proposed
 state both its ownership and cancellation semantics; copying the lifetime of a
 value alone would be insufficient.
 
-**Resource handoff before scope values.** A move from an inner scope to an
-already open enclosing scope would have to retain the destination before
-removing the source registration, rebind cancellation before the source ends,
-and preserve one final cleanup even on failure. It could simplify ownership
+**Resource handoff before scope values.** A move (now implemented, see
+[Moving resources](#moving-resources-between-scopes)) has to retain the
+destination before removing the source registration, rebind cancellation, and
+preserve one final cleanup even on failure. It could simplify ownership
 bookkeeping for the first three cases, but `attach` already supplies their
 required lifetime. It does not solve rolling cleanup: the destination still
 retains the old acquisition until it closes. A sibling destination is not a
@@ -1552,9 +1552,10 @@ fn roll(prev: OwnedScope in app, conn: Conn in prev, app: Scope, n: Int) uses io
   `state`, as `cancel` does. The effects of tasks and finalizers are charged
   where they are started or registered, so passing an owner on does not hide
   any.
-- **Not done.** Moving a running task or a resource registration between
-  scopes is not offered: a task's captures, cancellation and failures stay with
-  the scope it started in. A worker routine owning each generation was the
+- **Not done.** Moving a running task between scopes is not offered: a task's
+  captures, cancellation and failures stay with the scope it started in. A
+  resource registration can be moved (`move(r, b.scope)`, or out of a child;
+  see below). A worker routine owning each generation was the
   alternative; it needs a hand-over protocol, and its owned resources still
   could not leave its routine. Rolling uses recursion, so an unbounded roll
   grows the Go stack, as any bork recursion does.
@@ -1563,6 +1564,49 @@ fn roll(prev: OwnedScope in app, conn: Conn in prev, app: Scope, n: Int) uses io
   `owned_scopes_testing` (panics in the owner and in the receiver, failures of
   finalizers and tasks, parent aggregation, `logFailures`), and
   `owned_scopes_fail` / `owned_scopes_type_fail` (rejections).
+
+### Moving resources between scopes
+
+> **Implemented** (bork-u8ndmy). The design, with a comparison to Rust, C++,
+> Swift and Go, is in [design/move.md](design/move.md).
+
+`move(r, s)` hands the registration of resource `r` with the scope it belongs
+to here over to scope `s`: the source no longer keeps it open, and it closes
+when `s` closes (or later, if it is attached to other scopes still open).
+`attach` adds an owner; `move` replaces one. Afterwards `r`, and every value
+holding it (records, lists, lambdas, values made from it), is a compile error
+to use, and a branch that moved it leaves it possibly moved.
+
+- **What can be moved.** A resource acquired in this function or lambda:
+  the result of an `unsafe go` function, or of a bork function that the
+  compiler verifies acquires into its one `Scope` parameter, given exactly one
+  scope (a scope variable or `b.scope`); or of `attach` or `move`. It flows
+  through bindings, `?`, blocks, `if`, `match`, a pattern binding the whole
+  value, and generic bork functions that give back a `T` they were given
+  (`fs.Open`'s `result(...)`). Anything else is borrowed and cannot be moved:
+  parameters, lambda parameters, record fields, values from channels, atoms or
+  tasks, and results of other calls. The error suggests `attach`.
+- **Pins.** A value that a task, a channel, an atom, Go code given a scope,
+  a parameter declared `in` another, an async binding or a mock may still use
+  cannot be moved, until the scope that keeps it has ended (a scope block, or
+  an owned child opened here and closed with `closeScope`, whose policies
+  cannot orphan tasks or finalizers: none, or `logFailures`). Policies are
+  given only where a scope starts; `setScopePolicy` cannot be called
+  directly.
+- **Rules.** One source scope; a different target; not inside a lambda or a
+  loop body for a value acquired outside it; a direct call (not a function
+  value); no other argument of the same call may hold the moved value.
+- **Runtime.** Each registration is named, and a move transfers one
+  atomically: a failure (already closed, not owned by the source, target
+  finished closing) panics and changes nothing. Cancellation follows every
+  owning scope, so it follows the target instead of the source. Registrations
+  moved out of a long-lived scope are compacted away.
+- **Trust.** Go code given a scope that returns a resource returns a fresh
+  registration in that scope, and keeps no task using it (see
+  [std-go.md](std-go.md)). As for `attach`, a resource is usable while it has
+  a live registration.
+- **Tests.** `testdata/cases/move`, `move_fail`, `move_type_fail`, and the Go
+  runtime test `internal/gen/move_test.go`.
 
 ### Crash isolation and supervision (planned, not v0.1)
 

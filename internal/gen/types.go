@@ -250,7 +250,7 @@ func (g *gen) typeDecl(t check.Type) []ast.Decl {
 		// closes it once the last scope it is attached to closes:
 		// File{handle: f, owner: s.Own(func() { f.Close() })}.
 		g.usesScopes = true
-		src := fmt.Sprintf("package main\ntype %[1]s struct{ handle any; owner *_Owner }\nfunc (%[1]s) String() string { return \"<%[2]s>\" }\nfunc (r %[1]s) _ownerOf() *_Owner { return r.owner }\nfunc (r %[1]s) _borkRebind(s *_Scope) { if h, ok := r.handle.(interface { _borkRebind(*_Scope) }); ok { h._borkRebind(s) } }\n", typeName(t.Name, t.Pkg).Name, t.Name)
+		src := fmt.Sprintf("package main\ntype %[1]s struct{ handle any; owner *_Owner }\nfunc (%[1]s) String() string { return \"<%[2]s>\" }\nfunc (r %[1]s) _ownerOf() *_Owner { return r.owner }\nfunc (r %[1]s) _borkRebind(s *_Scope) { if h, ok := r.handle.(interface { _borkRebind(*_Scope) }); ok { h._borkRebind(s) } }\nfunc (r %[1]s) _borkUnbind(s *_Scope) { if h, ok := r.handle.(interface { _borkUnbind(*_Scope) }); ok { h._borkUnbind(s) } }\n", typeName(t.Name, t.Pkg).Name, t.Name)
 		f, err := parser.ParseFile(token.NewFileSet(), "", src, 0)
 		if err != nil {
 			panic(err)
@@ -757,6 +757,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"slices"
 	"syscall"
 	"sync"
 	"sync/atomic"
@@ -769,7 +770,10 @@ import (
 // block, and with the scope it is nested in.
 type _Scope struct {
 	mu         sync.Mutex
-	finalizers []func()
+	finalizers []_finalizer
+	// dead counts the finalizers of registrations moved away (see
+	// _Owner.move), which compact drops.
+	dead int
 	running    sync.WaitGroup
 	tasks      []*_task
 	ctx        context.Context
@@ -790,6 +794,9 @@ type _Scope struct {
 	// raising them.
 	logFailures bool
 	closed      bool
+	// finalized is set once close has run every finalizer: a finalizer
+	// added later would never run (see tryDefer).
+	finalized bool
 	name    string
 	// parent is the scope an owned child scope was opened in (openScope),
 	// and children the owned child scopes still open in this one.
@@ -873,12 +880,12 @@ func (s *_Scope) cancelAfter(ms int64) {
 	remaining := time.Until(deadline)
 	if remaining > 0 { s.deadlineTimer = time.AfterFunc(remaining, func() { s.cancel(context.DeadlineExceeded) }) }
 	if first {
-		s.finalizers = append(s.finalizers, func() {
+		s.finalizers = append(s.finalizers, _finalizer{run: func() {
 			s.mu.Lock()
 			timer := s.deadlineTimer
 			s.mu.Unlock()
 			if timer != nil { timer.Stop() }
-		})
+		}})
 	}
 	s.mu.Unlock()
 	if remaining <= 0 { s.cancel(context.DeadlineExceeded) }
@@ -939,44 +946,142 @@ func (s *_Scope) _sleep(d time.Duration) bool {
 	}
 }
 
-// _Owner closes a resource once every scope it is attached to has
-// closed: the scope it was opened in, and those attach added.
+// _Owner closes a resource once every scope it is registered with has
+// closed: the scope it was opened in, and those attach added (or move
+// moved it to).
 type _Owner struct {
 	mu      sync.Mutex
 	count   int
 	closeFn func()
+	// regs are the active registrations, one per owning scope.
+	regs []*_ownerReg
+}
+
+// An _ownerReg is a resource's registration with one scope, whose
+// finalizer releases it. owner is nil once it is released or moved away.
+type _ownerReg struct {
+	owner atomic.Pointer[_Owner]
+	scope *_Scope
+}
+
+// A _finalizer runs when its scope closes; reg is the registration it
+// releases, if it is one.
+type _finalizer struct {
+	run func()
+	reg *_ownerReg
 }
 
 // Own makes closeFn close a resource when the scope closes, or, if the
 // resource is attached to other scopes too, when the last of them does.
 func (s *_Scope) Own(closeFn func()) *_Owner {
 	o := &_Owner{count: 1, closeFn: closeFn}
-	s.Defer(o.release)
+	r := o.newReg(s)
+	s.mu.Lock()
+	s.finalizers = append(s.finalizers, _finalizer{run: r.release, reg: r})
+	s.mu.Unlock()
 	return o
 }
 
-// attach keeps the resource open until s closes too. It reports false
-// if the resource is already closed.
-func (o *_Owner) attach(s *_Scope) bool {
-	o.mu.Lock()
-	if o.count == 0 {
-		o.mu.Unlock()
-		return false
-	}
-	o.count++
-	o.mu.Unlock()
-	s.Defer(o.release)
-	return true
+func (o *_Owner) newReg(s *_Scope) *_ownerReg {
+	r := &_ownerReg{scope: s}
+	r.owner.Store(o)
+	o.regs = append(o.regs, r)
+	return r
 }
 
-func (o *_Owner) release() {
+// attach keeps the resource open until s closes too. It gives "" or why
+// it cannot.
+func (o *_Owner) attach(s *_Scope) string {
 	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.count == 0 {
+		return "the resource is already closed"
+	}
+	r := &_ownerReg{scope: s}
+	r.owner.Store(o)
+	if !s.tryDefer(r) {
+		return "the scope has finished closing"
+	}
+	o.regs = append(o.regs, r)
+	o.count++
+	return ""
+}
+
+// move moves the registration of the resource with from over to to,
+// atomically: from no longer closes it, to does. It gives "" or why it
+// cannot (and then changes nothing), and whether from still has another
+// registration of it (an attach to the same scope).
+func (o *_Owner) move(from, to *_Scope) (string, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.count == 0 {
+		return "the resource is already closed", false
+	}
+	i := slices.IndexFunc(o.regs, func(r *_ownerReg) bool { return r.scope == from })
+	if i < 0 {
+		return "the resource is not owned by the scope it is moved from", false
+	}
+	if from == to {
+		return "", true
+	}
+	r := &_ownerReg{scope: to}
+	r.owner.Store(o)
+	if !to.tryDefer(r) {
+		return "the target scope has finished closing", false
+	}
+	old := o.regs[i]
+	old.owner.Store(nil)
+	o.regs[i] = r
+	from.compact()
+	return "", slices.ContainsFunc(o.regs, func(r *_ownerReg) bool { return r.scope == from })
+}
+
+// release releases the registration r: the resource closes with the
+// last of them.
+func (r *_ownerReg) release() {
+	o := r.owner.Load()
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	if r.owner.Load() == nil {
+		o.mu.Unlock()
+		return
+	}
+	r.owner.Store(nil)
+	if i := slices.Index(o.regs, r); i >= 0 {
+		o.regs = slices.Delete(o.regs, i, i+1)
+	}
 	o.count--
 	last := o.count == 0
 	o.mu.Unlock()
 	if last {
 		o.closeFn()
 	}
+}
+
+// _moveResource moves the resource r from scope from to scope to (what
+// move compiles to): to now keeps it open, from no longer does, and its
+// cancellation follows to instead of from.
+func _moveResource[R any](r R, from, to *_Scope) R {
+	o, _ := any(r).(interface{ _ownerOf() *_Owner })
+	if o == nil || o._ownerOf() == nil {
+		panic("bork: move: the resource was not opened with an owner (s.Own)")
+	}
+	why, kept := o._ownerOf().move(from, to)
+	if why != "" {
+		panic("bork: move: " + why)
+	}
+	if h, ok := any(r).(interface{ _borkRebind(*_Scope) }); ok {
+		h._borkRebind(to)
+	}
+	// Cancellation follows every owning scope: from only stops counting
+	// once it has no registration left (the same scope may be given
+	// under two names, or attached to twice).
+	if h, ok := any(r).(interface{ _borkUnbind(*_Scope) }); ok && !kept {
+		h._borkUnbind(from)
+	}
+	return r
 }
 
 // _task is a goroutine a scope started (spawn, launch).
@@ -991,8 +1096,42 @@ type _task struct {
 // unsafe go code register their finalizers with it.
 func (s *_Scope) Defer(f func()) {
 	s.mu.Lock()
-	s.finalizers = append(s.finalizers, f)
+	s.finalizers = append(s.finalizers, _finalizer{run: f})
 	s.mu.Unlock()
+}
+
+// tryDefer registers the release of r, unless the scope has already run
+// its finalizers (it may be closing still: a task of it can attach to it
+// while it waits for its tasks).
+func (s *_Scope) tryDefer(r *_ownerReg) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.finalized {
+		return false
+	}
+	s.finalizers = append(s.finalizers, _finalizer{run: r.release, reg: r})
+	return true
+}
+
+// compact counts a registration moved away from the scope, and drops
+// such finalizers once they are half of them, so that a long-lived
+// scope moving resources out does not grow.
+func (s *_Scope) compact() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.dead++
+	if s.dead < 16 || 2*s.dead < len(s.finalizers) {
+		return
+	}
+	kept := s.finalizers[:0]
+	for _, f := range s.finalizers {
+		if f.reg == nil || f.reg.owner.Load() != nil {
+			kept = append(kept, f)
+		}
+	}
+	clear(s.finalizers[len(kept):])
+	s.finalizers = kept
+	s.dead = 0
 }
 
 // Go runs work on a goroutine the scope waits for before it closes. A
@@ -1085,13 +1224,17 @@ func (s *_Scope) close() {
 	for {
 		s.mu.Lock()
 		if len(s.finalizers) == 0 {
+			s.finalized = true
 			s.mu.Unlock()
 			break
 		}
 		f := s.finalizers[len(s.finalizers)-1]
 		s.finalizers = s.finalizers[:len(s.finalizers)-1]
 		s.mu.Unlock()
-		if r := s.finalize(f); r != nil {
+		if f.reg != nil && f.reg.owner.Load() == nil {
+			continue
+		}
+		if r := s.finalize(f.run); r != nil {
 			failures = append(failures, r)
 		}
 	}

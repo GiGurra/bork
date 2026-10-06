@@ -1,0 +1,37 @@
+main.bork:65:12: c cannot be moved: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; attach it instead to keep it open until w closes too
+main.bork:75:21: a was moved to scope app at line 74; to keep using it here, attach it instead of moving it
+main.bork:76:21: holder may be released: it holds a resource that was moved to scope app at line 74
+main.bork:77:15: f may be released: it holds a resource that was moved to scope app at line 74
+main.bork:85:21: b may have been moved to scope app at line 83; to keep using it here, attach it instead of moving it
+main.bork:90:16: c cannot be moved: the task of s started at line 89 may still use it; attach it instead
+main.bork:96:16: d cannot be moved: the channel ch given it at line 95 may still use it; attach it instead
+main.bork:99:16: e cannot be moved: parameter c of keep, declared in ch, at line 98 may still use it; attach it instead
+main.bork:102:31: r cannot be moved: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; attach it instead to keep it open until app closes too
+main.bork:110:16: x cannot be moved: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; attach it instead to keep it open until s closes too
+main.bork:112:16: y cannot be moved: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; attach it instead to keep it open until app closes too
+main.bork:114:16: w cannot be moved: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; attach it instead to keep it open until app closes too
+main.bork:116:16: z cannot be moved: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; attach it instead to keep it open until app closes too
+main.bork:123:16: q cannot be moved: the task of inner started at line 121 may still use it; attach it instead
+main.bork:128:16: r cannot be moved: the task of b.scope started at line 126 may still use it; attach it instead
+main.bork:129:7: setScopePolicy cannot be called directly; give policies where the scope starts: scope s with taskTimeout(100) { ... }, or openScope(parent, [taskTimeout(100)])
+main.bork:134:21: t may have been moved to scope app at line 131; to keep using it here, attach it instead of moving it
+main.bork:137:16: u cannot be moved: the async binding of v at line 136 may still use it; attach it instead
+main.bork:141:16: o2 cannot be moved: onClose, given scope s, at line 140 may still use it; attach it instead
+main.bork:144:16: cc may be released: it belongs to owned scope c2, which was passed on at line 144
+main.bork:146:16: dd was moved to scope app at line 146; to keep using it here, attach it instead of moving it
+main.bork:151:16: gg cannot be moved: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; attach it instead to keep it open until s closes too
+main.bork:155:20: owned scope c3 was already closed at line 154
+main.bork:164:16: jj cannot be moved: onClose, given scope inner, at line 162 may still use it; attach it instead
+main.bork:166:41: setScopePolicy cannot be used as a function value: a call through a function value is not checked
+main.bork:175:16: kk cannot be moved: the task of s started at line 171 may still use it; attach it instead
+main.bork:180:16: local cannot be moved: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; attach it instead to keep it open until app closes too
+main.bork:190:16: xx cannot be moved: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; attach it instead to keep it open until app closes too
+main.bork:196:32: own cannot be moved: the generator's yield at line 195 may still use it; attach it instead
+main.bork:202:19: h already belongs to scope s
+main.bork:206:16: k cannot be moved: it may belong to scope s or scope app
+main.bork:208:22: l cannot be moved here: it was acquired outside this lambda (or lazy, async or comptime body), which may run later or more than once; move it before
+main.bork:210:18: l cannot be moved here: it was acquired outside this lambda (or lazy, async or comptime body), which may run later or more than once; move it before
+main.bork:215:18: a loop cannot move m, which was acquired outside its body
+main.bork:218:34: move cannot be used as a function value: a call through a function value is not checked
+main.bork:219:20: o is used by this call after another of its arguments moves it to scope app (line 219)
+main.bork:221:23: p is used by this call after another of its arguments moves it to scope app (line 221)
