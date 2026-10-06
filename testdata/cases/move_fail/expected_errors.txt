@@ -22,16 +22,16 @@ main.bork:146:16: dd was moved to scope app at line 146; to keep using it here, 
 main.bork:151:16: gg cannot be moved: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; attach it instead to keep it open until s closes too
 main.bork:155:20: owned scope c3 was already closed at line 154
 main.bork:164:16: jj cannot be moved: onClose, given scope inner, at line 162 may still use it; attach it instead
-main.bork:166:43: setScopePolicy cannot be used as a function value: a call through a function value is not checked
+main.bork:166:41: setScopePolicy cannot be used as a function value: a call through a function value is not checked
 main.bork:175:16: kk cannot be moved: the task of s started at line 171 may still use it; attach it instead
 main.bork:180:16: local cannot be moved: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; attach it instead to keep it open until app closes too
 main.bork:190:16: xx cannot be moved: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; attach it instead to keep it open until app closes too
 main.bork:196:32: own cannot be moved: the generator's yield at line 195 may still use it; attach it instead
 main.bork:202:19: h already belongs to scope s
 main.bork:206:16: k cannot be moved: it may belong to scope s or scope app
-main.bork:208:26: l cannot be moved here: it was acquired outside this lambda (or lazy, async or comptime body), which may run later or more than once; move it before
+main.bork:208:22: l cannot be moved here: it was acquired outside this lambda (or lazy, async or comptime body), which may run later or more than once; move it before
 main.bork:210:18: l cannot be moved here: it was acquired outside this lambda (or lazy, async or comptime body), which may run later or more than once; move it before
 main.bork:214:18: a loop cannot move m, which was acquired outside its body
-main.bork:217:35: move cannot be used as a function value: a call through a function value is not checked
+main.bork:217:34: move cannot be used as a function value: a call through a function value is not checked
 main.bork:218:20: o is used by this call after another of its arguments moves it to scope app (line 218)
 main.bork:220:23: p is used by this call after another of its arguments moves it to scope app (line 220)

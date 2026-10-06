@@ -15,7 +15,7 @@ fn pair(a: Conn, b: Conn): String unsafe go {
 }
 
 fn keep(c: Conn in ch, ch: Channel[Conn]) uses state {
-  _ = send(ch, c)
+  _ = ch.trySend(c)
 }
 
 fn rewrap(c: Conn, s: Scope): Conn { c }
@@ -92,12 +92,12 @@ fn main() {
     scope s {
       ch = channel[Conn](s, 1)
       d = connect("d", s)
-      _ = send(ch, d)
+      _ = ch.send(s, d)
       _ = move(d, app)
       e = connect("e", s)
       keep(e, ch)
       _ = move(e, app)
-      got = receive(ch)
+      got = ch.receive(s)
       match (got) {
         r: Conn => { _ = move(r, app) }
         _ => {}
@@ -163,7 +163,7 @@ fn main() {
       }
       _ = move(jj, app)
       scope inner {
-        set: (Scope, ScopePolicy) => Ok = setScopePolicy
+        _: (Scope, ScopePolicy) => Ok = setScopePolicy
       }
       kk = connect("kk", s)
       for (n in [1, 2]) {
@@ -205,16 +205,16 @@ fn main() {
       k = if (query(i, "") != "") { i } else { j }
       _ = move(k, app)
       l = connect("l", s)
-      later = () => move(l, app)
+      _ = () => move(l, app)
       [1, 2].forEach(n => {
         _ = move(l, app)
       })
       m = connect("m", s)
-      for (n in [1, 2]) {
+      for (_ in [1, 2]) {
         _ = move(m, app)
       }
       o = connect("o", s)
-      mv: (Conn, Scope) => Conn = move
+      _: (Conn, Scope) => Conn = move
       println(pair(o, move(o, app)))
       p = connect("p", s)
       println(pair(b: p, a: move(p, app)))
