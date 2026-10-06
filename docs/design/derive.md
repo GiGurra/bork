@@ -407,14 +407,16 @@ and CLI PR #342 users after rebase, rather than carrying divergent codec APIs.
 ## Caching and performance contract
 
 Expansion performs no native Go build or execution. Programs with no derive
-pay only declaration dispatch; unchanged derivations are reused. Within one
-check, memoize normalized expansion plans per template/head/scope; do not
-retain mutable checked pointer graphs across checks. Store immutable plans
-with stable declaration references and reconstruct request-local typed nodes.
-Session reuse and a bounded versioned content cache for plans are part of the
-shape delivery, not deferred until after codec porting.
+pay only declaration dispatch. Preserve existing checked-program session reuse
+and check-local typed helper memoization; do not retain mutable checked pointer
+graphs across checks. Broader retained expansion caching requires a measured
+benefit on realistic warm edits. The initial metadata-only session/content
+plan prototype was removed after the 200-record codec/Labels workload regressed;
+see [the experiment](derive-performance.md). If broader plans are reintroduced,
+store immutable plans with stable declaration references and reconstruct
+request-local typed nodes.
 
-Keys include compiler/shape ABI, template and reachable helper bodies, full
+Retained plan keys must include compiler/shape ABI, template and reachable helper bodies, full
 target shape (types, defaults, computed bodies, facts, variant order/payload
 kind, privacy, foreign tags), generic arguments, library lexical dependencies,
 and the requester's visible dictionaries/rules. Candidate changes that alter
