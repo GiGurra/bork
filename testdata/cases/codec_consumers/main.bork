@@ -35,6 +35,7 @@ test "environment uses override words and accepts aliases" {
   match (load({ "APP_LISTEN_PORT": "3", "APP_OLD_PORT": "4" })) { error: env.ConfigError => assertEqual(at(error.errors, 0).path, "APP_OLD_PORT"), _ => assert(false) }
 }
 test "environment collisions fail before lookup" {
+  match (env.LoadWith[Row]("", name => { assert(name != "OLD_PORT"); Option.None })) { _: env.ConfigError => assert(true), _ => assert(false) }
   match (env.LoadWith[Collision]("APP", name => { assert(false); Option.None })) { _: env.ConfigError => assert(true), _ => assert(false) }
 }
 test "CSV uses canonical headers and accepts aliases with supplied error paths" {

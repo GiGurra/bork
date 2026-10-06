@@ -41,7 +41,7 @@ localhost 8080 Option.None
 
 ## Load configuration
 
-Field `httpPort` with prefix `APP` maps to `APP_HTTP_PORT`. Names use [codec words](codec.md): an explicit `codec { name: "listen_port" }` maps to `APP_LISTEN_PORT`, while a type naming policy leaves automatic environment names unchanged. Field aliases become alternative environment names with the same prefix. Supplying both the canonical variable and an alias is an error; word collisions are checked before lookup. String fields use literal text; other fields use JSON syntax. Absent fields with defaults use those defaults; missing Option fields without defaults become None. Missing-variable, parsing and independent field-validation errors are collected. Once those checks pass, full decoding checks sibling-dependent and record facts, returning the first such error in ConfigError.
+Field `httpPort` with prefix `APP` maps to `APP_HTTP_PORT`. Names use [codec words](codec.md): an explicit `codec { name: "listen_port" }` maps to `APP_LISTEN_PORT`, while a type naming policy leaves automatic environment names unchanged. With a nonempty prefix, field aliases become alternative environment names with that prefix; an empty prefix disables aliases to avoid ambient shell variables. Supplying both the canonical variable and an alias is an error; word collisions are checked before lookup. String fields use literal text; other fields use JSON syntax. Absent fields with defaults use those defaults; missing Option fields without defaults become None. Missing-variable, parsing and independent field-validation errors are collected. Once those checks pass, full decoding checks sibling-dependent and record facts, returning the first such error in ConfigError.
 
 ```bork
 import "bork/codec"
