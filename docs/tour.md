@@ -181,7 +181,7 @@ fn main() {
 Three new things appear here:
 
 - **`uses io`** says that `readLines` touches the outside world. A function without `uses` is pure: it cannot print, read files, or call anything that does. `main` may do anything.
-- **`scope s { ... }`** owns the file. `fs.Open` takes the scope, and the file is closed when the scope ends, on every path out of it.
+- **`scope s { ... }`** owns the file. `fs.Open` takes the scope, and the file is closed when the scope ends, on every path out of it. A resource can also be handed over to another scope with `move`, and the compiler then rejects any further use of the original ([Scopes and tasks](language/scopes.md#longer-lived-resources)).
 - **`?`** keeps the successful value and returns the failure to the caller. `fs.Open(path, s)?` gives the file, or makes `readLines` return the `fs.Error`.
 
 `import "bork/fs"` brings in a [standard package](std/README.md). Its functions are called with the package name in front.

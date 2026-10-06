@@ -40,6 +40,7 @@ Each example's expected output is kept in [testdata/examples](../testdata/exampl
 | [fan_in_out](../examples/fan_in_out/main.bork) | Workers sharing one channel of jobs, and `merge` collecting their results |
 | [unbounded_queue](../examples/unbounded_queue/main.bork) | A queue that never blocks its producer, against a bounded one |
 | [task_pool](../examples/task_pool/main.bork) | A bounded task pool that refuses work when it is full |
+| [handoff](../examples/handoff/main.bork) | Handing a connection over to another scope with `move` |
 
 ## Services
 

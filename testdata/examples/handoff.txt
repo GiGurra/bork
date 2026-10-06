@@ -1,0 +1,7 @@
+echo warm-up 1
+echo work 1
+server: a client closed its connection
+echo warm-up 2
+echo work 2
+server: a client closed its connection
+Ok
