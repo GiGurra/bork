@@ -28,6 +28,10 @@ fn main() {
 }
 ```
 
+Inline `derive (...)` on a fact alias and standalone `derive Class for Alias`
+retain the alias's whole-value facts in the instance head. A derived decoder
+checks those facts before returning a value of the alias.
+
 `comptime for` expands one body per descriptor. Each field has its own type,
 so `field.Type` can appear in annotations and type arguments. The list form
 collects one expression per field, and its optional `comptime if` filters fields.

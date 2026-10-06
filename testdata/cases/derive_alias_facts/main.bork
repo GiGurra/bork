@@ -1,0 +1,35 @@
+import "bork/codec"
+import "bork/json"
+use codec.Defaults
+
+class Known[T] {
+  fn isKnown(value: T): Bool
+}
+pred known[T: Known](value: T) { isKnown(value) }
+
+type Color = sealed { Red; Other(String) }
+instance colorKnown: Known[Color] {
+  fn isKnown(value: Color): Bool {
+    match (value) { .Red => true; .Other(_) => false }
+  }
+}
+type KnownColor = Color where known derive (codec.Decode)
+
+type Config = { port: Int }
+pred valid(config: Config) { config.port > 0 }
+type ValidConfig = Config where valid
+type InlineConfig = ValidConfig derive (codec.Decode)
+
+type Standalone = { port: Int }
+pred validStandalone(config: Standalone) { config.port > 0 }
+type StandaloneConfig = Standalone where validStandalone
+derive codec.Decode for StandaloneConfig
+
+fn main() {
+  println(json.Decode[KnownColor]("\"Red\""))
+  println(json.Decode[KnownColor]("{\"type\":\"Other\",\"values\":[\"purple\"]}"))
+  println(json.Decode[InlineConfig]("{\"port\":8}"))
+  println(json.Decode[InlineConfig]("{\"port\":0}"))
+  println(json.Decode[StandaloneConfig]("{\"port\":8}"))
+  println(json.Decode[StandaloneConfig]("{\"port\":0}"))
+}

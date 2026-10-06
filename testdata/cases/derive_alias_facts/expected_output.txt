@@ -1,0 +1,6 @@
+Color.Red
+DecodeError { path: "", message: "must be known" }
+Config { port: 8 }
+DecodeError { path: ".port", message: "must satisfy port > 0 (valid)" }
+Standalone { port: 8 }
+DecodeError { path: ".port", message: "must satisfy port > 0 (validStandalone)" }
