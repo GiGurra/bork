@@ -9,6 +9,7 @@ One binary does everything: `bork <command>`. Most commands take a path, which i
 | [`bork run`](#run-build-and-install) | Compile and run a program |
 | [`bork build`](#run-build-and-install) | Compile a program to an executable |
 | [`bork install`](#run-build-and-install) | Compile a program and install the executable |
+| [`bork debug`](#debug) | Build for the debugger and run its server |
 | [`bork check`](#check) | Type-check without building |
 | [`bork lint`](#lint) | Report advisory compiler warnings |
 | [`bork test`](#test) | Run a package's tests |
@@ -53,7 +54,7 @@ bork install .                 # build, then put the executable in BORKBIN
 
 `bork install` names the executable after the source file or directory, creates `BORKBIN` if needed, and replaces an existing executable only after a successful build. Add `BORKBIN` to your `PATH` to run installed programs by name. See [settings](#settings) for where it is.
 
-## `bork debug`
+## Debug
 
 `bork debug build [path] -o program` builds with bork source locations, disables optimization and inlining, and retains generated Go in `program.bork-debug/`. `bork debug setup` installs the pinned optional debugger into BORKCACHE. `bork debug dap --listen 127.0.0.1:0` launches its loopback DAP server. See [debugging](debugging.md) for editor setup and runtime limitations.
 
@@ -75,15 +76,17 @@ bork check --json .     # one JSON object per diagnostic
 
 `check` is the quickest way to get the compiler's answer, because it stops before generating and building Go.
 
+It also warns about leftover development markers: `dbg(...)` calls and `todo()` placeholders. Warnings do not fail the check.
+
+`--json` is meant for editors, scripts, and coding agents. Each diagnostic has a stable code, a position, and, where the compiler knows the repair, the text edits that apply it. `build`, `install`, and `test` accept `--json` too, and write the diagnostics to standard error. See [JSON diagnostics](diagnostics.md) and [watch mode](watch.md).
+
+### Fixes
+
 Non-exhaustive matches include a structured fix in `check --json`. It adds
 missing cases with destructuring patterns and `todo()` bodies. Effect errors
 also include fixes for the function's `uses` clause. The language server exposes
 these as quick fixes and formats the result; replace generated `todo()` calls
 with the intended behavior.
-
-It also warns about leftover development markers: `dbg(...)` calls and `todo()` placeholders. Warnings do not fail the check.
-
-`--json` is meant for editors, scripts, and coding agents. Each diagnostic has a stable code, a position, and, where the compiler knows the repair, the text edits that apply it. `build`, `install`, and `test` accept `--json` too, and write the diagnostics to standard error. See [JSON diagnostics](diagnostics.md) and [watch mode](watch.md).
 
 ## Test
 
@@ -210,8 +213,6 @@ The executable is staged in a temporary directory inside `BORKBIN`, then publish
 Each step prints immediately. A terminal shows a spinner, elapsed time, and downloaded bytes; redirected output and CI use plain lines. Default `BORKBIN` resolution queries local Go storage settings with `GOTOOLCHAIN=local`, so it cannot select or download an SDK before reporting progress.
 
 When no matching release/archive exists, or the release lookup cannot reach GitHub, the command falls back to `go install github.com/GiGurra/bork/cmd/bork@<version>`. `--from-source` selects this path directly. Go must be on `PATH` for source builds and for resolving the default `BORKBIN`; an explicit `BORKBIN` permits a prebuilt upgrade without Go. The source progress line covers Go's module/version resolution, any SDK download and compilation, and Go's own output remains visible. Offline source installs require cached modules. A downloaded archive's integrity or extraction failure never falls back to source.
-
-The manually dispatched **Upgrade benchmark** GitHub workflow measures time to first output and total upgrade time on macOS for the original source installer and the new prebuilt path. It records both transcripts and timings as an artifact and in the workflow summary.
 
 If `BORKBIN` is absent from `PATH`, the command warns you to add it. If you are running bork from another location, the command prints both locations: run the executable in `BORKBIN` to use the upgrade. A different bork earlier on `PATH` may still take precedence.
 

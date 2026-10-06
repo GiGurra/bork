@@ -4,6 +4,7 @@ bork is a programming language for backend services. These pages describe the la
 
 ## Start
 
+- [Installing bork](install.md): Go, `go install`, Homebrew, release archives, and upgrades.
 - [A tour of bork](tour.md): install the compiler and build a small program step by step.
 - [Browser playground](playground.md): check code, inspect types, and format a file without installing anything.
 - [Examples](examples.md): complete programs to read and run.
@@ -34,7 +35,8 @@ Each page covers one area in plain terms, with code you can run.
 
 - [The bork command](cli.md): every command, the settings, and the compile cache.
 - [Standard packages](std/README.md): files, HTTP, JSON, SQL, time, and more.
-- [Editor support and VS Code](../editors/vscode/README.md): `bork lsp` checks unsaved buffers and supplies navigation, completion and formatting.
+- [Editors](editors.md): VS Code, Neovim, Vim, Emacs, Helix, Zed, and any LSP client. The [VS Code extension](../editors/vscode/README.md) has its own page.
+- [Debugging](debugging.md): breakpoints and stepping in bork source.
 - [JSON diagnostics](diagnostics.md), [watch mode](watch.md), and [compiler code queries](describe.md): the compiler's interfaces for editors and tools.
 
 ## For contributors

@@ -11,6 +11,8 @@ go install github.com/GiGurra/bork/cmd/bork@latest
 bork version
 ```
 
+Homebrew, release archives, and upgrades are covered in [installing bork](install.md).
+
 ## A first program
 
 Create a project, then run its program and first test:

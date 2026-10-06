@@ -5,22 +5,6 @@ The template has one target parameter and implements the class's methods.
 Each request expands the template for its target, then checks the resulting
 Bork code with the ordinary type, effect, fact and lifetime rules.
 
-Definitions also check predicate names and arity, concrete expression types,
-known effects, and closed dictionary requirements even when no target requests
-them. Effects follow the ordinary rules. A call of a known function or helper
-uses what it declares, plus what its arguments to open callback parameters use.
-Callback parameters and results written without `uses` are open, in helpers
-and template methods alike. A callback must fit a function type written with
-`uses`, and one returned as an open result may use only what the open
-parameters use. A `comptime if` or `comptime match` branch is not selected for
-every target, and a `comptime for` body may expand to no copies, so calls in
-them are charged by expansion; callbacks in them must still fit their contexts.
-A `comptime { ... }` block may use only `build`. Calls whose callee depends on
-the target are left to expansion. Checking an unused definition never runs
-`comptime` code or captures `build` or `embed` files.
-Known parameter facts participate in dictionary selection. Requirements that
-depend on a target's type or predicate callback remain checks of its expansion.
-
 ```bork
 import "bork/shape"
 
@@ -199,6 +183,24 @@ retain caller arguments and predicate callbacks as typed dictionary captures;
 the captures participate in lifetime and compile-time dependency checking.
 Predicate callbacks must be pure: write `(Int) uses nothing => Bool` for a
 callback on an Int slot. Encode does not retain tuple predicate arguments.
+
+## How templates are checked
+
+Each expansion is checked as ordinary bork code. The definition itself is also
+checked even when no target requests it: predicate names and arity, concrete
+expression types, known effects, and closed dictionary requirements. Effects follow the ordinary rules. A call of a known function or helper
+uses what it declares, plus what its arguments to open callback parameters use.
+Callback parameters and results written without `uses` are open, in helpers
+and template methods alike. A callback must fit a function type written with
+`uses`, and one returned as an open result may use only what the open
+parameters use. A `comptime if` or `comptime match` branch is not selected for
+every target, and a `comptime for` body may expand to no copies, so calls in
+them are charged by expansion; callbacks in them must still fit their contexts.
+A `comptime { ... }` block may use only `build`. Calls whose callee depends on
+the target are left to expansion. Checking an unused definition never runs
+`comptime` code or captures `build` or `embed` files.
+Known parameter facts participate in dictionary selection. Requirements that
+depend on a target's type or predicate callback remain checks of its expansion.
 
 ## Foreign records
 

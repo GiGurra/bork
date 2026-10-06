@@ -2,10 +2,6 @@
 
 A scope is a block that owns things with a lifetime: open files, connections, and running tasks. When the block ends, everything it owns is finished or closed.
 
-Local names may be rebound only within the same block. A scope body is a nested
-block, so it cannot rebind a name from outside that scope. Each local value must
-be used; explicitly discard unwanted values with `_`.
-
 ## Scopes own resources
 
 ```bork
@@ -26,7 +22,7 @@ fn main() {
 
 `scope s { ... }` opens a scope named `s`. Functions that create a resource take the scope as an argument, and the resource then belongs to it. When the block ends, the file is closed. That happens on every way out: reaching the end, returning early with `?`, or a panic.
 
-The value of the scope block is the value of its last expression, so results flow out normally.
+The value of the scope block is the value of its last expression, so results flow out normally. A scope body is a nested block, so it cannot rebind a name from outside the scope; see [names and values](basics.md#names-and-values).
 
 ## A resource cannot outlive its scope
 
