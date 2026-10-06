@@ -111,7 +111,18 @@ func describeProgram(program *compiledProgram, pos diag.Pos, src []byte, where s
 		lazy = v.Var.Let.Lazy
 		async = v.Var.Let.Async
 	}
-	return &describe.Result{Rebinds: rebinds, Documentation: documentation, Async: async, Lazy: lazy, SchemaVersion: 1, Position: pos, Type: check.TypeText(selected.Type, selected.Package), Expression: selected.Expression, Definition: selected.Definition, Methods: methods, Facts: facts, Proof: proof, Callable: selected.Callable, BelongsTo: belongsTo(info, selected), Assembly: selected.Assembly}, nil
+	return &describe.Result{Rebinds: rebinds, Documentation: documentation, Async: async, Lazy: lazy, SchemaVersion: 1, Position: pos, Type: check.TypeText(selected.Type, selected.Package), Expression: selected.Expression, Definition: selected.Definition, Methods: methods, Facts: facts, Proof: proof, Callable: selected.Callable, BelongsTo: belongsTo(info, selected), Ownership: ownership(info, selected), Assembly: selected.Assembly}, nil
+}
+
+// ownership says what the selected resource variable is there (see
+// check.Info.Ownership).
+func ownership(info *check.Info, selected *describe.Selection) string {
+	if v, ok := selected.Expr.(*check.VarRef); ok && v.Pos() == v.Var.Pos {
+		if text := info.VarOwnership[v.Var]; text != "" {
+			return text
+		}
+	}
+	return info.Ownership[selected.Expr]
 }
 
 // belongsTo names the scopes the selected value belongs to.

@@ -106,6 +106,9 @@ func (s *server) feature(method, path string, p documentParams) (any, error) {
 		for _, fact := range result.Facts {
 			text += "\n\nKnown: `" + fact.Path + " " + fact.Constraint + "`"
 		}
+		if result.Ownership != "" {
+			text += "\n\nOwnership: " + result.Ownership
+		}
 		return map[string]any{"contents": map[string]string{"kind": "markdown", "value": text}}, nil
 	case "textDocument/definition":
 		def, err := pkg.analysis.Definition(pos)

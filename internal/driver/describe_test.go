@@ -763,3 +763,100 @@ fn main() {}
 		}
 	}
 }
+
+func TestDescribeOwnership(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	files := map[string]string{
+		"bork.mod": "module example.com/own\nunsafe \"example.com/own\"\n",
+		"main.bork": `type Conn = resource
+fn connect(s: Scope) uses io: Conn unsafe go {
+  return Conn{handle: 1, owner: s.Own(func() {})}
+}
+fn query(c: Conn): String unsafe go {
+  return ""
+}
+fn borrow(c: Conn): String { query(c) }
+fn maybe(s: Scope, flag: Bool) uses io: Conn | String {
+  if (flag) { "none" } else { connect(s) }
+}
+fn early(s: Scope, w: Scope, flag: Bool) uses io: String {
+  if (flag) {
+    a = connect(s)
+    _ = move(a, w)
+    return "moved"
+  }
+  outer = connect(s)
+  if (flag) { _ = move(outer, w) }
+  match (maybe(s, flag)) {
+    c: Conn => {
+      _ = move(c, w)
+      "matched"
+    }
+    other: String => other
+  }
+}
+fn main() {
+  scope s {
+    a = connect(s)
+    println(query(a))
+    scope w { _ = move(a, w) }
+    b = connect(s)
+    launch(s, () => println(query(b)))
+    d = connect(s)
+    f = () => query(d)
+    println(f())
+    e = connect(s)
+    for (i in [1, 2]) { println(query(e)); println(i) }
+  }
+}
+fn more(s: Scope, w: Scope, v: Scope, flag: Bool) uses io: String {
+  a = connect(s)
+  if (flag) { _ = move(a, w) } else { _ = move(a, v) }
+  b = connect(s)
+  if (flag) { _ = move(b, w) } else { return "early" }
+  e = connect(s)
+  for (x in [e]) { c = e; println(query(c)); println(query(x)) }
+  k = connect(s)
+  launch(s, () => println(query(k)))
+  k2 = k; println(query(k2))
+  t = connect(s)
+  scope u { launch(u, () => println(query(t))) }
+  query(t)
+}
+`,
+	}
+	for name, source := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(source), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	path := filepath.Join(dir, "main.bork")
+	borrowed := "borrowed (not acquired here), so it cannot be moved; attach it instead"
+	for _, tc := range []struct{ pos, want string }{
+		{"8:11", borrowed},
+		{"8:36", borrowed},
+		{"14:5", "moved to scope w at line 15"},
+		{"18:3", "possibly moved to scope w at line 19"},
+		{"21:5", "moved to scope w at line 22"},
+		{"30:5", "moved to scope w at line 32"},
+		{"31:19", "owned by scope s and acquired here, so move can hand it to another scope"},
+		{"33:5", "owned by scope s, and kept by the task of s started at line 34, so it cannot be moved"},
+		{"39:39", "owned by scope s, but acquired outside this loop, so it cannot be moved here"},
+		{"43:3", "moved to scope w or scope v at line 44"},
+		{"45:3", "moved to scope w at line 46"},
+		{"48:20", "owned by parameter s, but acquired outside this loop, so it cannot be moved here"},
+		{"48:8", borrowed},
+		{"51:3", "owned by parameter s, and kept by the task of s started at line 50, so it cannot be moved"},
+		{"52:3", "owned by parameter s and acquired here, so move can hand it to another scope"},
+		{"36:21", "owned by scope s, but acquired outside this lambda (or lazy, async or comptime body), so it cannot be moved here"},
+	} {
+		result, err := Describe(path+":"+tc.pos, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Ownership != tc.want {
+			t.Errorf("%s: ownership %q, want %q", tc.pos, result.Ownership, tc.want)
+		}
+	}
+}

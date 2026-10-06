@@ -1,6 +1,7 @@
 package check
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -374,8 +375,9 @@ func safeOpen(x Expr) bool {
 // scopes of keeper (or for good).
 func (l *lifeChecker) pin(life lifetime, pos diag.Pos, what string, keeper lifetime, forever bool) {
 	for _, h := range handles(life) {
+		p := pinAt{pos: pos, what: what, keeper: keeper, forever: forever}
 		// Branches share the slices (copyPins): never append in place.
-		l.pins[h] = append(slices.Clip(l.pins[h]), pinAt{pos: pos, what: what, keeper: keeper, forever: forever})
+		l.pins[h] = append(slices.Clip(l.pins[h]), p)
 	}
 }
 
@@ -436,12 +438,17 @@ func (l *lifeChecker) moveCall(x *Call) lifetime {
 		l.errorf(target.Pos(), "%s already belongs to %s", name, l.scopeText(src.scope))
 		return args[1]
 	}
-	to := scopeName(target)
+	to := "scope " + scopeName(target)
 	if len(args[1]) == 1 {
-		to = strings.TrimPrefix(l.scopeText(unhandle(args[1][0])), "parameter ")
+		// A Scope parameter is a scope of the caller's: name it as one.
+		to = l.scopeText(unhandle(args[1][0]))
+		if rest, ok := strings.CutPrefix(to, "parameter "); ok {
+			to = "scope " + rest
+		}
 	}
 	for _, h := range o.hs {
-		l.moved[h] = movedAt{pos: x.Pos(), to: to}
+		m := movedAt{pos: x.Pos(), to: to}
+		l.moved[h] = m
 	}
 	x.MoveFrom = src.from
 	life := args[1]
@@ -450,6 +457,63 @@ func (l *lifeChecker) moveCall(x *Call) lifetime {
 		life = life.union(lifetime{h})
 	}
 	return life
+}
+
+// ownership describes, for queries, what a resource variable x is where
+// it is used: moved, possibly moved, kept by something that may still
+// use it, borrowed, or owned (and movable here, or not).
+func (l *lifeChecker) ownership(x *VarRef) string {
+	return l.varOwnership(x.Var)
+}
+
+func (l *lifeChecker) varOwnership(v *Var) string {
+	if _, ok := v.Type.(*Resource); !ok {
+		return ""
+	}
+	o := l.origins[v]
+	if !o.known || len(o.hs) == 0 || o.hs[0].res == nil {
+		return borrowedText
+	}
+	for _, h := range o.hs {
+		if m, ok := l.moved[h]; ok {
+			if m.possibly {
+				return fmt.Sprintf("possibly moved to %s at line %d", m.to, m.pos.Line)
+			}
+			return fmt.Sprintf("moved to %s at line %d", m.to, m.pos.Line)
+		}
+	}
+	owner := l.scopeText(o.hs[0].scope)
+	for _, h := range o.hs {
+		if p, ok := l.pinned(h); ok {
+			return fmt.Sprintf("owned by %s, and kept by %s at line %d, so it cannot be moved", owner, p.what, p.pos.Line)
+		}
+		if h.frame != l.cur {
+			return fmt.Sprintf("owned by %s, but acquired outside this %s, so it cannot be moved here", owner, l.frameKind())
+		}
+		if h.loop != l.loop {
+			return fmt.Sprintf("owned by %s, but acquired outside this loop, so it cannot be moved here", owner)
+		}
+	}
+	return fmt.Sprintf("owned by %s and acquired here, so move can hand it to another scope", owner)
+}
+
+const borrowedText = "borrowed (not acquired here), so it cannot be moved; attach it instead"
+
+// noteVar marks v, bound here, for queries: where the block (or body)
+// that binds it ends, settle records what it is there, which is how it
+// ends up (moves and pins of other paths joined, ended keepers gone).
+func (l *lifeChecker) noteVar(v *Var) {
+	if _, ok := v.Type.(*Resource); ok && l.record {
+		l.defined = append(l.defined, v)
+	}
+}
+
+// settle records the state of the variables noted since mark.
+func (l *lifeChecker) settle(mark int) {
+	for _, v := range l.defined[mark:] {
+		l.info.VarOwnership[v] = l.varOwnership(v)
+	}
+	l.defined = l.defined[:mark]
 }
 
 // movedUse reports the use of x, of a value that holds the moved handle
@@ -557,6 +621,11 @@ func joinMoves(start map[*handle]movedAt, ends []map[*handle]movedAt, startPins 
 				}
 			}
 			if prev, ok := moved[h]; ok && !prev.possibly {
+				// Moved on every path: name each target (at the first move).
+				if !m.possibly && !slices.Contains(strings.Split(prev.to, " or "), m.to) {
+					prev.to += " or " + m.to
+					moved[h] = prev
+				}
 				continue
 			}
 			moved[h] = m
@@ -644,6 +713,7 @@ func summarize(fns []*Func, info *Info) (map[*Func]int, map[*Func]bool) {
 			if i := mayAcquire(fn); i >= 0 {
 				if _, ok := acquires[fn]; !ok {
 					l := newLifeChecker(info, &diag.List{})
+					l.record = false
 					l.acquires, l.passes = acquires, passes
 					l.acquireParam = fn.ParamVars[i]
 					l.acquireOK = true
@@ -658,6 +728,7 @@ func summarize(fns []*Func, info *Info) (map[*Func]int, map[*Func]bool) {
 				continue
 			}
 			l := newLifeChecker(info, &diag.List{})
+			l.record = false
 			if _, params := l.passShape(fn); len(params) > 0 {
 				l.acquires, l.passes = acquires, passes
 				for _, i := range params {

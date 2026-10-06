@@ -28,7 +28,11 @@ type Result struct {
 	Facts          []check.KnownFact                `json:"facts"`
 	// BelongsTo lists the scopes the value belongs to: it is usable
 	// while all of them are open.
-	BelongsTo []string                   `json:"belongs_to,omitempty"`
+	BelongsTo []string `json:"belongs_to,omitempty"`
+	// Ownership says whether a resource variable was acquired here and
+	// can be moved, is borrowed, is kept by a task or a channel, or was
+	// moved.
+	Ownership string                     `json:"ownership,omitempty"`
 	Proof     *check.Proof               `json:"proof,omitempty"`
 	Callable  *check.CallableDescription `json:"callable,omitempty"`
 }
@@ -398,6 +402,12 @@ func (s *sourceIndex) walk(x check.Expr) {
 		for _, policy := range x.Policies {
 			s.walk(policy)
 		}
+		s.walk(x.Body)
+	case *check.For:
+		if x.Var != nil && s.contains(x.Var.Pos, len(x.Var.Name)) {
+			s.selectVar(x.Var, x.Body.Pos())
+		}
+		s.walk(x.Items)
 		s.walk(x.Body)
 	case *check.ListLit:
 		for _, elem := range x.Elems {

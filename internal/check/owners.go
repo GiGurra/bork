@@ -404,6 +404,7 @@ func (l *lifeChecker) callLife(x *Call) lifetime {
 // be gone where it ends, if it does.
 func (l *lifeChecker) block(b *Block, tail func(Expr) lifetime) lifetime {
 	l.owners = append(l.owners, nil)
+	defined := len(l.defined)
 	for _, s := range b.Stmts {
 		l.stmt(s)
 	}
@@ -418,6 +419,7 @@ func (l *lifeChecker) block(b *Block, tail func(Expr) lifetime) lifetime {
 			l.mustBeGone(v, b.End)
 		}
 	}
+	l.settle(defined)
 	return life
 }
 

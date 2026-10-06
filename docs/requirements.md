@@ -1605,8 +1605,14 @@ to use, and a branch that moved it leaves it possibly moved.
   registration in that scope, and keeps no task using it (see
   [std-go.md](std-go.md)). As for `attach`, a resource is usable while it has
   a live registration.
-- **Tests.** `testdata/cases/move`, `move_fail`, `move_type_fail`, and the Go
-  runtime test `internal/gen/move_test.go`.
+- **Tooling.** A use after a move offers the fix "attach instead of moving"
+  (`bork check --json`, and an editor quick fix). Hover and `bork describe`
+  show a resource variable's ownership (`ownership` in JSON): owned and
+  acquired here (so movable), borrowed, kept by a task, channel or Go code,
+  moved, or possibly moved; a definition says how the variable ends up.
+- **Tests.** `testdata/cases/move`, `move_fail`, `move_type_fail`, the Go
+  runtime test `internal/gen/move_test.go`, `TestDescribeOwnership` and
+  `TestHoverOwnership`.
 
 ### Crash isolation and supervision (planned, not v0.1)
 

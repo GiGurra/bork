@@ -387,3 +387,44 @@ func TestInitializeCompilerVersion(t *testing.T) {
 		t.Fatalf("server info: %+v", result.ServerInfo)
 	}
 }
+
+func TestHoverOwnership(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	uri := fileURI(path)
+	source := `type Conn = resource
+fn connect(s: Scope) uses io: Conn unsafe go {
+  return Conn{handle: 1, owner: s.Own(func() {})}
+}
+fn main() {
+  scope s {
+    a = connect(s)
+    scope w { _ = move(a, w) }
+  }
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "bork.mod"), []byte("module example.com/own\nunsafe \"example.com/own\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var in, out bytes.Buffer
+	for _, m := range []map[string]any{
+		{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{}},
+		{"jsonrpc": "2.0", "method": "textDocument/didOpen", "params": map[string]any{"textDocument": map[string]any{"uri": uri, "version": 1, "text": source}}},
+		{"jsonrpc": "2.0", "id": 2, "method": "textDocument/hover", "params": map[string]any{"textDocument": map[string]any{"uri": uri}, "position": position{6, 4}}},
+		{"jsonrpc": "2.0", "id": 3, "method": "shutdown"},
+		{"jsonrpc": "2.0", "method": "exit"},
+	} {
+		if err := writeMessage(&in, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Serve(&in, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Ownership: moved to scope w at line 8") {
+		t.Fatalf("hover lacks the moved state: %s", &out)
+	}
+}

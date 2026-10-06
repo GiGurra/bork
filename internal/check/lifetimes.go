@@ -32,6 +32,8 @@ import (
 func Lifetimes(files []*syntax.File, info *Info, diags *diag.List) {
 	info.Lifetimes = map[Expr][]string{}
 	info.VarLifetimes = map[*Var][]string{}
+	info.Ownership = map[Expr]string{}
+	info.VarOwnership = map[*Var]string{}
 	var fns []*Func
 	for _, f := range files {
 		for _, fd := range f.Funcs {
@@ -79,6 +81,7 @@ func newLifeChecker(info *Info, diags *diag.List) *lifeChecker {
 		safeChild:  map[*Var]bool{},
 		passes:     map[*Func]bool{},
 		passParams: map[*Var]*handle{},
+		record:     true,
 	}
 }
 
@@ -174,6 +177,11 @@ type lifeChecker struct {
 	passes     map[*Func]bool
 	passParams map[*Var]*handle
 	passOK     bool
+	// record is set when describing ownership for queries (not while
+	// summarizing); defined lists the resource variables bound in the
+	// blocks being checked (see noteVar).
+	record  bool
+	defined []*Var
 }
 
 func (l *lifeChecker) errorf(pos diag.Pos, format string, args ...any) {
@@ -185,9 +193,11 @@ func (l *lifeChecker) function(fn *Func) {
 	l.open = nil
 	l.loop = nil
 	l.enclosing = map[*ScopeBlock][]*ScopeBlock{}
+	mark := len(l.defined)
 	for _, p := range fn.ParamVars {
 		l.frame[p] = fn
 		l.env[p] = lifetime{p}
+		l.noteVar(p)
 		if p.Type == OwnedScope {
 			l.bind(p)
 		}
@@ -222,6 +232,7 @@ func (l *lifeChecker) function(fn *Func) {
 		}
 	}
 	l.result(fn.Body, l.value(fn.Body, "return"), l.what())
+	l.settle(mark)
 	l.verifyResult(fn.Body)
 	if fn.Body.Type() != Never {
 		for _, p := range fn.ParamVars {
@@ -548,6 +559,11 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		for _, c := range l.captures {
 			*c = c.union(life)
 		}
+		if l.record {
+			if text := l.ownership(x); text != "" {
+				l.info.Ownership[x] = text
+			}
+		}
 		return l.use(x, life)
 	case *Block:
 		return l.block(x, l.expr)
@@ -582,11 +598,13 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		var life lifetime
 		b := l.fork()
 		for _, arm := range x.Arms {
+			defined := len(l.defined)
 			l.bindPattern(arm.Pat, subject, l.originOf(x.X))
 			for _, guard := range arm.Pat.Guards() {
 				l.conditional(guard, func() { l.use(guard, l.expr(guard)) })
 			}
 			life = life.union(l.expr(arm.Body))
+			l.settle(defined)
 			b.done(arm.Body)
 		}
 		b.join(x.Pos(), "match")
@@ -628,7 +646,10 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		mark := len(l.bound)
 		outer := l.loop
 		l.loop = x
+		defined := len(l.defined)
+		l.noteVar(x.Var)
 		l.expr(x.Body)
+		l.settle(defined)
 		l.loop = outer
 		for owner, gone := range l.gone {
 			if _, ok := before[owner]; !ok && l.bound[owner] < mark {
@@ -802,6 +823,7 @@ func (l *lifeChecker) stmt(s Stmt) {
 		// A possibly released value can be bound; using it is the error.
 		l.env[s.Var] = l.expr(s.Value)
 		l.origins[s.Var] = l.originOf(s.Value)
+		l.noteVar(s.Var)
 		if len(l.env[s.Var]) > 0 {
 			l.info.VarLifetimes[s.Var] = l.lifeText(l.env[s.Var])
 		}
@@ -825,6 +847,7 @@ func (l *lifeChecker) bindPattern(p *Pat, life lifetime, o resOrigin) {
 	if p.Var != nil {
 		l.env[p.Var] = life
 		l.origins[p.Var] = o
+		l.noteVar(p.Var)
 	}
 	for _, f := range p.Fields {
 		l.bindPattern(f.Pat, life, resOrigin{})
@@ -841,9 +864,11 @@ func (l *lifeChecker) lambda(x *Lambda) lifetime {
 	l.loop = nil
 	l.parent[x] = l.cur
 	l.cur = x
+	mark := len(l.defined)
 	for _, p := range x.Params {
 		l.frame[p] = x
 		l.env[p] = lifetime{p}
+		l.noteVar(p)
 		if life, ok := l.lambdaParams[p]; ok {
 			l.env[p] = life
 			if len(life) > 0 && l.carriesLife(p.Type) {
@@ -854,6 +879,7 @@ func (l *lifeChecker) lambda(x *Lambda) lifetime {
 	var used lifetime
 	l.captures = append(l.captures, &used)
 	l.result(x.Body, l.use(x.Body, l.expr(x.Body)), "the lambda")
+	l.settle(mark)
 	l.captures = l.captures[:len(l.captures)-1]
 	l.cur, l.open, l.loop = saved, savedOpen, savedLoop
 	// The lambda lives as long as what it uses from outside (not the
@@ -877,11 +903,14 @@ func (l *lifeChecker) mock(m *Mock) {
 	saved := l.cur
 	l.parent[m.Func] = l.cur
 	l.cur = m.Func
+	mark := len(l.defined)
 	for _, p := range m.Func.ParamVars {
 		l.frame[p] = m.Func
 		l.env[p] = lifetime{p}
+		l.noteVar(p)
 	}
 	life := l.use(m.Func.Body, l.expr(m.Func.Body))
+	l.settle(mark)
 	l.result(m.Func.Body, life, l.what())
 	l.pin(life, m.Pos, "the mock of "+m.Text, nil, true)
 	// Callers give the result the lifetime the target's signature
