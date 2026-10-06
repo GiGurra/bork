@@ -41,7 +41,8 @@ runtime meaning; the prefix states which stage should select or repeat code.
 A runtime loop over descriptors reports an error offering to add `comptime`.
 
 `shape.fields[T]()` returns record fields in declaration order. A field exposes
-`name`, `positional`, `index`, `doc`, `computed`, and `hasDefault`. `field.read(value)` expands
+`name`, `positional`, `index`, `doc`, `computed`, `hasDefault`, and `tags`, the
+field's declared `go { name: "value" }` tags in order as a `List[shape.Tag]`. `field.read(value)` expands
 into a checked field read; the value must have the descriptor's owner type.
 The projected type retains independent field facts. Sibling constraints remain
 on the descriptor and complete owner proof, since their arguments require that
@@ -139,7 +140,8 @@ bounds and facts still apply. Helpers cannot contain unsafe Go or be called
 from runtime source. The metadata evaluator supports String, Bool and Int literals, bindings, descriptor
 properties, sequence `length()` and `isEmpty()` queries, scalar equality,
 String concatenation, Boolean operations, staged conditions and matches, and calls to
-helpers using these operations. Other computations report an unsupported
+helpers using these operations. It also folds `toUpper()`, `toLower()` and
+`capitalize()` on a compile-time String. Other computations report an unsupported
 compile-time value when a staged control needs their result. Expansion has a
 shared work and depth limits and does not execute
 the native evaluator used by ordinary `comptime { ... }` blocks.
@@ -186,6 +188,50 @@ retain caller arguments and predicate callbacks as typed dictionary captures;
 the captures participate in lifetime and compile-time dependency checking.
 Predicate callbacks must be pure: write `(Int) uses nothing => Bool` for a
 callback on an Int slot. Encode does not retain tuple predicate arguments.
+
+## Foreign records
+
+A template that declares `metadata shape.ForeignRecord` gives its class a
+generated Go struct and checked conversions, as `GoStruct` does. The compiler
+evaluates the metadata expression for each derived record and validates it as
+that record's Go layout. The template chooses the order, Go names, tags and
+`Option` policy of the stored fields; nothing in the compiler depends on the
+class's name. Evaluation supports the layout records `shape.ForeignRecord`,
+`shape.ForeignField` and `shape.Tag`, `comptime for` lists, descriptor properties,
+literals and String case operations, so a query of the same metadata at runtime
+returns the same layout.
+
+```bork
+import "bork/shape"
+
+class Row[T] {}
+derive instance row[T]: Row[T] {
+  metadata shape.ForeignRecord = shape.ForeignRecord {
+    fields: [comptime for (field in shape.fields[T]()) comptime if (!field.computed)
+      shape.ForeignField {
+        slot: field.index,
+        name: "Col" + field.name.capitalize(),
+        tags: [shape.Tag { name: "db", value: field.name }],
+        option: shape.ForeignOption.Reject
+    }]
+  }
+}
+type User = { name: String, age: Int = 36 } derive (Row)
+fn main() { println(shape.metadata[User, Row, shape.ForeignRecord]()) }
+```
+
+`slot` is a field index. The layout must place each stored field once, under a
+unique exported Go name. `ForeignOption.Pointer` maps `Option[A]` to `*A` (or to
+`A` when its Go type is already nillable); `ForeignOption.Reject` refuses
+`Option` fields. A record has at most one Go layout, and the existing GoStruct
+rules apply: no tuples, specializations, resources or fields that depend on
+type parameters, and instances must be derived. A mirror keeps its Go struct:
+the layout must use its field names, ignoring case, and cannot add tags.
+Unsafe Go code reaches the conversions through the class dictionary's `New`,
+`FromGo`, `ToGo` and `Fields` members, described in
+[Generated Go structs](../std-go.md#generated-go-structs).
+
+## Exhaustive projections
 
 `shape.exhausted[T](value)` closes a staged sequence of sealed projections.
 The compiler requires an immutable owner parameter and a preceding unconditional

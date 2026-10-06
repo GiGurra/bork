@@ -216,7 +216,7 @@ func loadFrom(path string, reader sourceReader) ([]*syntax.File, string, *diag.L
 		if script {
 			l.scriptPath = paths[0]
 		}
-		l.files = append(l.files, prelude.Parse(diags)...)
+		l.preludeFiles(diags)
 		if err := l.loadPackage(root, paths); err != nil {
 			return nil, "", nil, err
 		}
@@ -233,6 +233,17 @@ func loadFrom(path string, reader sourceReader) ([]*syntax.File, string, *diag.L
 		graph = selected
 	}
 	return nil, "", nil, fmt.Errorf("library source and dependency graphs did not converge")
+}
+
+// preludeFiles starts the file list with the prelude. The standard packages
+// the prelude imports count as loaded, so user imports share them.
+func (l *loader) preludeFiles(diags *diag.List) {
+	l.files = append(l.files, prelude.Parse(diags)...)
+	for _, f := range l.files {
+		if !f.Prelude {
+			l.state[f.Package] = 2
+		}
+	}
 }
 
 func (l *loader) sourceReader() sourceReader {
@@ -425,10 +436,11 @@ func validName(s string) bool {
 func isLetter(r rune) bool { return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' }
 func isDigit(r rune) bool  { return r >= '0' && r <= '9' }
 
-// packagePos locates the root package, which follows the prelude files.
+// packagePos locates the root package, which follows the prelude files and
+// the standard packages they import.
 func packagePos(files []*syntax.File) diag.Pos {
 	for _, f := range files {
-		if !f.Prelude {
+		if !f.Prelude && !strings.HasPrefix(f.Package, std.Prefix) {
 			return diag.Pos{File: f.Path, Line: 1, Col: 1}
 		}
 	}

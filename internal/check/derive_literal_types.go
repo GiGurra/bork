@@ -323,6 +323,22 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 					metadata.locals[c.lookup(node.Name)] = kind
 				}
 				return
+			case *syntax.RecordLit:
+				// Fields of a known non-generic record supply their declared types.
+				if id, ok := node.Type.(*syntax.Ident); ok && !typeNames[id.Name] {
+					if entry := c.lookupType(id.Name); entry != nil {
+						if record, ok := entry.typ.(*Record); ok && len(record.TypeParams) == 0 {
+							for _, init := range node.Fields {
+								var declared Type
+								if field := record.Field(init.Name); field != nil {
+									declared = field.Type
+								}
+								walk(reflect.ValueOf(init.Value), declared, nil)
+							}
+							return
+						}
+					}
+				}
 			case *syntax.For:
 				c.scopes = append(c.scopes, map[string]*local{})
 				for _, init := range node.Init {

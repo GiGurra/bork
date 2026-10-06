@@ -67,6 +67,14 @@ fn (s: String) toLower(): String unsafe go {
   import "strings"
   return strings.ToLower(s)
 }
+// capitalize upper-cases the first Unicode character and keeps the rest.
+fn (s: String) capitalize(): String unsafe go {
+  import "unicode"
+  import "unicode/utf8"
+  first, size := utf8.DecodeRuneInString(s)
+  if size == 0 { return s }
+  return string(unicode.ToUpper(first)) + s[size:]
+}
 // trim removes leading and trailing white space.
 fn (s: String) trim(): String unsafe go {
   import "strings"

@@ -1,0 +1,6 @@
+users
+["name:ColName db=name", "email:ColEmail db=email", "age:ColAge db=age"]
+User { name: "bob", email: "b@example.com", age: 36 }
+GoValueError { path: "result.name", message: "must be short" }
+User { name: "y", email: "y", age: 36 }
+Option.Some(ForeignRecord { fields: [ForeignField { slot: 0, name: "ColName", tags: [Tag { name: "db", value: "name" }], option: ForeignOption.Reject }, ForeignField { slot: 1, name: "ColEmail", tags: [Tag { name: "db", value: "email" }], option: ForeignOption.Reject }, ForeignField { slot: 2, name: "ColAge", tags: [Tag { name: "db", value: "age" }], option: ForeignOption.Reject }] })

@@ -207,8 +207,7 @@ type Field struct {
 type Record struct {
 	Tuple        bool // structural positional record; never a named declaration
 	GoGenerated  bool
-	GoStruct     bool
-	GoStructPos  diag.Pos
+	Foreign      *ForeignLayout
 	GoTo, GoFrom bool
 	GoMirror     types.Type
 	GoFields     []GoField
@@ -242,7 +241,7 @@ func (r *Record) Instance(args []Type) *Record {
 	if t, ok := r.insts.byKey[key]; ok {
 		return t.(*Record)
 	}
-	inst := &Record{Name: r.Name, Decl: r.Decl, Prelude: r.Prelude, Pkg: r.Pkg, Base: r, Args: args, GoStruct: r.GoStruct, GoGenerated: r.GoGenerated, GoMirror: r.GoMirror, GoFields: r.GoFields, GoTo: r.GoTo, GoFrom: r.GoFrom}
+	inst := &Record{Name: r.Name, Decl: r.Decl, Prelude: r.Prelude, Pkg: r.Pkg, Base: r, Args: args, Foreign: r.Foreign, GoGenerated: r.GoGenerated, GoMirror: r.GoMirror, GoFields: r.GoFields, GoTo: r.GoTo, GoFrom: r.GoFrom}
 	r.insts.byKey[key] = inst
 	r.insts.whenResolved(func() {
 		inst.Fields = substFields(r.Fields, bindParams(r.TypeParams, args))

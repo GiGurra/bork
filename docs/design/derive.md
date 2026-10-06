@@ -370,26 +370,33 @@ requested U decoding; it never obtains T from a partial schema.
 metadata now replaces it in standard consumers. Metadata initializer functions remain runtime code;
 only their template structure is expanded at compile time.
 
-GoStruct moves to a library derivation using generic foreign-record shape
-primitives. The compiler must still know how to materialize an exported Go
-record layout and perform safe conversion; that is a backend capability,
-independent of any class name. `shape.foreignRecord` takes a checked ordered
-layout descriptor (slot, exported name, mapped foreign type, tags); generic
-foreign-type mapping and conversion primitives enforce nil, ownership,
-resource and recursive-layout rules. A template requests the layout during
-its declaration phase, before dependent Go bindings resolve, and publishes
-typed conversion metadata during the body phase. These are deterministic
-phases of one expansion, not separate native executions.
+GoStruct is a library derivation over a generic foreign-record capability.
+The compiler still materializes an exported Go record layout and performs safe
+conversion; that is a backend capability, independent of any class name. A
+class has it when its derive template declares the closed metadata key
+`shape.ForeignRecord`. Deriving such a class reserves the target's Go named
+type before Go bindings resolve (one Go layout per record). After defaults and
+computed fields are classified, the compiler evaluates the template's
+initializer with the bounded metadata evaluator. It evaluates the layout records
+(`ForeignRecord`, `ForeignField`, `Tag`), comptime lists, `ForeignOption`
+constants and String case operations. Then it validates slot provenance, each
+stored field placed exactly once, unique exported Go names, tag names, the
+Option policy, resources, generic fields, private ownership and specializations.
+The same initializer becomes the ordinary runtime metadata function, so
+`shape.metadata` returns the layout the compiler used. The checked plan is
+attached to the record, not read back from runtime values.
 
-The library chooses Go field capitalization, tags, stored/computed selection,
-Option mapping policy and exposes New/FromGo/ToGo/schema operations through
-ordinary methods/metadata. Foreign-to-bork construction must use the same
-checked builder and preserve accumulated GoValueError reporting, nil/cycle
-checks and defaults. Existing concrete-record restrictions remain initially.
-Mirrors retain their explicit declared foreign layout. Binding lowering reads
-generic conversion metadata rather than `IsGoStruct` or `GoGenerated` class
-switches. Whether GoStruct stays named in the prelude for compatibility is an
-API-location decision; it does not permit special compiler derivation logic.
+The template chooses Go field names, order, tags, stored/computed selection
+and Option mapping policy. GoStruct's template lives in the prelude, which now
+loads the standard packages it imports (`bork/shape`) as ordinary packages.
+Their declarations are emitted only when used. Every capability class's
+dictionary gets the generated New/FromGo/ToGo/Fields bridge, built on the
+checked mirror conversion backend. FromGo keeps accumulated GoValueError
+paths, nil/cycle checks, defaults and owner facts. Existing concrete-record
+restrictions remain. Mirrors keep their declared Go layout: the template must
+agree on field names (ignoring case) and add no tags. Fields() still looks up
+optional field decoders through the bork/codec package identity; moving that
+schema to source metadata is follow-up work.
 
 ## Codec protocol and migration
 

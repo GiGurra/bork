@@ -1,0 +1,55 @@
+import "bork/shape"
+
+class Twice[T] {}
+derive instance twice[T]: Twice[T] {
+  metadata shape.ForeignRecord = shape.ForeignRecord {
+    fields: [comptime for (field in shape.fields[T]()) shape.ForeignField { slot: 0, name: "A", tags: [], option: shape.ForeignOption.Pointer }]
+  }
+}
+class Lower[T] {}
+derive instance lower[T]: Lower[T] {
+  metadata shape.ForeignRecord = shape.ForeignRecord {
+    fields: [comptime for (field in shape.fields[T]()) shape.ForeignField { slot: field.index, name: field.name, tags: [shape.Tag { name: "bad tag", value: "" }], option: shape.ForeignOption.Pointer }]
+  }
+}
+class Strict[T] {}
+derive instance strict[T]: Strict[T] {
+  metadata shape.ForeignRecord = shape.ForeignRecord {
+    fields: [comptime for (field in shape.fields[T]()) shape.ForeignField { slot: field.index, name: field.name.capitalize(), tags: [], option: shape.ForeignOption.Reject }]
+  }
+}
+class Empty[T] {}
+derive instance empty[T]: Empty[T] {
+  metadata shape.ForeignRecord = shape.ForeignRecord { fields: [] }
+}
+class Spaced[T] {}
+derive instance spaced[T]: Spaced[T] {
+  metadata shape.ForeignRecord = shape.ForeignRecord {
+    fields: [comptime for (field in shape.fields[T]()) shape.ForeignField { slot: field.index, name: "Same Name", tags: [], option: shape.ForeignOption.Pointer }]
+  }
+}
+fn runtimeName(): String { "Name" }
+class Runtime[T] {}
+derive instance runtime[T]: Runtime[T] {
+  metadata shape.ForeignRecord = shape.ForeignRecord {
+    fields: [comptime for (field in shape.fields[T]()) shape.ForeignField { slot: field.index, name: runtimeName(), tags: [], option: shape.ForeignOption.Pointer }]
+  }
+}
+class Prefixed[T] {}
+derive instance prefixed[T]: Prefixed[T] {
+  metadata shape.ForeignRecord = shape.ForeignRecord {
+    fields: [comptime for (field in shape.fields[T]()) shape.ForeignField { slot: field.index, name: "X" + field.name, tags: [], option: shape.ForeignOption.Pointer }]
+  }
+}
+
+type Pair = { a: Int, b: Int } derive (Twice)
+type Lowered = { value: Int } derive (Lower)
+type Optional = { value: Option[Int] } derive (Strict)
+type Omitted = { value: Int } derive (Empty)
+type Dynamic = { value: Int } derive (Runtime)
+type Both = { value: Int } derive (GoStruct, Strict)
+type Url = go "net/url.URL" { host: String } derive (Prefixed)
+type Spacey = { a: Int } derive (Spaced)
+type Tuple = (Int, Int) derive (Strict)
+instance manual: Strict[Pair] {}
+fn main() {}

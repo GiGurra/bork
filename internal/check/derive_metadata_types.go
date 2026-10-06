@@ -155,6 +155,10 @@ func (m *deriveMetadataTypes) scalar(expr syntax.Expr) Type {
 			return Int
 		case "positional", "computed", "hasDefault":
 			return Bool
+		case "tags":
+			if shape := m.c.pkgs["bork/shape"]; shape != nil {
+				return &List{Elem: shape.TypeNamed("Tag")}
+			}
 		}
 	case deriveVariant:
 		switch selector.Name {
@@ -323,7 +327,7 @@ func (m *deriveMetadataTypes) checkMember(selector *syntax.Selector) {
 	switch kind {
 	case deriveField:
 		switch selector.Name {
-		case "name", "doc", "index", "positional", "computed", "hasDefault", "facts", "Type", "RawType", "read", "default", "validate", "check":
+		case "name", "doc", "index", "positional", "computed", "hasDefault", "tags", "facts", "Type", "RawType", "read", "default", "validate", "check":
 			valid = true
 		}
 	case deriveVariant:

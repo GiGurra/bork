@@ -192,6 +192,8 @@ func markerMethod(t *check.Sealed) string { return "is" + typeName(t.Name, t.Pkg
 // typeDecls generates Go declarations for the package's records and
 // sealed types, including String methods so values print in bork
 // syntax. Prelude types are only declared if the program uses them.
+func preludeOnly(pkg *check.Package) bool { return pkg != nil && pkg.PreludeOnly }
+
 func (g *gen) typeDecls() []ast.Decl {
 	needed := func(t check.Type) bool {
 		if g.artifactMode && !g.usedTypes[baseOf(t)] {
@@ -202,9 +204,9 @@ func (g *gen) typeDecls() []ast.Decl {
 			if t.MockCall {
 				return g.testMode && g.usedTypes[t]
 			}
-			return !t.Prelude || g.usedTypes[t]
+			return !t.Prelude && !preludeOnly(t.Pkg) || g.usedTypes[t]
 		case *check.Sealed:
-			return !t.Prelude || g.usedTypes[t]
+			return !t.Prelude && !preludeOnly(t.Pkg) || g.usedTypes[t]
 		case *check.Opaque:
 			return true
 		case *check.Resource:
@@ -1556,11 +1558,9 @@ func _seqfirst[T any](source _Seq[T]) Option[T] {
 }
 `)
 	}
-	if g.usesGoStruct {
+	if g.usesForeign {
 		src = append(src, g.codecRuntime(decodeSchemaHelpers))
-	}
-	if g.usesGoStruct {
-		src = append(src, strings.ReplaceAll(goStructSchemaHelpers, "@strconv@", g.goImport("strconv")))
+		src = append(src, strings.ReplaceAll(foreignSchemaHelpers, "@strconv@", g.goImport("strconv")))
 	}
 	if g.usesAssert {
 		g.usesShow = true

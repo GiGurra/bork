@@ -359,7 +359,7 @@ func (a *executionAuditor) dict(dict *Dict, depth int) {
 	for _, method := range dict.Inst.Methods {
 		a.function(method, depth+1)
 	}
-	for _, decoder := range dict.Inst.GoFieldDecoders {
+	for _, decoder := range dict.Inst.ForeignDecoders {
 		a.dict(decoder, depth+1)
 	}
 

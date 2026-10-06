@@ -103,7 +103,7 @@ func (p *deriveExpansion) helperPlan(call *syntax.Call, helper *syntax.FuncDecl,
 		p.error(call.Pos, "derive helper %s requires %d explicit type arguments and %d arguments", helper.Name, len(helper.TypeParams), len(helper.Params))
 		return nil, false
 	}
-	child := &deriveExpansion{c: p.c, template: &DeriveTemplate{Pkg: pkg}, target: p.target, scope: p.scope, instance: p.instance, env: map[string]any{}, origins: map[string]diag.Pos{}, typeFacts: map[string][]*Constraint{}, names: map[string]bool{}, active: p.active, budget: p.budget}
+	child := &deriveExpansion{c: p.c, template: &DeriveTemplate{Pkg: pkg}, target: p.target, scope: p.scope, instance: p.instance, env: map[string]any{}, origins: map[string]diag.Pos{}, typeFacts: map[string][]*Constraint{}, names: map[string]bool{}, active: p.active, budget: p.budget, layout: p.layout}
 	fn := &Func{Decl: helper, Pkg: pkg, Params: make([]Type, len(helper.Params)), defaultsChecked: true}
 	for i := range fn.Params {
 		fn.Params[i] = Invalid

@@ -17,8 +17,11 @@ type Field[T] = private {
   doc: String
   computed: Bool
   hasDefault: Bool
+  tags: List[Tag]
   facts: List[Fact[T]]
 }
+// Tag is one ordered `go { name: "value" }` tag declared on a field.
+type Tag = { name: String, value: String }
 // Fact keeps the resolved obligation identity during expansion. Its text is
 // display metadata, not a predicate to parse or a promise of validation.
 type Fact[T] = private {
@@ -67,3 +70,20 @@ fn metadata[T, C, M](): Option[M] unsafe go { panic("shape.metadata requires com
 
 // exhausted closes a complete sequence of returning projections of one owner.
 fn exhausted[T](value: T): Never unsafe go { panic("shape.exhausted requires certified derive projections") }
+
+// ForeignRecord is an ordered foreign (Go struct) layout of a record. A derive
+// template that declares `metadata shape.ForeignRecord` asks the compiler for
+// a generated Go struct with this layout, plus checked conversions. The
+// template's expression is evaluated during expansion, so it may only use
+// compile-time values: literals of these layout types, comptime lists,
+// descriptor properties and String case operations.
+type ForeignRecord = { fields: List[ForeignField] }
+// ForeignField places the stored field at slot (a field index) in the layout,
+// with an exported Go name, ordered struct tags and an Option mapping policy.
+type ForeignField = { slot: Int, name: String, tags: List[Tag], option: ForeignOption }
+type ForeignOption = sealed {
+  // Pointer maps Option[A] to *A, or to A when A's Go type is already nillable.
+  Pointer
+  // Reject refuses Option fields.
+  Reject
+}

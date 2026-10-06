@@ -1,0 +1,11 @@
+main.bork:45:32: cannot derive Twice for Pair: its ForeignRecord layout places field a twice
+main.bork:46:18: Go field value is not exported
+main.bork:46:18: invalid Go struct tag name bad tag
+main.bork:47:19: cannot derive Strict for Optional: field value is an Option, which its ForeignRecord layout rejects
+main.bork:48:31: cannot derive Empty for Omitted: its ForeignRecord layout omits stored field value
+main.bork:49:31: cannot derive Runtime for Dynamic: its template's ForeignRecord metadata at main.bork:34:3 must be a compile-time shape.ForeignRecord literal (layout records and lists, descriptor properties, literals and String case operations)
+main.bork:50:28: cannot derive Strict for Both: it already has a Go struct layout from GoStruct
+main.bork:51:31: cannot derive Prefixed for Url: the mirror keeps its Go layout, which maps field host to Host, not Xhost
+main.bork:52:17: Go field name "Same Name" for a is not an identifier
+main.bork:53:25: Strict cannot be derived for a tuple
+main.bork:54:18: Strict instances must be derived for records

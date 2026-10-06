@@ -19,6 +19,9 @@ type Package struct {
 	// Root is set for the package being built or tested; the others are
 	// the packages it imports, directly or not.
 	Root bool
+	// PreludeOnly is set for a standard package that only the prelude
+	// imports. Like prelude types, its types are emitted only when used.
+	PreludeOnly bool
 	// GoPrefix starts the Go names of the package's functions and types
 	// ("" for the root package and the prelude).
 	GoPrefix string
@@ -593,7 +596,7 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 	c.declareDeriveHelpers(files)
 	c.declareDeriveTemplates(files)
 	c.collectDerived(files)
-	c.resolveGoStructs(files)
+	c.resolveForeignRecords(files)
 	c.resolveGoMirrors(files, false)
 	c.checkRecordCycles()
 	c.info.OutOfRange = c.info.Named["OutOfRange"]
@@ -654,7 +657,7 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 		checkKey()
 	}
 	c.mapKeyChecks = nil
-	c.finishGoStructs()
+	c.finishForeignRecords()
 	c.resolveGoMirrors(files, true)
 	c.resolveDerived()
 	c.checkRules(files)
@@ -664,11 +667,12 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 			r.GoFrom = c.fromGo(r.GoMirror, r).ok
 			for _, t := range r.insts.byKey {
 				inst := t.(*Record)
-				inst.GoStruct, inst.GoGenerated, inst.GoMirror, inst.GoFields, inst.GoTo, inst.GoFrom = r.GoStruct, r.GoGenerated, r.GoMirror, r.GoFields, r.GoTo, r.GoFrom
+				inst.Foreign, inst.GoGenerated, inst.GoMirror, inst.GoFields, inst.GoTo, inst.GoFrom = r.Foreign, r.GoGenerated, r.GoMirror, r.GoFields, r.GoTo, r.GoFrom
 			}
-			if r.GoStruct && (!r.GoTo || !r.GoFrom) {
-				c.errorf(r.GoStructPos, "cannot derive GoStruct for %s: its fields must convert both to and from Go", r.Name)
+			if r.Foreign != nil && !r.Foreign.Failed && (!r.GoTo || !r.GoFrom) {
+				c.errorf(r.Foreign.Pos, "cannot derive %s for %s: its fields must convert both to and from Go", r.Foreign.Class.Name, r.Name)
 			}
+			c.checkMirrorLayout(r)
 		}
 	}
 	c.ensureAllFieldDefaults()
@@ -716,10 +720,10 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 	c.unappliedWheres(files)
 	c.markUnsafeGoImports(files)
 	for _, f := range files {
-		if f.Prelude {
-			continue
-		}
 		pkg := c.pkgs[f.Package]
+		if f.Prelude {
+			pkg = c.preludePkg
+		}
 		for _, imp := range f.Imports {
 			if pkg.imports[imp.Name] != nil && !pkg.used[imp.Name] {
 				c.diags.AddCode(imp.Pos, "import.unused", "%s is imported but not used", imp.Path)
@@ -832,10 +836,10 @@ func (c *checker) declarePackages(files []*syntax.File, root string) {
 		c.rootPkg = &Package{Path: root, Root: true, Funcs: map[string]*Func{}, types: map[string]*typeEntry{}, imports: map[string]*Package{}, used: map[string]bool{}, classes: map[string]*Class{}}
 	}
 	for _, f := range files {
-		if f.Prelude {
-			continue
-		}
 		pkg := c.pkgs[f.Package]
+		if f.Prelude {
+			pkg = c.preludePkg
+		}
 		for _, imp := range f.Imports {
 			target := c.pkgs[imp.Path]
 			switch {
@@ -848,6 +852,14 @@ func (c *checker) declarePackages(files []*syntax.File, root string) {
 			default:
 				pkg.imports[imp.Name] = target
 			}
+		}
+	}
+	for _, target := range c.preludePkg.imports {
+		target.PreludeOnly = true
+	}
+	for _, pkg := range c.pkgs {
+		for _, target := range pkg.imports {
+			target.PreludeOnly = false
 		}
 	}
 }

@@ -64,9 +64,6 @@ instance ordString: Ord[String] {
   fn compare(a: String, b: String): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
 }
 
-// GoStruct exposes a record to Go reflection through checked conversions.
-class GoStruct[T] {}
-
 instance ordRune: Ord[Rune] {
   fn compare(a: Rune, b: Rune): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
 }
