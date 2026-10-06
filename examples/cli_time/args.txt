@@ -1,0 +1,8 @@
+--timeout
+1m30s
+--since
+1970-01-01T01:00:00.123456789+01:00
+--retries
+500ms
+--retries
+1s
