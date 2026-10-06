@@ -38,4 +38,4 @@ fn main() {
 }
 
 type NamedChoice = sealed { Value { value: Int }, Empty }
-fn wrongField(o: NamedChoice): Int { match(o) { .Value { valu: 6 } => 6, _ => 0 } }
+fn wrongField(o: NamedChoice): Int { match (o) { .Value { valu: 6 } => 6, _ => 0 } }

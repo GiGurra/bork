@@ -13,7 +13,7 @@ derive codec.Encode for Positive
 derive codec.Decode for Positive
 
 type Defaults = { payload: Option[Int] = .Some(4), nested: Option[Option[Int]] = .Some(.Some(5)), tuple: Payload[Int] = Payload[Int].One((8, "default")) }
-fn defaultOption(value: Option[Int] = Option[Int].Some(9)): Int { match(value) { .Some(n) => n, .None => 0 } }
+fn defaultOption(value: Option[Int] = Option[Int].Some(9)): Int { match (value) { .Some(n) => n, .None => 0 } }
 
 type Bits = sealed { Pair(Bool, Bool), Empty }
 
@@ -25,7 +25,7 @@ fn read[T](value: Payload[T]): T | String {
     .Empty => "empty"
   }
 }
-fn explicitOption(value: Option[Int]): Int { match(value) { Option[Int].Some(n) => n, Option[Int].None => 0 } }
+fn explicitOption(value: Option[Int]): Int { match (value) { Option[Int].Some(n) => n, Option[Int].None => 0 } }
 fn optional(): Option[Int] { n = Option.Some(7)?; .Some(n + 1) }
 fn once(n: Int) uses io: Int { println(s"once $n"); n }
 fn checked(n: Positive): Int { match (n) { .Value(value) => needsPositive(value), .Empty => 1 } }
