@@ -1,5 +1,114 @@
 # Building a CLI application
 
+Start with a typed options record, then add configuration, subcommands and
+completion as your application needs them. The [API guide](cli.md) lists signatures
+and metadata fields.
+
+## Start with one command
+
+Save this complete program as `greet.bork`:
+
+```bork
+import "bork/cli"
+import "bork/codec"
+import "bork/process"
+use codec.Defaults
+
+type Options = {
+  // Person to greet.
+  name: String
+  // Print an excited greeting.
+  excited: Bool = false
+} derive (codec.Decode)
+
+fn main() {
+  result = cli.Run[Options]("greet", "Greet someone", (options, s) => {
+    ending = if (options.excited) { "!" } else { "." }
+    println(s"Hello, ${options.name}${ending}")
+  })
+  match (result) {
+    Ok => {}
+    error: cli.Error => {
+      eprintln(toString(error))
+      process.Exit(2)
+    }
+  }
+}
+```
+
+```sh
+bork build greet.bork -o greet
+./greet --name Ada
+./greet --name Ada --excited
+./greet --help
+./greet
+```
+
+```text
+$ ./greet --name Ada
+Hello, Ada.
+$ ./greet --name Ada --excited
+Hello, Ada!
+$ ./greet --help
+Greet someone
+
+Usage:
+  greet [flags]
+
+Flags:
+      --name string   Person to greet. (required)
+      --excited       Print an excited greeting. (default false)
+  -h, --help          help for greet
+$ ./greet
+Error { errors: [DecodeError { path: ".name", message: "is missing" }] }
+$ echo $?
+2
+```
+
+A required field has no default. Option fields may be omitted; Bool needs an
+explicit default if it should be optional. The handler runs only when every
+field and record fact is valid. Its Scope owns resources opened during that
+invocation, and closes after the handler returns. Help runs no handler and reads
+no configuration files. Run prints help and warnings; your program prints Error
+and chooses its exit code.
+
+`cli.Error` contains `errors: List[codec.DecodeError]`, each with path and message.
+Use `eprintln(toString(error))` for the whole value, or loop over errors and print
+`s"${failure.path}: ${failure.message}"`. Call process.Exit after Run returns so
+the handler's scope cleanup has finished.
+
+## Test explicit arguments
+
+Parse accepts arguments without the executable name and returns Help rather
+than printing it. Keep parsing tests independent of process argv:
+
+```bork
+import "bork/cli"
+import "bork/codec"
+use codec.Defaults
+
+type Options = { name: String } derive (codec.Decode)
+
+fn main() {
+  match (cli.Parse[Options]("greet", "Greet someone", ["--name", "Ada"])) {
+    options: Options => assert(options.name == "Ada")
+    error: cli.Error => panic(toString(error))
+    help: cli.Help => panic(help.text)
+  }
+  match (cli.Parse[Options]("greet", "Greet someone", [])) {
+    error: cli.Error => assert(!error.errors.isEmpty())
+    _ => panic("expected a missing-name error")
+  }
+}
+```
+
+For test declarations and assertions, see [testing](../language/testing.md).
+When displaying Parse help, send Help.text to stdout and Help.diagnostics to
+stderr; both are already rendered text. ParseDetailed also preserves successful
+deprecation warnings instead of discarding them.
+
+## Advanced walkthrough: fleet
+
 The [fleet example](../../examples/cli_fleet/main.bork) combines the CLI APIs in
 one application: nested commands and aliases, field documentation, reusable
 mapping policy, JSON settings, proven options, ordered positionals, and dynamic
