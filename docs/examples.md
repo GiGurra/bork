@@ -95,6 +95,7 @@ Each example's expected output is kept in [testdata/examples](../testdata/exampl
 | [process_pipeline](../examples/process_pipeline/main.bork) | A pipeline of processes connected by OS pipes |
 | [rand](../examples/rand/main.bork) | Seeded random generators with [bork/rand](std/rand.md) |
 | [regex](../examples/regex/main.bork) | Regular expressions with [bork/regex](std/regex.md) |
+| [cli_time](../examples/cli_time/main.bork) | Duration and RFC3339 flags with opt-in [bork/time](std/time.md) codecs | `bork run examples/cli_time -- --timeout 1m30s --since 1970-01-01T00:00:00Z --retries 500ms` |
 | [time_env](../examples/time_env/main.bork) | Configuration from the environment and an injectable clock with [bork/env](std/env.md) and [bork/time](std/time.md) |
 | [url](../examples/url/main.bork) | Parsing and building URLs with [bork/url](std/url.md) |
 | [uuid](../examples/uuid/main.bork) | UUIDs with [bork/uuid](std/uuid.md) |
