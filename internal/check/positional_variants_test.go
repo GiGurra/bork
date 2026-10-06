@@ -19,6 +19,7 @@ func TestPositionalVariantFixes(t *testing.T) {
 		{"nested pattern", `fn f(x:Option[List[Int]]):Int{match(x){.Some { value: [n, ...] }=>n,_=>0}}`, "type.variant_payload_form", false},
 		{"shorthand pattern", `fn f(x:Option[Int]):Int{match(x){Option.Some { value }=>value,Option.None=>0}}`, "type.variant_payload_form", false},
 		{"partly inferred type", `type A[T,U]=sealed{Value(T)};fn main(){println(A.Value(1))}`, "type.constructor_inference", true},
+		{"deferred missing type", `fn main(){println(["x"].fold(Option.None,(acc,x)=>acc))}`, "type.variant_expected", true},
 		{"missing type", `fn main(){println(Option.None)}`, "type.variant_expected", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

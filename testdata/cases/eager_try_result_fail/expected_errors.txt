@@ -4,7 +4,7 @@ main.bork:7:64: block promises a result that is Success, but for a value bad can
 main.bork:8:64: returned promises a result that is Success, but for a value bad can return, Success(Failed {  }) is false
 main.bork:9:54: explicitFailure promises a result that is Success, but Success(Failed {  }) is false
 main.bork:13:64: optionMake promises a result that is Present, but Present(Option.None) is false
-main.bork:14:90: optionArgument promises a result that is Present, but Present(Option.None) is false
+main.bork:14:81: optionArgument promises a result that is Present, but Present(Option.None) is false
 main.bork:15:67: optionBlock promises a result that is Present, but Present(Option.None) is false
 main.bork:21:73: bothFailures promises a result that is Numeric, but for a value alternatives can return, Numeric(First {  }) is false
 main.bork:21:73: bothFailures promises a result that is Numeric, but for a value alternatives can return, Numeric(Second {  }) is false

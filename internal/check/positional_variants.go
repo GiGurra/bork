@@ -36,7 +36,7 @@ func (c *checker) positionalVariantCall(call *syntax.Call, want Type) (Type, boo
 			return nil, false
 		}
 		sealed, ok := owner.(*Sealed)
-		if !ok {
+		if !ok || sealed.Variant(head.Name) == nil {
 			return nil, false
 		}
 		variant = c.specializedVariant(head.Pos, sealed, head.Name)
@@ -217,10 +217,21 @@ func (c *checker) variantExpectedFix(pos diag.Pos, owner string, sealed *Sealed,
 	}
 	insert := source.tokens[index-1].End
 	var args []string
-	for range sealed.TypeParams {
-		args = append(args, "_")
+	input := false
+	base := genericBaseOrSelf(sealed).(*Sealed)
+	for i := range base.TypeParams {
+		var arg Type
+		if i < len(sealed.Args) {
+			arg = c.zonk(sealed.Args[i])
+		}
+		if arg == nil || c.open(arg) {
+			args = append(args, "_")
+			input = true
+		} else {
+			args = append(args, TypeText(arg, c.pkg))
+		}
 	}
-	c.diags.Suggest(pos, code, source.tokens[index+1].End, diag.Fix{Message: "add explicit type arguments to " + owner, RequiresInput: true, Edits: []diag.TextEdit{{Start: insert, End: insert, Replacement: "[" + strings.Join(args, ", ") + "]"}}})
+	c.diags.Suggest(pos, code, source.tokens[index+1].End, diag.Fix{Message: "add explicit type arguments to " + owner, RequiresInput: input, Edits: []diag.TextEdit{{Start: insert, End: insert, Replacement: "[" + strings.Join(args, ", ") + "]"}}})
 }
 
 func (c *checker) constructorArgumentsFix(pos diag.Pos, head syntax.Expr, args []Type) {
