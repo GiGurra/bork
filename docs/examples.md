@@ -61,6 +61,7 @@ Each example's expected output is kept in [testdata/examples](../testdata/exampl
 | [slow_downstream](../examples/slow_downstream/main.bork) | Bounded admission and a shared retry budget against a slow service | `bork run examples/slow_downstream` |
 | [sql](../examples/sql/main.bork) | SQLite connections and transactions owned by scopes | `bork run examples/sql` |
 | [http_multi](../examples/http_multi/main.bork) | API, metrics and debug listeners with one application lifetime | `bork run examples/http_multi` |
+| [service_tour](../examples/service_tour/main.bork) | The [service tour](tour-service.md): environment configuration, validated JSON and SQLite | `bork run examples/service_tour -- demo` |
 
 ### Keep a service running
 
@@ -71,8 +72,9 @@ These commands keep listening; run curl in another terminal, then stop the servi
 | In-memory todo API | `bork run examples/http_server -- serve 127.0.0.1:8080` | `curl -H 'Content-Type: application/json' -d '{"title":"buy milk"}' http://127.0.0.1:8080/todos` |
 | Validated signup API | `bork run examples/signup_api -- serve 127.0.0.1:8080` | `curl -H 'Content-Type: application/json' -d '{"name":"ann","plan":"Free"}' http://127.0.0.1:8080/signup` |
 | API, metrics and debug | `bork run examples/http_multi -- serve` | `curl http://127.0.0.1:8080/hello` (metrics: port 9090; debug: port 6060) |
+| SQLite notes API | `bork run examples/service_tour -- serve` | `curl http://127.0.0.1:8080/notes` (creates `notes.db` in the current directory) |
 
-Choose one service at a time if they share port 8080. See [HTTP](std/http.md) for listeners, routing and shutdown.
+Choose one service at a time if they share port 8080. See [HTTP](std/http.md) for listeners, routing and shutdown. The [service tour](tour-service.md) covers configuration with `TOUR_ADDRESS` and `TOUR_DATABASE`, POST requests and tests.
 
 ## Standard packages
 
@@ -80,6 +82,7 @@ Choose one service at a time if they share port 8080. See [HTTP](std/http.md) fo
 | --- | --- | --- |
 | [bytes_encoding](../examples/bytes_encoding/main.bork) | Hex and base64 with [bork/encoding](std/encoding.md) | `bork run examples/bytes_encoding` |
 | [cli](../examples/cli/main.bork) | Command-line options decoded into a record with [bork/cli](std/cli.md) | `(cd examples/cli && bork run . -- --name Ada -p 443 --tags one --tags two)` |
+| [cli_visibility](../examples/cli_visibility/main.bork) | Hidden flags and warnings for deprecated flags with [bork/cli](std/cli.md) | `bork run examples/cli_visibility -- --trace --old-port 9000` |
 | [subcommands](../examples/subcommands/main.bork) | Typed subcommands with [bork/cli](std/cli.md) | `(cd examples/subcommands && bork run . -- serve --host localhost -p 443)` |
 | [compress_archive](../examples/compress_archive/main.bork) | Gzip, ZIP, and TAR with [bork/compress](std/compress.md) and [bork/archive](std/archive.md) | `bork run examples/compress_archive` |
 | [crypto](../examples/crypto/main.bork) | Hashes and HMAC with [bork/crypto](std/crypto.md) | `bork run examples/crypto` |
