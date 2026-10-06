@@ -1,9 +1,9 @@
 0
 open a
+open b
 a: in session
 close a
 session ended
-open b
 b: in session
 close b
 session ended
@@ -30,6 +30,12 @@ Ok
 open g
 close g
 Closed {}
+open x
+open y
+x: looped
+y: looped
+close y
+close x
 close f
 close e
 app ended
