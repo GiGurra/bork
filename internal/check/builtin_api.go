@@ -1,6 +1,7 @@
 package check
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -24,7 +25,7 @@ func BuiltinAPI(info *Info, files []*syntax.File) *PackageAPI {
 	out.Documentation = "Built-ins are available in every Bork package without an import. Compiler-provided signatures use value for any value type and values... for zero or more independently typed arguments. Conversion results and assembly effects depend on their inputs."
 	for name, typ := range basicTypes {
 		text := "type " + name
-		doc := "A compiler-provided type."
+		doc := builtinTypeComment(typ)
 		if name != typ.String() {
 			text += " = " + typ.String()
 			doc = "An alias for " + typ.String() + "."
@@ -34,7 +35,7 @@ func BuiltinAPI(info *Info, files []*syntax.File) *PackageAPI {
 	out.Declarations = append(out.Declarations, []APIDeclaration{
 		{Kind: "type", Name: "List", Signature: "type List[T]", Documentation: "An immutable ordered collection; its methods return new lists."},
 		{Kind: "type", Name: "Map", Signature: "type Map[K, V]", Documentation: "An immutable map from keys to values; its methods return new maps."},
-		{Kind: "type", Name: "Seq", Signature: "type Seq[T] uses effects", Documentation: "A lazy sequence. Iteration charges its declared effects; omitted effects are inferred from context."},
+		{Kind: "type", Name: "Seq", Signature: "type Seq[T] uses effects", Documentation: "A lazy sequence. Iteration charges its declared effects; without uses it is pure."},
 		{Kind: "type", Name: "Never", Signature: "type Never", Documentation: "The result type of an expression that does not return."},
 	}...)
 	out.Declarations = append(out.Declarations, CompilerBuiltinDeclarations()...)
@@ -98,4 +99,30 @@ func CompilerBuiltinDeclarations() []APIDeclaration {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+func builtinTypeComment(typ Type) string {
+	switch typ {
+	case Bool:
+		return "A true or false value."
+	case String:
+		return "Immutable UTF-8 text; byte indexes and Unicode rune indexes are distinct."
+	case Rune:
+		return "A Unicode scalar value, distinct from numeric Int32."
+	case Bytes:
+		return "Immutable binary data, distinct from List[Byte]."
+	case Ok:
+		return "The result of an operation that produces no meaningful value."
+	case Scope:
+		return "A lifetime for tasks and resources; exit cancels tasks, joins them, and runs cleanup."
+	case OwnedScope:
+		return "The unique right to close a child scope created by openScope."
+	}
+	kind := "signed integer"
+	if IsFloat(typ) {
+		kind = "floating-point number"
+	} else if isUnsigned(typ) {
+		kind = "unsigned integer"
+	}
+	return fmt.Sprintf("A %d-bit %s.", bitsOf(typ), kind)
 }
