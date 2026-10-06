@@ -31,6 +31,7 @@ type FieldSpec = {
   config: Bool
   hidden: Bool
   deprecated: String
+  collection: Collection = Collection.Repeat
   choices: List[Choice] = []
   strictChoices: Bool = false
   files: Bool = false
@@ -133,6 +134,8 @@ fn resolveMetadataWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordS
     doc := field.doc
     if description, ok := flag.description.(Option_Some[string]); ok { doc = description.E0 }
     spec := FieldSpec{field: field.name, long: flag.long, short: flag.shortName, env: flag.envName, description: doc, positional: flag.positional, position: flag.position, configFile: flag.configFile, config: flag.config, hidden: flag.hidden, deprecated: flag.deprecated, choices: flag.choices, strictChoices: flag.strictChoices, files: flag.files, directories: flag.directories, keepOrder: flag.keepOrder}
+    mode := fieldCollection(field)
+    if failure, bad := mode.(codec.DecodeError); bad { fail(field.name, "invalid cli tag group: " + failure.message) } else { spec.collection = mode.(Collection) }
     automaticShort := false
     derive := func(spec FieldSpec) FieldSpec {
       if _, auto := spec.long.(Mapping_Auto); auto {
@@ -172,6 +175,13 @@ fn resolveMetadataWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordS
     }
     if spec.field != field.name { fail(field.name, "enricher must preserve field identity") }
     spec = derive(spec)
+    switch spec.collection.(type) {
+    case Collection_Csv:
+      if !strings.HasPrefix(field.kind, "list:") { fail(field.name, "Csv collection requires a List field") }
+    case Collection_KeyValue:
+      kind := strings.TrimPrefix(field.kind, "map:")
+      if !strings.HasPrefix(field.kind, "map:") || kind != "string" && kind != "number" && kind != "bool" { fail(field.name, "KeyValue collection requires a Map[String, V] with string, number, or bool input values") }
+    }
     long, short, env := nameOf(spec.long), nameOf(spec.short), nameOf(spec.env)
     if long == "" || isPositional(spec) { spec.aliases.long = nil }
     if env == "" || isPositional(spec) { spec.aliases.env = nil }
@@ -252,8 +262,12 @@ fn resolveMetadataWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordS
       name, found := positions[int64(i)]
       if !found { fail("position", "positions must be contiguous starting at zero"); continue }
       field := schema[schemaIndex[name]]
-      list := strings.HasPrefix(field.kind, "list:")
-      if list && i != len(positions)-1 { fail(name, "a List positional must be last") }
+      keyValue := false
+      for _, positionalSpec := range specs { if positionalSpec.field == name { _, keyValue = positionalSpec.collection.(Collection_KeyValue); break } }
+      list := strings.HasPrefix(field.kind, "list:") || keyValue
+      if list && i != len(positions)-1 {
+        if keyValue { fail(name, "a KeyValue positional must be last") } else { fail(name, "a List positional must be last") }
+      }
       if !list && !field.optional && !field.hasDefault && earlierOptional != "" { fail(name, "required positional cannot follow optional/default positional " + earlierOptional) }
       if !list && (field.optional || field.hasDefault) { earlierOptional = name }
     }

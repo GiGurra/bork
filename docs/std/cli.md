@@ -328,6 +328,7 @@ FieldSpec is the immutable metadata passed through the chain. `aliases` contains
 | `aliases` | `cli.FieldAliases = cli.FieldAliases {}` (`long, env: List[String] = []`) |
 | `positional, configFile, config, hidden` | `Bool` |
 | `position` | `Option[Int] = Option.None` |
+| `collection` | `cli.Collection = cli.Collection.Repeat` |
 | `choices` | `List[cli.Choice] = []` |
 | `strictChoices, files, directories, keepOrder` | `Bool = false` |
 
@@ -823,6 +824,54 @@ bork run examples/cli_dynamic -- --namespace team --resource team-web
 bork run examples/cli_dynamic -- __complete --config examples/cli_dynamic/settings.json --resource team-w
 bork run examples/cli_dynamic -- completion bash
 ```
+
+## CSV lists and key=value maps
+
+By default, List flags keep one literal element per occurrence and Map fields
+accept a whole JSON object. Opt in per field with the typed `cli` tag group.
+Select `use cli.FieldTagsEncode` alongside `use codec.Defaults` where the options
+record derives its decoder, so its schema can carry the validated tag value:
+
+```bork
+import "bork/cli"
+import "bork/codec"
+use codec.Defaults
+use cli.FieldTagsEncode
+
+type Options = {
+  tags: List[String] = [] cli { collection: cli.Collection.Csv }
+  labels: Option[Map[String, String]] cli { collection: cli.Collection.KeyValue }
+} derive (codec.Decode)
+
+fn main() {
+  println(cli.Parse[Options]("app", "Collections", [
+    "--tags", "web,worker", "--tags", "api", "--labels", "env=dev,team=ops"
+  ]))
+}
+```
+
+`Collection.Csv` splits each occurrence into CSV elements and appends repeated
+occurrences. Standard CSV quotes preserve commas inside a value. For example,
+`--tags '"one,two",three'` supplies two tags; an empty occurrence supplies an
+empty list. Whitespace inside an element remains part of its value. Input must
+contain one CSV record; malformed quoting and extra records return errors.
+
+`Collection.KeyValue` accepts comma-separated `key=value` pairs, including
+repeated flags. Keys must be nonempty; values split at the first `=`, so later
+`=` characters remain in the value. Duplicate keys are errors naming the key.
+The selected map-value decoder must accept string, number or bool input:
+strings are literal, while numbers and booleans use JSON syntax. An empty
+occurrence supplies an empty map; `key=` supplies an empty string value.
+Structured map values keep whole JSON-object syntax in Repeat mode.
+
+CLI environment bindings and final collection positionals use the same CSV
+rules, including quoted commas. Configuration files retain ordinary arrays and
+objects, and a higher-precedence source replaces the whole field. Field and
+record facts still validate the decoded result. Partial completion sees decoded
+supplied collections and keeps omitted fields Missing. Enrichers can override
+`FieldSpec.collection`; incompatible modes are metadata errors before source
+reads. Explicit `Collection.Repeat` preserves the default input policy.
+See [cli_collections](../../examples/cli_collections/main.bork).
 
 ## Ordered positional arguments
 

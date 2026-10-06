@@ -124,9 +124,10 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
   for i, field := range schema {
     typ := reflect.TypeFor[*string]()
     if field.kind == "bool" { typ = reflect.TypeFor[*bool]() }
-    list := strings.HasPrefix(field.kind, "list:")
-    if list { typ = reflect.TypeFor[*[]string]() }
     flag := metadata[field.field]
+    _, keyValue := flag.collection.(Collection_KeyValue)
+    list := strings.HasPrefix(field.kind, "list:") || keyValue
+    if list { typ = reflect.TypeFor[*[]string]() }
     doc := flag.description
     if field.hasDefault { doc += " (default " + helpDefault(field) + ")" } else if !field.optional { doc += " (required)" }
     tag := "optional:\"true\" descr:" + strconv.Quote(strings.TrimSpace(doc))
@@ -150,17 +151,45 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
   }
   shadow := reflect.New(reflect.StructOf(fields))
   var result any = pending{}
+  parameters := map[string]boa.Param{}
+  environmentInputs := map[string]string{}
+  var configuredFlags *pflag.FlagSet
   collect := func(arguments []string, partial bool) any {
       // Boa joins List positionals with commas. Keep original words, including
       // commas, whitespace and JSON compound elements, after its raw binding.
       for i, field := range schema {
         spec := metadata[field.field]
-        if !spec.positional || !strings.HasPrefix(field.kind, "list:") { continue }
+        _, keyValue := spec.collection.(Collection_KeyValue)
+        if !spec.positional || !strings.HasPrefix(field.kind, "list:") && !keyValue { continue }
         index := positionalIndex(spec)
         if len(arguments) > index {
           values := append([]string{}, arguments[index:]...)
           shadow.Elem().Field(i).Set(reflect.ValueOf(&values))
         }
+      }
+      collectionFailures := map[string][]codec.DecodeError{}
+      // Flags retain raw occurrences. Use one strict CSV parser for flags,
+      // original positional words and the selected canonical/alias env input.
+      for i, field := range schema {
+        spec := metadata[field.field]
+        _, csv := spec.collection.(Collection_Csv)
+        _, keyValue := spec.collection.(Collection_KeyValue)
+        if !csv && !keyValue { continue }
+        value := shadow.Elem().Field(i)
+        supplied := spec.positional && len(arguments) > positionalIndex(spec)
+        if flag := configuredFlags.Lookup(mappingName(spec.long)); flag != nil && flag.Changed { supplied = true }
+        var words []string
+        if !supplied && environmentInputs[field.field] != "" {
+          words = []string{environmentInputs[field.field]}
+        } else if !value.IsNil() { words = value.Elem().Interface().([]string) } else { continue }
+        parsed := parseCollectionWords(words)
+        if failure, bad := parsed.(Error); bad {
+          for j := range failure.errors { failure.errors[j].path = "." + inputKey(field) }
+          collectionFailures[field.field] = failure.errors
+          continue
+        }
+        values := parsed.([]string)
+        value.Set(reflect.ValueOf(&values))
       }
       files := append([]string{}, configFiles...)
       for i, field := range schema {
@@ -201,6 +230,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
       jsonFields := []codec.Field{}
       failures := []codec.DecodeError{}
       for i, field := range schema {
+        if errors := collectionFailures[field.field]; len(errors) != 0 { failures = append(failures, errors...); continue }
         key := inputKey(field)
         value := shadow.Elem().Field(i)
         var json codec.Value
@@ -210,6 +240,13 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
             if !field.optional { failures = append(failures, codec.DecodeError{path: "." + key, message: "is missing"}); continue }
             json = codec.Value_Null{}
           }
+        } else if _, keyValue := metadata[field.field].collection.(Collection_KeyValue); keyValue {
+          parsed := parseKeyValues(value.Elem().Interface().([]string), strings.TrimPrefix(field.kind, "map:"), parse)
+          if failure, bad := parsed.(Error); bad {
+            for _, issue := range failure.errors { issue.path = "." + key + issue.path; failures = append(failures, issue) }
+            continue
+          }
+          json = parsed.(codec.Value)
         } else if strings.HasPrefix(field.kind, "list:") {
           values := []codec.Value{}
           invalid := false
@@ -252,7 +289,6 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
       }
       return inputCollection{fields: jsonFields, errors: failures}
   }
-  parameters := map[string]boa.Param{}
   command := boa.Cmd{
     Use: name, Short: description, Params: shadow.Interface(),
     ParamEnrich: func(_ []boa.Param, param boa.Param, fieldName string) error { parameters[fieldName] = param; return nil },
@@ -268,12 +304,13 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
   cmd, err := command.ToCobraE()
   if err != nil { return Error{errors: []codec.DecodeError{{path: name, message: err.Error()}}} }
   declaring := cmd
-  configuredFlags := cmd.Flags()
+  configuredFlags = cmd.Flags()
   if persistent { configuredFlags = cmd.PersistentFlags() }
   normalizedAliases := map[string]string{}
   bindAliases := func(executed *cobra.Command, args []string) error {
     for index, field := range schema {
       spec := metadata[field.field]
+      delete(environmentInputs, field.field)
       long := mappingName(spec.long)
       canonical := configuredFlags.Lookup(long)
       supplied := ""
@@ -291,12 +328,14 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
       }
       env := mappingName(spec.env)
       if env == "" { continue }
-      selected := ""
+      selected, selectedInput := "", ""
       for _, candidate := range append([]string{env}, spec.aliases.env...) {
-        if os.Getenv(candidate) == "" { continue }
+        raw := os.Getenv(candidate)
+        if raw == "" { continue }
         if selected != "" { return fmt.Errorf("%s is the same field as %s", candidate, selected) }
-        selected = candidate
+        selected, selectedInput = candidate, raw
       }
+      environmentInputs[field.field] = selectedInput
       if selected == "" { selected = env }
       if param := parameters[fmt.Sprintf("Field%d", index)]; param != nil { param.SetEnv(selected) }
     }
@@ -324,7 +363,8 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
   for _, spec := range specs {
     long := mappingName(spec.long)
     complete := func(cmd *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {
-      if spec.positional && len(args) > positionalIndex(spec) && !strings.HasPrefix(kinds[spec.field], "list:") { return nil, cobra.ShellCompDirectiveNoFileComp }
+      _, keyValue := spec.collection.(Collection_KeyValue)
+      if spec.positional && len(args) > positionalIndex(spec) && !strings.HasPrefix(kinds[spec.field], "list:") && !keyValue { return nil, cobra.ShellCompDirectiveNoFileComp }
       if completion, supplied := dynamic[spec.field]; supplied && !spec.hidden && spec.deprecated == "" {
         fail := func(errors []codec.DecodeError) ([]string, cobra.ShellCompDirective) {
           for _, failure := range errors { _, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s: %s\n", failure.path, failure.message) }
@@ -408,7 +448,8 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
     if spec.positional {
       index := positionalIndex(spec)
       positionalCompletions[index] = complete
-      if strings.HasPrefix(kinds[spec.field], "list:") { listPosition = index }
+      _, keyValue := spec.collection.(Collection_KeyValue)
+      if strings.HasPrefix(kinds[spec.field], "list:") || keyValue { listPosition = index }
       continue
     }
     if long == "" { continue }

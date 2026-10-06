@@ -200,7 +200,7 @@ The first input has too few elements; the second has the wrong type at index 1:
 
 ## Decoder metadata
 
-Field adapters need more than a value decoder. The selected decoder can publish `metadata codec.FieldSchema = ...`; the schema kind is `string`, `number`, `bool`, `list:` followed by the element kind, or `json`, plus an optional flag.
+Field adapters need more than a value decoder. The selected decoder can publish `metadata codec.FieldSchema = ...`; the schema kind is `string`, `number`, `bool`, `list:` followed by the element kind, `map:` followed by the value kind, or `json`, plus an optional flag.
 
 | Signature/type | Meaning |
 | --- | --- |

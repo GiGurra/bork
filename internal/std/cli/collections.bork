@@ -1,0 +1,65 @@
+import codecs "bork/json"
+import "bork/codec"
+use codec.Defaults
+// Repeat preserves literal list words and whole JSON map input.
+type Collection = sealed { Repeat, Csv, KeyValue } derive (codec.Decode, codec.Encode)
+// This concrete tag record is carried by the selected codec record schema.
+type FieldTags = { collection: Collection = Collection.Repeat } derive (codec.Decode)
+// Select this encoder where options records derive schemas with cli tags.
+instance FieldTagsEncode: codec.Encode[FieldTags] {
+  fn encode(value: FieldTags): codec.Value {
+    codec.Value.Object { fields: [codec.Field { name: "collection", value: codec.encode(value.collection) }] }
+  }
+}
+
+fn parseCollectionWords(words: List[String]): List[String] | Error unsafe go {
+  import "encoding/csv"
+  import "io"
+  import "strings"
+  values := []string{}
+  for _, word := range words {
+    reader := csv.NewReader(strings.NewReader(word))
+    reader.FieldsPerRecord = -1
+    record, err := reader.Read()
+    if err == io.EOF { continue }
+    if err != nil { return Error{errors: []codec.DecodeError{{path: "", message: "invalid CSV input: " + err.Error()}}} }
+    if _, err := reader.Read(); err != io.EOF { return Error{errors: []codec.DecodeError{{path: "", message: "CSV input must contain one record"}}} }
+    values = append(values, record...)
+  }
+  return values
+}
+fn parseKeyValues(words: List[String], kind: String, parse: (String) => codec.Value | codecs.JsonError): codec.Value | Error unsafe go {
+  import "fmt"
+  import "strings"
+  fields := []codec.Field{}
+  failures := []codec.DecodeError{}
+  seen := map[string]bool{}
+  for _, word := range words {
+    key, raw, pair := strings.Cut(word, "=")
+    if !pair || key == "" { failures = append(failures, codec.DecodeError{path: "", message: "expected a nonempty key=value pair"}); continue }
+    if seen[key] { failures = append(failures, codec.DecodeError{path: "", message: fmt.Sprintf("duplicate map key %q", key)}); continue }
+    seen[key] = true
+    var value codec.Value = codec.Value_String{value: raw}
+    if kind != "string" {
+      parsed := parse(raw)
+      if failure, bad := parsed.(codecs.JsonError); bad { failures = append(failures, codec.DecodeError{path: "["+key+"]", message: failure.message}); continue }
+      value = parsed.(codec.Value)
+    }
+    fields = append(fields, codec.Field{name: key, value: value})
+  }
+  if len(failures) != 0 { return Error{errors: failures} }
+  return codec.Value_Object{fields: fields}
+}
+
+fn fieldCollection(field: codec.RecordField): Collection | codec.DecodeError {
+  mode: Collection = Collection.Repeat
+  groups = field.tags.filter(group => group.package == "bork/cli")
+  if (groups.length() > 1) { return codec.DecodeError { path: "", message: "duplicate cli tag group" } }
+  match (groups.head()) {
+    Option.None => mode
+    Option.Some(group) => match (codec.decode[FieldTags](group.value)) {
+      tags: FieldTags => tags.collection
+      error: codec.DecodeError => error
+    }
+  }
+}
