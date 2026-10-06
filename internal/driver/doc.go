@@ -119,7 +119,8 @@ func docNamesCurrent(a *EditorAnalysis, context *goContext) bool {
 			}
 			continue
 		}
-		names := (goPackages{module: a.program.module, context: context}).Names(input.paths)
+		usage := &goUsage{}
+		names := (goPackages{module: a.program.module, context: context, usage: usage}).Names(input.paths)
 		if !maps.Equal(names, input.names) {
 			return false
 		}

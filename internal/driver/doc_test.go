@@ -172,10 +172,22 @@ func TestDocExternalGoNamesCurrent(t *testing.T) {
 	module := &goModuleInputs{mod: []byte(fmt.Sprintf("module borkdoc\ngo 1.23\nrequire example.com/docnames v0.0.0\nreplace example.com/docnames => %q\n", filepath.ToSlash(root)))}
 	context := captureGoContextWithOptions(goContextOptions{settings: []string{"GO111MODULE=on", "GOPACKAGESDRIVER=off"}})
 	usage := &goUsage{}
-	names := (goPackages{module: module, context: context, usage: usage}).Names([]string{"example.com/docnames"})
-	if names["example.com/docnames"] != "original" || len(usage.names) != 1 || usage.names[0].standard {
+	names := (goPackages{module: module, context: context, usage: usage}).Names([]string{"fmt", "example.com/docnames"})
+	if names["fmt"] != "fmt" || names["example.com/docnames"] != "original" || len(usage.names) != 1 || usage.names[0].standard {
 		t.Fatalf("external name capture: %v, %+v", names, usage.names)
 	}
+	// A mixed standard/external group has no receipt. Validation must reload
+	// its standard names too, rather than accepting a cached package name.
+	key := standardGoNameKey{context.namespace, "fmt"}
+	previous, cached := standardGoNames.Load(key)
+	standardGoNames.Store(key, "staleName")
+	defer func() {
+		if cached {
+			standardGoNames.Store(key, previous)
+		} else {
+			standardGoNames.Delete(key)
+		}
+	}()
 	analysis := &EditorAnalysis{program: &compiledProgram{module: module}, usage: usage}
 	if !docNamesCurrent(analysis, context) {
 		t.Fatal("unchanged external Go names rejected")
