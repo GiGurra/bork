@@ -3,6 +3,6 @@ ok    {"id":2,"name":"bob","seats":12}
 bad   line 3: .name: must be nonEmpty
 bad   line 4: .name: must be maxBytes(20)
 bad   line 5: .age: must satisfy value >= 13 (between(13, 150))
-bad   line 6: .plan.type: unknown variant "Gold" of Plan
+bad   line 6: .plan.type: unknown variant "Gold" of Plan; expected one of Free, Paid
 bad   line 7: .plan.seats: is missing
 bad   line 8: not JSON: unexpected end of JSON: expected ',' or '}'

@@ -304,7 +304,6 @@ instances Defaults { decodeInt8, encodeInt8, decodeInt16, encodeInt16, decodeInt
 // preserve slot order; named payloads preserve declaration-order object fields.
 derive instance encodeShape[T]: Encode[T] {
   fn encode(x: T): Value {
-    CheckWireNames[T]()
     comptime match (shape.kind[T]()) {
       shape.Record => {
         comptime if (shape.positional[T]()) {
@@ -312,6 +311,7 @@ derive instance encodeShape[T]: Encode[T] {
             encode[field.Type](field.read(x))]
           Value.Array { items: values }
         } else {
+          CheckWireNames[T]()
           fields: List[Field] = [comptime for (field in shape.fields[T]())
             comptime if (!field.computed) {
               Field { name: FieldWireName[T](field), value: encode[field.Type](field.read(x)) }
@@ -320,6 +320,7 @@ derive instance encodeShape[T]: Encode[T] {
         }
       }
       shape.Sealed => {
+        CheckWireNames[T]()
         comptime for (variant in shape.variants[T]()) {
           comptime if (!variant.positional) {
             comptime for (field in variant.fields) {

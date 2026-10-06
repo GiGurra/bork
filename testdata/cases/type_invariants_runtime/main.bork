@@ -37,8 +37,8 @@ type Box[T] = { value: T, n: Int } where boxValid derive (codec.Decode)
 pred accepted(s: Gate) { match (s) { Gate.Accepted => true, Gate.Rejected => false } }
 type Gate = sealed { Accepted, Rejected } where accepted derive (codec.Decode)
 test "sealed-wide decoders validate fieldless variants" {
-  match (json.Decode[Gate]("\"Accepted\"")) { Gate => assert(true), _ => assert(false) }
-  match (json.Decode[Gate]("\"Rejected\"")) { Gate => assert(false), codec.DecodeError => assert(true), json.JsonError => assert(false) }
+  match (json.Decode[Gate]("\"ACCEPTED\"")) { Gate => assert(true), _ => assert(false) }
+  match (json.Decode[Gate]("\"REJECTED\"")) { Gate => assert(false), codec.DecodeError => assert(true), json.JsonError => assert(false) }
 }
 test "generic invariants validate and generate" (b: Box[String]) {
   assert(b.n > 0)
