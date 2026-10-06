@@ -2,6 +2,7 @@ package check
 
 import (
 	"maps"
+	"strings"
 	"testing"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -39,16 +40,15 @@ func TestEditorTypeQueriesPreserveSourceIndexes(t *testing.T) {
 	}
 }
 
-func TestEditorTypeQueryCallArgument(t *testing.T) {
+func TestFactQueryCallArgument(t *testing.T) {
 	info := executionAuditProgram(t, `pred above(x: Int, threshold: Int) { x > threshold }
 fn minimum(): Int { 0 }
+fn identity(value: Int): Int { value }
 fn main() {}`)
-	diags := &diag.List{}
-	query := syntax.Parse("query.bork", []byte("type Query = Int where above(minimum())\n"), diags)
-	if diags.Len() != 0 {
-		t.Fatal(diags.Error())
-	}
-	if typ := EditorType(info, info.Funcs["minimum"].Pkg, query.Types[0].Alias); typ != Invalid {
-		t.Fatalf("nonconstant predicate argument should be rejected, got %s", typ)
+	fn := info.Funcs["identity"]
+	value := fn.Body.Tail
+	_, _, err := DescribeFacts(info, fn, value, value.Pos(), "above(minimum())", nil)
+	if err == nil || !strings.Contains(err.Error(), "predicate arguments are constants or parameter names") {
+		t.Fatalf("want invalid predicate argument diagnostic, got %v", err)
 	}
 }
