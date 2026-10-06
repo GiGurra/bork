@@ -1,5 +1,8 @@
 # Transparent async bindings (local bindings implemented: bork-mais5u)
 
+> **Status:** Implemented for local bindings. Current docs: [lazy and async bindings](../language/scopes.md#lazy-and-async-bindings). Async fields and package bindings remain outside this feature.
+> Bork blocks below are design sketches; the linked current docs contain checked examples.
+
 `async(s) name = expr` starts one initializer immediately as a task of scope
 `s`. Reading `name` waits for that task and returns its result. The binding has
 its ordinary type T, including failure alternatives and facts; it exposes no
@@ -8,7 +11,7 @@ sharing their initializer boundary, capture checks and transparent memo reads.
 Local bindings are implemented; async fields and package bindings are outside
 this design.
 
-```bork
+```bork fragment
 fn page(id: Int) uses net: String = scope request {
   async(request) user = fetchUser(id)
   async(request) orders = fetchOrders(id)
@@ -52,7 +55,7 @@ fan-in combinator: sequential reads can wait on tasks that already run in parall
 
 Initializer effects are charged at the declaration, including for unread
 bindings. The scope expression's effects are charged there too. Scheduling
-adds no new `state` effect, matching the existing `spawn` and `launch` API.
+adds no new `state` effect, matching the existing `fork` API.
 Reads are memo observations of work already charged at creation, rather than
 repeatable pure evaluations of the initializer. Compile-time predicate and constant
 evaluation must never schedule an async task or force a runtime async cell.
@@ -61,15 +64,15 @@ A known-input pure candidate containing async is not evaluated at compile time;
 existing proof or runtime validation rules apply instead.
 
 Immutable lexical values and ambient `needs` are captured at declaration as
-for lazy initializers and spawn callbacks. Dynamic mocks and logged/propagated
-labels follow the existing spawn task-context rules: the scheduling context,
+for lazy initializers and fork callbacks. Dynamic mocks and logged/propagated
+labels follow the existing fork task-context rules: the scheduling context,
 not the reader's context, determines the initializer's observations. Captured
 capabilities are ordinary values, not snapshots of outside state.
 
 ## Scope ownership, cancellation and failure
 
 The task belongs to the supplied scope. Captures must outlive that scope under
-the same checks as a callback passed to `spawn`; use `attach` to extend resource
+the same checks as a callback passed to `fork`; use `attach` to extend resource
 ownership when appropriate. The binding's cell depends on that scope and its
 captures even when T is scalar. A closure retaining the cell cannot escape
 those lifetimes; neither a later read nor a captured cell can be used after an
@@ -90,7 +93,7 @@ Failure alternatives are values: `User | HttpError` remains that binding's type.
 A panic cancels the task's scope and is re-raised on every read. If no read
 observes it, scope exit reports it under the existing task-failure policy.
 Reading marks the task failure observed exactly as `await` does. Retry requires
-a new declaration. Task waits retain spawn's ordinary blocking/deadlock limits;
+a new declaration. Task waits retain fork's ordinary blocking/deadlock limits;
 there is no whole-program dependency-cycle detector.
 
 ## Lowering and tooling

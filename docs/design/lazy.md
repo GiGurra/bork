@@ -1,4 +1,7 @@
-# Lazy bindings and record fields (proposal: bork-9zpf2t)
+# Lazy bindings and record fields (bork-9zpf2t)
+
+> **Status:** Implemented: local lazy bindings, lazy/computed record fields and pure package bindings. Current docs: [lazy bindings](../language/scopes.md#lazy-and-async-bindings) and [record types](../language/types.md).
+> Bork blocks below are design sketches; the linked current docs contain checked examples.
 
 Bork evaluates ordinary expressions eagerly. An explicit `lazy` modifier defers
 one initializer until its first read and shares that result with every later
@@ -15,7 +18,7 @@ fields, computed sibling defaults and pure package bindings are implemented.
 
 ## Bindings and demand
 
-```bork
+```bork fragment
 fn answer(): Int {
   lazy result: Int = expensiveComputation()
   if (needAnswer()) { result } else { 0 }
@@ -110,7 +113,7 @@ re-entry is insufficient.
 
 ## Record fields and a passable lazy value
 
-```bork
+```bork fragment
 type Lazy[T] = { lazy value: T }
 
 fn deferred(): Lazy[Int] {

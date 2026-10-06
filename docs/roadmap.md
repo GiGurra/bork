@@ -1,6 +1,6 @@
 # bork roadmap
 
-> How we get from the requirements in [requirements.md](requirements.md) to a working v0.1 compiler. The milestones are ordered so the core idea (facts on immutable values) is tested early.
+> M0–M3 are completed milestones. This page records their acceptance criteria and the current compiler pipeline. The [language guide](language/basics.md) describes the implemented language; the [design notes](contributing.md#design-notes) identify active work and remaining proposals.
 
 ## Guiding decisions
 
@@ -14,15 +14,15 @@
 
 1. **Lex.** Tokens with positions, keeping comments (needed later for `bork fmt` and editor support). Automatic statement termination at line ends.
 2. **Parse.** Hand-written recursive descent into a syntax tree. Priority on error recovery and clear messages.
-3. **Load packages and resolve names.** Go-style: directory = package, imports by module path, circular imports rejected. Each package is compiled on its own against summaries of the packages it imports.
+3. **Load packages and resolve names.** Go-style: directory = package, imports by module path, circular imports rejected. The loader builds the complete source/import graph; reusable package-interface checking remains a design goal.
 4. **Type check.** Base types only, with every `where` clause ignored: records, unions, generics, local inference, lambdas, and exhaustive `match`.
 5. **Check facts.** Collect obligations (constrained parameters, constrained record construction, resource use), and resolve each one backwards from its use site through guards, `match`es, bindings, declared results, inference rules, and scopes. Unresolved obligations become diagnostics.
-6. **Evaluate at compile time.** Predicates on compile-time-known values run inside the compiler. That requires a small interpreter for bork's lowered form, which can be reused for compile-time blocks.
+6. **Evaluate at compile time.** Predicates on compile-time-known values and explicit `comptime` blocks use bounded native evaluators generated as Go programs. Eligible standard interpolation validators use compiler-embedded implementations. Closed pure proof batches have separate bounded reuse; explicit comptime values are baked into generated output.
 7. **Lower.** Desugar into a small intermediate form: `?` into explicit branches, `match` into tests, scopes into finalizers, derived instances into generated functions. Facts are erased here.
 8. **Generate Go**, plus a small bork runtime package written in Go (unions, persistent collections, scopes and finalizers, panics). `//line` directives point Go's errors, panics, and stack traces back at `.bork` source.
-9. **Build.** The `bork` CLI runs `go build` on the generated code. Go must be installed (or bundled later).
+9. **Build.** The `bork` CLI runs `go build` on the generated code. Compiler/Go toolchain selection and executable reuse follow the [CLI contracts](cli.md).
 
-Each package writes a summary (exported types, signatures with their constraints, instances) that importing packages read, similar to proven's sidecars.
+Imported sources are checked in the complete loaded graph. Complete-program Session and disk caches reuse eligible results; serialized package-interface summaries and partitioned Go output remain proposals in the [incremental design](design/incremental.md).
 
 ## Testing
 
@@ -42,14 +42,14 @@ Functions, records, unions and sealed types, `match` with exhaustiveness, `Optio
 
 ### M1: facts
 
-**Status: done**, apart from two items that need later milestones (below). Done:
+**Status: done.** Implemented:
 
 - **Constraints:** `pred` (also generic); `where` on parameters, results (also per union member), record fields, constrained aliases, typed bindings, and inside type arguments (`List[Int where positive]`, `Option[...]`, generic records and sealed types); predicate arguments that are constants or parameters; predicate parameters (`List[T where keep]`); OR, with `and` and parentheses.
 - **Fact sources:** guards (`if`, early `return`/`panic`, `&&`, `||`, `!`), callers' own requirements, callees' promises (also through `?` and `match`), derived results of helpers (through chains), fields and paths, `trust`, inference rules (with conditions, chains, and cycles), proofs by cases over OR facts, and parametricity (facts flow through generic functions and into lambdas).
 - **Checking:** verified result promises; compile-time evaluation of any predicate on constants and literals, using the program's own code; diagnostics with fixes; test mode (`bork test`), where trusted facts (`trust`, and promises of `unsafe go` functions) are checked as the tests run, and every inference rule gets a property test that looks for counterexamples (on Int, the sized numbers, Float, String, and Bool variables).
 - **Groundwork it needed:** generic functions and types, function types and lambdas, `List[T]`, `|>`, `Option` as a prelude type, and `test` declarations with `assert` and `assertEqual`.
 
-Packages are in too: obligations across packages work (importers see what signatures declare, and compile-time checks run the imported predicates). Remaining: the `CreateUser` example, which needs decoding (M3).
+Packages are in too: obligations across packages work (importers see what signatures declare, and compile-time checks run the imported predicates). JSON decoding validates constrained request fields, as demonstrated by [signup_api](../examples/signup_api/main.bork).
 
 `pred`, `where` on parameters and returns, constrained type aliases, guards and `match` as fact sources, the backward resolver, "callers prove or declare", inference rules, `trust`, and compile-time checks of literals.
 
@@ -92,13 +92,13 @@ The target example programs (a JSON-over-HTTP endpoint with constrained request 
   - property tests for inference rules, which find counter-examples
   - a test mode that runs contracts at runtime, so tests can assert that a given input violates a given predicate (proven's drift defense)
 
-What proven needed but bork does not: all mutation handling (invalidating facts on reassignment, field writes, `++`, address escapes). bork's immutability makes it unnecessary. proven's mutation test cases become "cannot happen" in bork, apart from shadowing, which must not affect facts on the outer binding.
+What proven needed but bork does not: all mutation handling (invalidating facts on reassignment, field writes, `++`, address escapes). bork's immutability makes it unnecessary. proven's mutation test cases become "cannot happen" in bork. Same-block rebinding creates a new binding; nested shadowing is rejected. Facts stay attached to the value they describe.
 
 proven's `testdata/cases/` (108 cases) are a good source of golden tests: each one, rewritten in bork syntax, is a ready-made test for M1.
 
 ### M2: scopes
 
-**Status: done.** `scope s { ... }` blocks; resource types (`type File = resource`) made in `unsafe go`; finalizers that run last-first when a scope's block ends, returns early (also by `?`), or panics (a failing finalizer does not stop the others); `onClose`; a minimal file API (`openFile`, `createFile`, `readAll`, `write`); and lifetimes, which reject using a possibly released value, returning a value of a scope the function opened (also inside records, lists, and lambdas), and giving a scope something that may not live as long. Structured concurrency: `fork`/`await` start tasks (originally `spawn`/`launch`) that their scope waits for before it closes. Cancellation through scopes (`cancel`, `cancelAfter`, `delay`, `checkpoint`, request scopes in `bork/http`), channels, and `attach`, which keeps a resource open for a task of an outer scope. **M2 is done.**
+**Status: done.** `scope s { ... }` blocks; resource types (`type File = resource`) made in `unsafe go`; finalizers that run last-first when a scope's block ends, returns early (also by `?`), or panics (a failing finalizer does not stop the others); `onClose`; a minimal file API (`openFile`, `createFile`, `readAll`, `write`); and lifetimes, which reject using a possibly released value, returning a value of a scope the function opened (also inside records, lists, and lambdas), and giving a scope something that may not live as long. Structured concurrency: `fork`/`await` start and join scoped tasks. Scope exit cancels tasks, joins them, then runs finalizers; a `taskTimeout` policy grants a bounded wait before cancellation. Cancellation through scopes (`cancel`, `cancelAfter`, `delay`, `checkpoint`, request scopes in `bork/http`), channels, and `attach`, which keeps a resource open for a task of an outer scope. **M2 is done.**
 
 `scope` blocks, resources attached to scopes, finalizers in reverse order, the proof-of-open-scope rule, and "possibly released" diagnostics. A minimal file API is the first resource.
 
@@ -108,14 +108,21 @@ proven's `testdata/cases/` (108 cases) are a good source of golden tests: each o
 
 **Status: done.** Done: classes, named instances (also generic, with bounds), bounded type parameters, `use` of other packages' instances and of named sets of them (`instances Json { ... }`), ambiguity and missing-instance errors, explicit type arguments, format-independent codecs in `bork/codec` (`codec.Value`, `codec.Decode`, `codec.Encode`), and `derive (codec.Decode, codec.Encode)`, whose decoders check the fields' where clauses (the `signup` example decodes requests into proven values). `Eq` is built in (structural `==`, also on lists, and `[T: Eq]` bounds), so it and `Show` need no `derive`; and instances on constrained types, chosen for fields whose where clauses include them. M3 is done, including constrained instances at call sites (declared facts of the arguments, or an explicit constrained type argument, which also proves the result).
 
-Type classes, instances (including on constrained types), explicit instance-scope imports, ambiguity errors, and `derive` (`Eq`, `Show`, `Decode`).
+Type classes, instances (including on constrained types), explicit instance-scope imports, ambiguity errors, and open library-defined derivation. `codec.Decode`, `codec.Encode` and `GoStruct` are library derivations; structural `Eq` and default `Show` need no derive.
 
 *Done when* a request record with constrained fields decodes from JSON into already-proven values.
 
-### Later
+### Implemented beyond M3
 
-Concurrency and structured concurrency, crash isolation and supervision, user-defined scoped facts, compile-time blocks, `bork fmt`, editor support, Go interop, other compilation targets.
+Structured concurrency, channel/select operations, explicit compile-time blocks,
+open derivation, lazy/computed fields, loops and tail calls, `bork fmt`, language-server
+editor support, Go interop, Bork library dependencies and compiler/Go toolchain
+selection are implemented. Their current APIs are documented in the
+[language guide](language/basics.md), [standard-library reference](std/README.md)
+and [CLI](cli.md).
 
-## Decisions to settle before or during M0
-
-- The target example programs: a JSON-over-HTTP endpoint with constrained request fields, a database handler using scopes, and a small CLI.
+Package-level incremental checking, partitioned Go output and independently
+cached comptime values remain design work. See the status banners in
+[contributor design notes](contributing.md#design-notes) for individual boundaries.
+The native compiler produces Go executables; the browser playground supports
+checking and formatting rather than program execution.

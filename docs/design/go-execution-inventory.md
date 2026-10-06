@@ -1,5 +1,7 @@
 # Execution observation and installed SDK identity
 
+> **Status:** Implemented: request-owned execution observation and installed-SDK identity. Current implementation reference: [proof evaluator](proof-evaluator.md). Enclosing evaluated-value certification and explicit comptime-value reuse remain proposals.
+
 Status: request-owned accounting is integrated for comptime and predicate calls,
 including invocation-local and Session predicate memo hits. Every attempt still
 declines an execution receipt. Narrow [Session proof batches](proof-evaluator.md)

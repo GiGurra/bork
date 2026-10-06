@@ -1,5 +1,7 @@
 # Closed predicate evaluator generation
 
+> **Status:** Implemented: closed evaluator generation and bounded invocation-local, Session and persistent CLI proof batches. Current contributor reference: [compiler performance](performance.md). Explicit comptime values and enclosing execution certification use separate contracts.
+
 Ordinary fact checking used to compile unrelated user types, derived instances,
 foreign aliases and field helpers into every native predicate evaluator. The
 first incremental-checking slice trims that program, while executing each selection afresh unless the separate Session or CLI proof cache below

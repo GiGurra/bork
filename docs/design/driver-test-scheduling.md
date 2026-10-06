@@ -1,5 +1,7 @@
 # Driver serial-root audit
 
+> **Status:** Completed audit and implemented scheduling changes. Current contributor reference: [CI test shards](../ci.md). Measurements and per-test decisions below describe the recorded baseline.
+
 Snapshot: main `04e3964`, second uncached normal milestone run. The 188 passing
 non-parallel roots account for 49.33 s before the parallel group starts at 50.25 s.
 Target: serial phase below 15 s. The later collector refactor removed nine roots;

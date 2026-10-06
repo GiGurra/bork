@@ -1,5 +1,7 @@
 # Go package output experiment (bork-iqrd0t)
 
+> **Status:** Completed experiment; historical prototype. Production output remains a single Go package. Current implementation reference: [compiler performance](performance.md).
+
 Status: measured scalar-only prototype. The production compiler keeps its
 single-package output. The prototype establishes potential savings but does
 not meet the acceptance condition on an existing real multi-package program.

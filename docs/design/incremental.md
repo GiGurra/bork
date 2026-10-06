@@ -1,8 +1,10 @@
 # Incremental compilation (bork-h5rkt4)
 
-Status: proposal for review. No cache, watch command or output-layout change is
-implemented by this document. This design guides the remaining work in
-[bork-e3r166](performance.md).
+> **Status:** Partially implemented: complete-program Sessions, watch mode and eligible persistent results. Current docs: [watch mode](../watch.md); implementation reference: [disk cache](disk-cache.md). Package-interface incremental checking and partitioned Go output below remain proposals.
+
+The implemented complete-result Session and disk cache are described in the
+phase records below. The package-interface and output-layout design guides
+remaining work in [bork-e3r166](performance.md).
 
 ## Goal and correctness contract
 

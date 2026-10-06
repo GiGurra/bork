@@ -1,13 +1,16 @@
 # Loops and tail calls (design: bork-8jiark)
 
-bork has one loop today, `for (x in xs) { ... }` over a `List` or `Seq`, with
-`break` and `continue`. Everything else is written as recursion, and Go does
+> **Status:** Implemented: all loop forms, loop-carried rebinding and direct self-tail-call lowering. Current docs: [basics](../language/basics.md) and [collections](../language/collections.md); precise tail-call limits: [grammar](../grammar.md).
+> Bork blocks below are design sketches; the linked current docs contain checked examples.
+
+Before this design, bork had one loop, `for (x in xs) { ... }` over a `List` or `Seq`, with
+`break` and `continue`. Other loops used recursion, and the generated Go did
 not eliminate tail calls. A recursive event loop, such as a server's `select`
 loop, a retry loop or a state machine, grows the goroutine stack on every
 round until Go's 1 GB limit kills the process. Immutable bindings mean the
 usual fix (a `while` loop that updates variables) cannot be written either.
 
-This design adds two things, as decided by the human:
+The implemented design adds two things:
 
 1. **Go-style loops** with the existing `for` keyword: `for { ... }`,
    `for (cond) { ... }` and `for (init; cond; post) { ... }`. Loop-carried
@@ -18,7 +21,7 @@ This design adds two things, as decided by the human:
    recursion is not optimized. With loops and carried state, a state machine is
    a loop over a state value (see "Mutual recursion").
 
-```bork
+```bork fragment
 fn sum(xs: List[Int]): Int {
   total = 0
   for (x in xs) {
@@ -129,7 +132,7 @@ leave both loops need a carried flag without them. They are additive later
 type `Never`. Code after it is unreachable, which is a compile error, as after
 `return`. A function whose body ends in such a loop needs no final value:
 
-```bork
+```bork fragment
 fn main() uses io + state {
   for {
     println(next())
@@ -158,7 +161,7 @@ has the value of the branch that ran; a branch that does not rebind it keeps
 the previous value. The latest value flows into the next iteration, and after
 the loop the name has the value it had when the loop ended.
 
-```bork
+```bork fragment
 fn stats(xs: List[Int]): String {
   count = 0
   total = 0
@@ -187,7 +190,7 @@ The names that can be carried:
 
 Nested loops therefore carry through each level:
 
-```bork
+```bork fragment
 total = 0
 for (row in rows) {
   for (x in row) {
@@ -203,7 +206,7 @@ when each of these is a *statement*. That means its value is not used: it is
 an expression statement of the loop body, or of a branch that qualifies in
 turn. Go programmers write `if (x > best) { best = x }`, and that works:
 
-```bork
+```bork fragment
 best = 0
 for (x in xs) {
   if (x > best) {
@@ -279,7 +282,7 @@ the value the name had where the closure was made. That covers each
 iteration's values and each rebinding within an iteration. This is stronger
 than Go 1.22, where only three-clause header variables are per iteration.
 
-```bork
+```bork fragment
 fs: List[() => Int] = []
 for (i = 0; i < 3; i = i + 1) {
   fs = fs.append(() => i)
@@ -534,7 +537,7 @@ Both are real work for a case that loops now cover. The motivating case,
 a server or protocol state machine, is a loop over a state value with carried
 rebinding:
 
-```bork
+```bork fragment
 state: State = State.Idle
 for {
   state = match (state) {
@@ -553,7 +556,7 @@ widen from "self" to "the component".
 
 ### `uses tailrec`: the guarantee
 
-```bork
+```bork fragment
 fn serve(s: Scope, state: State) uses io + state + tailrec: Ok | Cancelled { ... }
 ```
 
