@@ -20,7 +20,7 @@ fn main() {
   match (cli.Run[Options]("files", "Process files with an ordered positional layout", (options, s) => {
     println(s"${options.action} with ${options.workers} workers: ${options.files}")
     }, flags: flags())) {
-    error: cli.Error => { println(error); process.Exit(2) }
+    error: cli.Error => { eprintln(error.Render("files")); process.Exit(2) }
     Ok => {}
   }
 }

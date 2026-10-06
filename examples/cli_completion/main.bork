@@ -18,7 +18,7 @@ fn main() {
   match (cli.Run[Options]("deploy", "Deploy selected resources", (options, s) => {
     println(s"${options.environment}: ${options.resources}")
     }, flags: flags())) {
-    error: cli.Error => { println(error); process.Exit(2) }
+    error: cli.Error => { eprintln(error.Render("deploy")); process.Exit(2) }
     Ok => {}
   }
 }

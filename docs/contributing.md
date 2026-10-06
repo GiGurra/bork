@@ -2,6 +2,8 @@
 
 These documents are for people working on the compiler and the standard library. They record what was decided and why, in much more detail than the reader pages. You do not need them to use the language.
 
+Each design note states whether it describes an implemented feature, a partial implementation, or a historical proposal, and links the current reference. Original design sketches and delivery plans preserve rationale; their APIs and status must not be inferred from proposal-era prose.
+
 ## References
 
 - [Grammar](grammar.md): the syntax the compiler accepts, in EBNF, with the semantic rules in brief.
@@ -21,7 +23,9 @@ Golden tests live in `testdata/cases/<name>/`, and every example's expected outp
 
 The documentation is tested too, in `internal/driver/docs_snippets_test.go`:
 
-- `TestDocSnippets` compiles the bork code blocks of the README and the reader pages, automatically discovering every `docs/language/*.md` and `docs/std/*.md` page. A block marked `bork` must compile and be formatted. One marked `bork fails` must not compile, and a `text` block right after it quotes the compiler's message, which is checked as well. One marked `bork fragment` is not checked.
+- `TestDocSnippets` compiles the bork code blocks of the README and the reader pages, automatically discovering every `docs/*.md` reader page except `grammar.md`, `requirements.md`, `roadmap.md`, `std-go.md`, `syntax-changes.md` and `ci.md`, plus every `docs/language/*.md` and `docs/std/*.md` page. A block marked `bork` must compile and be formatted. One marked `bork fails` must not compile, and a `text` block right after it quotes the compiler's message, which is checked as well. One marked `bork fragment` is not checked.
+- Footer placement and duplicate-paragraph guards cover the same reader pages.
+- Editor configuration fences (`lua`, `toml`, `elisp`) are allowed; Bork blocks still follow the checking rules above.
 - `TestDocLinks` checks the relative links, and the headings they point at, in every Markdown page under `docs/` and `examples/`.
 
 ## Building the documentation site

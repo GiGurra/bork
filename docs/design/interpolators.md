@@ -1,13 +1,14 @@
 # Typed string interpolators
 
-Design for bork-kgrtcn. This document proposes the language mechanism and the
-first library, `bork/sql`; implementation follows in a separate PR.
+Implemented design for typed string interpolators and `bork/sql`. For current
+usage, see [typed interpolators](../language/interpolators.md) and
+[SQL](../std/sql.md). Incomplete code below is marked as a protocol sketch.
 
 ## Syntax and result types
 
 Use an adjacent named prefix, with optional package qualification:
 
-```bork
+```bork fragment
 import "bork/sql"
 
 name = "Ada"
@@ -38,7 +39,7 @@ prefix makes the security boundary visible and works with bork's current imports
 
 The language knows only this call protocol:
 
-```bork
+```bork fragment
 SQL"a $x b ${y()} c"
 // Equivalent call structure:
 SQL(/* compiler-created StaticParts: ["a ", " b ", " c"] */)
@@ -56,7 +57,7 @@ type, including a failure union if the library chooses one.
 
 For example, a library can use bork's existing generic/class machinery:
 
-```bork
+```bork fragment
 class Encodable[T] { fn encodePart(value: T): String }
 type Builder = { parts: List[String], values: List[String] }
 fn Html(parts: StaticParts): Builder { Builder { parts: parts.values, values: [] } }
@@ -104,7 +105,7 @@ without changing the interpolation syntax or compiler protocol.
   source order and numbered only at execution. Statement doubles as Fragment;
   there is no second representation to convert or accidentally stringify.
 
-```bork
+```bork fragment
 table = sql.Name(tableName)?
 column = sql.Name(columnName)?
 filter = sql.SQL"$column = $name"
@@ -170,8 +171,33 @@ record or Error for testing and inspection. Rendering is pure; execution and
 stream traversal retain their current effects and scope ownership.
 The raw `sql.Exec/Query/QueryJson/Rows/RowsJson(connection, query, params)`
 entry points require `query: UnsafeQuery`, constructed with `sql.Unsafe(text)`.
-Their old String signatures are removed; parameters remain bound by the driver. Migrate examples/sql to Statement methods and use actual
-value holes for inserts and predicates.
+Parameters remain bound by the driver; UnsafeQuery makes trust in runtime SQL
+text explicit at the call site.
+
+## Compile-time and render-time SQL checks
+
+The SQL validator checks literal parts and hole kinds during compilation. It
+rejects a boundary only when both SQLite and Postgres reject it. Each component
+starts in an unquoted context: wrapping a locally rejected component in another
+fragment cannot make its construction legal. Checking stops before an unknown
+or Statement hole and defers its remaining tail. Unterminated literal fragments
+can be completed by composition and therefore remain render-time checks.
+
+| Check | Compile time | Render time |
+| --- | --- | --- |
+| Known holes in ordinary quotes/comments or partial tokens | Reject definite errors in a literal component | Check all flattened boundaries |
+| NUL literal text or unambiguous manual `$1` placeholders | Reject | Reject |
+| SQLite `?` placeholders, Postgres dollar quotes, arrays, escapes | Defer dialect-dependent errors | Check actual dialect |
+| Runtime Statement fragments and open hole kinds | Defer from the first unknown boundary | Check actual flattened text |
+| Unterminated quoted/comment fragments | Defer EOF-only errors | Reject unfinished text |
+
+SQLite line comments end only at LF; Postgres also accepts CR. Postgres E
+strings, Unicode dollar-quote tags and nested comments are recognized. Ordinary
+Postgres strings containing backslashes are rejected because session settings
+can change their meaning. The PostgreSQL `?` JSON operator is permitted.
+Compile errors name the library validator and point at the hole, or at the
+prefix for literal-only errors. Render errors have operation `interpolate`.
+Both checks validate interpolation boundaries rather than SQL grammar/schema.
 
 ## Diagnostics and tooling
 
@@ -193,9 +219,8 @@ The formatter preserves the prefix/quote adjacency and the literal's bytes,
 including nested interpolation expressions, just as for s"...". Update editor
 string-prefix recognition for qualified/custom prefixes while keeping ordinary
 names and string tokens distinct. Do not infer SQL syntax highlighting from
-arbitrary user names as a language rule. Update grammar, requirements, README,
-and SQL API docs when implementation lands, describing the compiler-created literal capability
-and the difference between String rendering and typed literal construction.
+arbitrary user names as a language rule. The reader docs describe the
+compiler-created literal capability and the difference between String rendering and typed literal construction.
 
 ## Prior art and decisions
 
@@ -247,5 +272,4 @@ rendering; existing driver behavior remains covered by the library checks.
 HTML needs context-aware escaping, URL components need explicit encoding roles,
 and shell/exec should produce argv rather than a shell string. JSON and regex
 have their own structural/escaping rules. Each can use this protocol later;
-none is implemented by generic Show rendering. SQL parsing/schema checks and
-compile-time template validation remain separate follow-ups.
+none is implemented by generic Show rendering. Full SQL grammar and schema validation remain outside this protocol.

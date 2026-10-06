@@ -1,5 +1,7 @@
 # Cached compiler evaluations
 
+> **Status:** Partially implemented: invocation-local, Session and persistent closed-proof boolean reuse. Current implementation reference: [proof evaluator](proof-evaluator.md). Enclosing execution certification and explicit comptime-value reuse remain proposals.
+
 Status: enclosing execution receipts and explicit comptime-value reuse remain
 deferred. [Closed CLI proof batches](proof-evaluator.md#persistent-cli-proof-batches-bork-44yvg8)
 now persist bounded booleans under the existing native installed-SDK contract;

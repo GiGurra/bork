@@ -1,5 +1,7 @@
 # Tuples and ordinary provider bundles
 
+> **Status:** Implemented: immutable tuples and ordinary tuple provider bundles. Current docs: [tuples](../language/types.md#tuples), [assembly](../language/packages.md) and [test helpers](../std/test.md). The removal of declaration-style bundles below records a historical syntax decision.
+
 Approved design for bork-ys21yg (2026-10-05). Tuples are immutable,
 heterogeneous positional values. They introduce no keyword or named builtin type.
 Implementation is split into core tuples, then assembly/test helpers and migration.

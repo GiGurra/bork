@@ -1,5 +1,7 @@
 # Compiler performance (bork-e3r166)
 
+> **Status:** Ongoing implementation and benchmark record. Current contributor reference: [CI test shards](../ci.md); cache contracts: [disk cache](disk-cache.md) and [executable reuse](executable-reuse.md). Dated measurements describe their stated revisions, not present performance guarantees.
+
 The [Go package output experiment](go-package-output.md) records isolated Go
 build and end-to-end edit measurements. Its scalar prototype wins on a synthetic
 multi-package workload; existing real examples require the flat fallback, so

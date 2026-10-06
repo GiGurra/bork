@@ -1,6 +1,8 @@
 # Moving resources between scopes
 
-Design for bork-u8ndmy. Nothing here is implemented yet. The plan is four
+> **Status:** Implemented: checked resource moves, cancellation ownership and task/owned-scope integration. Current docs: [scopes](../language/scopes.md). The original problem and delivery plan below preserve the design rationale.
+
+Implemented design for bork-u8ndmy. The original plan was four
 PRs: the cancellation fix for attached resources, the checker and runtime, then
 task and owned-scope integration with the editor support, then examples and
 reader docs.
@@ -83,7 +85,7 @@ fn startSession(address: String, app: Scope, session: Scope) uses net + state + 
   conn = net.Dial(address, app)?
   _ = net.WriteLine(conn, "HELLO")?       // set up while app owns it
   owned = move(conn, session)             // app no longer keeps it
-  launch(session, () => serve(owned))
+  fork(session, () => serve(owned))
   _ = net.WriteLine(conn, "BYE")?         // error: conn was moved to scope session at line 4
 }
 ```
@@ -220,7 +222,7 @@ just its origin), and a pinned handle cannot be moved:
 
 ```
 conn = connect(s)?
-launch(s, () => pump(conn))               // pins conn's handle until s ends
+fork(s, () => pump(conn))               // pins conn's handle until s ends
 w = move(conn, worker)                    // error: conn cannot be moved: a task of scope s
                                           // started at line 2 may still use it; attach it instead
 ```
@@ -230,8 +232,8 @@ lifetime checker:
 
 - `send`, `update` and `swap` pin what is stored, kept by the container.
 - An `unsafe go` function or a function value given a `Scope` pins its other
-  arguments, kept by that scope. This covers `spawn`, `launch`, `onClose`,
-  `tasks.TrySpawn`, `sql.Begin(conn, s)` and the like.
+  arguments, kept by that scope. This covers `fork`, `onClose`,
+  `tasks.TryFork`, `sql.Begin(conn, s)` and the like.
 - A parameter declared `in` another (`c: Conn in ch`) pins its argument, kept
   by the target argument.
 - `async(s) x = ...` pins what the initializer captures, kept by `s`. A mock
@@ -363,7 +365,7 @@ wrong:
 ```
 conn = net.Dial(addr, s)?
 a = attach(conn, app)                  // app also keeps it; it now follows app
-launch(app, () => serveForever(a))
+fork(app, () => serveForever(a))
 _ = move(conn, w)                      // follows w; w ends, raw.Close()
                                        // app still owns it, but the socket is gone
 ```
@@ -395,7 +397,7 @@ library registers every resource with `Own`.
   the target the only owner if the resource is attached elsewhere. It transfers
   one registration, exactly as `attach` adds one.
 - **Tasks.** Move before handing over: `c = move(conn, w)`, then
-  `launch(w, () => serve(c))`. No `spawn ... with handover` sugar for now: the
+  `fork(w, () => serve(c))`. No `fork ... with handover` sugar for now: the
   two-line form says which registration moves, and the sugar would only save
   the binding. A move inside the task's lambda is already rejected by the
   same-frame rule. The task may start after the source has ended. Moving tasks

@@ -1,5 +1,7 @@
 # Variant ergonomics
 
+> **Status:** Implemented: context patterns and positional variant payloads. Current docs: [matching](../language/matching.md) and [types](../language/types.md). The delivery order and Option transition below record the original design.
+
 Ticket: bork-3ic73j. Deliver context patterns first (PR A), then positional
 variant payloads and the Option migration (PR B), after tuples PR 1 lands.
 These are general sealed-type features; neither introduces global variant

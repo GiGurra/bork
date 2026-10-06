@@ -1,11 +1,15 @@
 # Explicit compile-time computation (bork-pvx43y)
 
+> **Status:** Implemented: closed compile-time computation and captured build inputs. Current docs: [compile-time computation](../language/comptime.md). Standalone reuse of comptime values across compilations remains a proposal.
+> Bork blocks below are design sketches; the linked current docs contain checked examples.
+
 Status: implemented syntax, checking, evaluation, value baking and module-file
 inputs (PRs #200, #204, #205 and #207). `comptime { ... }` and
 `bork/build.ReadString` / `ReadBytes` are accepted APIs. Native-target checks and
-the initial execution/input/result limits are enforced. Limit hardening and
-Session value reuse remain planned; disk value reuse will use the shared
-incremental cache layer. The cache contract below describes those remaining
+the initial execution/input/result limits are enforced. Standalone Session and disk value reuse remain planned. Within a compilation,
+node values and dependent package values are memoized. Executable reuse may
+skip compilation entirely. Compilations that use compile-time evaluation
+bypass Session and disk complete-result caches. The cache contract below describes those remaining
 requirements, not enabled reuse. User-defined derive, structural constraints
 and source/declaration generation are outside this ticket.
 
@@ -20,7 +24,7 @@ program contains the result; it does not run the block's recipe. `check`,
 report build-time failures even if runtime control flow would skip the block.
 Tests retain the driver's existing checking/selection policy.
 
-```bork
+```bork fragment
 fn defaultPort(): Int {
   comptime { 8000 + 80 }
 }
@@ -50,8 +54,8 @@ are compilation failures. Use `panic` to reject invalid build data explicitly.
 There is no `comptime fn` modifier: ordinary checked pure functions are reusable
 at runtime and at build time. There is no separate binding modifier; placing a
 block on its initializer makes any existing binding a computed binding. Package
-bindings, when implemented by bork-9zpf2t, use the same expression. This feature
-does not depend on that ticket or introduce package declarations itself.
+bindings use the same expression; reads of pure package values are evaluated
+in dependency order and baked into the output. See [package values](../language/basics.md#functions).
 
 The inspiration is [q's AtCompileTime](https://gigurra.github.io/q/api/atcompiletime/):
 explicit call-site computation, earlier computed-value dependencies and baking
@@ -100,7 +104,7 @@ Foreign hidden nondeterminism remains subject to the unsafe trust contract.
 
 The initial API is a compiler intrinsic package, `bork/build`:
 
-```bork
+```bork fragment
 import "bork/build"
 import "bork/json"
 

@@ -1,7 +1,10 @@
 # CLI usability and boa parity
 
-Proposed design for awb bork-5xggub, pending lead approval. This document describes
-future APIs; it does not change the current [CLI API](../std/cli.md).
+> **Status:** Implemented: settings, mapping, commands and dynamic completion. Current docs: [CLI](../std/cli.md) and [CLI cookbook](../std/cli-cookbook.md). The comparisons and delivery sequence below record the original design.
+
+Design rationale for awb bork-5xggub. The implemented API is documented in
+the [CLI reference](../std/cli.md); proposal signatures below preserve the
+original design and may omit later fields or checks.
 
 ## Evidence and comparison
 

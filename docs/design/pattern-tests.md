@@ -1,5 +1,7 @@
 # Pattern tests and typed test assertions
 
+> **Status:** Implemented: pattern tests and typed assertions. Current docs: [matching](../language/matching.md) and [testing](../language/testing.md).
+
 Ticket: bork-878uk7. Implement alongside positional variants (bork-3ic73j),
 coordinating the `bork/test` package with tuples. This includes
 the human's addition requiring fact-qualified tests and assertions.

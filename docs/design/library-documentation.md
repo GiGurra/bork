@@ -1,5 +1,7 @@
 # Library documentation and discovery
 
+> **Status:** Implemented: checked-package Markdown and HTML API documentation. Current docs: [bork doc](../cli.md). External discovery and hosting remain choices for the library author.
+
 Design for `bork-khnvl1`, following the library dependency implementation in
 [Library dependencies](library-dependencies.md). Start with a useful local
 `bork doc` command. Its output also gives library authors documentation they can
@@ -80,8 +82,8 @@ An API snapshot contains declarations owned by the requested package:
 - Methods available to an importer: exported receiver methods and the methods
   of exported classes, including their lowercase class methods. Group receiver methods with their types;
   distinguish extension methods on another package's types.
-- Exported classes, named instances, instance bundles, providers, provider
-  bundles, interpolators, and package bindings, with their checked signatures
+- Exported classes, named instances, instance bundles, interpolators, and package bindings
+  (including ordinary tuple provider bundles), with their checked signatures
   and the information needed to use them.
 - Exported ambient declarations, separately from immutable package bindings,
   with their types, constraints, and logged/propagated markers so importers can

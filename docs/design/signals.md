@@ -1,6 +1,8 @@
 # Process signals
 
-Status: approved for bork-pd656h.
+> **Status:** Implemented: default signal cancellation and explicit signal control. Current docs: [signals](../std/signal.md) and [scopes](../language/scopes.md).
+
+Implemented design for bork-pd656h.
 
 ## Default
 

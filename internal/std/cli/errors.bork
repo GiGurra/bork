@@ -1,0 +1,12 @@
+// Render formats every failure and a usage hint without printing or exiting.
+// Paths are decoder paths; a whole-record failure has no path prefix.
+// command is the name shown in help, including subcommands when appropriate.
+fn (error: Error) Render(command: String): String {
+  lines = error.errors.map(issue => if (issue.path == "") {
+    s"Error: ${issue.message}"
+    } else {
+      s"Error: ${issue.path}: ${issue.message}"
+  })
+  text = if (lines.isEmpty()) { "Error: invalid command-line options" } else { lines.join("\n") }
+  s"${text}\n\nTry '${command} --help' for usage."
+}

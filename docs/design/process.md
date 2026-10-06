@@ -1,9 +1,12 @@
 # Process API: stream control, sync and async
 
-Design for bork-y4tu16. Today `bork/process` has `Run`, `Start`, `Await`,
+> **Status:** Implemented: stream configuration, process handles and typed exit status. Current docs: [process API](../std/process.md). The comparisons below preserve the original API design.
+> Bork blocks below are design sketches; the linked current docs contain checked examples.
+
+Design for bork-y4tu16. The original `bork/process` API had `Run`, `Start`, `Await`,
 `Stop` and `Pid`, captures both output streams in memory, takes stdin as
-`Option[Bytes]` and reports `Result { code, stdout, stderr }`. That covers
-"run a command and look at its output", and little else. This note adds
+`Option[Bytes]` and reports `Result { code, stdout, stderr }`. That covered
+"run a command and look at its output". The implemented design adds
 independent control of stdin, stdout and stderr, an exit status that separates
 exit codes from signals, a checked-run convenience, and an async handle that
 streams output, feeds input incrementally and stops gracefully. It adds no
@@ -37,7 +40,7 @@ path; scope ownership is the part bork already does better and keeps.
 Each stream is configured on its own with a sealed value. Leading-dot variant
 syntax keeps call sites short:
 
-```bork
+```bork fragment
 type Input = sealed {
   Empty,                       // /dev/null (the default)
   Inherit,                     // the parent's stdin
@@ -73,7 +76,7 @@ stderr goes to the parent's stdout; with `.Pipe` one reader yields both; with
 
 Examples of each combination people ask for:
 
-```bork
+```bork fragment
 process.Run(s, "make")                                          // capture both separately
 process.Run(s, "make", stderr: .Stdout)                         // capture combined, in order
 process.Run(s, "make", stdin: .Inherit, stdout: .Inherit, stderr: .Inherit)  // forward all
@@ -98,7 +101,7 @@ passing stdin change.
 
 ## Exit status
 
-```bork
+```bork fragment
 type ExitStatus = sealed {
   Exited { code: Int },                    // normal exit with a status code
   Signaled { number: Int, name: String },  // killed by a signal (Unix)
@@ -121,7 +124,7 @@ A non-zero exit and a signal death are both data: Run returns `Result`, never
 
 Methods on Result:
 
-```bork
+```bork fragment
 fn (r: Result) Success(): Bool                       // exit is Exited { code: 0 }
 fn (r: Result) Check(): Result | ExitError           // like Python's check=True
 fn (r: Result) StdoutText(): String                  // the bytes as a String
@@ -142,7 +145,7 @@ captured stderr (`exit status 2: fatal: not a git repository`), so
 There is no `timeout` argument. A deadline is a scope, as everywhere else in
 bork:
 
-```bork
+```bork fragment
 result = scope limited {
   cancelAfter(limited, 2000)
   process.Run(limited, "slow-tool")
@@ -166,7 +169,7 @@ so a child can never hold its scope open indefinitely.
 scope. Everything else is a method (the free functions `Await`, `Stop` and
 `Pid` are replaced; callers are migrated in the same PR):
 
-```bork
+```bork fragment
 fn (p: Process) Wait() uses io + state: Result | IoError | Cancelled
 fn (p: Process) TryWait() uses io + state: Option[Result | IoError | Cancelled]
 fn (p: Process) Pid(): Int
@@ -206,7 +209,7 @@ anyone called Wait. No path leaves an orphan the scope could have reached.
 A stream configured `.Pipe` is read through a `Reader` resource owned by the
 process's scope:
 
-```bork
+```bork fragment
 fn (r: Reader) NextLine() uses io + state: String | Closed | Cancelled | IoError
 fn (r: Reader) NextChunk(max: Int = 32768) uses io + state: Bytes | Closed | Cancelled | IoError
 fn (r: Reader) ReadAll() uses io + state: Bytes | Cancelled | IoError
@@ -245,7 +248,7 @@ full, so read pipes (in a task, or before Wait) or use `.Capture`. With
 
 ### Writing input: Writer
 
-```bork
+```bork fragment
 fn (w: Writer) Write(data: Bytes) uses io + state: Ok | Closed | Cancelled | IoError
 fn (w: Writer) WriteText(text: String) uses io + state: Ok | Closed | Cancelled | IoError
 fn (w: Writer) Close() uses io + state
@@ -261,7 +264,7 @@ scope cancellation. A write after the child exited is `Closed` (EPIPE is not an
 `.From { reader: reader }` connects a piped output directly to another
 process's stdin at the OS level, without copying through bork:
 
-```bork
+```bork fragment
 producer = process.Start(s, "git", ["log", "--oneline"], stdout: .Pipe)?
 counter = process.Start(s, "wc", ["-l"], stdin: .From { reader: producer.Stdout() })?
 lines = counter.Wait()?.StdoutText()

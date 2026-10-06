@@ -1,5 +1,7 @@
 # Browser playground
 
+> **Status:** Implemented: browser-local check, describe and formatting. Current docs: [browser playground](../playground.md). Hosted execution remains outside this feature.
+
 Start with a browser-local playground on the documentation site: diagnostics, type information at the cursor, and formatting for one `.bork` file. Hosted execution is outside this phase. This gives readers a way to explore ordinary functions, immutable data, matching, effects, and guarded facts without installing Go or bork.
 
 ## Options and cost

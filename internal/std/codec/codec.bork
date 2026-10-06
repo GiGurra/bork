@@ -16,7 +16,7 @@ type Value = sealed {
 type Field = { name: String, value: Value }
 
 // valueKind names the kind of a JSON value, for messages.
-fn valueKind (j: Value): String {
+fn valueKind(j: Value): String {
   match (j) {
     Value.Null => "null"
     Value.Bool { value: _ } => "a boolean"
@@ -95,13 +95,13 @@ class Encode[T] {
   fn encode(x: T): Value
 }
 
-fn decodeMismatch (expected: String, json: Value): DecodeError {
+fn decodeMismatch(expected: String, json: Value): DecodeError {
   DecodeError { path: "", message: s"expected $expected, found ${valueKind(json)}" }
 }
 
 // atPath puts an error found inside a value under the given step of
 // its path (".name", "[2]").
-fn atPath (e: DecodeError, step: String): DecodeError {
+fn atPath(e: DecodeError, step: String): DecodeError {
   DecodeError { path: step + e.path, message: e.message }
 }
 
@@ -113,7 +113,7 @@ instance decodeInt: Decode[Int] {
         n: Int => n
         ParseError => DecodeError { path: "", message: s"expected a whole number, found $text" }
       }
-      other => decodeMismatch ("a whole number", other)
+      other => decodeMismatch("a whole number", other)
     }
   }
 }
@@ -126,7 +126,7 @@ instance decodeFloat: Decode[Float] {
         f: Float => f
         ParseError => DecodeError { path: "", message: s"expected a number, found $text" }
       }
-      other => decodeMismatch ("a number", other)
+      other => decodeMismatch("a number", other)
     }
   }
 }
@@ -136,7 +136,7 @@ instance decodeString: Decode[String] {
   fn decode(json: Value): String | DecodeError {
     match (json) {
       Value.String { value } => value
-      other => decodeMismatch ("a string", other)
+      other => decodeMismatch("a string", other)
     }
   }
 }
@@ -146,7 +146,7 @@ instance decodeBool: Decode[Bool] {
   fn decode(json: Value): Bool | DecodeError {
     match (json) {
       Value.Bool { value } => value
-      other => decodeMismatch ("a boolean", other)
+      other => decodeMismatch("a boolean", other)
     }
   }
 }
@@ -169,18 +169,18 @@ instance decodeList[T: Decode]: Decode[List[T]] {
   metadata FieldSchema = FieldSchema { kind: "list:" + FieldInfo[T]().kind, optional: false }
   fn decode(json: Value): List[T] | DecodeError {
     match (json) {
-      Value.Array { items } => decodeItems (items, 0, [])
-      other => decodeMismatch ("an array", other)
+      Value.Array { items } => decodeItems(items, 0, [])
+      other => decodeMismatch("an array", other)
     }
   }
 }
 
-fn decodeItems [T: Decode](items: List[Value], index: Int, done: List[T]): List[T] | DecodeError {
+fn decodeItems[T: Decode](items: List[Value], index: Int, done: List[T]): List[T] | DecodeError {
   match (items.head()) {
     Option.None => done.reverse()
     Option.Some(item) => match (decode[T](item)) {
-      e: DecodeError => atPath (e, s"[$index]")
-      x: T => decodeItems (items.drop(1), index + 1, prepend(x, done))
+      e: DecodeError => atPath(e, s"[$index]")
+      x: T => decodeItems(items.drop(1), index + 1, prepend(x, done))
     }
   }
 }
@@ -190,23 +190,23 @@ instance decodeMap[V: Decode]: Decode[Map[String, V]] {
   metadata FieldSchema = FieldSchema { kind: "json", optional: false }
   fn decode(json: Value): Map[String, V] | DecodeError {
     match (json) {
-      Value.Object { fields: fields } => decodeFields (fields, {:})
-      other => decodeMismatch ("an object", other)
+      Value.Object { fields: fields } => decodeFields(fields, {:})
+      other => decodeMismatch("an object", other)
     }
   }
 }
 
-fn decodeFields [V: Decode](fields: List[Field], done: Map[String, V]): Map[String, V] | DecodeError {
+fn decodeFields[V: Decode](fields: List[Field], done: Map[String, V]): Map[String, V] | DecodeError {
   match (fields.head()) {
     Option.None => done
     Option.Some(field) => match (decode[V](field.value)) {
-      e: DecodeError => atPath (e, s".${field.name}")
-      x: V => decodeFields (fields.drop(1), fieldPut (done, field.name, x))
+      e: DecodeError => atPath(e, s".${field.name}")
+      x: V => decodeFields(fields.drop(1), fieldPut(done, field.name, x))
     }
   }
 }
 
-fn fieldPut [V](m: Map[String, V], name: String, value: V): Map[String, V] unsafe go {
+fn fieldPut[V](m: Map[String, V], name: String, value: V): Map[String, V] unsafe go {
   return m.put(name, value)
 }
 
@@ -246,16 +246,21 @@ instance encodeList[T: Encode]: Encode[List[T]] {
 
 instance encodeMap[V: Encode]: Encode[Map[String, V]] {
   fn encode(m: Map[String, V]): Value {
-    Value.Object { fields: fieldEntries (m).map(e => Field { name: e.key, value: encode(e.value) }) }
+    Value.Object { fields: fieldEntries(m).map(e => Field { name: e.key, value: encode(e.value) }) }
   }
 }
 
-fn fieldEntries [V](m: Map[String, V]): List[Entry[String, V]] unsafe go {
+fn fieldEntries[V](m: Map[String, V]): List[Entry[String, V]] unsafe go {
+  import "slices"
+  import "strings"
   out := make([]Entry[string, V], 0, m.len())
   m.each(func(k string, v V) bool {
     out = append(out, Entry[string, V]{key: k, value: v})
     return true
   })
+  if _, unordered := m.impl().(*_hashCore); unordered {
+    slices.SortFunc(out, func(a, b Entry[string, V]) int { return strings.Compare(a.key, b.key) })
+  }
   return out
 }
 
@@ -272,18 +277,18 @@ instance decodeRune: Decode[Rune] {
   metadata FieldSchema = FieldSchema { kind: "string", optional: false }
   fn decode(json: Value): Rune | DecodeError {
     match (json) {
-      Value.String { value } => if ( validRuneString (value)) {
+      Value.String { value } => if (validRuneString(value)) {
         match (value.runeAt(0)) {
           Option.Some(r) => r
           Option.None => DecodeError { path: "", message: "expected one Unicode scalar" }
         }
       } else { DecodeError { path: "", message: "expected one Unicode scalar" } }
-      other => decodeMismatch ("one Unicode scalar", other)
+      other => decodeMismatch("one Unicode scalar", other)
     }
   }
 }
 
-fn validRuneString (value: String): Bool unsafe go {
+fn validRuneString(value: String): Bool unsafe go {
   import "unicode/utf8"
   return utf8.ValidString(value) && utf8.RuneCountInString(value) == 1
 }
@@ -305,12 +310,19 @@ derive instance encodeShape[T]: Encode[T] {
           fields: List[Field] = [comptime for (field in shape.fields[T]())
             comptime if (!field.computed) {
               Field { name: field.name, value: encode[field.Type](field.read(x)) }
-            }]
+          }]
           Value.Object { fields: fields }
         }
       }
       shape.Sealed => {
         comptime for (variant in shape.variants[T]()) {
+          comptime if (!variant.positional) {
+            comptime for (field in variant.fields) {
+              comptime if (field.name == "type") {
+                shape.fail("named sealed payload field 'type' collides with the codec discriminator")
+              }
+            }
+          }
           match (variant.project(x)) {
             Option.Some(payload) => {
               _ = payload
@@ -325,7 +337,7 @@ derive instance encodeShape[T]: Encode[T] {
                 fields: List[Field] = [comptime for (field in variant.fields)
                   comptime if (!field.computed) {
                     Field { name: field.name, value: encode[field.Type](field.read(payload)) }
-                  }]
+                }]
                 return Value.Object { fields: prepend(
                   Field { name: "type", value: Value.String { value: variant.name } }, fields) }
               }
@@ -373,7 +385,7 @@ derive fn RecordInfo[T](): Option[RecordSchema] {
                 }
               }
             }
-          }]
+        }]
         Option.Some(RecordSchema { fields: fields })
       }
     }
@@ -404,7 +416,7 @@ derive fn DecodeRecord[T](json: Value): T | DecodeError {
               value: field.RawType => state.set(field, value)
             }
             Option.None => DecodeError { path: s"[${field.index}]", message: "tuple element is missing" }
-          }]
+        }]
         start: initial.Type | DecodeError = initial
         assembled = steps.fold(start, (state, step) => match (state) {
           error: DecodeError => error
@@ -451,7 +463,7 @@ derive fn DecodeRecord[T](json: Value): T | DecodeError {
                 }
               }
             }
-          }]
+        }]
         start: initial.Type | DecodeError = initial
         assembled = steps.fold(start, (state, step) => match (state) {
           error: DecodeError => error
@@ -495,6 +507,13 @@ derive fn DecodeSealed[T](json: Value): T | DecodeError {
       fields: List[Field] = match (json) { Value.Object { fields } => fields, _ => [] }
       _ = fields
       comptime for (variant in shape.variants[T]()) {
+        comptime if (!variant.positional) {
+          comptime for (field in variant.fields) {
+            comptime if (field.name == "type") {
+              shape.fail("named sealed payload field 'type' collides with the codec discriminator")
+            }
+          }
+        }
         if (name == variant.name) {
           initial = variant.builder()
           comptime if (variant.positional) {
@@ -518,7 +537,7 @@ derive fn DecodeSealed[T](json: Value): T | DecodeError {
                       value: field.RawType => state.set(field, value)
                     }
                     Option.None => DecodeError { path: s".values[${field.index}]", message: "is missing" }
-                  }]
+                }]
                 start: initial.Type | DecodeError = initial
                 assembled = steps.fold(start, (state, step) => match (state) {
                   error: DecodeError => error
@@ -561,7 +580,7 @@ derive fn DecodeSealed[T](json: Value): T | DecodeError {
                     }
                   }
                 }
-              }]
+            }]
             start: initial.Type | DecodeError = initial
             assembled = steps.fold(start, (state, step) => match (state) {
               error: DecodeError => error

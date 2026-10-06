@@ -15,7 +15,7 @@ fn main() {
   match (cli.Run[Options]("enrichers", "Compose reusable metadata policies", (options, s) => {
     println(s"${options.host}:${options.port}")
     }, settings: policy())) {
-    error: cli.Error => { println(error); process.Exit(2) }
+    error: cli.Error => { eprintln(error.Render("enrichers")); process.Exit(2) }
     Ok => {}
   }
 }

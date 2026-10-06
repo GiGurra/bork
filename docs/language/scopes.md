@@ -1,6 +1,6 @@
 # Scopes and tasks
 
-A scope is a block that owns things with a lifetime: open files, connections, and running tasks. When the block ends, everything it owns is finished or closed.
+A scope is a block that owns things with a lifetime: open files, connections, and running tasks. When the block ends, it cancels its tasks, waits for them to stop, and closes its resources.
 
 ## Scopes own resources
 
@@ -51,29 +51,19 @@ hold an OwnedScope, because owning scopes cannot be copied into containers.
 
 ## Process signals
 
-SIGINT (Ctrl+C) and SIGTERM cancel every root scope by default. Nested scopes
-and tasks inherit the cancellation, whose reason names the signal. After cleanup,
-a normal return exits with `128 + signal number`: 130 for SIGINT, 143 for SIGTERM.
-An explicit `process.Exit(code)` keeps that code. Copies within 500 ms count as
-one request; a subsequent cancelling signal terminates immediately. Three
-Ctrl+C presses within 5 seconds always exit with 130, even when the program
-subscribes to or ignores `Interrupt`. There is no
-default grace deadline. Other signals, including SIGHUP, keep their Go/OS
-behavior. Programs that never open a scope install no bork signal handler.
+SIGINT (Ctrl+C) and SIGTERM cancel root scopes by default. Nested scopes and
+tasks inherit that cancellation, and scope cleanup still runs. Tasks observe
+cancellation at a checkpoint or a cancellable wait; a signal does not interrupt
+arbitrary computation.
 
-[bork/signal](../std/signal.md) chooses cancellation signals, sets a grace
-duration, subscribes to events such as SIGHUP reloads, or ignores signals.
-**A registration's scope owns its lifetime, not an isolated disposition.**
-Its signal behavior affects the whole process until its last owner closes.
-Subscriptions prevent their signals from cancelling any root scope.
-
-On Windows, Ctrl+C and Ctrl+Break both act as SIGINT. Console close, logoff
-and shutdown give a SIGTERM cleanup opportunity, subject to Windows' own
-termination deadline.
+[bork/signal](../std/signal.md) explains exit codes, repeated signals, Windows
+behavior, and how to choose cancellation signals, set a grace duration or
+subscribe to reload events. Registrations affect the whole process, and their
+scopes own how long they remain active.
 
 ## Tasks
 
-`fork` starts a task that runs at the same time as the code that started it. A task also belongs to a scope, and the scope does not end until its tasks are done.
+`fork` starts a task that runs at the same time as the code that started it. A task also belongs to a scope. Await the work you need before leaving its scope: exit requests cancellation before waiting for the tasks.
 
 ```bork
 fn fib(n: Int): Int {
@@ -91,9 +81,62 @@ fn main() {
 ```
 
 - `fork(s, () => ...)` gives a `Task[T]`, and `await(task)` waits for its result.
-- Work that gives no value gives a `Task[Ok]`. It can be dropped like an `Ok`, so `fork(s, () => { ... })` on its own line starts fire-and-forget work. The scope still waits for it, and reports it if it panics. Other tasks must be used: dropping a `Task[Int]` is an error, as dropping an `Int` is.
+- Work that gives no value gives a `Task[Ok]`. It can be dropped like an `Ok`, so `fork(s, () => { ... })` on its own line starts fire-and-forget work. When the scope exits, it cancels and joins the task, and reports an unawaited panic. Work that observes cancellation may stop before completing. Other tasks must be used: dropping a `Task[Int]` is an error, as dropping an `Int` is.
 
-Every task belongs to a scope. When the scope block is finished, all of its tasks are finished.
+## What happens at scope exit
+
+The order is **cancel → join → cleanup**. Leaving the block cancels the scope,
+then waits for its tasks, then runs resource cleanup in reverse acquisition
+order. This also happens on early return, `?`, or panic. Every cleanup runs even
+if another fails; unawaited task panics and cleanup failures are reported after
+cleanup finishes.
+
+Awaiting inside the block lets a delayed task finish before cancellation:
+
+```bork
+fn delayed(s: Scope) uses clock + state: String | Cancelled {
+  delay(s, 10)?
+  "finished"
+}
+
+fn main() {
+  scope s {
+    onClose(s, () => println("cleanup"))
+    task = fork(s, () => delayed(s))
+    println(await(task))
+  }
+}
+```
+
+```text
+finished
+cleanup
+```
+
+Leaving without awaiting cancels that same wait. This example uses a long delay
+so that normal scope exit happens first:
+
+```bork
+fn main() {
+  scope s {
+    onClose(s, () => println("cleanup"))
+    fork(s, () => {
+      println(delay(s, 60_000))
+    })
+  }
+}
+```
+
+```text
+Cancelled { reason: "the scope ended" }
+cleanup
+```
+
+Cancellation is cooperative. Code that never checks it can continue running,
+and the scope normally waits for that code too. The exception is
+`taskTimeout(ms)`: when its join deadline expires, the scope leaves remaining
+tasks running and proceeds with cleanup. Those tasks may encounter closed
+resources; see [cancellation and timeouts](#cancellation-and-timeouts).
 
 Lists of tasks have helpers: `tasks.awaitAll()` gives every result in order, and `tasks.awaitFirst(s)` the first to finish. `race(s, [...])` runs several functions and keeps the first result, cancelling the others. See the [task_fanin example](../../examples/task_fanin/main.bork).
 
@@ -122,9 +165,11 @@ Cancelled { reason: "deadline exceeded" }
 
 A scope can be given limits when it is opened:
 
-```bork fragment
-scope s with taskTimeout(100), cleanupTimeout(500) {
-  ...
+```bork
+fn main() {
+  scope s with taskTimeout(100), cleanupTimeout(500) {
+    println(checkpoint(s))
+  }
 }
 ```
 
@@ -168,9 +213,10 @@ All values are immutable, so tasks cannot interfere with each other's data. When
 fn main() {
   counter = atom(0)
   scope s {
-    range(0, 100).forEach(i => fork(s, () => {
-      _ = update(counter, n => n + 1)
+    tasks = range(0, 100).map(i => fork(s, () => {
+      update(counter, n => n + 1)
     }))
+    _ = tasks.awaitAll()
   }
   println(current(counter))
 }
@@ -206,7 +252,7 @@ In both cases `total` and `other` are plain `Int` values to the rest of the code
 
 ## Longer-lived resources
 
-Two tools cover the cases where a block does not fit:
+Several tools cover lifetimes that do not fit a single block:
 
 - `attach(resource, s)` keeps a resource open until another scope `s` ends as well. A function can open something in its own scope and hand it to its caller's.
 - `move(resource, s)` hands a resource over to scope `s`: the scope it was opened in lets go of it, and `s` closes it. The compiler then rejects any further use of the original, or of anything holding it. Only a resource acquired right there can be moved, and not while a task or a channel may still use it.
@@ -234,6 +280,149 @@ fn main() {
   }
 }
 ```
+
+### Sharing with `attach`
+
+`attach` keeps both owners. Here a helper opens a temporary file in a short
+scope and attaches it to the application's scope before returning it:
+
+```bork
+import "bork/fs"
+
+fn temporary(app: Scope) uses io: fs.File | fs.Error {
+  scope check {
+    file = fs.TempFile(check)?
+    attach(file, app)
+  }
+}
+
+fn main() {
+  scope app {
+    match (temporary(app)) {
+      file: fs.File => println(fs.Path(file) != "")
+      failure: fs.Error => println(failure)
+    }
+  }
+}
+```
+
+The short scope no longer keeps the file open after it ends, but `app` does.
+`attach` must run while the resource is still usable. It cannot revive a
+resource after its last known scope has ended.
+
+### Explicit child scopes
+
+`OwnedScope` is the right to end a child scope opened with `openScope`.
+`owner.scope` borrows that child's ordinary `Scope`, for opening resources or
+starting tasks. The owner is passed on or closed exactly once on every path;
+it cannot be copied into records, tuples or lists. Returning it transfers that
+responsibility to the caller. Early exits close owners that remain local.
+
+```bork
+fn finish(owner: OwnedScope, work: () => Ok in owner) uses state {
+  work()
+  closeScope(owner)
+}
+
+fn main() {
+  scope app {
+    old = openScope(app)
+    next = openScope(app)
+    onClose(old.scope, () => println("old closed"))
+    onClose(next.scope, () => println("next closed"))
+    finish(old, () => println("using old"))
+    println("next is still open")
+    closeScope(next)
+  }
+}
+```
+
+Both children are open during the handover; closing `old` leaves `next` open.
+The parameter `work: () => Ok in owner` tells the compiler that the callback
+stays valid while the child is open. The helper runs it before closing that
+child.
+
+## Functions that keep resources
+
+An ordinary synchronous helper can take `file: fs.File` without a lifetime
+annotation. It runs while its caller keeps the file alive. When the helper
+stores a value, starts longer-lived work, or takes an owned scope it may close,
+its signature must describe the needed lifetime.
+
+### A parameter that must outlive another
+
+`value: T in other` says that `value` stays usable at least as long as `other`.
+For a channel, this lets a helper put a resource into it:
+
+```bork
+import "bork/fs"
+
+fn put(files: Channel[fs.File], file: fs.File in files, wait: Scope) uses state: Ok | Closed | Cancelled {
+  files.send(wait, file)
+}
+
+fn main() {
+  scope app {
+    files = channel[fs.File](app, 1)
+    match (fs.TempFile(app)) {
+      file: fs.File => println(put(files, file, app))
+      failure: fs.Error => println(failure)
+    }
+  }
+}
+```
+
+The direction matters: `file in files` lets the channel keep the file. A
+shorter-lived file must be attached to the channel's scope before sending it.
+This is a checked lifetime relationship, not a request to attach automatically.
+
+### Returning a value that retains a resource
+
+A record, list, tuple or closure holding a resource carries its lifetime too.
+There is no extra keyword for retaining it. Give the helper its caller's scope,
+and return the resource or a value that contains it:
+
+```bork
+import "bork/fs"
+
+type LabeledFile = { file: fs.File, label: String }
+
+fn labeled(app: Scope) uses io: LabeledFile | fs.Error {
+  file = fs.TempFile(app)?
+  LabeledFile { file: file, label: "scratch" }
+}
+
+fn main() {
+  scope app {
+    match (labeled(app)) {
+      result: LabeledFile => println(result.label, fs.Path(result.file) != "")
+      failure: fs.Error => println(failure)
+    }
+  }
+}
+```
+
+The whole `LabeledFile` is usable only while `app` stays open. Returning a
+wrapper does not make a file opened in the helper's own scope safe to escape;
+use the caller's scope, `attach` or `move` instead.
+
+### Declaring a resource type
+
+Library authors declare opaque resource handles with `resource`:
+
+```bork
+type Connection = resource
+
+fn keep(connection: Connection): Connection {
+  connection
+}
+```
+
+The declaration marks values as scoped resources. It does not open anything
+or provide a bork constructor. An [`unsafe go` implementation](go-interop.md)
+creates the handle and registers cleanup with its ownership scope; a
+`resource go` declaration can wrap a Go type with a `Close` method. Most
+programs use the resource types already supplied by standard packages.
 
 Most programs need only `scope` blocks.
 

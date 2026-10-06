@@ -262,6 +262,52 @@ The compiler does not reason about multiplication, so without the `trust` line t
 
 A `trust` is checked when the tests run. Under `bork test`, every `trust` is evaluated, and a false one fails the test with the offending value.
 
+## When the compiler cannot prove a fact
+
+Start with the value named by the diagnostic, and keep the proof close to it:
+
+1. **Guard the exact value.** Check `if (positive(count))` before passing `count`.
+   A check on another binding or a different computation proves that other value.
+   Repeated pure expressions can share a proof, but the compiler does not infer
+   general algebraic equivalence or reuse effectful observations.
+2. **Validate at the boundary.** Return `Int where positive | NotPositive` from
+   a validator, as in [functions that promise a fact](#functions-that-promise-a-fact).
+   Unwrap or match its success result before calling code that requires it.
+3. **Keep the contract in the type.** Use a constrained alias such as
+   `Quantity` when storing or returning validated data. If one predicate implies
+   another, declare and test a `rule`; renaming a predicate does not create that
+   implication.
+4. **Inspect the proof.** Run [`bork describe`](../cli.md#describe) at the
+   binding or expression to see its type and known facts. Compare the identities
+   and predicate arguments with those required by the call.
+5. **Use `trust` only for the remaining gap, and test it.** State the specific
+   fact next to the calculation, and run that path under `bork test` so the
+   trusted statement is evaluated.
+
+For example, this calculation has a tested trust point:
+
+```bork
+pred even(n: Int) { n % 2 == 0 }
+
+fn double(n: Int): Int where even {
+  result = n * 2
+  trust even(result)
+  result
+}
+
+test "doubling is even" (n: Int) {
+  assert(even(double(n)))
+}
+
+fn main() {
+  println(double(21))
+}
+```
+
+`trust` supplies a promise, not a runtime repair. Test the input range your
+application uses, including boundaries; a trusted fact on an untested path
+still depends on your reasoning.
+
 ## What facts cost
 
 Proving a fact costs nothing at run time. Facts exist only during compilation, and the generated program does not carry them.

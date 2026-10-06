@@ -36,6 +36,25 @@ reuse names. Package functions, imports and package values cannot be rebound loc
 Prelude free functions may be shadowed by locals; calling a non-function local
 with a prelude function’s name reports the local declaration.
 
+✅ Rebinding in the same block is allowed, as in the `count` example above.
+❌ An inner block cannot introduce another `count`:
+
+```bork fails
+fn main() {
+  count = 1
+  if (count > 0) {
+    count = 2
+    println(count)
+  }
+}
+```
+
+```text
+count is already defined in an enclosing scope (bork does not allow shadowing)
+```
+
+Loops have a specific exception for [carrying values](#loop-carrying).
+
 Every local binding must be read, including a binding replaced by another one.
 Unused locals are compiler errors; parameters are exempt. Use `_ = expression`
 (or `_: Type = expression` when an annotation is needed) to discard a result.
@@ -74,31 +93,6 @@ A value shared by the whole package is declared at the top level, as in `MaxRetr
 
 Package values can refer to values declared later or in another file in the same package. Dependency cycles are compile errors, including through helper functions. An uppercase name is exported, as with functions and types. An annotation can require facts (`Limit: Int where positive = 3`); the initializer must prove them and reads retain those promises. A package initializer can itself use `comptime { ... }` and read other pure package values; see [compile-time evaluation](comptime.md).
 
-## Recursion and tail calls
-
-A call is a *tail call* when its result is the function's result, with nothing left to do after it. A function's calls of itself in tail position are compiled as jumps to the top of the function, so they use no stack:
-
-```bork
-fn gcd(a: Int, b: Int) uses tailrec: Int {
-  if (b == 0) { a } else { gcd(b, a % b) }
-}
-
-fn countdown(n: Int) uses io {
-  if (n > 0) {
-    countdown(n - 1)
-  }
-}
-
-fn main() {
-  println(gcd(48, 18))
-  countdown(10000000)
-}
-```
-
-This needs no marker: `countdown` runs ten million rounds without growing its stack. Writing `tailrec` in the `uses` list asks the compiler to guarantee it. The function must call itself, every call of itself must be a tail call, and it must not be mutually recursive with another function. Otherwise compilation fails, and the error names each call and the reason. `tailrec` is not an effect. Callers do not declare it, and it is not part of the function's type.
-
-Positions that are not tail positions include a call whose result is used afterwards (`n * fact(n - 1)`), the operand of `?`, and a call inside a `scope` or `with` block, which ends after the call returns. Only direct calls of the function itself are optimized; calls between two functions are ordinary calls. `bork describe` and editor hovers show how a call of a function by itself is compiled.
-
 ## Everything is an expression
 
 `if`, `match`, and blocks all produce values, so they can be used wherever a value is expected.
@@ -135,6 +129,166 @@ fn main() {
 ```
 
 An expression that gives exactly `Ok`, which has no value, needs no `_`. A union that includes `Ok`, such as `Ok | IoError`, still has to be handled or dropped with `_ =`. A task with no value, `Task[Ok]`, is the one other exception (see [tasks](scopes.md#tasks)).
+
+## Control flow
+
+Use `if` to choose between expressions or run a statement conditionally.
+Use `match` to choose by a value's type or shape and handle every possibility:
+
+```bork
+fn label(n: Int): String {
+  if (n < 0) { return "negative" }
+  match (n) {
+    0 => "zero"
+    _ => "positive"
+  }
+}
+
+fn main() {
+  println(label(-1), label(0), label(3))
+}
+```
+
+`return` leaves the current function immediately. It is useful for a guard
+before the main work. See [matching and errors](matching.md) for patterns and
+returning failures with `?`.
+
+### Loop forms
+
+All loops use `for`. `break` leaves the nearest loop; `continue` skips to its
+next round. A loop has no result value.
+
+```bork
+fn main() {
+  // Visit each list element. Seq works here too.
+  for (n in [1, 2, 3]) {
+    println(n)
+  }
+
+  // Check the condition before each round.
+  remaining = 3
+  for (remaining > 0) {
+    println(remaining)
+    remaining = remaining - 1
+  }
+
+  // Initialize once, check the condition, then run the post clause.
+  for (i = 0; i < 4; i = i + 1) {
+    if (i == 1) { continue }
+    println(i)
+  }
+
+  // With no condition, stop explicitly.
+  for {
+    println("done")
+    break
+  }
+
+  // A counting header can also omit its condition.
+  for (i = 1;; i = i * 2) {
+    if (i > 8) { break }
+    println(i)
+  }
+}
+```
+
+Header names belong to the loop. Each round has its own values, and closures
+keep the round they captured. `continue` still runs the post clause. Several
+header bindings can advance together:
+
+```bork
+fn main() {
+  for (a = 1, b = 2; a < 10; a = b, b = a + b) {
+    println(a, b)
+  }
+}
+```
+
+The post expressions all read this round's values, so `a = b, b = a` swaps
+them. A post clause cannot use `return`, `?`, `break`, or `continue`. Facts on a
+header binding must hold for its initial value and every next value. An
+unconditional loop with no `break` cannot finish normally; code after it is
+unreachable.
+
+### Loop carrying
+
+✅ A loop can rebind a name from its surrounding block. `total = total + x`
+binds a new `total`, which the loop carries to the next round. After the loop,
+the name has the last value reached. This is how a program accumulates a result
+while keeping its values immutable.
+
+The body can rebind that name directly or inside an `if` or `match` statement.
+A branch that does not rebind it keeps the previous value:
+
+```bork
+fn main() {
+  count = 0
+  total = 0
+  best = 0
+  for (x in [3, -1, 4, -5, 9]) {
+    if (x < 0) { continue }
+    count = count + 1
+    total = total + x
+    if (x > best) { best = x }
+  }
+  println(s"$count values, total $total, best $best")
+}
+```
+
+```text
+3 values, total 16, best 9
+```
+
+A nested loop can carry a name that its enclosing loop carries. `break` and
+`continue` keep the values reached before the jump. The post clause can rebind
+carried names too. Their original types and declared facts must hold in every
+round and after the loop.
+
+A lambda, `scope`, `with`, or a branch used as a value cannot rebind a carried
+name. Read the accumulated result somewhere: `count = count + 1` alone does
+not count as using `count`.
+
+❌ Carrying preserves the original type, even though ordinary same-block
+rebinding can change types:
+
+```bork fails
+fn main() {
+  total = 0
+  for (n in [1, 2, 3]) {
+    total = s"$total + $n"
+  }
+  println(total)
+}
+```
+
+```text
+total is carried to the next iteration of the loop at line 3, so its new value must be Int (its type before the loop), found String; declare its first binding with a type that holds both
+```
+
+## Recursion and tail calls
+
+A call is a *tail call* when its result is the function's result, with nothing left to do after it. A function's calls of itself in tail position are compiled as jumps to the top of the function, so they use no stack:
+
+```bork
+fn gcd(a: Int, b: Int) uses tailrec: Int {
+  if (b == 0) { a } else { gcd(b, a % b) }
+}
+
+fn countdown(n: Int) uses io {
+  if (n > 0) {
+    countdown(n - 1)
+  }
+}
+
+fn main() {
+  println(gcd(48, 18))
+  countdown(10000000)
+}
+```
+
+This needs no marker: `countdown` runs ten million rounds without growing its stack. Writing `tailrec` in the `uses` list asks the compiler to guarantee it. The function must call itself, every call of itself must be a tail call, and it must not be mutually recursive with another function. Otherwise compilation fails, and the error names each call and the reason. `tailrec` is not an effect. Callers do not declare it, and it is not part of the function's type.
+
+Positions that are not tail positions include a call whose result is used afterwards (`n * fact(n - 1)`), the operand of `?`, and a call inside a `scope` or `with` block, which ends after the call returns. Only direct calls of the function itself are optimized; calls between two functions are ordinary calls. `bork describe` and editor hovers show how a call of a function by itself is compiled.
 
 ## Numbers
 
@@ -227,6 +381,24 @@ PADDED TEXT
 Only strings with the `s` prefix interpolate. `toString(x)` gives the same text as printing `x`.
 
 String methods include `byteLength`, `runeCount`, `contains`, `startsWith`, `endsWith`, `indexOf`, `toUpper`, `toLower`, `capitalize` (upper-cases the first character), `trim`, `replaceAll`, `repeat`, `substring`, `split`, `fields`, `lines`, and `runeAt`. The ones that may find nothing say so in their result: `indexOf` and `runeAt` return an `Option`, and `substring` returns the text or an `OutOfRange`. To turn text into a value, use `parseInt`, `parseFloat`, or `parseBool`, which return the value or a `ParseError`.
+
+### Printing
+
+`println` writes values to standard output, separated by spaces, then adds a
+newline. `eprintln` writes one `String` to standard error. Convert another type
+with `toString`, or interpolate it:
+
+```bork
+fn main() {
+  count = 3
+  println("count:", count)
+  eprintln(toString(count))
+  eprintln(s"count: $count")
+}
+```
+
+Calling `eprintln(count)` or `eprintln("count:", count)` is a compile error.
+Functions that print declare `uses io`; `main` can use the entry point's effects.
 
 ## Runes
 

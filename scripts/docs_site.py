@@ -5,10 +5,10 @@ import posixpath
 import re
 from urllib.parse import quote, urlsplit, urlunsplit
 
+from gen_llms import FENCE, TOKEN, write_outputs
+
 # Reader pages use inline links, enforced by TestDocLinks. Protect inline code
 # and fenced blocks so examples of Markdown are never changed by the site build.
-TOKEN = re.compile(r"(?P<code>`+[^`]*`+)|\[(?P<label>[^\]\n]+)\]\(\s*<?(?P<url>[^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
-FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
 
 def source_url(url, page, root, repo_url, revision):
@@ -96,3 +96,10 @@ def on_config(config):
 def on_page_markdown(markdown, page, config, files):
     return rewrite_links(markdown, page.file.src_uri, Path(config.config_file_path).parent,
                          config["repo_url"], os.environ.get("BORK_DOCS_REVISION", "main"))
+
+
+def on_post_build(config):
+    write_outputs(Path(config["site_dir"]), Path(config.config_file_path).parent,
+                  config["site_url"], config["repo_url"],
+                  os.environ.get("BORK_DOCS_REVISION", "main"),
+                  config.get("extra", {}).get("llms_source_overrides"))

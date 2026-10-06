@@ -1,5 +1,7 @@
 # Standard interpolator validator artifacts (bork-gc48vu)
 
+> **Status:** Implemented: generated standard-library validator artifacts and drift checks. Current implementation reference: [interpolation validators](../grammar.md#writing-an-interpolation-validator). Artifact execution is fresh per check; this feature does not cache results across builds.
+
 Generate owner-declared standard-library validator implementations into the
 compiler binary with `go generate`. A staleness test regenerates and compares
 both code and the binding manifest. The generic registry matches the exact

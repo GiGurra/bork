@@ -27,7 +27,7 @@ fn main() {
   match (cli.RunWith[Options]("deploy", "Deploy a resource with context-aware suggestions", (options, s) => {
     println(s"${options.namespace}/${options.resource}")
     }, completions: completions(), flags: flags())) {
-    error: cli.Error => { println(error); process.Exit(2) }
+    error: cli.Error => { eprintln(error.Render("deploy")); process.Exit(2) }
     Ok => {}
   }
 }

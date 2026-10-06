@@ -1,46 +1,6 @@
 # Types
 
-Programs describe their data with tuples, records, sealed types, and unions. All values are immutable.
-
-## Tuples
-
-A tuple groups values by position, with a separate type for each element:
-
-```bork
-import "bork/codec"
-import "bork/json"
-use codec.Defaults
-
-fn labeled(n: Int): (Int, String) { (n, "count") }
-
-fn main() {
-  pair = labeled(3)
-  (number, label) = pair
-  println(number, label, pair.0)
-  singleton = (true,)
-  println(singleton.0)
-  println(json.Encode(pair))
-}
-```
-
-`(Int, String)` is a tuple type. Positions start at zero, and an out-of-range
-selector is a compile error. `(value,)` and `(Type,)` are singleton tuples;
-`(value)` and `(Type)` keep their grouping meaning. There is no empty tuple.
-`() => value` still creates a function with no parameters.
-
-Tuples evaluate their elements once, from left to right, and are immutable.
-Their shape and ordered element types determine their type; no declaration is
-needed. Generic functions can take or return tuples, and an expected tuple type
-helps infer each element's type. Destructuring binds names or `_` and may nest;
-refutable patterns belong in [match](matching.md).
-
-Equality and map keys work when every element supports equality. Rendering uses
-tuple syntax. codec.Encode and codec.Decode use JSON arrays of exactly the tuple's length,
-when every element has the corresponding codec; decode errors use index paths
-such as `[1]`. Named tuple aliases may request `derive (codec.Encode, codec.Decode)` under
-the same requirements, and derived records may contain tuples. GoStruct does
-not derive for tuples. Element facts and scope lifetimes follow their values
-through tuple construction, selection and destructuring.
+Programs describe their data with records, sealed types, unions, and tuples. All values are immutable.
 
 ## Records
 
@@ -78,6 +38,59 @@ fn main() {
   println(ada.address.city, moved.address.city)
 }
 ```
+
+### Lazy and computed fields
+
+A `lazy` field evaluates when first read and remembers its value. An independent
+lazy field is supplied by the caller, or has a default that does not read other
+fields. A computed lazy field has a default that reads sibling fields:
+
+```bork
+import "bork/codec"
+import "bork/json"
+use codec.Defaults
+
+type Person = {
+  first: String,
+  last: String,
+  lazy note: String,
+  lazy full: String = s"$first $last",
+} derive (codec.Encode, codec.Decode)
+
+fn main() {
+  ada = Person { first: "Ada", last: "Lovelace", note: "mathematician" }
+  println(ada.full)
+  renamed = ada.copy(last: "Byron")
+  println(renamed.full, ada.full)
+  println(renamed)
+  println(json.Encode(renamed))
+}
+```
+
+```text
+Ada Lovelace
+Ada Byron Ada Lovelace
+Person { first: "Ada", last: "Byron", note: "mathematician" }
+{"first":"Ada","last":"Byron","note":"mathematician"}
+```
+
+`full` is computed, so callers cannot supply it or override it with `copy`.
+Change `first` or `last` instead. The changed copy recomputes `full` on demand;
+the original keeps its value. Copies share unchanged independent lazy fields.
+Computed fields share their cached value only when their dependencies are
+unchanged, including dependencies through other computed fields.
+
+Printing and derived encoding include independent lazy fields such as `note`
+and force them if needed. Computed fields such as `full` are omitted from
+printing, equality, hashing, and encoded data. Derived decoding reads the
+independent data and reconstructs computed fields from their defaults.
+
+Computed defaults must be pure, may read sibling fields, and cannot have a
+dependency cycle. Lazy field types and [record rules](#records-with-rules) are
+checked when constructing or copying the record. Laziness does not bypass a
+fact requirement. Decoding validates the completed record before returning it;
+validation can force a computed field used by a rule, and a failure is returned
+as a decode error rather than delayed until a later read.
 
 ### Converting between records
 
@@ -228,6 +241,44 @@ Option.Some(21)
 ```
 
 Where an `Option[String]` is expected, a plain `String` is accepted and becomes `Some`. Option methods are `map`, `flatMap`, `getOr`, `isSome`, and `isNone`.
+
+## Tuples
+
+A tuple groups values by position, with a separate type for each element:
+
+```bork
+import "bork/codec"
+import "bork/json"
+use codec.Defaults
+
+fn labeled(n: Int): (Int, String) { (n, "count") }
+
+fn main() {
+  pair = labeled(3)
+  (number, label) = pair
+  println(number, label, pair.0)
+  singleton = (true,)
+  println(singleton.0)
+  println(json.Encode(pair))
+}
+```
+
+`(Int, String)` is a tuple type. Positions start at zero, and an out-of-range
+selector is a compile error. `(value,)` and `(Type,)` are singleton tuples;
+`(value)` and `(Type)` keep their grouping meaning. There is no empty tuple.
+`() => value` still creates a function with no parameters.
+
+Tuples evaluate their elements once, from left to right, and are immutable.
+Their shape and ordered element types determine their type; no declaration is
+needed. Generic functions can take or return tuples, and an expected tuple type
+helps infer each element's type. Destructuring binds names or `_` and may nest;
+refutable patterns belong in [match](matching.md).
+
+Equality and map keys work when every element supports equality. Printing uses
+tuple syntax. Codecs use JSON arrays with exactly the tuple's length; decode
+errors identify positions such as `[1]`. Each element needs the corresponding
+codec instance. Tuple aliases can derive codecs, but cannot derive `GoStruct`.
+See [codecs](../std/codec.md) and [Go interop](go-interop.md) for those APIs.
 
 ## Ok
 

@@ -1,5 +1,7 @@
 # Executable reuse
 
+> **Status:** Implemented. Current docs: [compiler CLI](../cli.md). This note is the implementation reference for executable input tracking and reuse limits.
+
 `bork run`, `bork build`, and `bork script` default to reusing an executable when
 its recorded inputs have not changed. This applies to programs with foreign Go
 dependencies, embedded files, assembly, cgo, and compile-time computation. A warm

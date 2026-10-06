@@ -1,6 +1,8 @@
 # Persistent compiler cache
 
-Status: implementation plan for the next bork-h5rkt4 slices. Builds remain
+> **Status:** Implemented: persistent complete-graph results for eligible checks and emission. Current reference: [compiler cache settings](../cli.md#settings) and [execution reuse](executable-reuse.md). Compile-time evaluation bypasses enclosing result reuse; closed proof batches have a separate bounded cache.
+
+Implementation contract and delivery record for bork-h5rkt4. Builds remain
 correct with an absent, full, unavailable or corrupt cache. This extends the
 [complete-graph Session](incremental.md) and the stable Go staging work in
 [PR #213](https://github.com/GiGurra/bork/pull/213); complete-result artifacts do not serialize checker

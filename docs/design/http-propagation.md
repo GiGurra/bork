@@ -1,7 +1,8 @@
 # HTTP deadline and ambient propagation
 
-Implemented design for bork-gqxe4s. Deadline budgets and ambient/trace forwarding
-use scope deadlines and the bork-avr3ns marker helpers. See
+Implemented boundary design. For the current API and user-visible guarantees,
+see [bork/http](../std/http.md). Deadline budgets and ambient/trace forwarding
+use scope deadlines and marker helpers. See
 [service_context](../../examples/service_context/main.bork) for the two-service example.
 
 ## Deadline budget
@@ -122,7 +123,9 @@ their own valid root value. The example uses a fixed valid root for repeatable
 output.
 
 A companion `http.TraceState` fact alias and checked `TraceStateOf` helper support
-W3C member/key/value limits and duplicate-key rejection. Repeated tracestate
+W3C member/key/value limits and duplicate-key rejection. The limits are 32
+members, 256 bytes per key/value and 512 bytes overall, with the standard
+tenant/system key limits. Repeated tracestate
 fields combine in received order as the standard requires. Tracestate is only
 bound/forwarded when traceparent is valid; invalid state does not invalidate the
 parent. TraceStateOf applies the same parent check, returning None without a
