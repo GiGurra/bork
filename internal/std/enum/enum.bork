@@ -18,8 +18,16 @@ type Info = { names: List[String], docs: List[String], hasFallback: Bool }
 // Known narrows enum values to alternatives declared by their type.
 pred Known[T: Enum](value: T) { index(value).isSome() }
 
+// Keep the tooling shape gate independent from codec's open-enum classification.
+derive fn enumShapeAllowed[T](): Bool {
+  comptime match (shape.kind[T]()) {
+    shape.Sealed => [comptime for (variant in shape.variants[T]()) comptime if (!variant.fields.isEmpty()) true].isEmpty()
+    _ => false
+  }
+}
+
 derive fn CheckEnum[T](): Ok {
-  comptime if (!codec.EnumShape[T]()) {
+  comptime if (!enumShapeAllowed[T]()) {
     shape.fail("enum.Enum requires variants without payloads")
   }
   comptime for (variant in shape.variants[T]()) {
@@ -32,7 +40,7 @@ derive fn CheckEnum[T](): Ok {
 }
 
 derive fn EnumInfo[T](): Info {
-  comptime if (!codec.EnumShape[T]()) {
+  comptime if (!enumShapeAllowed[T]()) {
     shape.fail("enum.Enum requires variants without payloads")
     panic("invalid enum derivation")
   } else {
@@ -56,7 +64,7 @@ derive fn BuildValue[T](variant: shape.Variant[T]): T {
 derive instance enumShape[T]: Enum[T] {
   metadata Info = EnumInfo[T]()
   fn values(): List[T] {
-    comptime if (!codec.EnumShape[T]()) {
+    comptime if (!enumShapeAllowed[T]()) {
       shape.fail("enum.Enum requires variants without payloads")
       panic("invalid enum derivation")
     } else {
@@ -65,7 +73,7 @@ derive instance enumShape[T]: Enum[T] {
     }
   }
   fn name(value: T): String {
-    comptime if (!codec.EnumShape[T]()) {
+    comptime if (!enumShapeAllowed[T]()) {
       shape.fail("enum.Enum requires variants without payloads")
       panic("invalid enum derivation")
     } else {
@@ -80,7 +88,7 @@ derive instance enumShape[T]: Enum[T] {
     }
   }
   fn byName(input: String): Option[T] {
-    comptime if (!codec.EnumShape[T]()) {
+    comptime if (!enumShapeAllowed[T]()) {
       shape.fail("enum.Enum requires variants without payloads")
       panic("invalid enum derivation")
     } else {
@@ -92,7 +100,7 @@ derive instance enumShape[T]: Enum[T] {
     }
   }
   fn parse(input: String): T | UnknownName {
-    comptime if (!codec.EnumShape[T]()) {
+    comptime if (!enumShapeAllowed[T]()) {
       shape.fail("enum.Enum requires variants without payloads")
       panic("invalid enum derivation")
     } else {
@@ -104,7 +112,7 @@ derive instance enumShape[T]: Enum[T] {
     }
   }
   fn index(value: T): Option[Int] {
-    comptime if (!codec.EnumShape[T]()) {
+    comptime if (!enumShapeAllowed[T]()) {
       shape.fail("enum.Enum requires variants without payloads")
       panic("invalid enum derivation")
     } else {

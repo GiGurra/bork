@@ -659,6 +659,7 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 	c.checkDerivedDuplicates()
 	c.ensureAllFieldDefaults()
 	c.checkTagGroups(files)
+	c.checkCodecFallbacks()
 	for _, checkKey := range c.mapKeyChecks {
 		checkKey()
 	}
