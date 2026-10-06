@@ -58,3 +58,7 @@ fn builder[T](): Never unsafe go { panic("shape.builder requires a derive templa
 
 // positional identifies the ordered slots of a structural tuple target.
 fn positional[T](): Bool unsafe go { panic("shape.positional requires a derive template") }
+
+// metadata reads associated metadata from the selected instance. C is a class
+// handle, and M is the resolved type key. Missing metadata returns None.
+fn metadata[T, C, M](): Option[M] unsafe go { panic("shape.metadata requires compiler dictionary selection") }

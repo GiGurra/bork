@@ -106,6 +106,8 @@ func (c *checker) materializeDefaultUses() {
 		exprsByOwner[owner] = append(exprsByOwner[owner], e)
 	}
 	seen := map[*Func]map[string]bool{}
+	depth, remaining := 0, 100000
+	limitReported := false
 	var visit func(*Instance, diag.Pos)
 	var dict func(*Dict, map[*TypeParam]Type, diag.Pos, map[*Dict]bool)
 	dict = func(d *Dict, bound map[*TypeParam]Type, pos diag.Pos, active map[*Dict]bool) {
@@ -127,11 +129,22 @@ func (c *checker) materializeDefaultUses() {
 		}
 	}
 	visit = func(inst *Instance, pos diag.Pos) {
+		if limitReported {
+			return
+		}
 		for _, t := range inst.TypeArgs {
 			if hasTypeParam(t) {
 				return
 			}
 		}
+		remaining--
+		if depth >= 64 || remaining < 0 {
+			limitReported = true
+			c.errorf(pos, "generic default dependency expansion exceeds the work or specialization depth limit")
+			return
+		}
+		depth++
+		defer func() { depth-- }()
 		for _, t := range inst.TypeArgs {
 			c.noteDefaultTypeUse(t, pos)
 		}

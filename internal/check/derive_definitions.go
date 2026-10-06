@@ -19,6 +19,11 @@ func (c *checker) checkDeriveDefinitions(files []*syntax.File) {
 		targets := map[*syntax.FuncDecl][]*syntax.TypeParam{}
 		for _, template := range file.Templates {
 			methods = append(methods, template.Methods...)
+			for _, metadata := range template.Metadata {
+				method := &syntax.FuncDecl{Pos: metadata.Pos, Result: metadata.Type, Body: &syntax.Block{Pos: metadata.Pos, Tail: metadata.Value}}
+				methods = append(methods, method)
+				targets[method] = template.TypeParams
+			}
 			for _, method := range template.Methods {
 				targets[method] = template.TypeParams
 			}
@@ -80,8 +85,16 @@ func (c *checker) checkDeriveDefinitions(files []*syntax.File) {
 				}
 			}
 			// Walk the body separately from the FuncDecl's cyclic Instance link.
+			classHandles := map[*syntax.TypeExpr]bool{}
 			collect := func(node any) {
 				switch node := node.(type) {
+				case *syntax.Call:
+					if id, ok := node.Fun.(*syntax.Ident); ok && len(node.TypeArgs) == 3 {
+						alias, member, qualified := strings.Cut(id.Name, ".")
+						if pkg := c.pkg.imports[alias]; qualified && member == "metadata" && pkg != nil && pkg.Path == "bork/shape" {
+							classHandles[node.TypeArgs[1]] = true
+						}
+					}
 				case *syntax.Param:
 					locals[node.Name] = true
 				case *syntax.Binding:
@@ -116,6 +129,12 @@ func (c *checker) checkDeriveDefinitions(files []*syntax.File) {
 					c.checkDeriveCallShape(call, locals)
 				}
 				if written, ok := node.(*syntax.TypeExpr); ok && written.Name != "" {
+					if classHandles[written] {
+						if c.lookupClass(written.Name) == nil || len(written.Args) != 0 || len(written.Where) != 0 {
+							c.errorf(written.Pos, "shape.metadata requires a class as its second type argument")
+						}
+						return
+					}
 					projected := false
 					if owner, member, qualified := strings.Cut(written.Name, "."); qualified && (member == "Type" || member == "RawType") && locals[owner] {
 						projected = true
@@ -152,7 +171,7 @@ func (c *checker) checkDeriveDefinitions(files []*syntax.File) {
 					return
 				}
 				if alias, member, qualified := strings.Cut(identifier.Name, "."); qualified {
-					if pkg := c.pkg.imports[alias]; pkg != nil && pkg.Path == "bork/shape" && (member == "Record" || member == "Sealed" || member == "Other" || member == "fields" || member == "variants" || member == "kind" || member == "name" || member == "owner" || member == "positional" || member == "facts" || member == "builder" || member == "fail") {
+					if pkg := c.pkg.imports[alias]; pkg != nil && pkg.Path == "bork/shape" && (member == "Record" || member == "Sealed" || member == "Other" || member == "fields" || member == "variants" || member == "kind" || member == "name" || member == "owner" || member == "positional" || member == "facts" || member == "builder" || member == "fail" || member == "metadata") {
 						return
 					}
 				}

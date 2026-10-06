@@ -37,6 +37,11 @@ func (g *gen) classType(class *check.Class, t check.Type) ast.Expr {
 // classDecl declares a class's dictionary struct.
 func (g *gen) classDecl(class *check.Class) ast.Decl {
 	st := &ast.StructType{Fields: &ast.FieldList{}}
+	metadataType, err := parser.ParseExpr("map[string]func() any")
+	if err != nil {
+		panic(err)
+	}
+	st.Fields.List = append(st.Fields.List, &ast.Field{Names: []*ast.Ident{ast.NewIdent("_metadata")}, Type: metadataType})
 	for _, m := range class.Methods {
 		st.Fields.List = append(st.Fields.List, &ast.Field{
 			Names: []*ast.Ident{name(m.Decl.Name)},
@@ -140,6 +145,9 @@ func (g *gen) instanceDecl(ci *check.ClassInstance) ast.Decl {
 	if check.IsGoStruct(ci.Class) {
 		lit = g.goStructDictionary(ci)
 	}
+	if len(ci.Metadata) > 0 {
+		lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: ast.NewIdent("_metadata"), Value: g.instanceMetadata(ci)})
+	}
 	for i, m := range ci.Methods {
 		var fn ast.Expr = g.funcName(m)
 		if len(ci.TypeParams) > 0 {
@@ -228,6 +236,7 @@ func (g *gen) dict(d *check.Dict) ast.Expr {
 		// Retag generic tuple implementations through their checked method
 		// signatures instead of returning a dictionary with formal Go tags.
 		var fields []ast.Expr
+		fields = append(fields, &ast.KeyValueExpr{Key: ast.NewIdent("_metadata"), Value: &ast.SelectorExpr{X: g.declaredDictionary(d), Sel: ast.NewIdent("_metadata")}})
 		for _, method := range d.Class.Methods {
 			var implementation *check.Func
 			for _, candidate := range d.Inst.Methods {
@@ -244,6 +253,10 @@ func (g *gen) dict(d *check.Dict) ast.Expr {
 		return &ast.CompositeLit{Type: g.classType(d.Class, d.Type), Elts: fields}
 	}
 
+	return g.declaredDictionary(d)
+}
+
+func (g *gen) declaredDictionary(d *check.Dict) ast.Expr {
 	var fun ast.Expr = ast.NewIdent(instName(d.Inst))
 	if len(d.TypeArgs) > 0 {
 		idx := &ast.IndexListExpr{X: fun}

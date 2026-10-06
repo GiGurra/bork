@@ -184,6 +184,14 @@ type ClassDecl struct {
 	Methods    []*FuncDecl
 }
 
+// InstanceMetadata associates a checked expression with its resolved type key.
+// Metadata is contextual instance syntax, not a reserved word.
+type InstanceMetadata struct {
+	Pos   diag.Pos
+	Type  *TypeExpr
+	Value Expr
+}
+
 // InstanceDecl is a named instance of a class for a type:
 // `instance showInt: Show[Int] { fn show(x: Int): String { ... } }`, or
 // generic: `instance showList[T: Show]: Show[List[T]] { ... }`.
@@ -197,6 +205,7 @@ type InstanceDecl struct {
 	ClassPos   diag.Pos
 	Type       *TypeExpr
 	Methods    []*FuncDecl
+	Metadata   []*InstanceMetadata
 }
 
 // Bundle names a set of instances, which `use` brings into scope at

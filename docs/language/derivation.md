@@ -143,6 +143,32 @@ resulting instance with `use`. The class name itself is not an instance import.
 
 The [derive_labels example](../../examples/derive_labels/README.md) is runnable.
 
+Instances and templates can associate typed metadata with the selected dictionary.
+Declare `metadata Type = expression` alongside the methods. The expression is
+checked Bork code and runs when queried; constructing the dictionary or calling
+an ordinary method does not invoke it. `metadata` remains a contextual identifier.
+
+```bork
+import "bork/shape"
+type Description = { text: String }
+class Label[T] { fn label(value: T): String }
+instance integerLabel: Label[Int] {
+  metadata Description = Description { text: "a whole number" }
+  fn label(value: Int): String { toString(value) }
+}
+fn description[T: Label](): Option[Description] {
+  shape.metadata[T, Label, Description]()
+}
+fn main() { println(description[Int]()) }
+```
+
+`shape.metadata[T, Class, MetadataType]()` selects the same instance as ordinary
+class calls in its scope and returns `None` when that instance has no metadata
+for the requested key. It can be called from ordinary runtime code as well as
+templates. Keys must be closed resolved types; targets may remain generic.
+Callback effects remain part of key identity. Duplicate keys and wrongly typed
+initializers are rejected, including keys declared through equivalent aliases.
+
 The standard `codec.Encode` derivation is a source template in `bork/codec`. It omits computed fields, retains named-field
 object order, and uses the tagged `values` array for positional payloads.
 Tuple encoding uses the same template's array branch; `shape.positional[T]()`

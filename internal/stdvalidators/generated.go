@@ -20,10 +20,12 @@ import (
 )
 
 type Ord[T any] struct {
-	compare func(T, T) int64
+	_metadata map[string]func() any
+	compare   func(T, T) int64
 }
 
 type InterpolationValidator[B any] struct {
+	_metadata             map[string]func() any
 	validateInterpolation func(StaticParts, []InterpolationHole) []InterpolationIssue
 }
 

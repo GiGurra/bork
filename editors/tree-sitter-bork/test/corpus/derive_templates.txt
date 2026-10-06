@@ -180,3 +180,46 @@ derive instance c[T]: C[T] {
               (match_arm
                 (pattern)
                 (block)))))))))
+
+==================
+Associated selected-instance metadata
+==================
+instance integer: Label[Int] {
+ metadata Description = Description { text: "integer" }
+ fn label(value: Int): String { "integer" }
+}
+---
+
+(source_file
+  (instance_declaration
+    (identifier)
+    (type
+      (qualified_name
+        (identifier))
+      (type_arguments
+        (type
+          (qualified_name
+            (identifier)))))
+    (instance_metadata
+      (type
+        (qualified_name
+          (identifier)))
+      (record_expression
+        (qualified_name
+          (identifier))
+        (record_literal
+          (identifier)
+          (string))))
+    (function_declaration
+      (identifier)
+      (parameters
+        (parameter
+          (identifier)
+          (type
+            (qualified_name
+              (identifier)))))
+      (type
+        (qualified_name
+          (identifier)))
+      (block
+        (string)))))

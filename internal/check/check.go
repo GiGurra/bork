@@ -168,6 +168,7 @@ const (
 	BuiltinAssertIsFailure
 	BuiltinShapeFinish
 	BuiltinShapeValidate
+	BuiltinShapeMetadata
 )
 
 var builtins = map[string]Builtin{
@@ -328,6 +329,8 @@ type Info struct {
 	shapeRawHeads          map[*syntax.TypeExpr][]*Constraint
 	shapeDefaults          map[*syntax.Call]*Field
 	shapeValidations       map[*syntax.Call]*shapeValidationCall
+	shapeMetadataCalls     map[*syntax.Call]*Dict
+	metadataKeyTypes       []Type
 	assemblyNames          map[any]string
 	interpolatorCalls      map[*syntax.Interp]*syntax.Call
 	interpolatorValidators map[*syntax.Interp]*Dict
@@ -1820,6 +1823,9 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 }
 
 func (c *checker) call(e *syntax.Call, want Type) Type {
+	if result, handled := c.shapeMetadataCall(e); handled {
+		return result
+	}
 	if t, ok := c.positionalVariantCall(e, want); ok {
 		return t
 	}

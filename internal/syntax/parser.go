@@ -708,6 +708,13 @@ func (p *parser) instanceDecl() (id *InstanceDecl) {
 			break
 		}
 		if !p.at(KwFn) {
+			if p.at(TIdent) && p.tok().Text == "metadata" {
+				position := p.next().Pos
+				key := p.typeExpr()
+				p.expect(Assign, "after the metadata type")
+				id.Metadata = append(id.Metadata, &InstanceMetadata{Pos: position, Type: key, Value: p.expr()})
+				continue
+			}
 			p.errorf(p.tok().Pos, "expected a method (fn name(...) { ... }) or '}', found %s", p.tok().Kind)
 			panic(bailout{})
 		}

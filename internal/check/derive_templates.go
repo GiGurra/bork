@@ -1028,6 +1028,8 @@ func (c *checker) expandDeriveBodies() {
 			method.Decl.Body = plan.expr(method.Decl.Body).(*syntax.Block)
 			c.diags.DeriveContext(start, instance.Decl.Pos)
 		}
+		metadataPlan := &deriveExpansion{c: c, template: template, target: instance.Type, instance: instance, typeFacts: map[string][]*Constraint{template.Decl.TypeParams[0].Name: instance.Constraints}, active: map[*syntax.FuncDecl]bool{}, scope: instance.Pkg, env: map[string]any{template.Decl.TypeParams[0].Name: instance.Type}, budget: &deriveBudget{remaining: 100000}, names: map[string]bool{}}
+		c.declareInstanceMetadata(instance, template.Decl.Metadata, metadataPlan)
 		c.pkg = saved
 	}
 }

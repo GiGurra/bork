@@ -339,6 +339,14 @@ of Decode. Duplicate keys and mismatched metadata types are definition errors.
 Handwritten instances without metadata return None; an explicit metadata block
 can opt them in without a new required class method.
 
+The first implementation requires closed, resolved metadata key types, such as
+`RecordSchema` and `FieldSchema`. Generic targets and typed callbacks in their
+metadata values remain supported. Keys use checked Bork type identity, including
+callback effects and structural tuple equivalence; runtime Go reflection does
+not define identity. Parameter-dependent metadata keys are possible future work.
+Metadata initializers run lazily when their key is queried, rather than when the
+dictionary is constructed or one of its ordinary methods is called.
+
 `codec.Schema[T: codec.Decode](): Option[codec.RecordSchema]` and corresponding
 field-kind metadata replace hidden decoder members. Schemas contain ordered
 fields, names, docs, fact descriptions, default/optional flags and independent

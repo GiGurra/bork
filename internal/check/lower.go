@@ -416,6 +416,9 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 	case *syntax.Binary:
 		return &Binary{expr: at, Op: x.Op, X: l.expr(x.X), Y: l.expr(x.Y)}
 	case *syntax.Call:
+		if dictionary := l.info.shapeMetadataCalls[x]; dictionary != nil {
+			return &CallBuiltin{expr: at, Builtin: BuiltinShapeMetadata, Name: "shape.metadata", Dictionary: dictionary}
+		}
 		if literal := l.info.variantCalls[x]; literal != nil {
 			out := l.expr(literal).(*RecordLit)
 			out.SourceCall = x

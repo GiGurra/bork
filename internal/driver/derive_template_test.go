@@ -2930,3 +2930,191 @@ fn main() {
 		}
 	}
 }
+
+func TestDeriveTemplateSelectedInstanceMetadata(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+type Info = { label: String }
+class Tagged[T] { fn tag(value: T): String }
+instance integer: Tagged[Int] {
+ metadata Info = Info { label: "integer" }
+ fn tag(value: Int): String { toString(value) }
+}
+instance string: Tagged[String] { fn tag(value: String): String { value } }
+instance list[A: Tagged]: Tagged[List[A]] {
+ metadata Info = Info { label: "list:" + info[A]().map(item => item.label).getOr("unknown") }
+ fn tag(value: List[A]): String { "list" }
+}
+fn info[T: Tagged](): Option[Info] { shape.metadata[T, Tagged, Info]() }
+class Labels[T] { fn labels(value: T): String }
+derive instance labels[T]: Labels[T] {
+ metadata Info = Info { label: [comptime for (field in shape.fields[T]())
+  field.name + ":" + shape.metadata[field.RawType, Tagged, Info]().map(item => item.label).getOr("unknown")].join(",") }
+ fn labels(value: T): String { "labels" }
+}
+type Row = { value: Int, name: String } derive(Labels)
+fn main() {
+ println(info[Int]())
+ println(info[String]())
+ println(info[List[Int]]())
+ println(shape.metadata[Row, Labels, Info]())
+ println(shape.metadata[Row, Labels, String]())
+ println(shape.metadata[Int, Eq, Info]())
+}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatalf("selected metadata: %s, %v", output, err)
+	}
+	for _, expected := range []string{`label: "integer"`, `label: "list:integer"`, `label: "value:integer,name:unknown"`, "None"} {
+		if !strings.Contains(string(output), expected) {
+			t.Fatalf("want %q in %s", expected, output)
+		}
+	}
+}
+
+func TestDeriveTemplateMetadataChecks(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, body, want string }{
+		{"duplicate resolved key", `metadata Info = Info { label: "first" }; metadata Alias = Info { label: "second" }`, "metadata for Info is declared twice"},
+		{"wrong value", `metadata Info = 3`, "body produces Int"},
+		{"closed callback effects", `metadata (() => String) = noisy`, "uses io"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			checkPreludeSource(t, `import "bork/shape"
+type Info = { label: String }
+type Alias = Info
+class Tagged[T] { fn tag(value: T): T }
+fn noisy() uses io: String { println("called"); "noisy" }
+instance integer: Tagged[Int] { `+tc.body+`; fn tag(value: Int): Int { value } }
+fn main() { _ = shape.metadata[Int, Tagged, Info]() }`, tc.want)
+		})
+	}
+}
+
+func TestDeriveTemplateMetadataLazyProviders(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+class Tagged[T] { fn tag(value: T): T }
+instance integer: Tagged[Int] {
+ metadata String = toString(Value)
+ metadata Bool = true
+ fn tag(value: Int): Int { value }
+}
+lazy Value: Int = tag(1)
+fn main() { println(Value); println(shape.metadata[Int, Tagged, Bool]()) }`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "1\nOption.Some(true)\n" {
+		t.Fatalf("lazy metadata: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplateTupleInstanceMetadata(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+class Tagged[T] { fn tag(value: T): String }
+instance pair: Tagged[(Int, String)] {
+ metadata String = "pair"
+ fn tag(value: (Int, String)): String { "pair" }
+}
+fn main() { println(shape.metadata[(Int, String), Tagged, String]()) }`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "Option.Some(\"pair\")\n" {
+		t.Fatalf("tuple metadata: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplateMetadataGenericLazyCycle(t *testing.T) {
+	checkPreludeSource(t, `import "bork/shape"
+class Tagged[T] { fn tag(value: T): T }
+instance integer: Tagged[Int] {
+ metadata String = toString(Value)
+ fn tag(value: Int): Int { value }
+}
+fn info[A: Tagged](): Option[String] { shape.metadata[A, Tagged, String]() }
+fn wrapper[B: Tagged](): Option[String] { info[B]() }
+lazy Value: Int = { _ = wrapper[Int](); 1 }
+fn main() { println(Value) }`, "cycle")
+}
+
+func TestDeriveTemplateMetadataEffectKeys(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+class Tagged[T] { fn tag(value: T): T }
+fn quiet(): String { "quiet" }
+fn noisy() uses io: String { println("noisy"); "noisy" }
+instance integer: Tagged[Int] {
+ metadata (() => String) = quiet
+ metadata (() uses io => String) = noisy
+ fn tag(value: Int): Int { value }
+}
+fn pure(): String { shape.metadata[Int, Tagged, (() => String)]().map(callback => callback()).getOr("missing") }
+fn main() {
+ println(pure())
+ match (shape.metadata[Int, Tagged, (() uses io => String)]()) {
+  Option.Some(callback) => println(callback())
+  Option.None => println("missing")
+ }
+}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "quiet\nnoisy\nnoisy\n" {
+		t.Fatalf("metadata effect keys: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplateMetadataClosedKeys(t *testing.T) {
+	checkPreludeSource(t, `import "bork/shape"
+class Tagged[T] { fn tag(value: T): String }
+instance list[A]: Tagged[List[A]] {
+ metadata List[A] = []
+ fn tag(value: List[A]): String { "list" }
+}
+fn main() { _ = shape.metadata[List[Int], Tagged, String]() }`, "metadata requires a closed resolved type key")
+	checkPreludeSource(t, `import "bork/shape"
+class Tagged[T] { fn tag(value: T): String }
+fn info[A: Tagged](): Option[A] { shape.metadata[A, Tagged, A]() }
+fn main() {}`, "metadata requires a closed resolved type key")
+}
+
+func TestDeriveTemplateMetadataNestedGenericLazyCycle(t *testing.T) {
+	checkPreludeSource(t, `import "bork/shape"
+class Tagged[T] { fn tag(value: T): String }
+instance integer: Tagged[Int] {
+ metadata String = toString(Value)
+ fn tag(value: Int): String { toString(value) }
+}
+instance list[A: Tagged]: Tagged[List[A]] {
+ metadata String = info[A]().getOr("")
+ fn tag(value: List[A]): String { "list" }
+}
+fn info[A: Tagged](): Option[String] { shape.metadata[A, Tagged, String]() }
+lazy Value: Int = { _ = info[List[List[Int]]](); 1 }
+fn main() { println(Value) }`, "cycle")
+}
+
+func TestDeriveTemplateMetadataGrowingDependency(t *testing.T) {
+	checkPreludeSource(t, `import "bork/shape"
+class Tagged[T] { fn tag(value: T): String }
+instance integer: Tagged[Int] {
+ metadata String = growing[Int]()
+ fn tag(value: Int): String { toString(value) }
+}
+fn growing[A](): String { growing[List[A]]() }
+lazy Value: String = shape.metadata[Int, Tagged, String]().getOr("")
+fn main() { println(Value) }`, "generic default dependency expansion exceeds")
+}

@@ -49,7 +49,8 @@ type ClassInstance struct {
 	TypeParams      []*TypeParam
 	Type            Type
 	// Methods holds the implementations, in the class's method order.
-	Methods []*Func
+	Methods  []*Func
+	Metadata []*Func
 	// Constraints are those of a constrained instance's type
 	// (`Decode[Int where positive]`). Such an instance is used only for
 	// values known to satisfy them.
@@ -422,6 +423,7 @@ func (c *checker) declareInstance(id *syntax.InstanceDecl, prelude bool) {
 	}
 	c.pkg.instances = append(c.pkg.instances, ci)
 	c.info.ClassInstances = append(c.info.ClassInstances, ci)
+	c.declareInstanceMetadata(ci, id.Metadata, nil)
 }
 
 // resolveUses decides which instances are in scope in each package: its

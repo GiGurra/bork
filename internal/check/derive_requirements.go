@@ -63,7 +63,7 @@ func deriveBoundKey(pkg *Package, instance, parameter string) string {
 func classIdentity(class *Class) string { return class.Pkg.Path + "\x00" + class.Name }
 
 func (c *checker) discoverBound(tp *TypeParam, class *Class) bool {
-	if c.deriveDiscovery == nil || c.fn == nil || c.fn.TemplatePkg == nil {
+	if c.deriveDiscovery == nil || c.fn == nil || c.fn.TemplatePkg == nil || c.fn.TemplateScope == nil {
 		return false
 	}
 	for _, parameter := range c.fn.TypeParams {

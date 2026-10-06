@@ -228,6 +228,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	// Instances are used through their dictionaries, so all are emitted.
 	for _, ci := range info.ClassInstances {
 		roots = append(roots, ci.Methods...)
+		roots = append(roots, ci.Metadata...)
 		if ci.Derived != "" {
 			for _, con := range ci.Constraints {
 				roots = append(roots, constraintPreds(con)...)
@@ -1549,6 +1550,8 @@ func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 		return &ast.CallExpr{Fun: &ast.SelectorExpr{X: ast.NewIdent("fmt"), Sel: ast.NewIdent(fn)}, Args: args}
 	}
 	switch e.Builtin {
+	case check.BuiltinShapeMetadata:
+		return g.shapeMetadata(e)
 	case check.BuiltinShapeValidate:
 		return g.shapeValidate(e, args[0])
 	case check.BuiltinShapeFinish:
