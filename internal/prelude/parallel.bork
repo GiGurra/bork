@@ -2,6 +2,8 @@
 // workers <= 0 uses the CPUs available to the Go runtime.
 // Pure callbacks need no scope; In methods accept effects and cancellation.
 
+// Maps elements concurrently and returns results in input order. workers <=
+// 0 uses the CPUs available to the Go runtime.
 fn (xs: List[A]) parMap[A, B](f: (A) uses nothing => B, workers: Int = 0): List[B] unsafe go {
   out := make([]B, len(xs))
   _borkParallel(nil, len(xs), workers, func(i int) bool {
@@ -12,6 +14,9 @@ fn (xs: List[A]) parMap[A, B](f: (A) uses nothing => B, workers: Int = 0): List[
   return out
 }
 
+// Maps elements concurrently and returns results in input order. Uses scope
+// s for cancellation and returns Cancelled when scheduling stops; workers <=
+// 0 uses the available CPUs.
 fn (xs: List[A]) parMapIn[A, B](s: Scope, f: (Scope, A) => B, workers: Int = 0) uses state: List[B] | Cancelled unsafe go {
   out := make([]B, len(xs))
   if !_borkParallel(s, len(xs), workers, func(i int) bool {
@@ -22,6 +27,9 @@ fn (xs: List[A]) parMapIn[A, B](s: Scope, f: (Scope, A) => B, workers: Int = 0) 
   return out
 }
 
+// Tests elements concurrently and keeps matches in input order, retaining
+// their predicate facts. workers <= 0 uses the CPUs available to the Go
+// runtime.
 fn (xs: List[A]) parFilter[A](f: (A) uses nothing => Bool, workers: Int = 0): List[A where f] unsafe go {
   keep := make([]bool, len(xs))
   _borkParallel(nil, len(xs), workers, func(i int) bool {
@@ -34,6 +42,9 @@ fn (xs: List[A]) parFilter[A](f: (A) uses nothing => Bool, workers: Int = 0): Li
   return out
 }
 
+// Tests elements concurrently and keeps matches in input order. Uses scope s
+// for cancellation and returns Cancelled when scheduling stops; workers <= 0
+// uses the available CPUs.
 fn (xs: List[A]) parFilterIn[A](s: Scope, f: (Scope, A) => Bool, workers: Int = 0) uses state: List[A] | Cancelled unsafe go {
   keep := make([]bool, len(xs))
   if !_borkParallel(s, len(xs), workers, func(i int) bool {
@@ -46,6 +57,8 @@ fn (xs: List[A]) parFilterIn[A](s: Scope, f: (Scope, A) => Bool, workers: Int = 
   return out
 }
 
+// Maps elements concurrently and concatenates the returned lists in input
+// order. workers <= 0 uses the CPUs available to the Go runtime.
 fn (xs: List[A]) parFlatMap[A, B](f: (A) uses nothing => List[B], workers: Int = 0): List[B] unsafe go {
   parts := make([][]B, len(xs))
   _borkParallel(nil, len(xs), workers, func(i int) bool {
@@ -58,6 +71,9 @@ fn (xs: List[A]) parFlatMap[A, B](f: (A) uses nothing => List[B], workers: Int =
   return out
 }
 
+// Maps elements concurrently and concatenates the returned lists in input
+// order. Uses scope s for cancellation and returns Cancelled when scheduling
+// stops; workers <= 0 uses the available CPUs.
 fn (xs: List[A]) parFlatMapIn[A, B](s: Scope, f: (Scope, A) => List[B], workers: Int = 0) uses state: List[B] | Cancelled unsafe go {
   parts := make([][]B, len(xs))
   if !_borkParallel(s, len(xs), workers, func(i int) bool {
@@ -70,6 +86,8 @@ fn (xs: List[A]) parFlatMapIn[A, B](s: Scope, f: (Scope, A) => List[B], workers:
   return out
 }
 
+// Calls f concurrently for every element; callback execution order is
+// unspecified. workers <= 0 uses the CPUs available to the Go runtime.
 fn (xs: List[A]) parForEach[A](f: (A) uses nothing => Ok, workers: Int = 0): Ok unsafe go {
   _borkParallel(nil, len(xs), workers, func(i int) bool {
     x := xs[i]
@@ -79,6 +97,9 @@ fn (xs: List[A]) parForEach[A](f: (A) uses nothing => Ok, workers: Int = 0): Ok 
   return
 }
 
+// Calls f concurrently for every element; callback execution order is
+// unspecified. Uses scope s for cancellation and returns Cancelled when
+// scheduling stops; workers <= 0 uses the available CPUs.
 fn (xs: List[A]) parForEachIn[A](s: Scope, f: (Scope, A) => Ok, workers: Int = 0) uses state: Ok | Cancelled unsafe go {
   if !_borkParallel(s, len(xs), workers, func(i int) bool {
     x := xs[i]

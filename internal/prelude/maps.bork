@@ -15,6 +15,7 @@ type Entry[K, V] = { key: K, value: V }
 // goes back to insertion order, starting from the current traversal order.
 // Operations preserve the order policy of the map they start from.
 
+// Returns the value at key, or None when the key is absent.
 fn (m: Map[K, V]) get[K: Eq, V](key: K): Option[V] unsafe go {
   if v, ok := m.get(key); ok {
     return Option_Some[V]{E0: v}
@@ -22,6 +23,7 @@ fn (m: Map[K, V]) get[K: Eq, V](key: K): Option[V] unsafe go {
   return Option_None[V]{}
 }
 
+// Returns the value at key, or otherwise when the key is absent.
 fn (m: Map[K, V]) getOr[K: Eq, V](key: K, otherwise: V): V unsafe go {
   if v, ok := m.get(key); ok {
     return v
@@ -29,35 +31,43 @@ fn (m: Map[K, V]) getOr[K: Eq, V](key: K, otherwise: V): V unsafe go {
   return otherwise
 }
 
+// Reports whether the map contains key.
 fn (m: Map[K, V]) has[K: Eq, V](key: K): Bool unsafe go {
   _, ok := m.get(key)
   return ok
 }
 
+// Returns a map with key associated with value, replacing an existing association.
 fn (m: Map[K, V]) put[K: Eq, V](key: K, value: V): Map[K, V] unsafe go {
   return m.put(key, value)
 }
 
+// Returns a map without key; an absent key leaves the entries unchanged.
 fn (m: Map[K, V]) remove[K: Eq, V](key: K): Map[K, V] unsafe go {
   return m.remove(key)
 }
 
+// Returns the number of entries.
 fn (m: Map[K, V]) size[K: Eq, V](): Int unsafe go {
   return int64(m.len())
 }
 
+// Reports whether the map has no entries.
 fn (m: Map[K, V]) isEmpty[K: Eq, V](): Bool unsafe go {
   return m.len() == 0
 }
 
+// Lists keys in the map's traversal order.
 fn (m: Map[K, V]) keys[K: Eq, V](): List[K] unsafe go {
   return m.keys()
 }
 
+// Lists values in the map's traversal order.
 fn (m: Map[K, V]) values[K: Eq, V](): List[V] unsafe go {
   return m.vals()
 }
 
+// Lists the key/value entries in the map's traversal order.
 fn (m: Map[K, V]) entries[K: Eq, V](): List[Entry[K, V]] unsafe go {
   out := make([]Entry[K, V], 0, m.len())
   m.each(func(k K, v V) bool {
@@ -67,6 +77,7 @@ fn (m: Map[K, V]) entries[K: Eq, V](): List[Entry[K, V]] unsafe go {
   return out
 }
 
+// Adds entries from b; b's values replace this map's values for shared keys.
 fn (a: Map[K, V]) merge[K: Eq, V](b: Map[K, V]): Map[K, V] unsafe go {
   out := a
   b.each(func(k K, v V) bool {
@@ -76,10 +87,12 @@ fn (a: Map[K, V]) merge[K: Eq, V](b: Map[K, V]): Map[K, V] unsafe go {
   return out
 }
 
+// Applies f to each value, preserving keys and the order policy.
 fn (m: Map[K, V]) mapValues[K: Eq, V, W](f: (V) => W): Map[K, W] unsafe go {
   return _mapValues(m, f)
 }
 
+// Keeps entries for which test(key, value) is true, preserving the order policy.
 fn (m: Map[K, V]) filter[K: Eq, V](test: (K, V) => Bool): Map[K, V] unsafe go {
   out := m
   m.each(func(k K, v V) bool {
@@ -91,6 +104,7 @@ fn (m: Map[K, V]) filter[K: Eq, V](test: (K, V) => Bool): Map[K, V] unsafe go {
   return out
 }
 
+// Calls f for each key/value entry in traversal order.
 fn (m: Map[K, V]) forEach[K: Eq, V](f: (K, V) => Ok) unsafe go {
   m.each(func(k K, v V) bool {
     f(k, v)
@@ -98,16 +112,20 @@ fn (m: Map[K, V]) forEach[K: Eq, V](f: (K, V) => Ok) unsafe go {
   })
 }
 
+// Returns a map whose traversal follows its keys' Ord instance.
 fn (m: Map[K, V]) sorted[K: Ord + Eq, V](): Map[K, V] { m.sortedBy((a, b) => compare(a, b) < 0) }
 
+// Returns a map ordered by less; less must be a strict order agreeing with key equality.
 fn (m: Map[K, V]) sortedBy[K: Eq, V](less: (K, K) => Bool): Map[K, V] unsafe go {
   return _mapSortedBy(m, less)
 }
 
+// Returns an insertion-ordered map initialized in the current traversal order.
 fn (m: Map[K, V]) inOrder[K: Eq, V](): Map[K, V] unsafe go {
   return _mapInOrder(m)
 }
 
+// Returns a hash map with unspecified traversal order; printing remains deterministic.
 fn (m: Map[K, V]) unordered[K: Eq, V](): Map[K, V] unsafe go {
   return _mapUnordered(m)
 }

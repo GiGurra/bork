@@ -4,7 +4,7 @@ Standard packages ship with the compiler. Import one as `bork/name` and call its
 
 Operations on strings, lists, maps, options, and bytes need no import. They are methods that are available everywhere, such as `text.trim()` and `xs.map(f)`. Run `bork doc builtin` for their signatures.
 
-<!-- Builtin API slot: add the builtins.md reference link when PR 2b lands. -->
+The [built-in API reference](builtins.md) lists functions and methods available without imports, with their signatures and comments.
 
 Run `bork doc bork/<package>` for generated package signatures and comments; for example, `bork doc bork/http`.
 

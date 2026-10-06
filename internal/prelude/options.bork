@@ -1,6 +1,7 @@
 // Option is a value that may be missing.
 type Option[T] = sealed { Some(T), None }
 
+// Transforms a present value with f; None stays None.
 fn (o: Option[T]) map[T, U](f: (T) => U): Option[U] {
   match (o) {
     Option.Some(value) => Option.Some(f(value))
@@ -8,6 +9,7 @@ fn (o: Option[T]) map[T, U](f: (T) => U): Option[U] {
   }
 }
 
+// Applies f to a present value; None stays None.
 fn (o: Option[T]) flatMap[T, U](f: (T) => Option[U]): Option[U] {
   match (o) {
     Option.Some(value) => f(value)
@@ -15,6 +17,8 @@ fn (o: Option[T]) flatMap[T, U](f: (T) => Option[U]): Option[U] {
   }
 }
 
+// Returns the present value, or otherwise for None; otherwise is evaluated
+// before the call.
 fn (o: Option[T]) getOr[T](otherwise: T): T {
   match (o) {
     Option.Some(value) => value
@@ -22,6 +26,7 @@ fn (o: Option[T]) getOr[T](otherwise: T): T {
   }
 }
 
+// Reports whether the option contains a value.
 fn (o: Option[T]) isSome[T](): Bool {
   match (o) {
     Option.Some(_) => true
@@ -29,4 +34,5 @@ fn (o: Option[T]) isSome[T](): Bool {
   }
 }
 
+// Reports whether the option is None.
 fn (o: Option[T]) isNone[T](): Bool { !o.isSome() }

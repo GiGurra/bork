@@ -4,13 +4,19 @@ fn (values: List[Byte]) toBytes(): Bytes unsafe go {
   return _borkBytesFrom(values)
 }
 
+// Returns the number of bytes.
 fn (data: Bytes) length(): Int unsafe go { return int64(len(data)) }
+// Reports whether the data contains no bytes.
 fn (data: Bytes) isEmpty(): Bool unsafe go { return len(data) == 0 }
+// Returns the byte at a zero-based index, or None when the index is out of bounds.
 fn (data: Bytes) get(index: Int): Option[Byte] unsafe go {
   if index < 0 || index >= int64(len(data)) { return _borkNone[byte]() }
   return _borkSome(data[index])
 }
+// Copies the data into an immutable byte list.
 fn (data: Bytes) toList(): List[Byte] unsafe go { return _borkBytesData(data) }
+// Copies bytes from the inclusive from index to the exclusive to index;
+// invalid bounds return OutOfRange.
 fn (data: Bytes) slice(from: Int, to: Int): Bytes | OutOfRange unsafe go {
   import "fmt"
   if from < 0 || to < from || to > int64(len(data)) {
@@ -18,6 +24,7 @@ fn (data: Bytes) slice(from: Int, to: Int): Bytes | OutOfRange unsafe go {
   }
   return _borkBytesFrom(data[from:to])
 }
+// Builds new bytes containing this data followed by other.
 fn (data: Bytes) concat(other: Bytes): Bytes unsafe go {
   return append(_borkBytesFrom(data), other...)
 }
