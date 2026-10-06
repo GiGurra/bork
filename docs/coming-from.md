@@ -18,8 +18,9 @@ For syntax at a glance, see the [cheat sheet](cheatsheet.md).
 | `[]T`, `map[K]V`, channels | Immutable `List[T]`, `Map[K, V]`, and scope-owned `Channel[T]`. |
 
 Go is also available through checked [interop](language/go-interop.md). A bork
-file importing unsafe Go requires the corresponding `unsafe "path"` permission
-in `bork.mod`; ordinary std imports do not.
+package containing `unsafe go` functions must be listed as `unsafe "package/path"`
+in its owning module's `bork.mod`. Importing an authorized wrapper does not
+require another permission in the caller's module.
 
 ## From TypeScript
 

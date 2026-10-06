@@ -169,22 +169,23 @@ fn main() {
 }
 ```
 
-## How do I print a record error to stderr?
+## Why does printing require uses io?
 
 ```bork fails
-type Failure = { message: String }
-fn main() { eprintln(Failure { message: "failed" }) }
+fn greet() { eprintln("hello") }
+fn main() { greet() }
 ```
 
 ```text
-argument 1 to eprintln must be String, found Failure
+greet uses io (it calls eprintln), but its signature allows no effects; declare it: uses io
 ```
 
-Convert the value with toString. println accepts values directly; eprintln currently takes a String. The conversion also works with CLI error records.
+Declare the effects a private function uses. Omitting uses makes it pure; main
+and tests may use runtime effects without declaring them.
 
 ```bork
-type Failure = { message: String }
-fn main() { eprintln(toString(Failure { message: "failed" })) }
+fn greet() uses io { eprintln("hello") }
+fn main() { greet() }
 ```
 
 ## Why does match need another arm?
@@ -342,6 +343,15 @@ scope when work should finish before leaving. Cooperative operations such as
 `delay` return Cancelled when the scope ends; uncooperative work can continue
 until it stops, except when `taskTimeout` explicitly limits joining. See
 [scopes](language/scopes.md) for runnable examples and resource contracts.
+
+## How do I print a record error to stderr?
+
+Convert it with toString; this works for user-defined errors and cli.Error.
+
+```bork
+type Failure = { message: String }
+fn main() { eprintln(toString(Failure { message: "failed" })) }
+```
 
 ## How do I return a nonzero exit code?
 
