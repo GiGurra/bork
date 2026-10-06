@@ -1,0 +1,20 @@
+"RED"
+"DARK_BLUE"
+Color.DarkBlue
+Color.Red
+Color.DarkBlue
+DecodeError { path: ".type", message: "unknown variant \"purple\" of Color; expected one of RED, DARK_BLUE" }
+DecodeError { path: ".type", message: "unknown variant \"DarkBlue\" of Color; expected one of RED, DARK_BLUE" }
+Color.DarkBlue
+DARK_BLUE
+Color.DarkBlue
+["RED","DARK_BLUE"]
+[Color.Red, Color.DarkBlue]
+"dark-blue"
+KebabColor.DarkBlue
+"DarkBlue"
+VerbatimColor.DarkBlue
+"navy"
+NamedColor.DarkBlue
+{"type":"Empty"}
+{"type":"Some","value":7}

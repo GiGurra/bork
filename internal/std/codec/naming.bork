@@ -1,0 +1,87 @@
+import "bork/shape"
+
+// Naming selects the spelling of record fields and sealed tags on the wire.
+type Naming = sealed { Verbatim, Camel, Pascal, Snake, Kebab, ScreamingSnake }
+type TypeTags = { naming: Option[Naming] = Option.None }
+type FieldTags = { name: Option[String] = Option.None }
+type VariantTags = { name: Option[String] = Option.None }
+
+// Words splits separators and transitions in names, retaining digits within
+// their word and treating the end of an acronym as a new capitalised word.
+fn Words(name: String): List[String] unsafe go { return _borkCodecWords(name) }
+// JoinWords gives already split words the requested conventional spelling.
+// Verbatim joins words without a separator; WireName preserves the original.
+fn JoinWords(words: List[String], naming: Naming): String unsafe go {
+  policy := "Verbatim"
+  switch naming.(type) {
+  case Naming_Camel: policy = "Camel"
+  case Naming_Pascal: policy = "Pascal"
+  case Naming_Snake: policy = "Snake"
+  case Naming_Kebab: policy = "Kebab"
+  case Naming_ScreamingSnake: policy = "ScreamingSnake"
+  }
+  return _borkCodecJoinWords(words, policy)
+}
+// WireName preserves Verbatim or joins the words under a naming policy.
+fn WireName(name: String, naming: Naming): String {
+  match (naming) { Naming.Verbatim => name, _ => JoinWords(Words(name), naming) }
+}
+
+// EnumShape identifies a sealed type whose alternatives all have no payload.
+derive fn EnumShape[T](): Bool {
+  comptime match (shape.kind[T]()) {
+    shape.Sealed => [comptime for (variant in shape.variants[T]()) comptime if (!variant.fields.isEmpty()) true].isEmpty()
+    _ => false
+  }
+}
+// NamingOf applies the shape's default only when no policy was specified.
+derive fn NamingOf[T](): Naming {
+  defaultNaming = comptime if (EnumShape[T]()) { Naming.ScreamingSnake } else { Naming.Verbatim }
+  shape.tagged[T, TypeTags]().getOr(TypeTags {}).naming.getOr(defaultNaming)
+}
+derive fn FieldWireName[T](field: shape.Field[T]): String {
+  field.tagged[FieldTags]().getOr(FieldTags {}).name.getOr(WireName(field.name, NamingOf[T]()))
+}
+derive fn VariantWireName[T](variant: shape.Variant[T]): String {
+  variant.tagged[VariantTags]().getOr(VariantTags {}).name.getOr(WireName(variant.name, NamingOf[T]()))
+}
+
+// Builder facts use source paths. Only the owner's first field segment needs
+// translating; nested decoders already return paths in their own wire names.
+fn remapWirePath(path: String, names: List[(String, String)]): String unsafe go {
+  import "strings"
+  for _, pair := range names {
+    source := "." + pair.E0
+    if strings.HasPrefix(path, source) && (len(path) == len(source) || path[len(source)] == '.' || path[len(source)] == '[') {
+      return "." + pair.E1 + path[len(source):]
+    }
+  }
+  return path
+}
+
+// These checks consume closed names only during typed derive expansion.
+fn wireNameAllowed(name: String): Bool unsafe go { panic("wireNameAllowed requires derive expansion") }
+fn variantNameAllowed(name: String): Bool unsafe go { panic("variantNameAllowed requires derive expansion") }
+fn wireNamesUnique(names: List[String]): Bool unsafe go { panic("wireNamesUnique requires derive expansion") }
+
+derive fn CheckFieldNames[T](fields: List[shape.Field[T]]): Ok {
+  comptime for (field in fields) {
+    comptime if (!wireNameAllowed(FieldWireName[T](field))) { shape.fail("codec field '" + field.name + "' has an empty wire name or the YAML merge key '<<'") }
+  }
+  comptime if (!wireNamesUnique([comptime for (field in fields) FieldWireName[T](field)])) { shape.fail("codec fields have duplicate wire names") }
+  Ok
+}
+derive fn CheckWireNames[T](): Ok {
+  comptime match (shape.kind[T]()) {
+    shape.Record => { comptime if (!shape.positional[T]()) { CheckFieldNames[T](shape.fields[T]()) } else { Ok } }
+    shape.Sealed => {
+      comptime for (variant in shape.variants[T]()) {
+        comptime if (!variantNameAllowed(VariantWireName[T](variant))) { shape.fail("codec variant '" + variant.name + "' has invalid YAML wire name '" + VariantWireName[T](variant) + "'") }
+        comptime if (!variant.positional) { CheckFieldNames[T](variant.fields) }
+      }
+      comptime if (!wireNamesUnique([comptime for (variant in shape.variants[T]()) VariantWireName[T](variant)])) { shape.fail("codec variants have duplicate wire names") }
+      Ok
+    }
+    _ => Ok
+  }
+}

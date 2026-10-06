@@ -319,9 +319,7 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 		}
 		return p.tagRecord(x)
 	case *syntax.ListLit:
-		if p.layout {
-			return p.layoutList(x)
-		}
+		return p.layoutList(x)
 	case *syntax.Ident:
 		if kind := p.shapeCall(x.Name); kind == "Record" || kind == "Sealed" || kind == "Other" {
 			return shapeEnum(kind), true
@@ -470,6 +468,9 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 			return a || b, aok && bok
 		}
 	case *syntax.Call:
+		if value, known := p.namingCall(x); known {
+			return value, true
+		}
 		if value, known := p.tagged(x); known {
 			return value, true
 		}
@@ -511,6 +512,12 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 		}
 		if selector, ok := x.Fun.(*syntax.Selector); ok && (selector.Name == "length" || selector.Name == "isEmpty") {
 			if receiver, known := p.eval(selector.X); known {
+				if list, yes := receiver.(metadataList); yes && len(x.Args) == 0 && len(x.TypeArgs) == 0 {
+					if selector.Name == "isEmpty" {
+						return len(list.items) == 0, true
+					}
+					return int64(len(list.items)), true
+				}
 				if sequence, yes := receiver.(shapeSequence); yes {
 					if len(x.Args) != 0 || len(x.TypeArgs) > 1 {
 						p.error(x.Pos, "metadata sequence %s takes no arguments", selector.Name)

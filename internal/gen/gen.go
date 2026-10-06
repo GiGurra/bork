@@ -257,6 +257,9 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 			}
 			if fd.GoBody != nil {
 				fn := info.FuncOf[fd]
+				if strings.Contains(fd.GoBody.Body, "_borkCodec") {
+					g.usesCodecWords = true
+				}
 				if strings.Contains(fd.GoBody.Body, "_borkFanIn") {
 					g.usesFanIn = true
 					g.usesScopes = true
@@ -502,6 +505,7 @@ type gen struct {
 	usesFanIn        bool
 	usesChannels     bool
 	usesEqual        bool
+	usesCodecWords   bool
 	usesHash         bool
 	usesOk           bool
 	usesMap          bool

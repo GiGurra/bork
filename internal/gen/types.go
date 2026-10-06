@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/GiGurra/bork/internal/check"
+	"github.com/GiGurra/bork/internal/naming"
 )
 
 // goType maps a bork type to the Go type that represents it.
@@ -1564,6 +1565,9 @@ func _fmtFloat(f float64, bits int) string {
 // comments print correctly.
 func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	var src []string
+	if g.usesCodecWords {
+		src = append(src, naming.RuntimeSource)
+	}
 	if g.usesAsync {
 		src = append(src, asyncRuntime)
 	}

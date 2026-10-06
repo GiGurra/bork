@@ -56,6 +56,10 @@ func (p *deriveExpansion) descriptorType(name string, owner Type) Type {
 
 func (p *deriveExpansion) metadataType(value any) Type {
 	switch value := value.(type) {
+	case metadataList:
+		if value.element != nil {
+			return &List{Elem: value.element}
+		}
 	case metadataChecked:
 		if value.raw {
 			return p.c.info.optionPayloads[value.value]

@@ -91,6 +91,8 @@ as `Null`, so it is `None` for an `Option` and an error for a record. A
 trailing `---` starts another, empty document, which DecodeAll decodes as
 `Null` too.
 
+Derived record keys and variant names follow the [codec naming policies and typed tags](codec.md#wire-names). An enum with no payload alternatives emits a bare canonical string, such as `SITE_ADMIN` for `SiteAdmin` under the default `ScreamingSnake` policy. Decode accepts that scalar or `type: SITE_ADMIN`; source spelling needs an explicit `Verbatim` policy. Mixed sealed types keep their discriminator mappings. Derived variant names must be unchanged YAML string scalars, so names such as `true`, `null`, and `42` fail derivation.
+
 Unlike `json.Encode`, `yaml.Encode` can fail: a Float that is NaN or infinite
 has no YAML number, so it gives `yaml.Error`. Its text ends with a newline, as
 Render's does.

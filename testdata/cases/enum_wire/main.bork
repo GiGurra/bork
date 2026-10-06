@@ -1,0 +1,43 @@
+import "bork/codec"
+import "bork/json"
+import "bork/yaml"
+use codec.Defaults
+
+type Color = sealed {
+  Red
+  DarkBlue
+} derive (codec.Decode, codec.Encode)
+
+type Mixed = sealed {
+  Empty
+  Some { value: Int }
+} derive (codec.Decode, codec.Encode)
+
+type KebabColor = sealed { DarkBlue } codec { naming: codec.Naming.Kebab } derive (codec.Decode, codec.Encode)
+type VerbatimColor = sealed { DarkBlue } codec { naming: codec.Naming.Verbatim } derive (codec.Decode, codec.Encode)
+type NamedColor = sealed { DarkBlue codec { name: "navy" } } derive (codec.Decode, codec.Encode)
+
+fn main() {
+  println(json.Encode(Color.Red))
+  println(json.Encode(Color.DarkBlue))
+  println(json.Decode[Color](json.Encode(Color.DarkBlue)))
+  println(json.Decode[Color]("\"RED\""))
+  println(json.Decode[Color]("{\"type\":\"DARK_BLUE\"}"))
+  println(json.Decode[Color]("\"purple\""))
+  println(json.Decode[Color]("\"DarkBlue\""))
+  println(yaml.Decode[Color]("DARK_BLUE"))
+  match (yaml.Encode(Color.DarkBlue)) {
+    text: String => { println(text.trim()); println(yaml.Decode[Color](text)) }
+    error: yaml.Error => println(error)
+  }
+  println(json.Encode([Color.Red, Color.DarkBlue]))
+  println(json.Decode[List[Color]]("[\"RED\",\"DARK_BLUE\"]"))
+  println(json.Encode(KebabColor.DarkBlue))
+  println(json.Decode[KebabColor]("\"dark-blue\""))
+  println(json.Encode(VerbatimColor.DarkBlue))
+  println(json.Decode[VerbatimColor]("\"DarkBlue\""))
+  println(json.Encode(NamedColor.DarkBlue))
+  println(json.Decode[NamedColor]("\"navy\""))
+  println(json.Encode(Mixed.Empty))
+  println(json.Encode(Mixed.Some { value: 7 }))
+}

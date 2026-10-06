@@ -28,6 +28,10 @@ Ada 37
 
 Import [bork/codec](codec.md) for the value tree and Encode/Decode classes, and select `use codec.Defaults` for standard instances. Derived decoders check field facts and record invariants.
 
+## Derived wire names
+
+Derived record keys and sealed names follow the [codec naming policies and typed tags](codec.md#wire-names). Payload-free sealed types encode as canonical bare strings: `SiteAdmin` becomes `"SITE_ADMIN"` by default. Decoding accepts `"SITE_ADMIN"` or `{"type":"SITE_ADMIN"}`; the old source name `"SiteAdmin"` needs an explicit `Verbatim` policy. Mixed sealed types keep their discriminator objects. Naming also applies to decode error paths.
+
 ## Text API
 
 These functions are pure; `json.JsonError` has `{ message: String }`. A `codec.DecodeError` has `{ path: String, message: String }`.
