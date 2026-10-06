@@ -1,0 +1,29 @@
+import "bork/codec"
+import "bork/cli"
+use codec.Defaults
+type Level = sealed { Info, Debug } derive (codec.Decode)
+type Db = { host: String = "localhost", port: Int = 5432 } derive (codec.Decode)
+type Options = {
+  // Listening port.
+  port: Int = 8080
+  // Retry delay multiplier.
+  multiplier: Float = 1.5
+  // Tags; repeat the flag for each value.
+  tags: List[String] = ["web", "background worker"]
+  // Logging level.
+  level: Level = Level.Info
+  // Database settings as JSON.
+  db: Db = .{}
+  // API token supplied through the environment.
+  token: String
+} derive (codec.Decode)
+fn main() {
+  // Inspect help without loading configuration, requiring the token,
+  // or running a handler. Displayed defaults are not guaranteed input syntax.
+  match (cli.Parse[Options]("help-values", "Options and environment variables", ["--help"], flags: [
+    .{ field: "token", long: cli.Mapping.Disabled, env: "HELP_API_TOKEN" }
+  ])) {
+    help: cli.Help => { println(help.text) }
+    other => { panic(s"Expected help, got ${other}") }
+  }
+}

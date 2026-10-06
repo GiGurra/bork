@@ -73,6 +73,20 @@ func (a *EditorAnalysis) EditorContextCompletions(file, src string, pos, at diag
 	if len(stack) > 0 {
 		open := stack[len(stack)-1]
 		if prior[open].Kind == syntax.LBrace && open > 0 {
+			// A package tag body uses its checked FieldTags/VariantTags/TypeTags.
+			if editorLabelPosition(prior[open+1:]) {
+				qualifier := a.editorSnapshotPosition(file, src, prior[open-1].Pos)
+				_, from := a.editorFile(file)
+				fields := check.EditorTagFields(a.program.info, qualifier)
+				if len(fields) > 0 {
+					for _, field := range fields {
+						if !editorCompletionLabelUsed(prior[open+1:], field.Name) {
+							add(EditorCompletion{Name: field.Name, Text: field.Name + ": ", Detail: check.TypeText(field.Type, from), Kind: "field"})
+						}
+					}
+					return out, true
+				}
+			}
 			// Match scrutinees are queried through checked source identities.
 			if prior[open-1].Kind == syntax.RParen {
 				depth := 1

@@ -1,0 +1,16 @@
+Options and environment variables
+
+Usage:
+  help-values [flags]
+
+Flags:
+      --port int            Listening port. (default 8080)
+      --multiplier float    Retry delay multiplier. (default 1.5)
+      --tags strings        Tags; repeat the flag for each value. (default ["web", "background worker"])
+      --level json          Logging level. (default Info)
+      --db json             Database settings as JSON. (default { host: "localhost", port: 5432 })
+  -h, --help                help for help-values
+
+Environment variables:
+  HELP_API_TOKEN string  API token supplied through the environment. (required)
+

@@ -8,6 +8,7 @@ type InterpolationKind = sealed {
   Named { packagePath: String, name: String }
   Unknown
 }
+// Describes the allowed value kinds for one interpolated hole.
 type InterpolationHole = { kinds: List[InterpolationKind] }
 // Some(index) selects a zero-based hole; None selects the literal prefix.
 type InterpolationIssue = { hole: Option[Int], message: String }

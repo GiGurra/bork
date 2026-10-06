@@ -13,6 +13,7 @@
 type TaskHandle = resource
 type ChannelHandle = resource
 
+// A computation started with fork and owned by its scope; await retrieves its result.
 type Task[T] = private { wait: () => T, native: TaskHandle }
 
 // fork starts work on its own goroutine, as a task of scope s, which waits

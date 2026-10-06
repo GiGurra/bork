@@ -56,7 +56,7 @@ func (c *checker) lookupType(name string) *typeEntry {
 	return c.preludePkg.types[name]
 }
 
-// Generic groups are parsed now; typed package metadata checking follows.
+// Go tags retain their field-only placement; package groups are checked later.
 func (c *checker) checkTagGroupSyntax(groups []*syntax.TagGroup, goFields bool) {
 	seen := map[string]bool{}
 	for _, group := range groups {
@@ -64,9 +64,7 @@ func (c *checker) checkTagGroupSyntax(groups []*syntax.TagGroup, goFields bool) 
 			c.errorf(group.Pos, "tag group %s is declared twice", group.Name)
 		}
 		seen[group.Name] = true
-		if group.Name != "go" {
-			c.errorf(group.Pos, "typed tag group %s is not supported yet", group.Name)
-		} else if !goFields {
+		if group.Name == "go" && !goFields {
 			c.errorf(group.Pos, "Go struct tags can only be written on fields")
 		}
 	}

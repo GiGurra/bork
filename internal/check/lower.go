@@ -455,6 +455,12 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		if assertion := l.info.patternAssertions[x]; assertion != nil {
 			return l.assertIs(x, at, assertion)
 		}
+		if value, ok := l.info.tagValues[x]; ok {
+			if value.raw {
+				return &Block{expr: at, Tail: l.exprRaw(value.value, l.info.optionPayloads[value.value])}
+			}
+			return &Block{expr: at, Tail: l.expr(value.value)}
+		}
 		if field := l.info.shapeDefaults[x]; field != nil {
 			// Reuse the default's checked lexical identities and contextual
 			// types. Each call evaluates this expression at runtime.

@@ -1,5 +1,7 @@
 // Reading numbers and Bools from Strings.
 
+// Parses a base-10 signed 64-bit integer; invalid or out-of-range text
+// returns ParseError.
 fn parseInt(text: String): Int | ParseError unsafe go {
   import "strconv"
   n, err := strconv.ParseInt(text, 10, 64)
@@ -9,6 +11,7 @@ fn parseInt(text: String): Int | ParseError unsafe go {
   return n
 }
 
+// Parses a 64-bit floating-point number; invalid or out-of-range text returns ParseError.
 fn parseFloat(text: String): Float | ParseError unsafe go {
   import "strconv"
   f, err := strconv.ParseFloat(text, 64)
@@ -18,6 +21,7 @@ fn parseFloat(text: String): Float | ParseError unsafe go {
   return f
 }
 
+// Parses exactly "true" or "false"; other text returns ParseError.
 fn parseBool(text: String): Bool | ParseError unsafe go {
   switch text {
   case "true":
@@ -31,21 +35,26 @@ fn parseBool(text: String): Bool | ParseError unsafe go {
 // String methods. Lengths and indexes count bytes (UTF-8), except
 // runeCount(), runeAt(), and substring(), which count Unicode code points.
 
+// Returns the UTF-8 byte length.
 fn (s: String) byteLength(): Int unsafe go {
   return int64(len(s))
 }
+// Counts Unicode code points rather than bytes.
 fn (s: String) runeCount(): Int unsafe go {
   import "unicode/utf8"
   return int64(utf8.RuneCountInString(s))
 }
+// Reports whether part occurs anywhere in the string.
 fn (s: String) contains(part: String): Bool unsafe go {
   import "strings"
   return strings.Contains(s, part)
 }
+// Reports whether the string starts with prefix.
 fn (s: String) startsWith(prefix: String): Bool unsafe go {
   import "strings"
   return strings.HasPrefix(s, prefix)
 }
+// Reports whether the string ends with suffix.
 fn (s: String) endsWith(suffix: String): Bool unsafe go {
   import "strings"
   return strings.HasSuffix(s, suffix)
@@ -59,10 +68,12 @@ fn (s: String) indexOf(part: String): Option[Int] unsafe go {
   }
   return Option_Some[int64]{E0: int64(i)}
 }
+// Returns the string with Unicode letters converted to uppercase.
 fn (s: String) toUpper(): String unsafe go {
   import "strings"
   return strings.ToUpper(s)
 }
+// Returns the string with Unicode letters converted to lowercase.
 fn (s: String) toLower(): String unsafe go {
   import "strings"
   return strings.ToLower(s)
@@ -80,6 +91,7 @@ fn (s: String) trim(): String unsafe go {
   import "strings"
   return strings.TrimSpace(s)
 }
+// Replaces every nonoverlapping occurrence of old with replacement.
 fn (s: String) replaceAll(old: String, replacement: String): String unsafe go {
   import "strings"
   return strings.ReplaceAll(s, old, replacement)

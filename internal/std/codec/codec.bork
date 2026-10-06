@@ -75,9 +75,12 @@ fn Schema[T: Decode](): Option[RecordSchema] {
   }
 }
 
-// Display follows Go's default-value presentation used by CLI help.
-fn defaultInfo[T](value: T): DefaultSchema unsafe go {
-  import "fmt"
+// Display preserves bork's readable list separators and quoted list elements.
+// It is presentation text, not an encoding guaranteed to round-trip.
+fn defaultInfo[T](value: T): DefaultSchema {
+  defaultInfoWithDisplay(value, toString(value))
+}
+fn defaultInfoWithDisplay[T](value: T, display: String): DefaultSchema unsafe go {
   var path Option[string] = Option_None[string]{}
   choices := []string{}
   switch value := any(value).(type) {
@@ -86,7 +89,7 @@ fn defaultInfo[T](value: T): DefaultSchema unsafe go {
   case Option_Some[string]: path = Option_Some[string]{E0:value.E0}; choices = []string{value.E0}
   case Option_Some[[]string]: choices = value.E0
   }
-  return DefaultSchema{display:fmt.Sprintf("%v",value),configPath:path,choices:choices}
+  return DefaultSchema{display:display,configPath:path,choices:choices}
 }
 
 // Encode writes typed values to the value tree; `derive (Encode)` gives
