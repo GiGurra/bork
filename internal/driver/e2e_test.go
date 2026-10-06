@@ -153,6 +153,7 @@ func compare(t *testing.T, expectedPath, got string) {
 // TestExamples runs every program under examples/ and compares its
 // output with testdata/examples/<name>.txt. A program runs in its own
 // directory, with the arguments in its args.txt (one per line) if it
+// has one, and the KEY=VALUE environment variables in its env.txt if it
 // has one. Its output includes standard error, and how it exited if it
 // failed.
 func TestExamples(t *testing.T) {
@@ -179,6 +180,19 @@ func TestExamples(t *testing.T) {
 			}
 			cmd := exec.Command(exe, args...)
 			cmd.Dir = filepath.Join(root, name)
+			if text, err := os.ReadFile(filepath.Join(root, name, "env.txt")); err == nil {
+				cmd.Env = os.Environ()
+				for line := range strings.Lines(string(text)) {
+					line = strings.TrimSpace(line)
+					if line == "" {
+						continue
+					}
+					if !strings.Contains(line, "=") {
+						t.Fatalf("env.txt line %q is not KEY=VALUE", line)
+					}
+					cmd.Env = append(cmd.Env, line)
+				}
+			}
 			out, err := cmd.CombinedOutput()
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) {

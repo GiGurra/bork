@@ -101,6 +101,9 @@ The [comptime example](../../examples/comptime/README.md) is a runnable version 
 
 Multiple blocks share the compiler's evaluation program to reduce build time. Each block still runs after its dependencies have passed their checks, with its own time and result limits.
 
+Derivation templates also use `comptime if`, `comptime for`, and `comptime match`
+to select or repeat typed source code. See [derivation templates](derivation.md).
+
 ## Limits
 
 An evaluation may take at most ten seconds and produce at most 16 MiB of data. A file read at build time may be at most 16 MiB.
@@ -110,6 +113,3 @@ To include files as they are, without processing them, [bork/embed](../std/embed
 ---
 
 Previous: [Channels](channels.md) · Next: [Typed interpolation](interpolators.md) · [All pages](../README.md#the-language)
-
-Derivation templates also use `comptime if`, `comptime for`, and `comptime match`
-to select or repeat typed source code. See [derivation templates](derivation.md).

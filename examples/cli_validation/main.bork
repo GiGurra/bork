@@ -1,0 +1,65 @@
+import "bork/codec"
+import "bork/cli"
+import "bork/process"
+import "bork/regex"
+use codec.Defaults
+pred validPort(n: Int) { n > 0 && n < 65536 }
+pred slug(text: String) { regex.Matches(text, regex.Compile("^[a-z][a-z0-9-]*$")) }
+pred atLeast(x: Int, min: Int) { x >= min }
+// TLS needs both files or neither, and at most one output format may be chosen.
+pred consistent(o: Options) { o.tlsCert.isSome() == o.tlsKey.isSome() && !(o.json && o.yaml) }
+type Options = {
+  // Service name: lowercase letters, digits and hyphens.
+  name: String where slug
+  // Listening port, 1 to 65535.
+  port: Int where validPort = 8080
+  // Fewest replicas to run.
+  minReplicas: Int = 1
+  // Most replicas to run; at least --min-replicas.
+  maxReplicas: Int where atLeast(minReplicas) = 3
+  // TLS certificate file; requires --tls-key.
+  tlsCert: Option[String]
+  // TLS key file; requires --tls-cert.
+  tlsKey: Option[String]
+  // Print the result as JSON; excludes --yaml.
+  json: Bool = false
+  // Print the result as YAML; excludes --json.
+  yaml: Bool = false
+} where consistent derive (codec.Decode)
+fn main() {
+  // args.txt breaks two field rules, and both are reported. Rules relating
+  // fields (maxReplicas, consistent) run once every field is valid on its own.
+  match (cli.Run[Options]("validate", "Rules checked before the handler runs", (options, s) => {
+    println(s"${options.name} on ${options.port} with ${options.minReplicas}-${options.maxReplicas} replicas")
+  })) {
+    error: cli.Error => {
+      for (issue in error.errors) { println(s"${if (issue.path == "") { "(options)" } else { issue.path }}: ${issue.message}") }
+      process.Exit(2)
+    }
+    Ok => {}
+  }
+}
+test "valid input reaches the handler as a proven record" {
+  match (cli.Parse[Options]("validate", "", ["--name", "billing-api", "--max-replicas", "5", "--tls-cert", "c.pem", "--tls-key", "k.pem"])) {
+    options: Options => { assertEqual(options.maxReplicas, 5) }
+    other => { panic(s"Expected options, got ${other}") }
+  }
+}
+test "a rule can relate two fields" {
+  match (cli.Parse[Options]("validate", "", ["--name", "billing", "--min-replicas", "4", "--max-replicas", "2"])) {
+    error: cli.Error => { assertEqual(error.errors.map(issue => issue.path), [".maxReplicas"]) }
+    other => { panic(s"Expected an error, got ${other}") }
+  }
+}
+test "a whole-record rule catches a missing partner flag" {
+  match (cli.Parse[Options]("validate", "", ["--name", "billing", "--tls-cert", "c.pem"])) {
+    error: cli.Error => { assertEqual(error.errors.map(issue => s"${issue.path}|${issue.message}"), ["|must be consistent"]) }
+    other => { panic(s"Expected an error, got ${other}") }
+  }
+}
+test "a whole-record rule makes two flags mutually exclusive" {
+  match (cli.Parse[Options]("validate", "", ["--name", "billing", "--json", "--yaml"])) {
+    error: cli.Error => { assertEqual(error.errors.map(issue => issue.message), ["must be consistent"]) }
+    other => { panic(s"Expected an error, got ${other}") }
+  }
+}
