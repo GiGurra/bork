@@ -5,13 +5,29 @@ package main
 import (
 	"bytes"
 	"debug/buildinfo"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
+	"time"
 )
+
+// rewriteExecutable corrupts path in place, keeping its inode. Linux can
+// briefly report ETXTBSY after a program that just ran from path has exited,
+// so retry the open until the kernel releases it.
+func rewriteExecutable(path string, data []byte) error {
+	for attempt := 0; ; attempt++ {
+		err := os.WriteFile(path, data, 0700)
+		if !errors.Is(err, syscall.ETXTBSY) || attempt == 100 {
+			return err
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
 
 func TestBuildReceiptSkipsGoAndRepairsOutput(t *testing.T) {
 	exe, _, probe := buildReceiptCLI(t)
@@ -52,7 +68,7 @@ func TestBuildReceiptSkipsGoAndRepairsOutput(t *testing.T) {
 	if out, err := exec.Command(output).CombinedOutput(); err != nil || string(out) != "42\n" {
 		t.Fatalf("repaired permissions: %s: %v", out, err)
 	}
-	if err := os.WriteFile(output, []byte("corrupted executable"), 0700); err != nil {
+	if err := rewriteExecutable(output, []byte("corrupted executable")); err != nil {
 		t.Fatal(err)
 	}
 	build()
@@ -83,7 +99,7 @@ func TestBuildReceiptRepairsCorruptionWithIntactBuildID(t *testing.T) {
 	if bytes.Equal(data, changed) || len(data) != len(changed) {
 		t.Fatal("did not alter an executable string without changing its size")
 	}
-	if err := os.WriteFile(output, changed, 0700); err != nil {
+	if err := rewriteExecutable(output, changed); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := buildinfo.ReadFile(output); err != nil {
