@@ -39,20 +39,54 @@ fn fieldsJsonWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchema
   schema := record.fields
   if !supported { return codec.DecodeError{path: "", message: "expected a derived record decoder"} }
   fields := []codec.Field{}
-  for _, field := range schema {
-    raw, found := _borkMapGet(values, field.name)
-    if !found {
-      if !field.optional { return codec.DecodeError{path: "."+field.name, message: "is missing"} }
-      continue
+  owners := map[string]int{}
+  for index, field := range schema {
+    key := field.wireName
+    if key == "" { key = field.name }
+    for _, name := range append([]string{key}, field.aliases...) {
+      if _, duplicate := owners[name]; duplicate { return codec.DecodeError{path: "."+name, message: "duplicate schema field name"} }
+      owners[name] = index
     }
-    if len(raw) != 1 { return codec.DecodeError{path: "."+field.name, message: "expected exactly one value"} }
+  }
+  seen := map[int]string{}
+  var failure codec.DecodeError
+  failed := false
+  _borkMapEach(values, func(name string, raw []string) bool {
+    index, known := owners[name]
+    // Retain unknown keys so the selected decoder applies its unknown policy.
+    if !known {
+      var value codec.Value = codec.Value_Null{}
+      if len(raw) == 1 { value = codec.Value_String{value: raw[0]} } else if len(raw) > 1 {
+        items := []codec.Value{}
+        for _, text := range raw { items = append(items, codec.Value_String{value: text}) }
+        value = codec.Value_Array{items: items}
+      }
+      fields = append(fields, codec.Field{name: name, value: value})
+      return true
+    }
+    if first, duplicate := seen[index]; duplicate {
+      failure, failed = codec.DecodeError{path: "."+name, message: "same field as ."+first}, true
+      return false
+    }
+    seen[index] = name
+    if len(raw) != 1 { failure, failed = codec.DecodeError{path: "."+name, message: "expected exactly one value"}, true; return false }
+    field := schema[index]
     var value codec.Value = codec.Value_String{value: raw[0]}
     if field.kind != "string" {
       parsed := parseJsonValue(raw[0])
-      if failure, failed := parsed.(codecs.JsonError); failed { return codec.DecodeError{path: "."+field.name, message: failure.message} }
+      if error, bad := parsed.(codecs.JsonError); bad { failure, failed = codec.DecodeError{path: "."+name, message: error.message}, true; return false }
       value = parsed.(codec.Value)
     }
-    fields = append(fields, codec.Field{name: field.name, value: value})
+    fields = append(fields, codec.Field{name: name, value: value})
+    return true
+  })
+  if failed { return failure }
+  for index, field := range schema {
+    if _, found := seen[index]; !found && !field.optional && !field.hasDefault {
+      key := field.wireName
+      if key == "" { key = field.name }
+      return codec.DecodeError{path: "."+key, message: "is missing"}
+    }
   }
   return codec.Value_Object{fields: fields}
 }

@@ -1,0 +1,84 @@
+import "bork/codec"
+import "bork/encoding"
+import "bork/env"
+import "bork/http"
+use codec.Defaults
+use decodeLegacy
+pred positive(x: Int) { x > 0 }
+type Row = {
+  HTTPPort: Int where positive codec { name: "listen_port", aliases: ["old-port"] }
+  userName: String = "guest"
+} codec { naming: codec.Naming.Snake, unknown: codec.Unknown.Reject } derive (codec.Encode, codec.Decode)
+type Collision = { fooBar: String, foo_bar: String } derive (codec.Decode)
+type Omitted = { value: Int = 1 codec { omit: codec.Omit.Default } } derive (codec.Encode, codec.Decode)
+fn request(query: String = "", params: Map[String, String] = {:}): http.Request {
+  http.Request { method: "GET", path: "/", query: query, params: params, headers: {:}, body: "" }
+}
+fn load(values: Map[String, String]): Row | env.ConfigError { env.LoadWith[Row]("APP", name => values.get(name)) }
+test "schema keeps source names and publishes wire aliases and words" {
+  match (codec.Schema[Row]()) {
+    Option.Some(schema) => {
+      first = at(schema.fields, 0)
+      assertEqual(first.name, "HTTPPort")
+      assertEqual(first.wireName, "listen_port")
+      assertEqual(first.aliases, ["old-port"])
+      assertEqual(first.words, ["listen", "port"])
+      assertEqual(at(schema.fields, 1).words, ["user", "name"])
+    }
+    Option.None => assert(false)
+  }
+}
+test "environment uses override words and accepts aliases" {
+  match (load({ "APP_LISTEN_PORT": "3" })) { row: Row => assertEqual(row.HTTPPort, 3), _ => assert(false) }
+  match (load({ "APP_OLD_PORT": "4" })) { row: Row => assertEqual(row.HTTPPort, 4), _ => assert(false) }
+  match (load({ "APP_OLD_PORT": "0" })) { error: env.ConfigError => assertEqual(at(error.errors, 0).path, "APP_OLD_PORT"), _ => assert(false) }
+  match (load({ "APP_LISTEN_PORT": "3", "APP_OLD_PORT": "4" })) { error: env.ConfigError => assertEqual(at(error.errors, 0).path, "APP_OLD_PORT"), _ => assert(false) }
+}
+test "environment collisions fail before lookup" {
+  match (env.LoadWith[Row]("", name => { assert(name != "OLD_PORT"); Option.None })) { _: env.ConfigError => assert(true), _ => assert(false) }
+  match (env.LoadWith[Collision]("APP", name => { assert(false); Option.None })) { _: env.ConfigError => assert(true), _ => assert(false) }
+}
+test "CSV uses canonical headers and accepts aliases with supplied error paths" {
+  match (encoding.EncodeCsv([Row { HTTPPort: 3 }])) { text: String => assertEqual(text, "listen_port,user_name\n3,guest\n"), _ => assert(false) }
+  match (encoding.DecodeCsv[Row]("old-port\n4\n")) { rows: List[Row] => assertEqual(at(rows, 0).HTTPPort, 4), _ => assert(false) }
+  match (encoding.DecodeCsv[Row]("old-port\n0\n")) { error: encoding.CsvErrors => assertEqual(at(error.errors, 0).column, "old-port"), _ => assert(false) }
+  match (encoding.DecodeCsv[Row]("listen_port,old-port\n3,4\n")) { error: encoding.CsvErrors => assertEqual(at(error.errors, 0).message, "same field as listen_port"), _ => assert(false) }
+  match (encoding.DecodeCsv[Row]("old-port,listen_port\n3,4\n")) { error: encoding.CsvErrors => assertEqual(at(error.errors, 0).message, "same field as old-port"), _ => assert(false) }
+}
+test "CSV explains omitted columns" {
+  match (encoding.EncodeCsv([Omitted {}])) { error: encoding.CsvError => { assertEqual(error.column, "value"); assert(error.message.contains("Omit.Never")) }, _ => assert(false) }
+}
+test "HTTP query and path use aliases, defaults and unknown policy" {
+  match (http.QueryAs[Row](request("old-port=4"))) { row: Row => { assertEqual(row.HTTPPort, 4); assertEqual(row.userName, "guest") }, _ => assert(false) }
+  match (http.PathAs[Row](request(params: { "old-port": "5" }))) { row: Row => assertEqual(row.HTTPPort, 5), _ => assert(false) }
+  match (http.QueryAs[Row](request("old-port=0"))) { error: codec.DecodeError => assertEqual(error.path, ".old-port"), _ => assert(false) }
+  match (http.QueryAs[Row](request("listen_port=3&old-port=4"))) { error: codec.DecodeError => assert(error.message.contains("same field")), _ => assert(false) }
+  match (http.QueryAs[Row](request("old-port=3&extra=x"))) { error: codec.DecodeError => assertEqual(error.path, ".extra"), _ => assert(false) }
+  match (http.QueryAs[Row](request("old-port=3&old-port=4"))) { error: codec.DecodeError => assertEqual(error.path, ".old-port"), _ => assert(false) }
+}
+fn at[T](items: List[T], index: Int): T { match (items.get(index)) { Option.Some(value) => value, Option.None => panic("missing test item") } }
+fn main() {}
+type Legacy = { value: String }
+instance decodeLegacy: codec.Decode[Legacy] {
+  metadata codec.RecordSchema = codec.RecordSchema {
+    fields: [codec.RecordField {
+      name: "value", typeName: "String", doc: "", facts: [], kind: "string", optional: false, hasDefault: false, defaultValue: Option.None,
+      validate: input => Ok
+    }]
+  }
+  fn decode(input: codec.Value): Legacy | codec.DecodeError {
+    match (input) {
+      codec.Value.Object { fields } => match (codec.decode[String](fields.find(field => field.name == "value").map(field => field.value).getOr(codec.Value.String { value: "fallback" }))) {
+        text: String => Legacy { value: text }
+        error: codec.DecodeError => error
+      }
+      _ => codec.DecodeError { path: "", message: "expected object" }
+    }
+  }
+}
+test "hand-written schemas without new metadata keep source keys" {
+  match (env.LoadWith[Legacy]("APP", name => if (name == "APP_VALUE") { Option.Some("env") } else { Option.None })) { value: Legacy => assertEqual(value.value, "env"), _ => assert(false) }
+  match (encoding.DecodeCsv[Legacy]("value\ncsv\n")) { values: List[Legacy] => assertEqual(at(values, 0).value, "csv"), _ => assert(false) }
+  match (http.QueryAs[Legacy](request())) { error: codec.DecodeError => assertEqual(error.path, ".value"), _ => assert(false) }
+  match (http.PathAs[Legacy](request(params: { "value": "path" }))) { value: Legacy => assertEqual(value.value, "path"), _ => assert(false) }
+}

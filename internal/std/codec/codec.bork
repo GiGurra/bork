@@ -55,6 +55,8 @@ type DefaultSchema = { display: String, configPath: Option[String], choices: Lis
 type RecordField = {
   name: String
   wireName: String = ""
+  aliases: List[String] = []
+  words: List[String] = []
   typeName: String
   doc: String
   facts: List[String]
@@ -394,6 +396,8 @@ derive fn RecordInfo[T](): Option[RecordSchema] {
             RecordField {
               name: field.name,
               wireName: FieldWireName[T](field),
+              aliases: FieldAliases[T](field),
+              words: Words(field.tagged[FieldTags]().getOr(FieldTags {}).name.getOr(field.name)),
               typeName: shape.typeName[field.RawType](),
               doc: field.doc,
               facts: [comptime for (fact in field.facts) fact.text],

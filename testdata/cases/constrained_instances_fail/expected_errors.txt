@@ -2,8 +2,8 @@ main.bork:9:33: method decode of instance decodePositive must promise positive f
 main.bork:17:38: an instance's type can only be constrained as a whole, as in Decode[Int where positive]
 main.bork:22:16: where clauses on the parameters of instance methods are not supported (an instance for a constrained type assumes its constraints)
 main.bork:22:29: positive applies to Int, not String
-main.bork:27:49: more than one instance of Decode for Int is in scope: main.decodePositive and main.decodeSmall; use only one of them (derive template at bork/codec/codec.bork:479:78)
-main.bork:27:49: more than one instance of Decode for Int is in scope: main.decodePositive and main.decodeSmall; use only one of them (derive template at bork/codec/codec.bork:489:67)
-main.bork:27:49: more than one instance of Decode for Int is in scope: main.decodePositive and main.decodeSmall; use only one of them (derive template at bork/codec/codec.bork:388:70)
-main.bork:27:49: more than one instance of Decode for Int is in scope: main.decodePositive and main.decodeSmall; use only one of them (derive template at bork/codec/codec.bork:404:62)
-main.bork:27:49: match arms have different types: DecodeError and Ok (derive template at bork/codec/codec.bork:406:41)
+main.bork:27:49: more than one instance of Decode for Int is in scope: main.decodePositive and main.decodeSmall; use only one of them (derive template at bork/codec/codec.bork:483:78)
+main.bork:27:49: more than one instance of Decode for Int is in scope: main.decodePositive and main.decodeSmall; use only one of them (derive template at bork/codec/codec.bork:493:67)
+main.bork:27:49: more than one instance of Decode for Int is in scope: main.decodePositive and main.decodeSmall; use only one of them (derive template at bork/codec/codec.bork:390:70)
+main.bork:27:49: more than one instance of Decode for Int is in scope: main.decodePositive and main.decodeSmall; use only one of them (derive template at bork/codec/codec.bork:408:62)
+main.bork:27:49: match arms have different types: DecodeError and Ok (derive template at bork/codec/codec.bork:410:41)

@@ -54,7 +54,7 @@ Both base64 parsers require zero trailing padding bits and accept CR/LF. Copy a 
 
 ## Round-trip records
 
-Derive both codec classes to encode and decode CSV; the Decode schema supplies field names and optional semantics. String cells are literal, so `007` stays `007`. Other types use JSON syntax. Types and independent field facts are checked before constructing records, collecting their row/field errors. Full decoding then checks sibling-dependent and record facts and returns the first such error per row. No partial records are returned.
+Derive both codec classes to encode and decode CSV; the Decode schema supplies field names and optional semantics. Headers use canonical codec wire names in declaration order. Decoding also accepts field aliases, reports failures under the supplied header, and rejects two headers naming the same field. Encoding requires every schema column: if a row omits one through a codec omission policy, it returns `CsvError`; use `codec.Omit.Never` for fields written to CSV. String cells are literal, so `007` stays `007`. Other types use JSON syntax. Types and independent field facts are checked before constructing records, collecting their row/field errors. Full decoding then checks sibling-dependent and record facts and returns the first such error per row. No partial records are returned.
 
 ```bork
 import "bork/codec"
