@@ -79,6 +79,11 @@ role: member
 - **Joining.** Each policy joins the words: `httpUrlPort`, `HttpUrlPort`,
   `http_url_port`, `http-url-port`, `HTTP_URL_PORT`. Acronym case is not kept,
   so `userID` under Camel becomes `userId`. Use a `name` override to keep it.
+- **Defaults (human decision).** Records and sealed types with payloads
+  default to `Verbatim`. Enum-shaped sealed types (no variant has a payload)
+  default to `ScreamingSnake`: `SiteAdmin` is written as `SITE_ADMIN`. This
+  changes today's enum wire form (`SiteAdmin`), so the implementation PR lists
+  it as a breaking change. A type-level `naming` overrides either default.
 - **Scope.** The policy is set on the type and covers the record's fields. On
   a sealed type it covers variant tags and the fields of named payloads. A
   separate policy for tags (serde's `rename_all` versus `rename_all_fields`)
@@ -211,10 +216,13 @@ nothing format-specific in codec. Points for YAML:
   works. The renderer must quote them; round-trip tests will check that.
 - **`<<`** is rejected as a wire name (see the checks above).
 - **Variant tags that YAML reads as other scalars.** A variant wire name or
-  alias such as `true`, `false`, `null`, `~`, `on` or `off` is a compile
-  error. As a bare-string value, hand-written YAML `role: null` would read as
-  Null, not as the tag. Object keys don't have this problem, because keys are
-  read by their text.
+  alias must read as a string when written as a plain YAML scalar. So
+  `true`/`True`/`TRUE`, `false`, `null`/`NULL`, `~` and numbers are compile
+  errors. `bork/yaml` uses the YAML 1.2 core schema, checked with
+  go.yaml.in/yaml/v4, so `on`, `off`, `yes` and `ON` are strings and are
+  allowed. As a bare-string value, hand-written `role: NULL` would otherwise
+  read as Null. Object keys don't have this problem, because keys are read by
+  their text.
 - **Merge keys and aliases.** In YAML a mapping's own key overrides the same
   key from a merged anchor. Codec only sees the merged `codec.Value`, so if
   an anchor supplies the alias `user` and the mapping writes `login`, decoding
@@ -285,7 +293,7 @@ forward compatibility. To keep the two designs consistent:
   see [enums.md](https://github.com/GiGurra/bork/pull/409). The type's invariant
   says that a fallback's String is never a wire name or alias.
 - A sealed type whose variants all have no payload encodes as a bare string
-  (`"red"`), not `{"type":"red"}`. That is the `enums` design. Decode already
+  (`"RED"` under the default policy), not `{"type":"RED"}`. That is the `enums` design. Decode already
   accepts a bare string tag, and the naming policy applies to the string.
 - CLI choices for an enum field show the wire names.
 
@@ -342,6 +350,8 @@ Read from `go doc encoding/json/v2` and `encoding/json/jsontext` (Go 1.27).
   are shared with the wire policy.
 - Alias env names exist only with a non-empty env prefix.
 - A YAML merge that mixes an alias and the wire name is an error.
+- Enum-shaped sealed types default to UPPER_SNAKE tags (a human decision, and
+  a wire change from today).
 - `Camel` loses acronym case (`userID` becomes `userId`).
 - Unknown members are still ignored by default.
 - Duplicate JSON names become an error. This breaks any caller that relies on
