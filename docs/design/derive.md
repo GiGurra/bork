@@ -1,15 +1,20 @@
 # Open derivation (bork-7zscao)
 
-Status: proposal for lead approval. This document does not implement its syntax
-or APIs. The human decisions are fixed: codecs move out of the prelude,
-standalone derive is available, and library authors can write derivations in
-bork. The stages below keep each migration reviewable.
+> **Status:** Implemented: open derivation, standalone declarations and library templates. Current docs: [derivation](../language/derivation.md). The original implementation review and staged delivery plan below preserve the design rationale; definition-time lifetime checks and some target-dependent facts remain deferred.
 
-## Current implementation and boundaries
+Design rationale for open derivation: codecs live in `bork/codec`,
+standalone derive declarations are available, and library authors write templates
+in Bork. The baseline review and delivery stages below describe the original
+implementation plan, rather than the current implementation boundary.
+
+## Original implementation and boundaries
+
+This section records the pre-open-derivation baseline; these internal paths and
+codec ownership rules are historical.
 
 `internal/check/classes.go` admits only the prelude's Encode, Decode and
 GoStruct. It synthesizes instances and resolves one dictionary per stored
-field. Generic derived codecs currently add the same class bound to every
+field. Generic derived codecs originally add the same class bound to every
 type parameter. `internal/gen/derive.go` writes codec bodies directly as Go,
 using `Info.Named["Json"]`, `JsonField` and `DecodeError`. The runtime helpers
 also assume these global names. Checking leaves the parsed syntax unchanged;
@@ -24,15 +29,15 @@ default providers, descriptions, scalar kinds and optionality. GoStruct then
 also used those decoders for field metadata. Removing compiler codec generation
 without replacing this schema would break more than JSON round trips.
 
-GoStruct is currently an empty prelude class. The checker prepares Go mirror
+GoStruct is originally an empty prelude class. The checker prepares Go mirror
 types before resolving fields, and the generator adds hidden New, FromGo,
 ToGo and Fields operations. It requires both type materialization and checked
 conversion, not merely a new instance method body.
 
 Ordinary instances are selectable: own and prelude instances are in scope,
-foreign instances require `use`, and ambiguity is an error. The current
+foreign instances require `use`, and ambiguity is an error. The original
 checker does **not** impose a general type-or-class ownership rule on ordinary
-instances. Show has its separate, stricter owner-only rule. This proposal adds
+instances. Show has its separate, stricter owner-only rule. The implemented design adds
 the requested ownership rule to standalone derivation, without silently
 removing existing third-party instance choices. Making all ordinary instances
 owner-restricted would be a separate language change.
@@ -41,7 +46,7 @@ owner-restricted would be a separate language change.
 
 `bork/codec` owns these names:
 
-| Current prelude name | New owner and name |
+| Original prelude name | Implemented owner and name |
 | --- | --- |
 | Json | codec.Value |
 | JsonField | codec.Field |

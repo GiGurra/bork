@@ -1,21 +1,23 @@
 # Channels and select
 
-Status: proposed for bork-73dn9h. Needs the lead's OK, and the human's
-decision on the `select` expression (see [The case for a select
-expression](#the-case-for-a-select-expression)).
+> **Status:** Implemented: channel methods, buffering, producers and select expressions. Current docs: [channels and select](../language/channels.md). The original implementation review and delivery plan below record the design rationale.
+> Bork blocks below are design sketches; the linked current docs contain checked examples.
 
-Channels exist today as `channel[T](s, capacity)` with free functions
+Design rationale for bork-73dn9h, including [the case for a select
+expression](#the-case-for-a-select-expression).
+
+Before the redesign, channels used `channel[T](s, capacity)` with free functions
 `send`, `receive`, `closeChannel` and `received`, and a receive-only
 `[a.receiveCase(f), b.receiveCase(g)].select(s)` whose mapping functions
-must turn every arm into one common event type. They are documented in one
-section of the scopes page and shown only in `examples/task_fanin`. This
-note reviews that implementation, then proposes a redesign: Go-familiar
+must turn every arm into one common event type. That API was documented in one
+section of the scopes page and shown in `examples/task_fanin`. This
+note records the review that led to the implemented redesign: Go-familiar
 methods, explicit capacity choices including an opt-in unbounded buffer,
 a `select` expression with receive, send, timer and non-blocking arms,
 time-based sources (`time.After`, `time.Tick`), iteration, producers, and
 dedicated examples and reader pages.
 
-## Review of the current implementation
+## Review of the original implementation
 
 `internal/prelude/concurrency.bork` (`channel`, `send`, `receive`,
 `closeChannel`, `received`), `internal/prelude/fanin.bork` (`receiveCase`,
@@ -47,7 +49,7 @@ scope s {
   results = channel[Result](s)        // unbuffered: send waits for a receiver
   log = unboundedChannel[String](s)   // grows; send never waits
 
-  launch(s, () => {
+  fork(s, () => {
     for (job in jobs.values(s)) {      // until jobs is closed
       _ = results.send(s, run(job))
     }
@@ -183,7 +185,7 @@ squares = produce[Int](s, 4, out => {
 for (x in squares.values(s)) { println(x) }
 ```
 
-`work`'s callback effects are charged to the caller, as for `launch`. `?`
+`work`'s callback effects are charged to the caller, as for `fork`. `?`
 works inside because `Closed` (the consumer closed it) and `Cancelled` are
 the natural ways for a producer to stop.
 

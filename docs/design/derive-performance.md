@@ -1,5 +1,7 @@
 # Derive expansion cache experiment
 
+> **Status:** Completed experiment; the metadata-only cross-check plan cache is removed. Current reference: [compiler performance](performance.md). Checked-program Session reuse and check-local helper memoization remain implemented.
+
 The initial metadata-only plan cache was removed after the realistic workload
 failed to improve warm edits. The existing checked-program session cache and
 check-local typed helper memoization remain. Resume cross-check plan caching

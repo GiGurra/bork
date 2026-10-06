@@ -1,8 +1,11 @@
 # Compile-time interpolator validation (bork-hstt36)
 
+> **Status:** Implemented: library-declared compile-time interpolation validators. Current reference: [interpolation validators](../grammar.md#writing-an-interpolation-validator); reader docs: [interpolation](../language/interpolators.md).
+> Bork blocks below are design sketches; the linked current docs contain checked examples.
+
 Named interpolation gains an optional prelude class:
 
-```bork
+```bork fragment
 class InterpolationValidator[B] {
   fn validateInterpolation(parts: StaticParts, holes: List[InterpolationHole]): List[InterpolationIssue]
 }

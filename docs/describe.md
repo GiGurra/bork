@@ -43,7 +43,7 @@ Methods follow exactly the compiler's visibility and precedence rules: local pac
 
 This abbreviated example omits method entries. Every description has `schema_version` (currently `1`), the requested `position`, `type`, `methods`, and `facts`. `definition` is omitted when there is no source definition. Folded arithmetic includes `expression`. A method has `name`, `type`, `definition` and optional `requires`; an ambiguous entry instead has `name` and `ambiguity`. `belongs_to` is present for values that belong to scopes, and `ownership` for resource variables. `proof` is present only with `--where`, and contains `where`, `proven`, and a `reason` when the requirement is not proven. `callable` accompanies direct callable selections and visible methods. It has `named_arguments: true`, `parameter_names_are_api: true`, and a `parameters` array of `name`, `type`, optional `default` (source syntax), and optional `receiver: true` (which cannot be named). Function-value selections omit `callable`. Consumers should accept additional fields.
 
-The position adapter reads the typed compiler tree. The CLI, JSON result, and backward proof queries are separate from lookup, so a future language server can use the same queries.
+The position adapter reads the typed compiler tree. The CLI, JSON result, and backward proof queries are separate from lookup, and the language server uses the same queries for hover and navigation; see [editor support](editors.md).
 
 For `assemble`, `assembleAll` and `assembleRecord`, selecting the intrinsic name
 or call's opening parenthesis reports the assembled result and its resolved graph.

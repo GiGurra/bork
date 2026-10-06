@@ -1,5 +1,8 @@
 # Handing resources over through a channel
 
+> **Status:** Implemented: scoped resource handoffs. Current docs: [channels](../language/channels.md) and [scopes](../language/scopes.md).
+> Bork blocks below are design sketches; the linked current docs contain checked examples.
+
 Design for bork-u9vlg7, a follow-up of [move](move.md) and the
 [channels redesign](channels.md). Implemented as described here (the
 lead approved the API on 2026-10-06).

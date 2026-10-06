@@ -1,5 +1,7 @@
 # Shared execution collector API draft
 
+> **Status:** Partially implemented: identity, tracking and observation primitives. Current implementation reference: [execution inventory](go-execution-inventory.md). Execution candidates and certification receipts below remain a private API proposal.
+
 Status: identity/tracker primitives and static auditing are implemented, but
 execution candidates and receipts remain ineligible. Request-owned observation
 uses shared installed-SDK identity and ordinary commands; cross-request proof and

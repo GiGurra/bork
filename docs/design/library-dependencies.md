@@ -1,7 +1,8 @@
 # Library dependencies
 
-Status: approved direction (bork-hxtpmo), updated after human review of #290.
-Implementation proceeds in focused PRs.
+> **Status:** Implemented: Bork libraries as Go modules and shared dependency commands. Current docs: [packages and modules](../language/packages.md) and [dependency commands](../cli.md). The proxy and privacy discussion below records the dependency model and its limits.
+
+Implemented dependency model (bork-hxtpmo), including the decisions reviewed in #290.
 Service documentation and terms checked on 2026-10-04.
 
 ## Decision

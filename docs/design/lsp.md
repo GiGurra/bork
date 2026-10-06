@@ -1,5 +1,7 @@
 # Language server and VS Code integration
 
+> **Status:** Implemented: language server and editor integration. Current docs: [editors](../editors.md) and [VS Code settings](../../editors/vscode/README.md). Measurements below record the initial implementation; the capability and rename descriptions reflect current behavior.
+
 `bork lsp` serves Language Server Protocol 3.17 over stdio. Only framed JSON-RPC
 messages go to stdout. The protocol implementation uses the Go standard library;
 compiler and formatting behavior come from existing in-process APIs.
@@ -24,12 +26,13 @@ open/save and semantic requests flush pending checks. The initial target is
 under 250 ms for warm small-package checking after that delay. Go metadata and
 compile-time execution may take longer. This is a target, not a latency promise.
 
-Coverage: diagnostics, hover (types and facts), definitions, formatting,
-document symbols, completion, references, rename and compiler suggested-edit
-code actions. References and rename use compiler definition positions rather
-than matching identifier spelling. The first implementation searches loaded
-package/import graphs; it does not promise a workspace-wide reverse import
-index. Embedded prelude/standard library definitions are virtual sources and
+Coverage: diagnostics, hover (types and facts), definitions, type definitions,
+implementations, call hierarchy, document highlights, formatting, document
+symbols, completion, signature help, semantic tokens, inlay hints, references,
+rename, run/test code lenses and compiler suggested-edit code actions. References and rename use compiler definition positions rather
+than matching identifier spelling. Workspace navigation and rename load checked packages below configured
+workspace roots, including importers; unreadable or invalid packages cause rename
+to fail rather than return a partial edit set. Embedded prelude/standard library definitions are virtual sources and
 must not produce unusable disk navigation or rename edits. Completion is
 conservative rather than inferred for arbitrary broken expressions.
 
@@ -48,11 +51,13 @@ the HTTP example does not. The benchmark includes the first cold analysis.
 Successful unchanged analyses reuse their graph; source edits still recheck the
 complete loaded program. Package-level incremental checking is future work.
 
-Rename initially supports local variables and package-private functions only.
-It rejects exported names, types/fields, unsafe Go bodies (whose references are
-not checked by bork), and new names already appearing in affected files. These
-limits prevent partial or capturing edits while the reference index is limited.
-References include interpolation holes and distinguish same-spelled locals.
+Rename supports checked variables, parameters, type parameters, functions,
+predicates, methods, types, fields, variants and package values, including exported
+names referenced by workspace importers. Dependency and standard-library sources
+are read-only. Potential references in unsafe Go bodies are rejected when they
+cannot be verified. Proposed edits must pass isolated workspace checks, including
+export visibility and name-capture checks. References include interpolation holes
+and distinguish same-spelled locals.
 
 The VSIX packaging smoke test verifies runtime client dependencies are included;
 client tests exercise startup/cleanup with a mocked extension host. An actual
@@ -71,8 +76,8 @@ examples. Incr has the phase benchmark for package-level incremental work.
 Rename scans sibling files for collisions, resolves declaration positions past
 receiver signatures, validates names with lexer diagnostics and indexes typed
 signature requirements. Proposed edits must also check in an isolated overlay
-Session. Unsupported named-predicate references are rejected rather than offered
-as partial edits. No proposed edits are written to disk.
+Session. Incomplete workspace inventories and unverifiable unsafe Go references
+are rejected rather than offered as partial edits. No proposed edits are written to disk.
 
 Shebang scripts select their own file as the analysis root; ordinary documents
 select the containing directory. This keeps script roots independent of adjacent

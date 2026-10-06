@@ -1,28 +1,30 @@
 # Backpressure and retry budgets
 
+> **Status:** Implemented: bounded task pools, HTTP admission and retry budgets. Current docs: [tasks](../std/tasks.md) and [HTTP](../std/http.md). Adaptive concurrency and request criticality remain proposals.
+> Bork blocks below are design sketches; the linked current docs contain checked examples.
+
 Design for bork-l0kn5g. Bounded task pools, HTTP admission, and typed client
 failures, scope deadlines, retry budgets, and the runnable
 [slow-downstream example](../../examples/slow_downstream/main.bork) are implemented. This note makes
 bounded admission, HTTP shedding, and retry budgets explicit operations with
-checked failure unions. The later deadline/trace propagation work is
-bork-gqxe4s; request criticality and adaptive concurrency remain follow-ups.
+checked failure unions. Deadline/trace propagation is described in [HTTP propagation](http-propagation.md); request criticality and adaptive concurrency remain follow-ups.
 
 ## Task admission
 
-Keep ordinary spawn/launch unchanged. Add bork/tasks with a scope-owned Pool
+Ordinary fork is unlimited. bork/tasks provides a scope-owned Pool
 resource, a positive capacity, and typed nonblocking submission:
 
-```bork
+```bork fragment
 pool = tasks.Open(app, maxTasks: 64)
-tasks.TrySpawn(pool, request, () => work())
+tasks.TryFork(pool, request, () => work())
 ```
 
-TrySpawn returns Task[T] | TaskLimitReached | Cancelled; TryLaunch returns
-Ok | TaskLimitReached | Cancelled. Callback effects remain open and are
+TryFork returns Task[T] | TaskLimitReached | Cancelled, including Task[Ok]
+for work without a value. Callback effects remain open and are
 charged to callers together with state, even for a pure callback: capacity and
 cancellation are observable shared state. The explicit Scope owns the resulting task and governs its
 cancellation. Pool capacity is shared across every submitter and child scope
-using that pool, rather than silently inherited by ordinary spawn. No new
+using that pool, rather than silently inherited by ordinary fork. No new
 ScopePolicy variant changes an existing call's result type.
 
 A slot counts admitted work until its callback returns or panics; awaiting the
@@ -50,7 +52,7 @@ The first version has no waiting submission variant. A later SpawnWait would be
 explicitly cancellable and warn that recursive submission into the same exhausted
 pool can deadlock. Recursive work handles rejection, deliberately uses another
 pool, or computes the child directly. Pool limits cannot constrain arbitrary
-unsafe Go goroutines or ordinary spawn calls that do not select a pool.
+unsafe Go goroutines or ordinary fork calls that do not select a pool.
 
 A small parallel helper in bork/tasks may take a Pool, Scope and a list callback,
 reserve all requested worker slots atomically and return TaskLimitReached without
@@ -59,12 +61,12 @@ and worker-count bounds. They do not implicitly consume a pool. Defer this helpe
 until core submission and HTTP admission are implemented; do not grow every
 existing failure union merely because some callers choose a pool.
 
-Alternatives considered: changing spawn/launch globally to failure unions taxes
+Alternatives considered: changing fork globally to failure unions taxes
 unlimited callers; implicit blocking changes submission semantics and creates
 recursive deadlocks; silently queuing callbacks hides an unbounded resource.
 A typed bounded scope could work, but a shared pool composes across distinct
 request scopes without adding compiler scope types. ScopePolicy maxTasks would
-require deciding what old spawn does at saturation and is deferred.
+require deciding what old fork does at saturation and is deferred.
 
 ## HTTP server admission
 
@@ -73,7 +75,7 @@ ListenRoutes and ListenTLS. None preserves current server behavior. The record
 has proven positive maxInFlight, nonnegative maxQueued, and queueTimeoutMs/
 retryAfterMs in the existing TimeoutMs range (0 through 9223372036854), and a rejection status restricted to 429 or 503:
 
-```bork
+```bork fragment
 http.Admission {
   maxInFlight: 64,
   maxQueued: 32,
@@ -124,7 +126,7 @@ routed and TLS listeners retain their full effect bound.
 
 Add public HTTP failure types:
 
-```bork
+```bork fragment
 http.Overloaded { retryAfter: Option[time.Duration], response: http.Response }
 http.DeadlineExceeded { message: String }
 ```
@@ -176,7 +178,7 @@ Tokens are not refunded when an admitted attempt fails or is cancelled.
 
 The helper takes an explicit operation and policy:
 
-```bork
+```bork fragment
 http.Retry(s, budget, operation, maxAttempts: 3,
            baseDelayMs: 20, maxDelayMs: 1000)
 ```
