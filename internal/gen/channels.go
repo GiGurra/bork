@@ -171,23 +171,35 @@ func (c *_borkChan) dequeueSender() *_borkWaiter {
   if w == nil {
    return nil
   }
-  if why := c.adopt(w.value, w.from); why != "" {
+  why, kept := c.adopt(w.value, w.from)
+  if why != "" {
    w.sel.complete(w.arm, _borkChanFailed, why)
    continue
   }
+  c.adopted(w.value, w.from, kept)
   return w
  }
 }
 
 // adopt moves v's registration from scope from to c's (when from is set:
 // v is handed over), with c locked, so that a receiver can move it on at
-// once. c is open, so its scope has not finished: what can fail is the
-// sender's side (its scope finished while it was an orphaned task).
-func (c *_borkChan) adopt(v any, from *_Scope) string {
+// once, and reports whether from keeps another. c is open, so its scope
+// has not finished: what can fail is the sender's side (its scope
+// finished while it was an orphaned task). It can still be undone without
+// a trace: v's cancellation follows c's scope only once the send is
+// certain (adopted).
+func (c *_borkChan) adopt(v any, from *_Scope) (string, bool) {
  if from == nil {
-  return ""
+  return "", false
  }
- return _tryMoveResource(v, from, c.scope)
+ return _moveRegistration(v, from, c.scope)
+}
+
+// adopted completes adopt once the send is certain.
+func (c *_borkChan) adopted(v any, from *_Scope, kept bool) {
+ if from != nil {
+  _moveBinding(v, from, c.scope, kept)
+ }
 }
 
 // trySend sends without waiting, with c locked, and gives the outcome,
@@ -202,20 +214,25 @@ func (c *_borkChan) trySend(v any, from *_Scope) (int, any, bool) {
  if !room && len(c.recvq) == 0 {
   return 0, nil, false
  }
- if why := c.adopt(v, from); why != "" {
+ why, kept := c.adopt(v, from)
+ if why != "" {
   return _borkChanFailed, why, true
  }
  if w := _borkDequeue(&c.recvq); w != nil {
+  c.adopted(v, from, kept)
   w.sel.complete(w.arm, _borkChanValue, v)
   return _borkChanValue, nil, true
  }
  if room {
+  c.adopted(v, from, kept)
   c.push(v)
   return _borkChanValue, nil, true
  }
- // Every waiting receiver was cancelled: v stays the sender's.
+ // Every waiting receiver was cancelled: v stays the sender's, as it was.
+ // That fails only if from finished meanwhile (an orphaned task's): then
+ // c's scope keeps v, and closes it, and the sender fails.
  if from != nil {
-  if why := _tryMoveResource(v, c.scope, from); why != "" {
+  if why, _ := _moveRegistration(v, c.scope, from); why != "" {
    return _borkChanFailed, why, true
   }
  }

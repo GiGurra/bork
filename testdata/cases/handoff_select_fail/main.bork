@@ -53,6 +53,15 @@ fn main() {
       _ => {}
     }
 
+    // Even when it gives Closed: the resource was released.
+    e = connect("e", app)
+    _ = select {
+      sent = conns.handOver(app, e) => match (sent) {
+        _: Ok => {}
+        _: Closed => println(query(e, "closed"))
+      }
+    }
+
     // What a handoff's receive arm gives is the arm's own.
     _ = select {
       next = conns.receive(app) => match (next) {

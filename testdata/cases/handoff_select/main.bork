@@ -69,7 +69,17 @@ fn demo(app: Scope) uses io + state: Ok | Closed | Cancelled {
       _: Closed => println("d was not received")
     }
   }?
-  serve(app, closed)
+  serve(app, closed)?
+
+  // The same resource in two arms: whichever runs hands it over (here
+  // spare, as conns is full).
+  e = connect("e", app)
+  spare = handoff[Conn](app, 1)
+  select {
+    conns.handOver(app, e) => println("handed e to conns")
+    spare.handOver(app, e) => println("handed e to spare")
+  }?
+  serve(app, spare)
 }
 
 fn main() {

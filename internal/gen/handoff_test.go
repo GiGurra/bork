@@ -310,4 +310,46 @@ func TestSelectHandOverToCancelledReceivers(t *testing.T) {
  src.close()
  if closes.Load() != 1 { t.Fatal("not closed with its source") }
 }
+
+// Undoing it leaves no trace even when the handoff's scope is cancelled
+// meanwhile: the resource's cancellation never followed it.
+func TestSelectHandOverUndoneInACancelledHandoff(t *testing.T) {
+ var closes atomic.Int32
+ app, src := scope(), scope()
+ defer app.close()
+ defer src.close()
+ h := _borkNewChan(app, 0)
+ h.recvq = append(h.recvq, &_borkWaiter{sel: &_borkSel{wake: make(chan struct{}, 1), ctxs: []context.Context{app.ctx}}})
+ c := open(src, &closes)
+ app.cancel(context.Canceled)
+ h.mu.Lock()
+ _, _, ok := h.trySend(c, src)
+ h.mu.Unlock()
+ if ok { t.Fatal("sent to a cancelled receiver") }
+ if !slices.Equal(owners(c), []*_Scope{src}) || c.handle.Context().Err() != nil { t.Fatal("a hand-over that did not happen moved or cancelled it") }
+}
+
+// A waiting hand-over that the handoff's close completes gives Closed,
+// and the resource is still its source's (compilerSelect releases it).
+func TestWaitingSelectHandOverClosed(t *testing.T) {
+ var closes atomic.Int32
+ app, src := scope(), scope()
+ defer app.close()
+ defer src.close()
+ h := _borkNewChan(app, 0)
+ c := open(src, &closes)
+ done := make(chan int)
+ go func() {
+  _, status, _ := _borkChanSelect([]_borkChanArm{handOverArm(h, c, src, app)}, true)
+  done <- status
+ }()
+ for waiting := 0; waiting == 0; runtime.Gosched() {
+  h.mu.Lock()
+  waiting = len(h.sendq)
+  h.mu.Unlock()
+ }
+ h.close()
+ if status := <-done; status != _borkChanClosed { t.Fatal(status) }
+ if !slices.Equal(owners(c), []*_Scope{src}) || closes.Load() != 0 { t.Fatal("a closed hand-over moved or closed it") }
+}
 `

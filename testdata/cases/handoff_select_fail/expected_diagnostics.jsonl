@@ -4,4 +4,5 @@
 {"schema_version":1,"file":"main.bork","line":39,"column":19,"end_line":39,"end_column":19,"message":"a may have been handed over to handoff conns at line 35, which ends its use here","code":"lifetime.error"}
 {"schema_version":1,"file":"main.bork","line":45,"column":29,"end_line":45,"end_column":29,"message":"a loop cannot hand over b, which was acquired outside its body","code":"lifetime.error"}
 {"schema_version":1,"file":"main.bork","line":52,"column":27,"end_line":52,"end_column":27,"message":"c cannot be handed over: the task of app started at line 50 may still use it; hand it over before that","code":"lifetime.error"}
-{"schema_version":1,"file":"main.bork","line":61,"column":25,"end_line":61,"end_column":25,"message":"d was handed over to handoff conns at line 60, which ends its use here","code":"lifetime.error"}
+{"schema_version":1,"file":"main.bork","line":61,"column":36,"end_line":61,"end_column":36,"message":"e was handed over to handoff conns at line 59, which ends its use here","code":"lifetime.error"}
+{"schema_version":1,"file":"main.bork","line":70,"column":25,"end_line":70,"end_column":25,"message":"d was handed over to handoff conns at line 69, which ends its use here","code":"lifetime.error"}

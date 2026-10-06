@@ -127,14 +127,22 @@ func (c *checker) selectExpr(e *syntax.Select, want Type) Type {
 		c.assemblyResolvers = map[string]func() *Func{}
 	}
 	// receiveHelper calls arm n's receive helper: the Handoff one when the
-	// arm's channel, checked by then, is a Handoff.
+	// arm's channel, checked by then, is a Handoff. The choice is kept for
+	// queries made later, outside the select.
 	receiveHelper := func(n, name, handoffName string, at syntax.Expr, args ...syntax.Expr) *syntax.Call {
 		ref, ch := prefix+name+n, prefix+"ch"+n
 		c.assemblyResolvers[ref] = func() *Func {
-			if l := c.lookup(ch); l != nil && handoffType(l.typ) {
-				return c.preludePkg.Funcs[handoffName]
+			l := c.lookup(ch)
+			if l == nil {
+				return c.preludePkg.Funcs[name]
 			}
-			return c.preludePkg.Funcs[name]
+			fn := c.preludePkg.Funcs[name]
+			if handoffType(l.typ) {
+				fn = c.preludePkg.Funcs[handoffName]
+			}
+			delete(c.assemblyResolvers, ref)
+			c.assemblyFuncs[ref] = fn
+			return fn
 		}
 		return call(ref, at, args)
 	}
