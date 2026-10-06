@@ -1,0 +1,4 @@
+true
+false
+Color.Red
+DecodeError { path: "", message: "must be Known" }

@@ -1,0 +1,41 @@
+import "bork/codec"
+import "bork/json"
+import "bork/yaml"
+use codec.Defaults
+pred positive(x: Int) { x > 0 }
+pred ordered(row: Row) { row.loginID <= row.upperBound }
+type Row = {
+  loginID: Int where positive codec { name: "login", aliases: ["uid", "old", "null"] }
+  upperBound: Int = 9
+} codec { naming: codec.Naming.Snake, unknown: codec.Unknown.Reject } where ordered derive (codec.Encode, codec.Decode)
+type Color = sealed { SiteAdmin codec { aliases: ["SiteAdmin", "admin"] } } derive (codec.Encode, codec.Decode)
+type Mixed = sealed { Item { fieldValue: Int codec { aliases: ["old"] } } codec { aliases: ["legacy"] } } codec { unknown: codec.Unknown.Reject } derive (codec.Encode, codec.Decode)
+type Lazy = { value: Int, lazy computedValue: Int = value + 1 codec { aliases: ["old"] } } derive (codec.Encode, codec.Decode)
+type Nested = { rowValue: Row codec { aliases: ["row"] } } derive (codec.Encode, codec.Decode)
+fn round[T: codec.Decode + codec.Encode](text: String) uses io {
+  match (json.Decode[T](text)) {
+    value: T => println(json.Encode(value))
+    error: codec.DecodeError => println(s"error ${error.path}: ${error.message}")
+    error: json.JsonError => println(error)
+  }
+}
+fn main() {
+  round[Row]("{\"uid\":3}")
+  round[Row]("{\"login\":3,\"uid\":4}")
+  round[Row]("{\"old\":3,\"login\":4}")
+  round[Row]("{\"old\":0}")
+  round[Row]("{\"uid\":10}")
+  round[Row]("{\"uid\":3,\"extra\":4}")
+  round[Row]("{}")
+  round[Color]("\"SiteAdmin\"")
+  round[Color]("{\"type\":\"admin\"}")
+  round[Mixed]("{\"type\":\"legacy\",\"old\":4}")
+  round[Mixed]("{\"type\":\"Item\",\"old\":\"bad\"}")
+  round[Mixed]("{\"type\":\"Item\",\"old\":4,\"extra\":1}")
+  round[Lazy]("{\"value\":1,\"old\":4}")
+  round[Nested]("{\"row\":{\"uid\":0}}")
+  round[Lazy]("{\"value\":1,\"extra\":4}")
+  println(yaml.Decode[Row]("uid: 3\n"))
+  println(yaml.Decode[Row]("null: 3\n"))
+  println(yaml.Decode[Row]("<<: &base {old: 3}\nlogin: 4\n"))
+}

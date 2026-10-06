@@ -1,0 +1,121 @@
+import "bork/codec"
+import "bork/shape"
+
+// Enum describes a sealed type whose public variants have no payload.
+class Enum[T] {
+  fn values(): List[T]
+  fn name(value: T): String
+  fn byName(input: String): Option[T]
+  fn parse(input: String): T | UnknownName
+  fn index(value: T): Option[Int]
+}
+
+// UnknownName reports the rejected input and canonical names in declaration order.
+type UnknownName = { name: String, expected: List[String] }
+// Info publishes canonical names, variant documentation, and fallback presence.
+type Info = { names: List[String], docs: List[String], hasFallback: Bool }
+
+// Known narrows enum values to alternatives declared by their type.
+pred Known[T: Enum](value: T) { index(value).isSome() }
+
+derive fn CheckEnum[T](): Ok {
+  comptime if (!codec.EnumShape[T]()) {
+    shape.fail("enum.Enum requires variants without payloads")
+  }
+  comptime for (variant in shape.variants[T]()) {
+    comptime if (variant.name != variant.name.capitalize()) {
+      shape.fail("enum.Enum requires public variants")
+    }
+  }
+  codec.CheckWireNames[T]()
+  Ok
+}
+
+derive fn EnumInfo[T](): Info {
+  comptime if (!codec.EnumShape[T]()) {
+    shape.fail("enum.Enum requires variants without payloads")
+    panic("invalid enum derivation")
+  } else {
+    CheckEnum[T]()
+    Info {
+      names: [comptime for (variant in shape.variants[T]()) codec.VariantWireName[T](variant)],
+      docs: [comptime for (variant in shape.variants[T]()) variant.doc],
+      hasFallback: false
+    }
+  }
+}
+
+derive fn BuildValue[T](variant: shape.Variant[T]): T {
+  initial = variant.builder()
+  match (initial.finish()) {
+    value: T => value
+    error: shape.ValidationError => panic(toString(error))
+  }
+}
+
+derive instance enumShape[T]: Enum[T] {
+  metadata Info = EnumInfo[T]()
+  fn values(): List[T] {
+    comptime if (!codec.EnumShape[T]()) {
+      shape.fail("enum.Enum requires variants without payloads")
+      panic("invalid enum derivation")
+    } else {
+      CheckEnum[T]()
+      [comptime for (variant in shape.variants[T]()) BuildValue[T](variant)]
+    }
+  }
+  fn name(value: T): String {
+    comptime if (!codec.EnumShape[T]()) {
+      shape.fail("enum.Enum requires variants without payloads")
+      panic("invalid enum derivation")
+    } else {
+      CheckEnum[T]()
+      comptime for (variant in shape.variants[T]()) {
+        match (variant.project(value)) {
+          Option.Some(payload) => { _ = payload; return codec.VariantWireName[T](variant) }
+          Option.None => {}
+        }
+      }
+      shape.exhausted[T](value)
+    }
+  }
+  fn byName(input: String): Option[T] {
+    comptime if (!codec.EnumShape[T]()) {
+      shape.fail("enum.Enum requires variants without payloads")
+      panic("invalid enum derivation")
+    } else {
+      CheckEnum[T]()
+      comptime for (variant in shape.variants[T]()) {
+        if (input == codec.VariantWireName[T](variant)) { return Option.Some(BuildValue[T](variant)) }
+      }
+      Option.None
+    }
+  }
+  fn parse(input: String): T | UnknownName {
+    comptime if (!codec.EnumShape[T]()) {
+      shape.fail("enum.Enum requires variants without payloads")
+      panic("invalid enum derivation")
+    } else {
+      CheckEnum[T]()
+      comptime for (variant in shape.variants[T]()) {
+        if (input == codec.VariantWireName[T](variant)) { return BuildValue[T](variant) }
+      }
+      UnknownName { name: input, expected: [comptime for (variant in shape.variants[T]()) codec.VariantWireName[T](variant)] }
+    }
+  }
+  fn index(value: T): Option[Int] {
+    comptime if (!codec.EnumShape[T]()) {
+      shape.fail("enum.Enum requires variants without payloads")
+      panic("invalid enum derivation")
+    } else {
+      CheckEnum[T]()
+      comptime for (variant in shape.variants[T]()) {
+        match (variant.project(value)) {
+          Option.Some(payload) => { _ = payload; return Option.Some(variant.index) }
+          Option.None => {}
+        }
+      }
+      shape.exhausted[T](value)
+    }
+  }
+}

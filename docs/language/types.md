@@ -154,6 +154,11 @@ Variants are written with the type's name in front: `Shape.Circle { radius: 1.0 
 
 Because the list of variants is closed, `match` knows when every one has been handled. Add a variant and the compiler points at every `match` that needs a new arm. See [matching](matching.md).
 
+Fieldless sealed types can derive `enum.Enum` from [bork/enum](../std/enum.md)
+for declaration-order values, canonical wire names, exact lookup, and indices.
+The derive template requires public variants; codec naming policies also apply
+to enum lookup. Indices change when variants are reordered.
+
 ## Deriving instances
 
 Records and sealed types can derive codecs with an inline list, or with one

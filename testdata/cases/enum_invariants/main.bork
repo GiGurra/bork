@@ -1,0 +1,21 @@
+import "bork/enum"
+
+pred IsRed(value: Color) { value is Color.Red }
+type Color = sealed { Red; Blue } where IsRed derive (enum.Enum)
+
+// Observe construction failures without allowing invalid enum values out.
+fn Panics[T](work: () => T): Bool unsafe go {
+  return func() (panicked bool) {
+    defer func() { panicked = recover() != nil }()
+    _ = work()
+    return false
+  }()
+}
+
+fn main() {
+  println(enum.byName[Color]("RED"))
+  println(enum.parse[Color]("RED"))
+  println(Panics(() => enum.values[Color]()))
+  println(Panics(() => enum.byName[Color]("BLUE")))
+  println(Panics(() => enum.parse[Color]("BLUE")))
+}

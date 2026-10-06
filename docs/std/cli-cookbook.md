@@ -67,9 +67,10 @@ $ echo $?
 2
 ```
 
-A required field has no default. Option fields may be omitted; Bool needs an
-explicit default if it should be optional. The handler runs only when every
-field and record fact is valid. Its Scope owns resources opened during that
+Option fields may be omitted; a non-optional Bool without a declared default starts as false in CLI parsing.
+Declared defaults take precedence over that inferred value. Ordinary codec
+decoding and env.Load still require a Bool with no default. Other non-optional
+fields without defaults are required. The handler runs only when every field and record fact is valid. Its Scope owns resources opened during that
 invocation, and closes after the handler returns. Help runs no handler and reads
 no configuration files. Run prints help and warnings; your program prints Error
 and chooses its exit code.
@@ -162,7 +163,10 @@ them; record defaults
 fill missing fields after source merging. The checked-in settings file provides
 namespace `team` and two replicas. A relative config or catalog path resolves
 from the process working directory, so commands above use repository-relative
-paths. Config documents use JSON; catalog JSON is a separate application format.
+paths. Config documents can use JSON or YAML: `.yaml` and `.yml` select YAML
+case-insensitively, while all other extensions select JSON. A chain can mix
+formats. Compound flag values still use JSON syntax; catalog JSON is a separate
+application format. See [cli_yaml](../../examples/cli_yaml/main.bork).
 
 The action offers `apply` and `inspect` as strict choices. Completion metadata
 alone only suggests values; strict choices also reject other values during
@@ -206,6 +210,29 @@ source fleet.bash
 The generated scripts resolve the nested tree and call its hidden completion
 endpoint. There is no separate completion application or second options schema.
 
+## Share root options
+
+When every descendant needs an option such as region or verbosity, use
+`RootSubcommand[R, T]` and `RootGroup[R]` to build `RootCommand[R]` values.
+`RunRoot[R]` or `DispatchRoot[R]` supplies the root record; the leaf handler
+receives `(root, leaf, scope)`. Persistent flags work before or after the command
+path. Root and leaf records merge their own environment and configuration
+sources, and both validate before the handler runs. Descendant help lists the
+inherited flags without reading those sources.
+
+The [cli_root example](../../examples/cli_root/main.bork) demonstrates nested
+commands with shared root options:
+
+```sh
+bork run examples/cli_root -- --region east services deploy --service api --replicas 3 --verbose
+bork run examples/cli_root -- services deploy --help
+```
+
+Root fields cannot be positional. Long-name collisions and explicit shorthand
+collisions are errors; an automatic root shorthand yields to a descendant's
+shorthand. See [persistent root flags](cli.md#persistent-root-flags) for an
+optional standalone root handler and dynamic completion behavior.
+
 ## Choose an entry point and test it
 
 Use `Run`/`Subcommand` for typed handlers with static completion, and
@@ -230,6 +257,10 @@ embedded tests.
 | Topic | Example |
 | --- | --- |
 | Typed decoding and config selection | [cli](../../examples/cli/main.bork) |
+| Selected input labels and readable defaults | [cli_help](../../examples/cli_help/main.bork) |
+| JSON/YAML configuration overlays | [cli_yaml](../../examples/cli_yaml/main.bork) |
+| Inferred false Bool flags | [cli_bool](../../examples/cli_bool/main.bork) |
+| Duration and RFC3339 string inputs | [cli_time](../../examples/cli_time/main.bork) |
 | Field docs and description overrides | [cli_docs](../../examples/cli_docs/main.bork) |
 | Automatic, explicit, and disabled mappings | [cli_mapping](../../examples/cli_mapping/main.bork) |
 | Environment naming and precedence | [cli_env](../../examples/cli_env/main.bork) |
@@ -241,6 +272,6 @@ embedded tests.
 | Indexed positionals and command deprecation | [cli_positionals](../../examples/cli_positionals/main.bork) |
 
 The [API guide](cli.md) describes diagnostics, completion directives, and the
-current limits: JSON config, flat option records and
+current limits: flat option records and
 no user lifecycle hooks. Native Cobra completion syntax/routing errors retain
 Cobra's protocol behavior; application callback errors use `:1`.

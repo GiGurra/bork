@@ -1,0 +1,35 @@
+import "bork/codec"
+import "bork/enum"
+import "bork/json"
+import "bork/shape"
+use codec.Defaults
+
+type Color = sealed {
+  // Warm color.
+  Red
+  DarkBlue
+  Teal codec { name: "cyan" }
+} derive (enum.Enum)
+type KnownColor = Color where enum.Known derive (codec.Decode)
+type Box[T] = sealed { Full; Empty } derive (enum.Enum)
+type Mode = sealed { FastMode; SlowMode } codec { naming: codec.Naming.Kebab } derive (enum.Enum)
+
+fn main() {
+  println(enum.values[Color]())
+  println(enum.name(Color.DarkBlue))
+  println(enum.name(Color.Teal))
+  println(enum.byName[Color]("DARK_BLUE"))
+  println(enum.byName[Color]("cyan"))
+  println(enum.byName[Color]("DarkBlue"))
+  println(enum.parse[Color]("RED"))
+  println(enum.parse[Color]("purple"))
+  println(enum.index(Color.Red), enum.index(Color.DarkBlue), enum.index(Color.Teal))
+  println(enum.Known(Color.Red))
+  println(shape.metadata[Color, enum.Enum, enum.Info]())
+  println(enum.values[Box[Int]]())
+  println(enum.values[Box[String]]())
+  println(enum.byName[Mode]("slow-mode"))
+  println(enum.name(Mode.FastMode))
+  println(json.Decode[KnownColor]("\"RED\""))
+  println(json.Decode[KnownColor]("\"purple\""))
+}

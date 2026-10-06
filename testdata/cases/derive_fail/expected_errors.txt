@@ -1,5 +1,5 @@
-main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:463:78)
-main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:473:67)
+main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:467:78)
+main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:477:67)
 main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:376:70)
 main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:392:62)
 main.bork:5:52: match arms have different types: DecodeError and Ok (derive template at bork/codec/codec.bork:394:41)
