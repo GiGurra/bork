@@ -105,9 +105,17 @@ as context. Unsupported staged computations also produce compile-time diagnostic
 | `computed` | `Bool`: whether the field is computed. |
 | `hasDefault` | `Bool`: whether a stored field declares a default. |
 | `tags` | `List[Tag]`: ordered `go` tags; Tag has `name: String`, `value: String`. |
+| `tagGroups` | `List[PackageTag[T]]`: checked package tag groups in declaration order; excludes `go` tags. |
 | `facts` | `List[Fact[T]]`: ordered resolved obligations. |
 | `Type` | Field type retaining independent field facts. |
 | `RawType` | Field type without its field facts. |
+
+Package tag descriptors expose `package: String` as the canonical import path,
+`Type` as the concrete tag record type, and `value(): tag.Type` as the checked
+record value including defaults. They retain lexical references from the tag
+declaration. Use `comptime for (tag in field.tagGroups)` to consume them; the
+descriptors cannot escape into runtime values. Ordinary generic consumers can
+read encoded foreign field tags through `codec.RecordField.tags`.
 
 | Field operation | Result and guarantee |
 | --- | --- |

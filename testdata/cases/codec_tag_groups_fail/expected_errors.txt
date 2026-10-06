@@ -1,0 +1,1 @@
+main.bork:4:35: no instance of Encode for FieldTags is in scope (declare one: instance name: codec.Encode[FieldTags] { ... }) (derive template at bork/codec/codec.bork:406:73)

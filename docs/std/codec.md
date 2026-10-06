@@ -207,8 +207,9 @@ Field adapters need more than a value decoder. The selected decoder can publish 
 | `codec.FieldInfo[T: codec.Decode](): codec.FieldSchema` | Read metadata from the actual selected decoder. |
 | `codec.FieldSchema` | `{ kind: String, optional: Bool }` |
 | `codec.Schema[T: codec.Decode](): Option[codec.RecordSchema]` | Read the selected decoder's record metadata, or None. |
+| `codec.TagGroup` | `{ package: String, value: codec.Value }` |
 | `codec.RecordSchema` | `{ fields: List[codec.RecordField] }` |
-| `codec.RecordField` | `name: String`, `wireName: String`, `aliases: List[String]`, `words: List[String]`, `typeName: String`, `doc: String`, `facts: List[String]`, `kind: String`, `optional: Bool`, `hasDefault: Bool`, `defaultValue: Option[() => codec.DefaultSchema]`, `validate: (codec.Value) => Ok \| codec.DecodeError` |
+| `codec.RecordField` | `name: String`, `wireName: String`, `aliases: List[String]`, `words: List[String]`, `tags: List[codec.TagGroup]`, `typeName: String`, `doc: String`, `facts: List[String]`, `kind: String`, `optional: Bool`, `hasDefault: Bool`, `defaultValue: Option[() => codec.DefaultSchema]`, `validate: (codec.Value) => Ok \| codec.DecodeError` |
 | `codec.DefaultSchema` | `{ display: String, configPath: Option[String], choices: List[String] }` |
 
 Container metadata delegates to its selected element decoder. Missing field metadata uses the general `json` kind and a required input. Record schemas describe named fields, typed validation and optional default-display callbacks. Looking up the schema does not evaluate defaults. A field's defaultValue callback returns display text, an optional configuration path and choices from one default evaluation.
@@ -216,3 +217,14 @@ Container metadata delegates to its selected element decoder. Missing field meta
 Field validation checks independent facts; facts involving sibling fields require complete `codec.decode[T]`. CLI, environment, HTTP field adapters and CSV read this metadata. Tuple constraints capturing caller values use typed helper parameters with ordinary lifetime checks and pure predicate callbacks. See [the Go schema helpers](../std-go.md) for integration details.
 
 `codec.RecordField.name` is the source field name; `wireName` is its canonical codec key. `aliases` lists accepted input keys. `words` contains the shared word split of the explicit field name, or of the source name when there is no override; naming policies do not change these words. Hand-written schemas can omit these new members: adapters use `name` when `wireName` is empty, split that key when `words` is empty, and accept no aliases.
+
+`RecordField.tags` carries foreign package field tag groups in declaration order.
+Each `TagGroup.package` is the canonical import path (for example, `bork/cli`),
+independent of the local import alias. `value` is produced by the selected
+`codec.Encode` instance for that package's concrete `FieldTags` record, including
+its defaults. That encoder must be in scope when deriving the options record's
+`codec.Decode`; a missing encoder rejects derivation with an Encode diagnostic.
+A consumer can decode `value` as its concrete tag record through its own Decode
+instance. Codec's own naming group already has dedicated schema members and is
+excluded here; `go` tags are also excluded. Untagged fields and handwritten
+schemas that omit `tags` have an empty list.

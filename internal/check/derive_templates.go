@@ -361,6 +361,13 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 		case metadataRecord:
 			out, known := value.fields[x.Name]
 			return out, known
+		case shapePackageTag:
+			switch x.Name {
+			case "package":
+				return value.typ.Pkg.Path, true
+			case "Type":
+				return value.typ, true
+			}
 		case shapeField:
 			switch x.Name {
 			case "name":
@@ -380,6 +387,8 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 				return value.field.Decl != nil && value.field.Decl.Default != nil, true
 			case "Type", "RawType":
 				return value.field.Type, true
+			case "tagGroups":
+				return p.fieldTagGroups(x.Pos, value)
 			case "tags":
 				return p.fieldTags(x.Pos, value.field)
 			case "facts":
@@ -476,6 +485,12 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 		}
 		if selector, ok := x.Fun.(*syntax.Selector); ok {
 			if value, known := p.eval(selector.X); known {
+				if tag, yes := value.(shapePackageTag); yes && selector.Name == "value" && len(x.Args) == 0 && len(x.TypeArgs) == 0 {
+					if !p.chargeDefaultSyntax(x.Pos, reflect.ValueOf(tag.literal)) {
+						return nil, false
+					}
+					return metadataChecked{value: tag.literal}, true
+				}
 				if variant, yes := value.(metadataVariant); yes && variant.typ.Base == p.c.preludePkg.TypeNamed("Option") && len(x.TypeArgs) == 0 {
 					method, _ := p.c.methodNamed(variant.typ, selector.Name)
 					if method == nil || !method.Prelude {
@@ -1008,6 +1023,9 @@ func (p *deriveExpansion) clone(value reflect.Value) reflect.Value {
 				if runtime, known := p.env[owner].(shapeRuntimeType); known && member == "Type" {
 					typ, yes = runtime.typ, true
 				}
+				if tag, known := p.env[owner].(shapePackageTag); known && member == "Type" {
+					typ, yes = tag.typ, true
+				}
 				if variant, known := p.env[owner].(shapeVariant); known && member == "Type" {
 					view := p.variantView(variant.variant)
 					if view != nil {
@@ -1149,7 +1167,7 @@ func (c *checker) expandDeriveBodies() {
 
 func metadataValue(value any) bool {
 	switch value.(type) {
-	case shapeField, shapeVariant, shapeFact, shapeSequence, shapeEnum, Type:
+	case shapeField, shapeVariant, shapeFact, shapePackageTag, shapeSequence, shapeEnum, Type:
 		return true
 	}
 	return false

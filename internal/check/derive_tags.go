@@ -226,3 +226,32 @@ func (p *deriveExpansion) tagVariantLiteral(selector *syntax.Selector) (any, boo
 	}
 	return metadataVariant{typ: sealed, name: variant.Name}, true
 }
+
+// Package tags retain the concrete record and lexical checked value, while the
+// descriptor itself stays compile-time metadata.
+type shapePackageTag struct {
+	owner   Type
+	typ     *Record
+	literal *syntax.RecordLit
+}
+
+func (p *deriveExpansion) fieldTagGroups(pos diag.Pos, field shapeField) (any, bool) {
+	var items []any
+	if field.field.Decl != nil {
+		for _, group := range field.field.Decl.TagGroups {
+			literal := p.c.info.tagGroups[group]
+			if literal == nil {
+				continue
+			}
+			typ, ok := p.c.info.types[literal].(*Record)
+			if !ok {
+				continue
+			}
+			items = append(items, shapePackageTag{owner: field.owner, typ: typ, literal: literal})
+		}
+	}
+	if !p.charge(pos, len(items)) {
+		return nil, false
+	}
+	return shapeSequence{items: items, element: p.descriptorType("PackageTag", field.owner)}, true
+}

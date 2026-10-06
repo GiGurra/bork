@@ -267,6 +267,9 @@ func (s *deriveSymbolicTypes) expr(expr syntax.Expr) *deriveTypeTerm {
 		}
 		return deriveTerm("Map", key, value)
 	case *syntax.Call:
+		if selector, ok := expr.Fun.(*syntax.Selector); ok && s.metadata.kind(selector.X) == derivePackageTag && selector.Name == "value" {
+			return &deriveTypeTerm{head: "tag.Type", dependent: true}
+		}
 		if selector, ok := expr.Fun.(*syntax.Selector); ok && s.metadata.kind(selector.X) == deriveField && (selector.Name == "read" || selector.Name == "default") {
 			return &deriveTypeTerm{head: "field.Type", dependent: true}
 		}
@@ -383,7 +386,7 @@ func deriveTermDescriptor(term *deriveTypeTerm) deriveDescriptor {
 		return 0
 	}
 	if term.head == "List" && len(term.args) == 1 {
-		if element := deriveTermDescriptor(term.args[0]); element >= deriveField && element <= deriveFact {
+		if element := deriveTermDescriptor(term.args[0]); element >= deriveField && element <= derivePackageTag {
 			return element - deriveField + deriveFields
 		}
 		return 0
@@ -398,6 +401,8 @@ func deriveTermDescriptor(term *deriveTypeTerm) deriveDescriptor {
 		return deriveVariant
 	case "bork/shape.Fact":
 		return deriveFact
+	case "bork/shape.PackageTag":
+		return derivePackageTag
 	}
 	return 0
 }

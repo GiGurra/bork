@@ -18,10 +18,15 @@ type Field[T] = private {
   computed: Bool
   hasDefault: Bool
   tags: List[Tag]
+  tagGroups: List[PackageTag[T]]
   facts: List[Fact[T]]
 }
 // Tag is one ordered `go { name: "value" }` tag declared on a field.
 type Tag = { name: String, value: String }
+// PackageTag is a checked package tag group during expansion. package is the
+// canonical import path; Type is its concrete record head and value() returns
+// the checked value, including defaults, in its original lexical package.
+type PackageTag[T] = private { package: String }
 // Fact keeps the resolved obligation identity during expansion. Its text is
 // display metadata, not a predicate to parse or a promise of validation.
 type Fact[T] = private {
