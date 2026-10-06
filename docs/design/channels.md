@@ -165,18 +165,18 @@ effectful sequences.
 ### Producers
 
 ```bork fragment
-fn produce[T](s: Scope, capacity: Int where nonNegative,
+fn forkProducer[T](s: Scope, capacity: Int where nonNegative,
               work: (Channel[T]) => Ok | Closed | Cancelled): Channel[T]
 ```
 
-`produce` makes a channel, launches `work` as a task of `s` with it, and
+`forkProducer` makes a channel, launches `work` as a task of `s` with it, and
 closes the channel when `work` returns, so consumers' loops end. If `work`
 panics, the failed task cancels `s` as any task does: consumers waiting in
 `s` get `Cancelled`, and the channel closes with `s`. It is Go's "generator goroutine that `defer close(out)`s", without the
 chance of forgetting the close:
 
 ```bork fragment
-squares = produce[Int](s, 4, out => {
+squares = forkProducer[Int](s, 4, out => {
   for (n in Seq.range(0, 10)) {
     out.send(s, n * n)?
   }
@@ -392,7 +392,7 @@ New runnable, tested examples (each with a golden output case under
 `testdata/cases`, and listed in docs/examples.md):
 
 - `examples/channels`: making channels of each kind, send/receive/close,
-  results as values, `for` over `values`, `produce`.
+  results as values, `for` over `values`, `forkProducer`.
 - `examples/channel_select`: select with a reply timeout, a ticker, a send
   arm, a non-blocking poll, and scope-deadline cancellation.
 - `examples/pipeline`: a worker pool fed by a bounded jobs channel, results
@@ -414,7 +414,7 @@ docs/tour.md and the time std page are updated with each PR.
 
 1. **Runtime and methods.** New channel runtime, method API with explicit
    scopes, capacity fact, `unboundedChannel`, `trySend`/`tryReceive`,
-   `values`, `toList`, `produce`, `merge`; migrate prelude users, std,
+   `values`, `toList`, `forkProducer`, `merge`; migrate prelude users, std,
    examples and tests; the free functions are removed with compiler fixes
    (as for other pre-1.0 renames). The list `select` keeps working on the
    new runtime until PR 3.

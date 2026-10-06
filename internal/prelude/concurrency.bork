@@ -253,12 +253,12 @@ fn (ch: Channel[T]) toList[T](s: Scope) uses state: List[T] | Cancelled unsafe g
   }
 }
 
-// produce makes a channel in s and runs work with it as a task of s,
+// forkProducer makes a channel in s and runs work with it as a task of s,
 // closing the channel when work returns, so receivers' loops end. (If
 // work panics, s is cancelled, which stops them too.) A producer written
 // as a named function can stop with out.send(s, x)? when the channel is
 // closed or s is cancelled.
-fn produce[T](s: Scope, capacity: Int where validCapacity, work: (Channel[T]) => Ok | Closed | Cancelled in s) uses state: Channel[T] {
+fn forkProducer[T](s: Scope, capacity: Int where validCapacity, work: (Channel[T]) => Ok | Closed | Cancelled in s) uses state: Channel[T] {
   out = channel[T](s, capacity)
   fork(s, () => {
     _ = work(out)

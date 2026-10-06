@@ -5,7 +5,7 @@
 type Order = { id: Int, items: Int }
 type Packed = { order: Int, boxes: Int }
 
-// jobs sends the orders, then returns, and produce closes the channel.
+// jobs sends the orders, then returns, and forkProducer closes the channel.
 fn jobs(s: Scope, out: Channel[Order]) uses state: Ok | Closed | Cancelled {
   for (id in Seq.range(1, 10)) {
     out.send(s, Order { id: id, items: id * 3 })?
@@ -24,9 +24,9 @@ fn pack(s: Scope, orders: Channel[Order], out: Channel[Packed]) uses state: Ok |
 
 fn main() {
   scope s {
-    orders = produce[Order](s, 0, out => jobs(s, out))
+    orders = forkProducer[Order](s, 0, out => jobs(s, out))
     // Three workers share the orders: fan out.
-    worker = () => produce[Packed](s, 0, out => pack(s, orders, out))
+    worker = () => forkProducer[Packed](s, 0, out => pack(s, orders, out))
     workers = [worker(), worker(), worker()]
     // One channel for all their results: fan in.
     packed = merge(s, workers).toList(s)

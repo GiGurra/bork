@@ -139,7 +139,7 @@ Option.Some(1) Option.None
 
 ## Producers and merge
 
-`produce(s, capacity, work)` makes a channel, runs `work` with it as a task of `s`, and closes the channel when `work` returns. The receivers' loops then end, and no close can be forgotten. If `work` panics, the failed task cancels `s`, as any failed task does, and the panic resurfaces when `s` ends.
+`forkProducer(s, capacity, work)` makes a channel, runs `work` with it as a task of `s`, closes the channel when `work` returns, and returns the channel. The receivers' loops then end, and no close can be forgotten. If `work` panics, the failed task cancels `s`, as any failed task does, and the panic resurfaces when `s` ends.
 
 ```bork
 fn squares(s: Scope, out: Channel[Int], count: Int) uses state: Ok | Closed | Cancelled {
@@ -151,7 +151,7 @@ fn squares(s: Scope, out: Channel[Int], count: Int) uses state: Ok | Closed | Ca
 
 fn main() {
   scope s {
-    for (n in produce[Int](s, 0, out => squares(s, out, 4)).values(s)) {
+    for (n in forkProducer[Int](s, 0, out => squares(s, out, 4)).values(s)) {
       println(n)
     }
   }
@@ -330,7 +330,7 @@ fn main() {
 
 ## Patterns
 
-- **Pipeline**: stages joined by channels, each a task made with `produce` that receives from the stage before it. See [examples/pipeline](../../examples/pipeline/main.bork).
+- **Pipeline**: stages joined by channels, each a task made with `forkProducer` that receives from the stage before it. See [examples/pipeline](../../examples/pipeline/main.bork).
 - **Fan out, fan in**: several workers receive from one channel of jobs, so each job goes to one of them, and `merge` collects their results. See [examples/fan_in_out](../../examples/fan_in_out/main.bork).
 - **Timeouts and tickers**: `select` over a reply and `time.After`, and `time.Tick` pacing steps. See [examples/select_timeout](../../examples/select_timeout/main.bork).
 - **A queue that never blocks its producer**: [examples/unbounded_queue](../../examples/unbounded_queue/main.bork).

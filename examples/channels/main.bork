@@ -39,9 +39,9 @@ fn main() {
     println(slots.trySend(4))
     println(slots.toList(s))
 
-    // produce runs a task that fills a new channel, and closes it when
+    // forkProducer runs a task that fills a new channel, and closes it when
     // the task returns.
-    launches = produce[Int](s, 0, out => countdown(s, out, 3))
+    launches = forkProducer[Int](s, 0, out => countdown(s, out, 3))
     for (n in launches.values(s)) {
       println(s"$n...")
     }
