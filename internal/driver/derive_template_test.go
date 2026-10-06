@@ -532,7 +532,7 @@ derive fn unused[T](): String { consume[T](run: item => { println("io"); "ok" },
 		{"closed parameter", `derive fn consume[A](run: (Int) => String): String { "ok" }
 derive fn unused[T](): String { consume[T](item => { println("io"); "ok" }) }`, "unused uses io"},
 		{"open list argument", `derive fn all[A](runs: List[(A) => String]): String { "ok" }
-derive fn unused[T](): String { all[T]([item => { println("io"); "ok" }]) }`, "it calls all, with a list of callbacks"},
+derive fn unused[T](): String { all[T]([item => { println("io"); "ok" }]) }`, "it calls all, with a lambda that calls println"},
 		{"function reference argument", `fn noisy(value: Int) uses io: String { println("io"); "ok" }
 fn consume(run: (Int) => String): String { "ok" }
 derive fn unused[T](): String { consume(noisy) }`, "it calls consume, with noisy"},
@@ -562,6 +562,16 @@ derive fn unused[T](): String { w = relay[T](item => "ok"); consume[T](w) }`, ""
 derive fn unused[T]() uses io: String { consume[T]({ x => { println("io"); "a" } }) }`, ""},
 		{"if open argument", `derive fn consume[A](run: (A) => String): String { "ok" }
 derive fn unused[T](flag: Bool) uses io: String { consume[T](if (flag) { x => { println("io"); "a" } } else { x => "b" }) }`, ""},
+		{"typed value to open parameter", `derive fn consume[A](run: (Int) => String): String { "ok" }
+derive fn unused[T](work: (Int) uses io => String) uses io: String { consume[T](work) }`, ""},
+		{"typed value charged through open parameter", `fn consume[A](run: (Int) => String): String { "ok" }
+derive fn unused[T](work: (Int) uses io => String): String { consume[T](work) }`, "it calls consume, with work"},
+		{"typed result to open parameter", `fn make(): (Int) uses io => String { item => { println("io"); "ok" } }
+derive fn consume[A](run: (Int) => String): String { "ok" }
+derive fn unused[T]() uses io: String { consume[T](make()) }`, ""},
+		{"typed list to open list", `derive fn all[A](runs: List[(Int) => String]): String { "ok" }
+derive fn unused[T](work: (Int) uses nothing => String): String { all[T]([work]) }`, ""},
+		{"generator", `derive fn unused[T](): Seq[Int] uses io { generate[Int] { println("x"); yield 1 } }`, ""},
 		{"comptime", `derive fn unused(): String { text = comptime { println("io"); "ok" }; text }`, "comptime requires pure code, found uses io"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -3757,6 +3767,17 @@ derive instance show[T]: Show[T] {
  fn show(value: T): String { println("io"); "ok" }
 }
 fn main() {}`, "show uses io (it calls println), but class Show allows no effects")
+	// Templates match the class's open callback positions exactly.
+	checkPreludeSource(t, `class Pure[T] { fn pure(value: T, work: (T) uses nothing => String): String }
+derive instance pure[T]: Pure[T] {
+ fn pure(value: T, work: (T) => String): String { "ok" }
+}
+fn main() {}`, "template parameter work must match its class signature")
+	checkPreludeSource(t, `class Many[T] { fn many(value: T, works: List[(T) => String]): String }
+derive instance many[T]: Many[T] {
+ fn many(value: T, works: List[(T) => String]): String { "ok" }
+}
+fn main() {}`, "")
 	// Metadata values are evaluated by expansion and charge nothing here.
 	checkPreludeSource(t, `class Tagged[T] { fn tag(value: T): String }
 derive instance tagged[T]: Tagged[T] {

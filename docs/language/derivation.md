@@ -7,16 +7,17 @@ Bork code with the ordinary type, effect, fact and lifetime rules.
 
 Definitions also check predicate names and arity, concrete expression types,
 known effects, and closed dictionary requirements even when no target requests
-them. Effects follow the ordinary rules: a call of a known function or helper
-uses what it declares, plus what its open callback arguments use. A callback
-must fit the effects of a function type written with `uses`, and one returned as
-an open result may use only what the open parameters use. Helper signature
-callbacks without `uses` remain open. Some targets select no copy of a staged
-`comptime if`, `match` or `for` body, so its calls are charged only by
-expansion; callbacks in it must still fit their contexts. A native `comptime`
-block may use only `build`.
-Calls whose callee depends on the target are left to its expansion. Checking an
-unused definition never runs `comptime` code or captures `build` or `embed` files.
+them. Effects follow the ordinary rules. A call of a known function or helper
+uses what it declares, plus what its arguments to open callback parameters use.
+Callback parameters and results written without `uses` are open, in helpers
+and template methods alike. A callback must fit a function type written with
+`uses`, and one returned as an open result may use only what the open
+parameters use. A `comptime if` or `comptime match` branch is not selected for
+every target, and a `comptime for` body may expand to no copies, so calls in
+them are charged by expansion; callbacks in them must still fit their contexts.
+A `comptime { ... }` block may use only `build`. Calls whose callee depends on
+the target are left to expansion. Checking an unused definition never runs
+`comptime` code or captures `build` or `embed` files.
 Known parameter facts participate in dictionary selection. Requirements that
 depend on a target's type or predicate callback remain checks of its expansion.
 

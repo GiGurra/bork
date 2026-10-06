@@ -128,7 +128,11 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 		actual := metadata.check(expr, want)
 		effects.concrete(expr, c.used)
 		c.used = 0
-		if want != nil && actual != Invalid && !assignable(actual, want) {
+		fits := assignable
+		if effects.open[expr] {
+			fits = fitsParam // An open parameter accepts a callback with any effects.
+		}
+		if want != nil && actual != Invalid && !fits(actual, want) {
 			c.errorf(expr.Position(), "derive expression must be %s, found %s", want, actual)
 		}
 		return actual
@@ -197,6 +201,11 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				symbolic.check(expression, symbolicWant)
 			}
 			switch node := v.Interface().(type) {
+			case *syntax.Generate:
+				// A generator's effects belong to its sequence, which charges
+				// them when traversed; traversal is left to expansion.
+				effects.nested(func() { walk(reflect.ValueOf(node.Body), nil, nil) })
+				return
 			case *syntax.Comptime:
 				inner := effects.nested(func() { walk(reflect.ValueOf(node.Body), want, symbolicWant) })
 				effects.comptime(node, inner)

@@ -26,16 +26,16 @@ func (c *checker) deriveOpenSignatureTerm(term *deriveTypeTerm, written *syntax.
 	if term == nil || written == nil {
 		return term
 	}
-	copy := *term
+	opened := *term
 	if parameter && term.head == "List" && written.Name == "List" && len(written.Args) == 1 && len(term.args) == 1 {
-		copy.args = []*deriveTypeTerm{c.deriveOpenSignatureTerm(term.args[0], written.Args[0], false)}
+		opened.args = []*deriveTypeTerm{c.deriveOpenSignatureTerm(term.args[0], written.Args[0], false)}
 	} else if term.head == "function" && c.unannotatedFunc(written, 0) {
-		copy.effects |= EffOpen
-		if copy.native != nil {
-			copy.native = c.openAt(copy.native, written)
+		opened.effects |= EffOpen
+		if opened.native != nil {
+			opened.native = c.openAt(opened.native, written)
 		}
 	}
-	return &copy
+	return &opened
 }
 
 func deriveOpenTerm(term *deriveTypeTerm) bool {
@@ -99,20 +99,33 @@ func (e *deriveEffects) concrete(expr syntax.Expr, used Effects) {
 	}
 }
 
-// markOpen records lambdas in a call's known open parameter positions,
-// including the elements of a list passed to a list of open callbacks.
-func (e *deriveEffects) markOpen(call *syntax.Call, params []*deriveTypeTerm, names []string) {
+// deriveOpenArguments gives the values a call passes to known open
+// parameters, as openArgEffects reads them: a direct argument, or the elements
+// of a list literal passed to a list of open callbacks (also given in lists).
+func deriveOpenArguments(call *syntax.Call, params []*deriveTypeTerm, names []string) (values, lists []syntax.Expr) {
 	for i, argument := range call.Args {
 		parameter := deriveTermArgument(call, i, params, names)
 		if deriveOpenTerm(parameter) {
-			e.markValue(argument)
+			values = append(values, argument)
 		} else if parameter != nil && parameter.head == "List" && len(parameter.args) == 1 && deriveOpenTerm(parameter.args[0]) {
 			if list, ok := argument.(*syntax.ListLit); ok {
-				for _, element := range list.Elems {
-					e.markValue(element)
-				}
+				lists = append(lists, list)
+				values = append(values, list.Elems...)
 			}
 		}
+	}
+	return values, lists
+}
+
+// markOpen records the values a call passes to known open parameters, which
+// accept any effects, as fitsParam does.
+func (e *deriveEffects) markOpen(call *syntax.Call, params []*deriveTypeTerm, names []string) {
+	values, lists := deriveOpenArguments(call, params, names)
+	for _, value := range values {
+		e.markValue(value)
+	}
+	for _, list := range lists {
+		e.open[list] = true
 	}
 }
 
@@ -156,19 +169,9 @@ func (e *deriveEffects) call(call *syntax.Call, signature *deriveCallSignature, 
 	}
 	e.uses.add(signature.effects&^EffOpen, call.Pos, id.Name)
 	var open Effects
-	for i, argument := range call.Args {
-		parameter := deriveTermArgument(call, i, params, names)
-		var effects Effects
-		if deriveOpenTerm(parameter) {
-			effects, _ = e.value(argument, symbolic)
-		} else if parameter != nil && parameter.head == "List" && len(parameter.args) == 1 && deriveOpenTerm(parameter.args[0]) {
-			if list, ok := argument.(*syntax.ListLit); ok {
-				for _, element := range list.Elems {
-					element, _ := e.value(element, symbolic)
-					effects |= element
-				}
-			}
-		}
+	values, _ := deriveOpenArguments(call, params, names)
+	for _, argument := range values {
+		effects, _ := e.value(argument, symbolic)
 		if effects != 0 && !deriveOpenTerm(result) {
 			e.uses.add(effects, argument.Position(), id.Name+", with "+e.describe(argument))
 		}
