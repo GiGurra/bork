@@ -6,7 +6,10 @@ Each request expands the template for its target, then checks the resulting
 Bork code with the ordinary type, effect, fact and lifetime rules.
 
 Definitions also check predicate names and arity, concrete expression types,
-and closed dictionary requirements even when no target requests them.
+known declared effects, and closed dictionary requirements even when no target
+requests them. Helper signature callbacks without `uses` remain open. Creating
+a callback does not charge its body effects to the creator, and native
+`comptime` blocks have their own build-only effect allowance.
 Known parameter facts participate in dictionary selection. Requirements that
 depend on a target's type or predicate callback remain checks of its expansion.
 

@@ -500,6 +500,43 @@ func TestDeriveTemplateConcretePredicateParameterType(t *testing.T) {
 fn main() {}`, "predicate parameter must be a function")
 }
 
+func TestDeriveTemplateUnrequestedDeclaredEffects(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `derive fn unused[T](value: T): String { println("io"); "ok" }
+fn main() {}`, "derive unused uses io")
+	checkPreludeSource(t, `derive fn unused[T](action: (T) uses io => String, value: T): String { action(value) }
+fn main() {}`, "derive unused uses io")
+	checkPreludeSource(t, `fn noisy[A](value: A) uses io: String { println("io"); "ok" }
+derive fn unused[T](value: T): String { noisy[T](value) }
+fn main() {}`, "derive unused uses io")
+	checkPreludeSource(t, `derive fn noisy[A](value: A) uses io: String { println("io"); "ok" }
+derive fn unused[T](value: T): String { noisy[T](value) }
+fn main() {}`, "derive unused uses io")
+	checkPreludeSource(t, `derive fn unused[T](value: T): String { comptime if (false) { println("io") }; "ok" }
+fn main() {}`, "derive unused uses io")
+	checkPreludeSource(t, `derive fn unused[T](value: T): (T) uses nothing => String { item => { println("io"); "ok" } }
+fn main() {}`, "derive lambda uses io")
+	checkPreludeSource(t, `derive fn unused[T](value: T): (T) uses io => String { item => { println("io"); "ok" } }
+fn main() {}`, "")
+	checkPreludeSource(t, `derive fn unused[T](value: T) uses io: String { println("io"); "ok" }
+fn main() {}`, "")
+	checkPreludeSource(t, `derive fn consume[A](run: (A) => String): String { "ok" }
+derive fn unused[T](): String { consume[T](item => { println("io"); "ok" }) }
+fn main() {}`, "")
+	checkPreludeSource(t, `derive fn unused[T](): (T) => String { item => { println("io"); "ok" } }
+fn main() {}`, "")
+	checkPreludeSource(t, `derive fn unused(): (Int) => String { item => { println("io"); "ok" } }
+fn main() {}`, "")
+	checkPreludeSource(t, `derive fn consume[A](run: (Int) => String): String { "ok" }
+derive fn unused[T](): String { consume[T](item => { println("io"); "ok" }) }
+fn main() {}`, "")
+	checkPreludeSource(t, `import "bork/build"
+derive fn unused[T](): String { text = comptime { build.ReadString("config.txt") }; text }
+fn main() {}`, "")
+	checkPreludeSource(t, `derive fn unused[T](): String { text = comptime { println("io"); "ok" }; text }
+fn main() {}`, "derive comptime block uses io")
+}
+
 func TestDeriveTemplateClosedBoundsRetainArgumentFacts(t *testing.T) {
 	t.Parallel()
 	declarations := `pred positive(n: Int) { n > 0 }

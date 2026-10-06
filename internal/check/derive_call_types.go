@@ -8,9 +8,10 @@ import (
 // Reading them selects neither a dictionary nor a native evaluator result;
 // projected heads and formal parameters remain expansion obligations.
 type deriveCallSignature struct {
-	params []Type
-	result Type
-	names  []string
+	params  []Type
+	result  Type
+	names   []string
+	effects Effects
 }
 
 func (c *checker) deriveCallSignature(call *syntax.Call, typeNames map[string]bool) *deriveCallSignature {
@@ -23,10 +24,10 @@ func (c *checker) deriveCallSignature(call *syntax.Call, typeNames map[string]bo
 		if !ok {
 			return nil
 		}
-		return &deriveCallSignature{params: typ.Params, result: independentDeriveType(typ.Result)}
+		return &deriveCallSignature{params: typ.Params, result: independentDeriveType(typ.Result), effects: typ.Effects}
 	}
 	if helper, pkg := c.deriveHelperNamed(c.pkg, id.Name); helper != nil {
-		signature := &deriveCallSignature{params: make([]Type, len(helper.Params)), names: make([]string, len(helper.Params))}
+		signature := &deriveCallSignature{params: make([]Type, len(helper.Params)), names: make([]string, len(helper.Params)), effects: deriveWrittenEffects(helper.Uses)}
 		helperTypes := map[string]bool{}
 		actuals := map[string]Type{}
 		for i, parameter := range helper.TypeParams {
@@ -44,11 +45,11 @@ func (c *checker) deriveCallSignature(call *syntax.Call, typeNames map[string]bo
 		for i, parameter := range helper.Params {
 			signature.names[i] = parameter.Name
 			if parameter.Type != nil && deriveConcreteType(parameter.Type, helperTypes) {
-				signature.params[i] = c.deriveKnownHelperType(parameter.Type, actuals)
+				signature.params[i] = c.openParamAt(c.deriveKnownHelperType(parameter.Type, actuals), parameter.Type)
 			}
 		}
 		if deriveConcreteType(helper.Result, helperTypes) {
-			signature.result = c.deriveKnownHelperType(helper.Result, actuals)
+			signature.result = c.openAt(c.deriveKnownHelperType(helper.Result, actuals), helper.Result)
 		}
 		return signature
 	}
@@ -66,7 +67,7 @@ func (c *checker) deriveCallSignature(call *syntax.Call, typeNames map[string]bo
 			}
 		}
 	}
-	signature := &deriveCallSignature{params: make([]Type, len(fn.Params)), names: make([]string, len(fn.Params)), result: independentDeriveType(subst(fn.Result, bound))}
+	signature := &deriveCallSignature{params: make([]Type, len(fn.Params)), names: make([]string, len(fn.Params)), result: independentDeriveType(subst(fn.Result, bound)), effects: fn.Effects}
 	for i, parameter := range fn.Params {
 		signature.params[i] = deriveArgumentContext(subst(parameter, bound))
 		if i < len(fn.Decl.Params) {

@@ -381,6 +381,13 @@ its declaration phase, before dependent Go bindings resolve, and publishes
 typed conversion metadata during the body phase. These are deterministic
 phases of one expansion, not separate native executions.
 
+For v1, a closed `shape.ForeignRecord` metadata key identifies this
+compiler-owned capability. The compiler generates conversion bridge members
+from the selected capability for any class that requests it, through one
+generic path. Its source template remains the authority for field names,
+tags, stored fields and Option policy. Target-indexed conversion metadata is
+possible future work; it does not relax the closed-key restriction in v1.
+
 The library chooses Go field capitalization, tags, stored/computed selection,
 Option mapping policy and exposes New/FromGo/ToGo/schema operations through
 ordinary methods/metadata. Foreign-to-bork construction must use the same
