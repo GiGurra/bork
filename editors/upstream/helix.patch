@@ -29,21 +29,23 @@ index a5403e6..e69a200 100644
 +
 +[[grammar]]
 +name = "bork"
-+source = { git = "https://github.com/GiGurra/bork", rev = "09f39edec857a80d36929c7c1288f89541f4151b", subpath = "editors/tree-sitter-bork" }
++source = { git = "https://github.com/GiGurra/bork", rev = "284eeeea410711ccffa9bd10e0113bbe5fde103a", subpath = "editors/tree-sitter-bork" }
 diff --git a/runtime/queries/bork/folds.scm b/runtime/queries/bork/folds.scm
 new file mode 100644
 --- /dev/null
 +++ b/runtime/queries/bork/folds.scm
-@@ -0,0 +1,4 @@
+@@ -0,0 +1,6 @@
 +[(block) (record_type) (record_literal) (match_expression) (select_expression) (class_declaration)
 + (instance_declaration) (instances_declaration)
 + (list_literal) (list_comprehension) (map_literal) (tuple_literal) (tuple_type) (tuple_pattern)
 + (go_body) (comment)] @fold
++
++(tag_group) @fold
 diff --git a/runtime/queries/bork/highlights.scm b/runtime/queries/bork/highlights.scm
 new file mode 100644
 --- /dev/null
 +++ b/runtime/queries/bork/highlights.scm
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,48 @@
 +(comment) @comment
 +(shebang) @comment
 +[(bare_return) (bare_break) (bare_continue)] @keyword
@@ -69,6 +71,7 @@ new file mode 100644
 +(record_literal name: (identifier) @variable.other.member)
 +(selector_expression field: (identifier) @variable.other.member)
 +(call_expression function: (qualified_name (identifier) @function.call))
++(call_expression function: (selector_expression field: (identifier) @function.call))
 +(interpolated_string prefix: (qualified_name (identifier) @function.call))
 +["fn" "pred" "type" "sealed" "unsafe" "where" "and" "or" "trust" "rule"
 + "generate" "yield" "for" "break" "continue" "if" "else" "return" "match"
@@ -88,11 +91,14 @@ new file mode 100644
 +(specialized_variant_pattern name: (identifier) @type.enum.variant)
 +(specialized_variant_pattern (qualified_name (identifier) @type))
 +(list_comprehension name: (identifier) @variable)
++
++(tag_group package: (identifier) @module)
++(tag_entry name: (identifier) @variable.other.member)
 diff --git a/runtime/queries/bork/indents.scm b/runtime/queries/bork/indents.scm
 new file mode 100644
 --- /dev/null
 +++ b/runtime/queries/bork/indents.scm
-@@ -0,0 +1,7 @@
+@@ -0,0 +1,9 @@
 +[(block) (record_literal) (record_type) (list_literal) (list_comprehension) (map_literal)
 + (tuple_literal) (tuple_type) (tuple_pattern)
 + (parameters) (type_arguments) (match_expression) (select_expression) (class_declaration)
@@ -100,6 +106,8 @@ new file mode 100644
 +["}" ")" "]"] @outdent
 +(comment) @ignore
 +(go_content) @ignore
++
++(tag_group) @indent
 diff --git a/runtime/queries/bork/injections.scm b/runtime/queries/bork/injections.scm
 new file mode 100644
 --- /dev/null

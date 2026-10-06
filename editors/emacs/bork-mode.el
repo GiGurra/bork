@@ -31,6 +31,7 @@
     table))
 (defconst bork-font-lock-keywords
   `(("\\_<\\(is\\)\\_>[[:space:]]+[^[:space:](:=]" 1 font-lock-keyword-face)
+    ("[[:alnum:]_})]\\([ \t]+\\)\\([a-z][[:alnum:]_]*\\)[ \t]*{" 2 font-lock-preprocessor-face)
     (,(regexp-opt bork-keywords 'symbols) . font-lock-keyword-face)
     (,(regexp-opt '("true" "false") 'symbols) . font-lock-constant-face)
     ("\\_<[A-Z][[:alnum:]_]*\\_>" . font-lock-type-face)
@@ -89,6 +90,8 @@
     `([,@(remove "nothing" bork-keywords)
        (bare_return) (bare_break) (bare_continue)] @font-lock-keyword-face
       (is_expression "is" @font-lock-keyword-face))
+    :language 'bork :feature 'type '((tag_group package: (identifier) @font-lock-preprocessor-face)
+                                   (tag_entry name: (identifier) @font-lock-variable-name-face))
     :language 'bork :feature 'string '([(string) (interpolated_string) (rune)] @font-lock-string-face)
     :language 'bork :feature 'type '( (type_declaration name: (identifier) @font-lock-type-face)
                                    (context_pattern name: (identifier) @font-lock-type-face)
@@ -105,6 +108,7 @@
            ((node-is "]") parent-bol 0)
            ((node-is ")") parent-bol 0)
            ((parent-is "block") parent-bol ,bork-indent-offset)
+           ((parent-is "tag_group") parent-bol ,bork-indent-offset)
            ((parent-is "record_type") parent-bol ,bork-indent-offset)
            ((parent-is "record_literal") parent-bol ,bork-indent-offset)
            ((parent-is "tuple_literal") parent-bol ,bork-indent-offset)

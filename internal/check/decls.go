@@ -56,7 +56,27 @@ func (c *checker) lookupType(name string) *typeEntry {
 	return c.preludePkg.types[name]
 }
 
+// Generic groups are parsed now; typed package metadata checking follows.
+func (c *checker) checkTagGroupSyntax(groups []*syntax.TagGroup, goFields bool) {
+	seen := map[string]bool{}
+	for _, group := range groups {
+		if seen[group.Name] {
+			c.errorf(group.Pos, "tag group %s is declared twice", group.Name)
+		}
+		seen[group.Name] = true
+		if group.Name != "go" {
+			c.errorf(group.Pos, "typed tag group %s is not supported yet", group.Name)
+		} else if !goFields {
+			c.errorf(group.Pos, "Go struct tags can only be written on fields")
+		}
+	}
+}
+
 func (c *checker) declareType(td *syntax.TypeDecl, prelude bool) {
+	c.checkTagGroupSyntax(td.TagGroups, false)
+	for _, variant := range td.Variants {
+		c.checkTagGroupSyntax(variant.TagGroups, false)
+	}
 	if reservedTypeNames[td.Name] {
 		c.errorf(td.Pos, "%s is a built-in type and cannot be redefined", td.Name)
 		return
@@ -203,6 +223,7 @@ func (c *checker) resolveFields(decls []*syntax.FieldDecl, owner string) []*Fiel
 	var fields []*Field
 	seen := map[string]bool{}
 	for _, fd := range decls {
+		c.checkTagGroupSyntax(fd.TagGroups, true)
 		if seen[fd.Name] {
 			c.errorf(fd.Pos, "field %s is declared twice in %s", fd.Name, owner)
 			continue
@@ -213,7 +234,7 @@ func (c *checker) resolveFields(decls []*syntax.FieldDecl, owner string) []*Fiel
 			c.errorf(fd.Type.Pos, "field %s cannot have type Ok", fd.Name)
 			t = Invalid
 		}
-		fields = append(fields, &Field{Lazy: fd.Lazy, Name: fd.Name, Type: t, Decl: fd, Pkg: c.pkg, Prelude: c.inPrelude, Doc: fd.Doc, GoTags: fd.GoTags, defaultGeneric: hasTypeParam(t)})
+		fields = append(fields, &Field{Lazy: fd.Lazy, Name: fd.Name, Type: t, Decl: fd, Pkg: c.pkg, Prelude: c.inPrelude, Doc: fd.Doc, GoTags: fd.GoTags(), defaultGeneric: hasTypeParam(t)})
 	}
 	for _, field := range fields {
 		field.siblings = fields

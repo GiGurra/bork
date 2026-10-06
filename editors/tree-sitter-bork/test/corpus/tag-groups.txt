@@ -1,0 +1,171 @@
+==================
+Package tag groups
+==================
+import codec "bork/codec"
+type Row = {
+  name: String = "Ada" codec { name: Option.Some("login"), aliases: ["user"] } go { json: "login" }
+} codec { naming: codec.Naming.Snake } derive (codec.Decode)
+type Mode = sealed {
+  Plain codec { name: "plain" }
+  Named { value: Int codec { name: "v" } } codec { aliases: ["old"] }
+  Positional(String) codec { fallback: true }
+} codec { naming: codec.Naming.Verbatim }
+---
+
+(source_file
+  (import_declaration
+    (identifier)
+    (string))
+  (type_declaration
+    (identifier)
+    (record_type
+      (field_declaration
+        (identifier)
+        (type
+          (qualified_name
+            (identifier)))
+        (string)
+        (tag_group
+          (identifier)
+          (tag_entry
+            (identifier)
+            (call_expression
+              (selector_expression
+                (qualified_name
+                  (identifier))
+                (identifier))
+              (argument
+                (string))))
+          (tag_entry
+            (identifier)
+            (list_literal
+              (string))))
+        (tag_group
+          (identifier)
+          (tag_entry
+            (identifier)
+            (string)))))
+    (tag_group
+      (identifier)
+      (tag_entry
+        (identifier)
+        (selector_expression
+          (selector_expression
+            (qualified_name
+              (identifier))
+            (identifier))
+          (identifier))))
+    (derive_clause
+      (qualified_name
+        (identifier)
+        (identifier))))
+  (type_declaration
+    (identifier)
+    (variant
+      (identifier)
+      (tag_group
+        (identifier)
+        (tag_entry
+          (identifier)
+          (string))))
+    (variant
+      (identifier)
+      (record_type
+        (field_declaration
+          (identifier)
+          (type
+            (qualified_name
+              (identifier)))
+          (tag_group
+            (identifier)
+            (tag_entry
+              (identifier)
+              (string)))))
+      (tag_group
+        (identifier)
+        (tag_entry
+          (identifier)
+          (list_literal
+            (string)))))
+    (variant
+      (identifier)
+      (type
+        (qualified_name
+          (identifier)))
+      (tag_group
+        (identifier)
+        (tag_entry
+          (identifier)
+          (boolean))))
+    (tag_group
+      (identifier)
+      (tag_entry
+        (identifier)
+        (selector_expression
+          (selector_expression
+            (qualified_name
+              (identifier))
+            (identifier))
+          (identifier))))))
+
+==================
+Newline starts a variant, not a group
+==================
+type Mode = sealed {
+  Plain
+  codec { value: String }
+}
+---
+
+(source_file
+  (type_declaration
+    (identifier)
+    (variant
+      (identifier))
+    (variant
+      (identifier)
+      (record_type
+        (field_declaration
+          (identifier)
+          (type
+            (qualified_name
+              (identifier))))))))
+
+==================
+Comments preserve group boundaries
+==================
+type Row = { value: Int codec /* inline */ { name: "v" } }
+type Mode = sealed {
+ Plain /*
+ */ codec { value: String }
+}
+---
+
+(source_file
+  (type_declaration
+    (identifier)
+    (record_type
+      (field_declaration
+        (identifier)
+        (type
+          (qualified_name
+            (identifier)))
+        (tag_group
+          (identifier)
+          (comment)
+          (tag_entry
+            (identifier)
+            (string))))))
+  (type_declaration
+    (identifier)
+    (variant
+      (identifier))
+    (comment)
+    (variant
+      (identifier)
+      (record_type
+        (field_declaration
+          (identifier)
+          (type
+            (qualified_name
+              (identifier))))))))

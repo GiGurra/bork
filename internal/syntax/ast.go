@@ -92,6 +92,7 @@ type TypeDecl struct {
 	Variants   []*VariantDecl // SealedType
 	Alias      *TypeExpr      // AliasType
 	Where      []*PredRef     // whole-value invariants on records and sealed types
+	TagGroups  []*TagGroup
 	// Derive lists the classes to derive instances of:
 	// `type User = { ... } derive (Decode, Encode)`.
 	Derive    []string
@@ -107,14 +108,35 @@ type DeriveDecl struct {
 }
 
 type FieldDecl struct {
-	Lazy    bool
-	LazyPos diag.Pos
-	GoTags  []GoTag
-	Default Expr
-	Doc     string
-	Pos     diag.Pos
-	Name    string
-	Type    *TypeExpr
+	Lazy      bool
+	LazyPos   diag.Pos
+	TagGroups []*TagGroup
+	Default   Expr
+	Doc       string
+	Pos       diag.Pos
+	Name      string
+	Type      *TypeExpr
+}
+
+// TagGroup is package metadata written after a field, variant or type body.
+// Go groups retain string-only entries; other groups contain ordinary expressions.
+type TagGroup struct {
+	Pos, End diag.Pos
+	Name     string
+	Entries  []*FieldInit
+}
+
+// GoTags returns the ordered string tags from the built-in go group.
+func (f *FieldDecl) GoTags() []GoTag {
+	var tags []GoTag
+	for _, group := range f.TagGroups {
+		if group.Name == "go" {
+			for _, entry := range group.Entries {
+				tags = append(tags, GoTag{Pos: entry.Pos, Name: entry.Name, Value: entry.Value.(*StringLit).Value})
+			}
+		}
+	}
+	return tags
 }
 
 // GoTag is an ordered Go struct tag on a generated field.
@@ -131,6 +153,7 @@ type VariantDecl struct {
 	Name       string
 	Fields     []*FieldDecl
 	Where      []*PredRef
+	TagGroups  []*TagGroup
 }
 
 // FuncDecl is `fn name(params): Result { body }`. Result is nil when
