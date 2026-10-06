@@ -2,6 +2,7 @@
 from pathlib import Path
 import json
 import os
+import re
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -13,7 +14,8 @@ class ChangesTests(unittest.TestCase):
     def test_docs_and_mixed_paths(self):
         self.assertTrue(ci_changes.docs_only([b"README.md", b"docs/tour.md", b"docs/assets/a.png", b"mkdocs.yml"]))
         for paths in ([], [b"go.mod"], [b"docs/tour.md", b"internal/driver/a.go"],
-                      [b"scripts/docs-requirements.txt"], [b".github/workflows/ci.yml"], [b"docs.go"]):
+                      [b"scripts/docs-requirements.txt"], [b"examples/hello/README.md"],
+                      [b"editors/vscode/README.md"], [b"internal/prelude/README.md"], [b"testdata/docs/api.md"], [b".github/workflows/ci.yml"], [b"docs.go"]):
             with self.subTest(paths=paths):
                 self.assertFalse(ci_changes.docs_only(paths))
 
@@ -32,6 +34,14 @@ class ChangesTests(unittest.TestCase):
         with patch("ci_changes.subprocess.check_output", side_effect=subprocess.CalledProcessError(1, "git")):
             with self.assertRaises(subprocess.CalledProcessError):
                 ci_changes.classify("base", "head")
+
+    def test_documentation_test_selection(self):
+        workflow = (Path(__file__).parent.parent / ".github/workflows/ci.yml").read_text()
+        pattern = re.search(r"go test ./internal/driver ./cmd/bork -run '([^']+)'", workflow).group(1)
+        for name in ("TestDocSnippets", "TestDocLinks", "TestDocStructure", "TestDocCommand",
+                     "TestTupleReplacementDocumentation", "TestSignalDocumentation", "TestStrconvDocumentation"):
+            with self.subTest(name=name):
+                self.assertRegex(name, pattern)
 
     def test_required_ci_gate(self):
         workflow = (Path(__file__).parent.parent / ".github/workflows/ci.yml").read_text()

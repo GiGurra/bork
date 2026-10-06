@@ -33,7 +33,7 @@ jobs:
       - uses: ./.github/actions/setup-go
         with:
           cache-name: docs-tests
-      - run: go test ./internal/driver ./cmd/bork -run '^TestDoc' -count=1
+      - run: go test ./internal/driver ./cmd/bork -run '^TestDoc|Documentation$' -count=1
   test:
     needs: changes
     if: needs.changes.outputs.docs-only != 'true'

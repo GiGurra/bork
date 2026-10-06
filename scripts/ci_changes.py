@@ -6,7 +6,7 @@ import subprocess
 
 def docs_only(paths):
     return bool(paths) and all(
-        path.startswith(b"docs/") or path.endswith(b".md") or path == b"mkdocs.yml"
+        path.startswith(b"docs/") or (b"/" not in path and path.endswith(b".md")) or path == b"mkdocs.yml"
         for path in paths
     )
 
