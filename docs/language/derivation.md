@@ -78,13 +78,21 @@ Computed fields cannot be supplied. The original state remains usable.
 For example, a template can build a sequence of typed updates and fold them:
 
 ```bork
-initial = shape.builder[T]()
-steps: List[(initial.Type) => initial.Type] = [
-  comptime for (field in shape.fields[T]())
-  comptime if (!field.computed && !field.hasDefault)
-    (state: initial.Type) => state.set(field, input)
-]
-steps.fold(initial, (state, step) => step(state)).finish()
+import "bork/shape"
+class Build[T] { fn build(input: Int): T | shape.ValidationError }
+derive instance build[T]: Build[T] {
+  fn build(input: Int): T | shape.ValidationError {
+    initial = shape.builder[T]()
+    steps: List[(initial.Type) => initial.Type] = [
+      comptime for (field in shape.fields[T]())
+      comptime if (!field.computed && !field.hasDefault)
+      (state: initial.Type) => state.set(field, input)
+    ]
+    steps.fold(initial, (state, step) => step(state)).finish()
+  }
+}
+type Point = { x: Int, y: Int } derive (Build)
+fn main() { println(build[Point](3)) }
 ```
 
 Each selected field must accept `input`'s type. The template may branch on

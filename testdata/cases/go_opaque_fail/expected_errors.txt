@@ -22,5 +22,5 @@ main.bork:27:46: cannot compare values of type List[Payload] with ==: opaque Go 
 main.bork:28:17: facts cannot apply to Payload, which holds a Go value that can change
 main.bork:29:45: predicate generic cannot take Payload, which holds a Go value that can change
 main.bork:30:36: cannot derive Decode for Config: field payload has type Payload, which has no Decode instance in scope (declare one: instance name: codec.Decode[Payload] { ... })
-main.bork:30:36: cannot derive Encode for Config: field payload has type Payload, which has no Encode instance in scope (declare one: instance name: codec.Encode[Payload] { ... })
+main.bork:30:36: Encode cannot apply to go_opaque_fail.Payload, which holds an opaque Go value (derive template at bork/codec/codec.bork:249:66)
 main.bork:31:22: cmp.Ordered is a constraint interface, so it cannot hold Go values

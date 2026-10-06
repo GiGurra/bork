@@ -22,7 +22,7 @@ func TestStandaloneDeriveChecks(t *testing.T) {
 		{"unknown target", "derive codec.Decode for Missing\nfn main(){}", "unknown type Missing"},
 		{"free type parameter", "type T[A]={a:A}\nderive codec.Decode for T[A]\nfn main(){}", "unknown type A"},
 		{"GoStruct specialization", "type T[A]={a:A}\nderive GoStruct for T[Int]\nfn main(){}", "cannot derive GoStruct for a specialization"},
-		{"missing field instance", "type T={callback:(Int)=>Int}\nderive codec.Encode for T\nfn main(){}", "has no Encode instance"},
+		{"missing field instance", "type T={callback:(Int)=>Int}\nderive codec.Encode for T\nfn main(){}", "no instance of Encode for (Int) => Int is in scope"},
 		{"GoStruct tags", "type T={value:Int go{json:\"value\"}}\nderive GoStruct for T\nfn main(){}", ""},
 		{"Show rule", "type T={}\nderive Show for T\nfn main(){}", "cannot be derived"},
 		{"Eq rule", "type T={}\nderive Eq for T\nfn main(){}", "Eq is built in"},
