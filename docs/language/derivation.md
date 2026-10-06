@@ -63,6 +63,41 @@ A payload field's `read` requires the matching variant's view; the complete
 sealed value and other variants' views do not suffice. Source code cannot
 construct or update these views. Computed fields read through the proven owner.
 
+`shape.builder[T]()` creates private immutable storage for a record;
+`variant.builder()` does the same for one sealed payload. A builder's `.Type`
+projection supplies its ordinary private storage type for annotations and helpers.
+The storage contains optional typed inputs and cannot be used as the completed
+owner. `state.set(field, value)` returns a new state, rejects mismatched owners,
+payloads and erased field types, and evaluates both runtime arguments once.
+Computed fields cannot be supplied. The original state remains usable.
+
+For example, a template can build a sequence of typed updates and fold them:
+
+```bork
+initial = shape.builder[T]()
+steps: List[(initial.Type) => initial.Type] = [
+  comptime for (field in shape.fields[T]())
+  comptime if (!field.computed && !field.hasDefault)
+    (state: initial.Type) => state.set(field, input)
+]
+steps.fold(initial, (state, step) => step(state)).finish()
+```
+
+Each selected field must accept `input`'s type. The template may branch on
+metadata to supply different typed expressions for different fields.
+`finish()` returns the owner or `shape.ValidationError`. It reports duplicate
+inputs, supplies declared defaults for missing stored inputs, and rejects other
+missing inputs. It validates stored facts, initializes computed cells, checks
+computed and sibling-dependent facts, then checks variant and owner invariants,
+including constrained type arguments. Only success exposes the promised owner.
+
+A validation error contains `path`, `message`, and an optional `obligation`.
+Predicate failures retain an opaque source obligation with readable `owner`,
+`variant`, `field`, `index`, and `source` metadata. The index identifies the
+fact's position in its source group; whole-owner facts have an empty field.
+Missing and duplicate inputs have no predicate obligation. This diagnostic
+metadata cannot establish a proof or construct an unchecked owner.
+
 `shape.kind[T]()` selects `shape.Record`, `shape.Sealed`, or
 `shape.Other` in `comptime if` or `comptime match`. `shape.name[T]()` and
 `shape.owner[T]()` expose the target's source name and defining package path.

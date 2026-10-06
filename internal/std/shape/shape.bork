@@ -40,3 +40,11 @@ fn owner[T](): String unsafe go { panic("shape.owner requires a derive template"
 fn facts[T](): List[Fact[T]] unsafe go { panic("shape.facts requires a derive template") }
 // fail rejects the target at its derive request with a compile-time message.
 fn fail(message: String): Never unsafe go { panic("shape.fail requires a derive template") }
+
+// Obligation identifies a resolved source fact, including its resolved owner.
+// It is diagnostic provenance, never a value proof or a callable predicate.
+type Obligation = private { owner: String, variant: String, field: String, index: Int, source: String }
+// Missing and duplicate inputs have no source fact; predicate failures retain it.
+type ValidationError = { path: String, message: String, obligation: Option[Obligation] = Option.None }
+// builder has a dependent private storage result during derive expansion.
+fn builder[T](): Never unsafe go { panic("shape.builder requires a derive template") }

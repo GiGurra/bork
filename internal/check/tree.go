@@ -242,8 +242,9 @@ type CallBuiltin struct {
 	Args      []Expr
 	// Conv describes a numeric conversion of a value that is not a
 	// constant; nil for other builtins.
-	Conv     *Conversion
-	Expected string
+	Conv         *Conversion
+	Expected     string
+	Construction *ShapeConstruction
 }
 
 // CallValue is a call of a function value: `f(x)`, `r.handler(x)`.

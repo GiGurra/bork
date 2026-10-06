@@ -41,3 +41,16 @@ func deriveFactKey(fact *Constraint) string {
 	}
 	return key
 }
+
+// Expanded bodies carry first-failure order and source provenance. Their local
+// memo keys must preserve those anchors until plans can refresh them on reuse.
+func deriveObligationsKey(facts []*Constraint) string {
+	var out strings.Builder
+	for _, fact := range facts {
+		out.WriteString("\x00")
+		out.WriteString(deriveFactKey(fact))
+		out.WriteString("\x00")
+		out.WriteString(fact.Pos.String())
+	}
+	return out.String()
+}

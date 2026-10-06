@@ -1499,3 +1499,344 @@ fn main(){println(render(Choice.One{item:2}))}`
 		t.Fatalf("payload facts: %s, %v", output, err)
 	}
 }
+
+func TestDeriveTemplateBuilder(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred positive(n:Int){n>0}
+class Build[T]{fn build(n:Int):T|shape.ValidationError}
+derive instance build[T]:Build[T]{
+ fn build(n:Int):T|shape.ValidationError{
+  initial = shape.builder[T]()
+  steps:List[(initial.Type)=>initial.Type] = [comptime for (f in shape.fields[T]()) comptime if (!f.computed && !f.hasDefault)
+   (state:initial.Type)=>state.set(f,n)]
+  steps.fold(initial,(state,step)=>step(state)).finish()
+ }
+}
+type Row={n:Int where positive, extra:Int=4, lazy next:Int where positive=n+1} derive(Build)
+fn main(){result=build[Row](2);println(result);println(match(result){row:Row=>row.next, _:shape.ValidationError=>-1});println(build[Row](-1))}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatalf("builder: %s, %v", output, err)
+	}
+	for _, expected := range []string{"Row { n: 2, extra: 4 }", "\n3\n", "path: \".n\"", "positive"} {
+		if !strings.Contains(string(output), expected) {
+			t.Fatalf("want %q in %s", expected, output)
+		}
+	}
+}
+
+func TestDeriveTemplateBuilderLazyDependencies(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `import "bork/shape"
+pred positive(n:Int){n>0}
+class Build[T]{fn build(n:Int):T|shape.ValidationError}
+derive instance build[T]:Build[T]{
+ fn build(n:Int):T|shape.ValidationError{
+  initial=shape.builder[T]()
+  steps:List[(initial.Type)=>initial.Type]=[comptime for(f in shape.fields[T]()) comptime if(!f.computed)
+   (state:initial.Type)=>state.set(f,n)]
+  steps.fold(initial,(state,step)=>step(state)).finish()
+ }
+}
+type Row={n:Int, lazy extra:Int where positive=n+Value} derive(Build)
+lazy Value:Int=match(build[Row](2)){row:Row=>row.n,_:shape.ValidationError=>0}
+fn main(){println(Value)}`, "cycle")
+}
+
+func TestDeriveTemplateBuilderStates(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, body, want string }{
+		{"missing", `initial=shape.builder[T]();initial.finish()`, `message: "is missing"`},
+		{"duplicate", `initial=shape.builder[T]();steps:List[(initial.Type)=>initial.Type]=[comptime for(f in shape.fields[T]()) (state:initial.Type)=>state.set(f,n).set(f,n+1)];steps.fold(initial,(state,step)=>step(state)).finish()`, "supplied more than once"},
+		{"fork", `initial=shape.builder[T]();steps:List[(initial.Type)=>initial.Type]=[comptime for(f in shape.fields[T]()) (state:initial.Type)=>state.set(f,n)];_=steps.fold(initial,(state,step)=>step(state)).finish();initial.finish()`, `message: "is missing"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			source := fmt.Sprintf(`import "bork/shape"
+class Build[T]{fn build(n:Int):T|shape.ValidationError}
+derive instance build[T]:Build[T]{fn build(n:Int):T|shape.ValidationError{%s}}
+type Row={n:Int} derive(Build)
+fn main(){println(build[Row](2))}`, tc.body)
+			executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+			if err != nil {
+				t.Fatal(err)
+			}
+			output, err := exec.Command(executable).CombinedOutput()
+			if err != nil || !strings.Contains(string(output), tc.want) {
+				t.Fatalf("want %q in %s: %v", tc.want, output, err)
+			}
+		})
+	}
+}
+
+func TestDeriveTemplateBuilderSealed(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred positive(n:Int){n>0}
+class Build[T]{fn build(n:Int):T|shape.ValidationError}
+derive instance build[T]:Build[T]{
+ fn build(n:Int):T|shape.ValidationError{
+  results:List[T|shape.ValidationError]=[comptime for(v in shape.variants[T]()) comptime if(v.name=="One") {
+   initial=v.builder()
+   steps:List[(initial.Type)=>initial.Type]=[comptime for(f in v.fields) (state:initial.Type)=>state.set(f,n)]
+   steps.fold(initial,(state,step)=>step(state)).finish()
+  }]
+  results.get(0).getOr(shape.ValidationError{path:"",message:"requires One"})
+ }
+}
+type Choice[A]=sealed{One{item:Int where positive},Empty} derive(Build)
+fn main(){println(build[Choice[String]](2));println(build[Choice[Int]](-1))}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatal(err, string(output))
+	}
+	if !strings.Contains(string(output), "item: 2") || !strings.Contains(string(output), `path: ".item"`) {
+		t.Fatal(string(output))
+	}
+}
+
+func TestDeriveTemplateBuilderNestedFacts(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred positive(n:Int){n>0}
+pred atLeast(n:Int,lo:Int){n>=lo}
+pred ordered(row:Row){row.hi>=row.lo && row.values.length()>0}
+class Build[T]{fn build(n:Int):T|shape.ValidationError}
+derive instance build[T]:Build[T]{
+ fn build(n:Int):T|shape.ValidationError{
+  initial=shape.builder[T]()
+  steps:List[(initial.Type)=>initial.Type]=[comptime for(f in shape.fields[T]()) {
+   comptime if(f.name=="lo") {(state:initial.Type)=>state.set(f,2)} else {comptime if(f.name=="hi") {(state:initial.Type)=>state.set(f,3)} else {(state:initial.Type)=>state.set(f,[n])}}
+  }]
+  steps.fold(initial,(state,step)=>step(state)).finish()
+ }
+}
+type Row={lo:Int where positive,hi:Int where atLeast(lo),values:List[Int where positive]} where ordered derive(Build)
+fn main(){println(build[Row](2));println(build[Row](-1))}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatal(err, string(output))
+	}
+	if !strings.Contains(string(output), "values: [2]") || !strings.Contains(string(output), `path: ".values[0]"`) {
+		t.Fatal(string(output))
+	}
+}
+
+func TestDeriveTemplateBuilderBoundaries(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `import "bork/shape"
+class Build[T]{fn build():String}
+derive instance build[T]:Build[T]{fn build():String{
+ initial=shape.builder[T]()
+ comptime for(f in shape.fields[T]()){_=initial.set(f,"wrong")}
+ "ok"
+}}
+type Row={n:Int} derive(Build)
+fn main(){}`, "builder.set field n must be Int, found String")
+	checkPreludeSource(t, `import "bork/shape"
+class Build[T]{fn build():String}
+derive instance build[T]:Build[T]{fn build():String{
+ initial=shape.builder[T]()
+ comptime for(f in shape.fields[Other]()){_=initial.set(f,1)}
+ "ok"
+}}
+type Other={n:Int}
+type Row={n:Int} derive(Build)
+fn main(){}`, "builder.set requires a field from its exact owner")
+	checkPreludeSource(t, `import "bork/shape"
+class Build[T]{fn build():String}
+derive instance build[T]:Build[T]{fn build():String{
+ initial=shape.builder[T]()
+ comptime for(f in shape.fields[T]()){_=initial.set(f,1)}
+ "ok"
+}}
+type Row={n:Int,lazy next:Int=n+1} derive(Build)
+fn main(){}`, "builder.set cannot supply computed field next")
+	checkPreludeSource(t, `import "bork/shape"
+class Build[T]{fn build():String}
+derive instance build[T]:Build[T]{fn build():String{
+ initial=shape.builder[T]()
+ _=initial.copy(duplicate:"")
+ "ok"
+}}
+type Row={n:Int} derive(Build)
+fn main(){}`, "cannot copy")
+}
+
+func TestDeriveTemplateBuilderProvenance(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred positive(n:Int){n>0}
+class Build[T]{fn build(n:Int):T|shape.ValidationError}
+derive fn supply[A,B](state:B,field:shape.Field[A],value:Int):B {state.set(field,value)}
+derive instance build[T]:Build[T]{fn build(n:Int):T|shape.ValidationError{
+ initial=shape.builder[T]()
+ steps:List[(initial.Type)=>initial.Type]=[comptime for(f in shape.fields[T]()) (state:initial.Type)=>supply[T,initial.Type](state,f,n)]
+ steps.fold(initial,(state,step)=>step(state)).finish()
+}}
+type Row={n:Int where positive} derive(Build)
+fn main(){match(build[Row](-1)){
+ error:shape.ValidationError=>match(error.obligation){
+  .Some{value:fact}=>{println(fact.field);println(fact.index);println(fact.source.contains("main.bork:"));println(fact.owner.contains("Row"))}
+  .None=>println("missing provenance")
+ }
+ _:Row=>println("unexpected success")
+}}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "n\n0\ntrue\ntrue\n" {
+		t.Fatalf("provenance: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplateBuilderGenericPayload(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+class Clone[T]{fn clone(x:T):T|shape.ValidationError}
+derive fn supply[A,B,V](state:B,field:shape.Field[A],value:V):B {state.set(field,value)}
+derive instance clone[T]:Clone[T]{fn clone(x:T):T|shape.ValidationError{
+ initial=shape.builder[T]()
+ steps:List[(initial.Type)=>initial.Type]=[comptime for(f in shape.fields[T]()) (state:initial.Type)=>supply[T,initial.Type,f.Type](state,f,f.read(x))]
+ steps.fold(initial,(state,step)=>step(state)).finish()
+}}
+type Box[A]={value:A} derive(Clone)
+fn main(){println(clone(Box[Int]{value:2}));println(clone(Box[String]{value:"ok"}))}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || !strings.Contains(string(output), "value: 2") || !strings.Contains(string(output), `value: "ok"`) {
+		t.Fatalf("generic payload: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplateBuilderEvaluation(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+fn traced[A](label:String,value:A) uses io:A {println(label);value}
+class Build[T]{fn build(n:Int) uses io:T|shape.ValidationError}
+derive instance build[T]:Build[T]{fn build(n:Int) uses io:T|shape.ValidationError{
+ initial=shape.builder[T]()
+ steps:List[(initial.Type) uses io=>initial.Type]=[comptime for(f in shape.fields[T]()) (state:initial.Type)=>traced("state",state).set(f,traced("input",n))]
+ steps.fold(initial,(state,step)=>step(state)).finish()
+}}
+type Row={n:Int} derive(Build)
+fn main(){println(build[Row](2))}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "state\ninput\nRow { n: 2 }\n" {
+		t.Fatalf("evaluation: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplateBuilderOwnerFacts(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred valid(row:Row){row.n>0}
+class Build[T]{fn build(n:Int):T|shape.ValidationError}
+derive instance build[T]:Build[T]{fn build(n:Int):T|shape.ValidationError{
+ initial=shape.builder[T]()
+ steps:List[(initial.Type)=>initial.Type]=[comptime for(f in shape.fields[T]()) (state:initial.Type)=>state.set(f,n)]
+ steps.fold(initial,(state,step)=>step(state)).finish()
+}}
+type Row={n:Int} where valid derive(Build)
+fn main(){match(build[Row](-1)){
+ error:shape.ValidationError=>{println(error.path);println(error.obligation.map(fact=>fact.field).getOr("missing"));println(error.obligation.map(fact=>fact.index).getOr(-1))}
+ _:Row=>println("unexpected success")
+}}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != ".n\n\n0\n" {
+		t.Fatalf("owner facts: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplateBuilderGenericLazyDependencies(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `import "bork/shape"
+type Cell={}
+instance render:Show[Cell]{fn show(cell:Cell):String{toString(Value)}}
+pred valid[A](n:A){s"$n"!=""}
+class Build[T]{fn build():T|shape.ValidationError}
+derive instance build[T]:Build[T]{fn build():T|shape.ValidationError{shape.builder[T]().finish()}}
+type Row[A]={item:A where valid} derive(Build)
+lazy Value:Int={_=build[Row[Cell]]();1}
+fn main(){println(Value)}`, "cycle")
+}
+
+func TestDeriveTemplateBuilderProvenanceReuse(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred positive(row:Row){row.n>0}
+type Row={n:Int=-1} derive(Probe)
+type First=Row where positive
+type Second=Row where positive
+class Probe[T]{fn probe():List[String]}
+derive fn failure[A]():String {
+ match(shape.builder[A]().finish()) {
+  error:shape.ValidationError=>error.obligation.map(fact=>fact.source).getOr("missing")
+  _=>"success"
+ }
+}
+derive instance probe[T]:Probe[T]{fn probe():List[String]{[
+ match(shape.builder[First]().finish()) {error:shape.ValidationError=>error.obligation.map(fact=>fact.source).getOr("missing"),_:Row=>"success"},
+ match(shape.builder[Second]().finish()) {error:shape.ValidationError=>error.obligation.map(fact=>fact.source).getOr("missing"),_:Row=>"success"},
+ failure[First](),failure[Second]()
+]}}
+fn main(){println(probe[Row]())}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || strings.Count(string(output), "main.bork:4:") != 2 || strings.Count(string(output), "main.bork:5:") != 2 {
+		t.Fatalf("source anchors: %s, %v", output, err)
+	}
+}
+
+func TestDeriveTemplateBuilderHeadProof(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred positive(row:Row){row.n>0}
+type Row={n:Int=2} derive(Probe)
+type Positive=Row where positive
+fn require(row:Positive):Int {row.n}
+class Probe[T]{fn probe():Int}
+derive instance probe[T]:Probe[T]{fn probe():Int{
+ match(shape.builder[Positive]().finish()) {
+  _:shape.ValidationError=>-1
+  row:Row=>require(row)
+ }
+}}
+fn main(){println(probe[Row]())}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "2\n" {
+		t.Fatalf("head proof: %s, %v", output, err)
+	}
+}

@@ -1549,6 +1549,8 @@ func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 		return &ast.CallExpr{Fun: &ast.SelectorExpr{X: ast.NewIdent("fmt"), Sel: ast.NewIdent(fn)}, Args: args}
 	}
 	switch e.Builtin {
+	case check.BuiltinShapeFinish:
+		return g.shapeFinish(e, args[0])
 	case check.BuiltinCallerLocation:
 		return g.callerLocation(e.Pos())
 	case check.BuiltinPrintln:

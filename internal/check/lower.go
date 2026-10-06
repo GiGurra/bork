@@ -421,6 +421,9 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 			out.SourceCall = x
 			return out
 		}
+		if operation := l.info.shapeBuildCalls[x]; operation != nil && operation.layout != nil {
+			return l.shapeBuild(x, at, operation)
+		}
 		if project := l.info.shapeProjects[x]; project != nil {
 			return l.shapeProjection(x, at, project)
 		}

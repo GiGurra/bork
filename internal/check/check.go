@@ -166,6 +166,7 @@ const (
 	BuiltinAssertSnapshot // assertSnapshot(x)
 	BuiltinAssemble
 	BuiltinAssertIsFailure
+	BuiltinShapeFinish
 )
 
 var builtins = map[string]Builtin{
@@ -311,6 +312,9 @@ type Info struct {
 	selectMatches          map[*syntax.Match]bool
 	assemblyTypes          map[*syntax.TypeExpr]Type
 	deriveSourceKinds      map[diag.Pos]string
+	shapeBuildCalls        map[*syntax.Call]*shapeBuildCall
+	shapeBuilderLayouts    map[*Record]*ShapeConstruction
+	shapeBuilderPlans      map[string]*ShapeConstruction
 	shapeProjects          map[*syntax.Call]*shapeProjection
 	shapeViewReads         map[*syntax.Selector]*shapeViewRead
 	shapeViews             map[*Variant]*Record
@@ -1797,6 +1801,11 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 func (c *checker) call(e *syntax.Call, want Type) Type {
 	if t, ok := c.positionalVariantCall(e, want); ok {
 		return t
+	}
+	if operation := c.info.shapeBuildCalls[e]; operation != nil {
+		if result, handled := c.shapeBuildCall(e, operation); handled {
+			return result
+		}
 	}
 	if project := c.info.shapeProjects[e]; project != nil {
 		actual := c.expr(e.Args[0])

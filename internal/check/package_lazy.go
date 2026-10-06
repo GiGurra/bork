@@ -1,6 +1,7 @@
 package check
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/syntax"
@@ -136,15 +137,16 @@ func (c *checker) packageBindingRead(node *syntax.Ident, binding *PackageBinding
 }
 
 type packageDependencies struct {
-	info      *Info
-	values    map[*PackageBinding]bool
-	calls     map[*Func]bool
-	fields    map[*Field]bool
-	instances map[*Func]bool
+	info               *Info
+	values             map[*PackageBinding]bool
+	calls              map[*Func]bool
+	fields             map[*Field]bool
+	instances          map[*Func]bool
+	constructionFields map[string]bool
 }
 
 func newPackageDependencies(info *Info) packageDependencies {
-	return packageDependencies{info: info, values: map[*PackageBinding]bool{}, calls: map[*Func]bool{}, fields: map[*Field]bool{}, instances: map[*Func]bool{}}
+	return packageDependencies{info: info, values: map[*PackageBinding]bool{}, calls: map[*Func]bool{}, fields: map[*Field]bool{}, instances: map[*Func]bool{}, constructionFields: map[string]bool{}}
 }
 
 func (dependencies packageDependencies) instance(instance *Instance) {
@@ -155,25 +157,7 @@ func (dependencies packageDependencies) instance(instance *Instance) {
 	if instance.Func != nil && len(instance.TypeArgs) != 0 && !dependencies.instances[instance.Func] {
 		dependencies.instances[instance.Func] = true
 		bound := bindParams(instance.Func.TypeParams, instance.TypeArgs)
-		WalkComptime(instance.Func.Body, func(node Expr) bool {
-			switch node := node.(type) {
-			case *Interp:
-				for _, value := range node.Exprs {
-					dependencies.render(subst(value.Type(), bound), map[Type]bool{})
-				}
-			case *CallBuiltin:
-				if node.Builtin == BuiltinToString || node.Builtin == BuiltinPrintln || node.Builtin == BuiltinDbg {
-					for _, value := range node.Args {
-						dependencies.render(subst(value.Type(), bound), map[Type]bool{})
-					}
-				}
-			case *Call:
-				dependencies.specializedInstance(node.Inst, bound)
-			case *FuncRef:
-				dependencies.specializedInstance(node.Inst, bound)
-			}
-			return true
-		})
+		dependencies.specializedTree(instance.Func.Body, bound)
 		delete(dependencies.instances, instance.Func)
 	}
 	seen := map[*Dict]bool{}
@@ -186,6 +170,9 @@ func (dependencies packageDependencies) instance(instance *Instance) {
 		if dictionary.Inst != nil {
 			for _, method := range dictionary.Inst.Methods {
 				dependencies.calls[method] = true
+				if len(method.TypeParams) != 0 && len(method.TypeParams) == len(dictionary.TypeArgs) {
+					dependencies.instance(&Instance{Func: method, TypeArgs: dictionary.TypeArgs, Dicts: dictionary.Args})
+				}
 			}
 		}
 		for _, argument := range dictionary.Args {
@@ -195,6 +182,58 @@ func (dependencies packageDependencies) instance(instance *Instance) {
 	for _, dictionary := range instance.Dicts {
 		dict(dictionary)
 	}
+}
+
+// Follow implicit construction calls under the same generic bindings as the
+// calling function; a predicate dictionary may be concrete only at this point.
+func (dependencies packageDependencies) specializedTree(root Expr, bound map[*TypeParam]Type) {
+	WalkComptime(root, func(node Expr) bool {
+		switch node := node.(type) {
+		case *Interp:
+			for _, value := range node.Exprs {
+				dependencies.render(subst(value.Type(), bound), map[Type]bool{})
+			}
+		case *CallBuiltin:
+			if node.Builtin == BuiltinShapeFinish && node.Construction != nil {
+				dependencies.construction(node.Construction, bound)
+			}
+			if node.Builtin == BuiltinToString || node.Builtin == BuiltinPrintln || node.Builtin == BuiltinDbg {
+				for _, value := range node.Args {
+					dependencies.render(subst(value.Type(), bound), map[Type]bool{})
+				}
+			}
+		case *Call:
+			dependencies.specializedInstance(node.Inst, bound)
+		case *FuncRef:
+			dependencies.specializedInstance(node.Inst, bound)
+		}
+		return true
+	})
+}
+
+func (dependencies packageDependencies) construction(layout *ShapeConstruction, bound map[*TypeParam]Type) {
+	owner := subst(layout.Owner, bound)
+	constraints := func(facts []*Constraint, subject Type) {
+		for _, fact := range substConstraints(facts, bound) {
+			dependencies.constraint(fact, subject)
+		}
+	}
+	for _, field := range layout.Fields {
+		if field.Default != nil {
+			key := fmt.Sprintf("%p:%s", field, typeKey(owner))
+			if !dependencies.constructionFields[key] {
+				dependencies.constructionFields[key] = true
+				dependencies.tree(field.Default)
+				if len(bound) != 0 {
+					dependencies.specializedTree(field.Default, bound)
+				}
+			}
+		}
+		constraints(field.Constraints, subst(field.Type, bound))
+	}
+	constraints(TypeConstraints(layout.Owner), owner)
+	constraints(variantConstraints(layout.Variant), owner)
+	constraints(layout.Constraints, owner)
 }
 
 func (dependencies packageDependencies) specializedInstance(instance *Instance, bound map[*TypeParam]Type) {
@@ -217,6 +256,9 @@ func (dependencies packageDependencies) tree(root Expr) {
 				dependencies.render(value.Type(), map[Type]bool{})
 			}
 		case *CallBuiltin:
+			if node.Builtin == BuiltinShapeFinish && node.Construction != nil {
+				dependencies.construction(node.Construction, nil)
+			}
 			if node.Builtin == BuiltinToString || node.Builtin == BuiltinPrintln || node.Builtin == BuiltinDbg {
 				for _, value := range node.Args {
 					dependencies.render(value.Type(), map[Type]bool{})

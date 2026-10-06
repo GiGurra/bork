@@ -225,7 +225,7 @@ func (p *deriveExpansion) runtimeHelper(call *syntax.Call, helper *syntax.FuncDe
 	runtimeIndices := map[int]int{}
 	key := fmt.Sprintf("%s\x00%s\x00%s", pkg.Path, helper.Name, deriveBoundKey(p.instance.Pkg, p.instance.Name, ""))
 	for _, parameter := range helper.TypeParams {
-		key += "\x00" + typeKey(child.env[parameter.Name].(Type)) + "\x00" + deriveFactsKey(child.typeFacts[parameter.Name])
+		key += "\x00" + typeKey(child.env[parameter.Name].(Type)) + "\x00" + deriveObligationsKey(child.typeFacts[parameter.Name])
 	}
 	for i, parameter := range helper.Params {
 		if value, known := p.eval(child.helperArgs[i]); known && metadataValue(value) {

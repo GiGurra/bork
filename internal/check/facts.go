@@ -2577,6 +2577,15 @@ func (f *factChecker) declaredMember(x Expr, m Type) []known {
 		for _, con := range f.argFactsFor(x, m) {
 			out = append(out, f.knownOf(con, noParams)...)
 		}
+	case *CallBuiltin:
+		if x.Builtin == BuiltinShapeFinish && x.Construction != nil && identical(x.Construction.Owner, m) {
+			for _, con := range x.Construction.Constraints {
+				out = append(out, f.knownOf(con, noParams)...)
+			}
+			for _, con := range variantConstraints(x.Construction.Variant) {
+				out = append(out, f.knownOf(con, noParams)...)
+			}
+		}
 	case *VarRef:
 		if x.Var.Kind == VarLet && x.Var.Let.Initializer == nil {
 			out = append(out, f.declaredMember(x.Var.Let.Value, m)...)

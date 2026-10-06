@@ -186,6 +186,7 @@ func (p *deriveExpansion) projectedTypeArg(t *syntax.TypeExpr) (Type, []*Constra
 	defer func() { p.c.pkg = saved }()
 	typ := p.c.resolveType(written)
 	facts := p.c.constraintsOf(written, typ, p.c.paramScope())
+	p.c.whereReported(t) // The metadata query consumed these source obligations.
 	return typ, facts
 }
 
@@ -283,8 +284,16 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 		if origin, present := p.origins[x.Name]; ok && present {
 			p.c.noteDeriveSource(x.Pos, x.Name, origin, "variable")
 		}
+		if _, runtime := value.(shapeRuntimeType); runtime {
+			return nil, false
+		}
 		return value, ok
 	case *syntax.Selector:
+		if id, yes := x.X.(*syntax.Ident); yes && x.Name == "Type" {
+			if runtime, known := p.env[id.Name].(shapeRuntimeType); known {
+				return runtime.typ, true
+			}
+		}
 		value, ok := p.eval(x.X)
 		if !ok {
 			return nil, false
@@ -571,7 +580,16 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 					}
 				}
 			}
-			out.Stmts = append(out.Stmts, p.clone(reflect.ValueOf(stmt)).Interface().(syntax.Stmt))
+			expanded := p.clone(reflect.ValueOf(stmt)).Interface().(syntax.Stmt)
+			out.Stmts = append(out.Stmts, expanded)
+			if binding, ok := expanded.(*syntax.Binding); ok {
+				if call, yes := binding.Value.(*syntax.Call); yes {
+					if operation := p.c.info.shapeBuildCalls[call]; operation != nil && operation.operation == "create" {
+						p.env[binding.Name] = shapeRuntimeType{operation.layout.Storage}
+						p.origins[binding.Name] = binding.Pos
+					}
+				}
+			}
 			if binding, ok := stmt.(*syntax.Binding); ok {
 				p.names[binding.Name] = true
 			}
@@ -594,6 +612,9 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 		}
 	case *syntax.Call:
 		if id, ok := x.Fun.(*syntax.Ident); ok {
+			if p.shapeCall(id.Name) == "builder" {
+				return p.builderCreation(x, nil)
+			}
 			if p.shapeCall(id.Name) == "fail" {
 				if len(x.TypeArgs) != 0 || len(x.Args) != 1 {
 					p.error(x.Pos, "shape.fail takes one compile-time String message")
@@ -618,6 +639,18 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 					return p.literal(x.Pos, value)
 				}
 				return p.runtimeHelper(x, helper, pkg)
+			}
+		}
+		if selector, ok := x.Fun.(*syntax.Selector); ok {
+			if selector.Name == "builder" {
+				if value, known := p.eval(selector.X); known {
+					if variant, yes := value.(shapeVariant); yes {
+						return p.builderCreation(x, variant.variant)
+					}
+				}
+			}
+			if expanded := p.builderOperation(x, selector); expanded != nil {
+				return expanded
 			}
 		}
 		if selector, ok := x.Fun.(*syntax.Selector); ok && selector.Name == "project" {
@@ -821,6 +854,9 @@ func (p *deriveExpansion) clone(value reflect.Value) reflect.Value {
 			typ, yes := p.env[written.Name].(Type)
 			var projected *Field
 			if owner, member, ok := strings.Cut(written.Name, "."); ok && member == "Type" {
+				if runtime, known := p.env[owner].(shapeRuntimeType); known {
+					typ, yes = runtime.typ, true
+				}
 				if variant, known := p.env[owner].(shapeVariant); known {
 					view := p.variantView(variant.variant)
 					if view != nil {
