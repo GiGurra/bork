@@ -136,7 +136,7 @@ and one lane, following the [OWASP password storage recommendation](https://chea
 parallelism 1–16. These bounds also limit work when verifying untrusted hashes.
 Overrides below the defaults are supported for testing or an explicit app
 policy; defaults are recommended for password storage. Argon2id has no bcrypt
-72-byte password limit. 
+72-byte password limit.
 
 `VerifyPassword` returns false for a wrong password and Error for a malformed,
 unsupported or out-of-bounds hash. It also accepts legacy bcrypt 2/2a/2b/2y
