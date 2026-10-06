@@ -26,6 +26,16 @@ type Outer = { sibling: String = "default", credentials: Option[Credentials] } d
 type Deep = { outer: Option[Outer] } derive (codec.Decode, codec.Encode)
 type Groups = { credentials: Option[Credentials], empty: Empty } derive (codec.Decode, codec.Encode)
 type Options = { db: Db codec { name: "database", aliases: ["oldDb"] }, optional: Option[Db] } derive (codec.Decode, codec.Encode)
+type Mode = sealed { Quiet, Loud codec { aliases: ["verbose"] }, Other(String) codec { fallback: true } } derive (codec.Decode, codec.Encode)
+type EnumDb = { level: Mode = Mode.Quiet, levels: List[Mode] = [] cli { collection: cli.Collection.Csv } } derive (codec.Decode, codec.Encode)
+type EnumOptions = { db: EnumDb codec { name: "database" } } derive (codec.Decode, codec.Encode)
+fn enumSuggest(request: cli.CompletionRequest, s: Scope): cli.Suggestions | cli.Error {
+ match (request.partial.Get[Mode]("db.level")) {
+  value: Mode => cli.Suggestions {choices:[.{value:json.Encode(value)}]}
+  _: cli.Missing => cli.Suggestions {choices:[.{value:"missing"}]}
+  error: codec.DecodeError => cli.Error {errors:[error]}
+ }
+}
 type StrictDb = { host: String = "localhost" } codec { unknown: codec.Unknown.Reject } derive (codec.Decode, codec.Encode)
 type StrictOptions = { db: StrictDb } derive (codec.Decode, codec.Encode)
 type Opaque = { host: String } derive (codec.Encode)
@@ -50,6 +60,14 @@ fn main() {
  args = process.Args()
  mode = args.head().getOr("normal")
  args = args.drop(1)
+ if (mode == "enum") {
+  match (cli.ParseWith[EnumOptions]("app", "Enum", args, completions:[.{field:"db.level",suggest:enumSuggest}])) {
+   help: cli.Help => {println(help.text);eprintln(help.diagnostics)}
+   value: EnumOptions => println(json.Encode(value))
+   error: cli.Error => println(error.Render("app"))
+  }
+  return
+ }
  if (mode == "deep") {
   println(cli.Parse[Deep]("app", "Deep", args))
   return
@@ -123,6 +141,11 @@ fn main() {
 		name, mode              string
 		args, env, want, absent []string
 	}{
+		{"nested enum alias", "enum", []string{"--database-level", "verbose"}, nil, []string{`"level":"LOUD"`}, nil},
+		{"nested enum unknown wire path", "enum", []string{"--database-level", "future"}, nil, []string{".database.level", "must be one of"}, nil},
+		{"nested enum csv names", "enum", []string{"--database-levels", "QUIET,verbose"}, nil, []string{`"levels":["QUIET","LOUD"]`}, nil},
+		{"nested enum csv unknown", "enum", []string{"--database-levels", "QUIET,future"}, nil, []string{".database.levels[1]", "must be one of"}, nil},
+		{"nested enum partial unknown retained", "enum", []string{"__completeNoDesc", "--database-level", "future", "--database-level", ""}, nil, []string{".database.level", "must be one of", ":1"}, []string{"missing"}},
 		{"optional required group absent", "groups", nil, nil, []string{`"credentials":null`, `"empty":{}`}, nil},
 		{"optional required group complete", "groups", []string{"--credentials-user", "Ada"}, nil, []string{`"credentials":{"user":"Ada","enabled":false}`}, nil},
 		{"optional group missing required leaf", "groups", []string{"--credentials-enabled"}, nil, []string{`.credentials.user`, `is missing`}, nil},
