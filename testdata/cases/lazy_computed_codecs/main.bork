@@ -20,7 +20,7 @@ fn zero[T: GoStruct](): T | GoValueError unsafe go {
  if len(errs)>0{return errs[0]};return result
 }
 fn fields[T: GoStruct](): Int unsafe go {return int64(len(_d_T_GoStruct.Fields()))}
-fn decoders[T: codec.Decode](): Int { codec.Schema[T]().map(schema => schema.fields.length()).getOr(0) }
+fn schemaFields[T: codec.Decode](): Int { codec.Schema[T]().map(schema => schema.fields.length()).getOr(0) }
 fn decode(text: String) uses io {
   result: Config | json.JsonError | codec.DecodeError = json.Decode(text)
   match (result) { c: Config => { println(c.doubled); println(json.Encode(c)) }, e: json.JsonError => println(e), e: codec.DecodeError => println(s"error ${e.path}: ${e.message}") }
@@ -28,7 +28,7 @@ fn decode(text: String) uses io {
 fn main() {
   c = Config { n: 3 }; println(json.Encode(c))
   match (round(c)) { v: Config => println(v.doubled), e: GoValueError => println(e) }
-  println(fields[Config]()); println(decoders[Config]())
+  println(fields[Config]()); println(schemaFields[Config]())
   println(zero[Config]())
   decode("{\"n\":5}")
   decode("{\"n\":0}")

@@ -20,8 +20,8 @@ primitive/container instances. `bork/json` parses and renders text.
 `bork/encoding` supplies CSV, while cli, env, sql and http consume the tree or
 codec dictionaries. CLI, env, CSV and HTTP access `_borkDecodeFields`, a hidden
 schema on derived Decode dictionaries; it includes independent field decoders,
-default providers, descriptions, scalar kinds and optionality. GoStruct also
-uses those decoders for field metadata. Removing compiler codec generation
+default providers, descriptions, scalar kinds and optionality. GoStruct then
+also used those decoders for field metadata. Removing compiler codec generation
 without replacing this schema would break more than JSON round trips.
 
 GoStruct is currently an empty prelude class. The checker prepares Go mirror

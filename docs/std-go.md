@@ -317,11 +317,11 @@ another foreign-record class `C`, `_d_T_C` has the same members):
   `Default`, `GoName` and ordered `Tags` (`Name`, `Value`). It carries no codec
   information.
 
-`GoStruct` does not require deriving `Decode`. Field decoders and kinds come
-from the selected Decode instance's [schema](#decode-schema): derive
-`codec.Decode` too and pass `codec.Schema[T]()` to the adapter. (Earlier
-versions put `Kind` and an optional `Decode` callback in `Fields()`.) Its instances are created by
-`derive` and imported with `use`, like other derived instances. `_borkToGo` and
+`GoStruct` does not require deriving `Decode`. Its instances are created by
+`derive` and imported with `use`, like other derived instances. Field decoders
+and kinds come from the selected Decode instance's [schema](#decode-schema):
+derive `codec.Decode` too and pass `codec.Schema[T]()` to the adapter. Earlier
+versions put `Kind` and an optional `Decode` callback in `Fields()`. `_borkToGo` and
 `_borkFromGo[T]` also work for these generated records as they do for mirrors.
 
 ## User Go dependencies
