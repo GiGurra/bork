@@ -33,8 +33,9 @@ fn Dial(address: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net + state + 
   return Connection{handle: handle, owner: s.Own(func() { handle.Close(); raw.Close() })}
 }
 
-// Listen starts a TCP server. Each handler receives a connection and its own
-// scope. Closing the server's scope cancels connections and waits for handlers.
+// Listen starts a TCP server and runs the handler in the background, one task
+// per connection. Each handler receives a connection and its own scope.
+// Closing the server's scope cancels connections and waits for handlers.
 fn Listen(address: String, s: Scope, handler: (Connection, Scope) => Ok | IoError | Cancelled) uses net + state: Server | IoError | Cancelled unsafe go {
   import "bufio"
   import "net"
