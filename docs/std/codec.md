@@ -114,7 +114,7 @@ Fields and variants can declare exact decode-only `aliases`. For example, `codec
 
 A field's `omit` policy controls object encoding: `codec.Omit.Never` (the default) always writes the field; `None` skips `Option.None`; `Default` skips a value equal to its declared default; `NoneOrDefault` applies both. Decoding still uses the field's ordinary optional/default rules.
 
-Derivation checks omission can round-trip. `None` requires an `Option` with no default or a `None` default; a `Some` default would change an omitted `None`. `Default` requires an eager default and equality on the field type. `NoneOrDefault` must satisfy both requirements. Computed, lazy, and positional fields cannot select omission. CSV encoding keeps all columns and ignores this object-encoding policy.
+Derivation checks omission can round-trip. `None` requires an `Option` with no default or a `None` default; a `Some` default would change an omitted `None`. `Default` requires an eager default and equality on the field type. `NoneOrDefault` must satisfy both requirements. Computed, lazy, and positional fields cannot select omission. CSV encoding requires all schema columns; a row whose encoder omitted a field is rejected. Use `Omit.Never` for fields written to CSV.
 
 `codec.VariantTags` provides `fallback: Bool = false`. Mark one positional String alternative to preserve unknown enum names:
 
