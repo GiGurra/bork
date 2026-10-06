@@ -39,22 +39,27 @@ fn main() {
 }
 ```
 
-`findUser` returns one of two outcomes, and `match` must handle both. `describe` only accepts ids proven positive, and it is pure: only `greet` says it does I/O. Break any of these rules and `bork check users.bork` stops you:
+`findUser` returns one of two outcomes, and `match` must handle both. `pred` declares a check, and `where positive` makes every caller of `describe` prove it. `describe` is also pure: only `greet` says it does I/O. Break any of these rules and `bork check users.bork` stops you:
 
 ```text
 users.bork:15:3: match is not exhaustive: missing NotFound
 users.bork:23:20: describe requires id to be positive, but that is not proven for id (check it first with if (positive(id)) { ... }, or require it: id: Int where positive)
-users.bork:18:7: describe uses io (it calls println), but its signature allows no effects; declare it: uses io
+users.bork:15:3: describe uses io (it calls println), but its signature allows no effects; declare it: uses io
 ```
 
-Those come from deleting the `NotFound` arm, calling `describe(id)` without the `if`, and adding a `println` to `describe`.
+Those come from three separate edits: deleting the `NotFound` arm, calling `describe(id)` in `greet` without the `if`, and adding `println(id)` as the first line of `describe`.
 
 ## Install
 
-bork needs [Go](https://go.dev/dl/) to compile programs. Then either:
+bork compiles through [Go](https://go.dev/dl/). With Go installed:
 
 ```sh
 go install github.com/GiGurra/bork/cmd/bork@latest
+```
+
+Or with Homebrew, which installs Go for you:
+
+```sh
 brew install gigurra/tap/bork
 ```
 
