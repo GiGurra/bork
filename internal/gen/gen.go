@@ -1627,9 +1627,13 @@ func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 		return g.shapeFinish(e, args[0])
 	case check.BuiltinCallerLocation:
 		return g.callerLocation(e.Pos())
-	case check.BuiltinPrintln:
+	case check.BuiltinPrintln, check.BuiltinEprintln:
 		for i := range args {
 			args[i] = g.str(args[i], e.Args[i].Type())
+		}
+		if e.Builtin == check.BuiltinEprintln {
+			g.imports["os"] = true
+			return fmtCall("Fprintln", append([]ast.Expr{&ast.SelectorExpr{X: ast.NewIdent("os"), Sel: ast.NewIdent("Stderr")}}, args...)...)
 		}
 		return fmtCall("Println", args...)
 	case check.BuiltinToString:

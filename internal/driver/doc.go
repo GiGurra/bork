@@ -18,10 +18,10 @@ import (
 
 type DocOptions struct{ All, HTML bool }
 type docTarget struct {
-	path, directory    string
-	owner              module
-	version            string
-	external, standard bool
+	path, directory             string
+	owner                       module
+	version                     string
+	external, standard, builtin bool
 }
 
 // Doc returns a complete document only after every requested package checks.
@@ -45,7 +45,7 @@ func Doc(path string, opts DocOptions) ([]byte, error) {
 	for _, target := range targets {
 		var loaded *loadedSources
 		var goModule *goModuleInputs
-		if !target.external && !target.standard {
+		if !target.external && !target.standard && !target.builtin {
 			loaded, goModule, err = loadCompilationInputsFrom(target.directory, nil, func() *sourceSnapshot {
 				snapshot := newSourceSnapshot()
 				snapshot.localDependencies = true
@@ -68,11 +68,17 @@ func Doc(path string, opts DocOptions) ([]byte, error) {
 			return nil, err
 		}
 		api := check.API(program.info, program.files, target.path)
+		if target.builtin {
+			api = check.BuiltinAPI(program.info, program.files)
+		}
 		if api == nil {
 			return nil, fmt.Errorf("no checked API for %s", target.path)
 		}
 		for i := range api.Declarations {
 			pos := &api.Declarations[i].Position
+			if target.builtin {
+				continue
+			}
 			if target.standard {
 				pos.File = strings.TrimPrefix(pos.File, target.path+"/")
 			} else {
@@ -129,6 +135,12 @@ func docNamesCurrent(a *EditorAnalysis, context *goContext) bool {
 }
 
 func docTargets(path string, all bool, reader *sourceSnapshot) ([]docTarget, error) {
+	if path == "builtin" {
+		if all {
+			return nil, fmt.Errorf("--all is not supported for builtin; it is one API")
+		}
+		return []docTarget{{path: path, builtin: true}}, nil
+	}
 	isDir, err := reader.isDirectory(path)
 	if err == nil {
 		directory := path
@@ -259,14 +271,25 @@ func loadDocTarget(target docTarget, inputs *sourceSnapshot) (*loadedSources, *g
 	}
 	l := &loader{mod: owner, owners: map[string]module{}, inputs: inputs, diags: diags, state: map[string]int{}}
 	l.preludeFiles(diags)
+	root := target.path
+	if target.builtin {
+		// A synthetic standard root keeps the caller's manifests out of the
+		// embedded API check, while providing the checker a root package.
+		root = std.Prefix + "builtin"
+		file := syntax.Parse(root+"/<bork-doc>", []byte("fn main() {}\n"), diags)
+		file.Package = root
+		l.files = append(l.files, file)
+	}
 	if target.external {
 		cwd, _ := inputs.workingDirectory()
 		file := syntax.Parse(filepath.Join(cwd, "<bork-doc>"), []byte("fn main() {}\n"), diags)
 		file.Package = owner.path
 		l.files = append(l.files, file)
 	}
-	if err := l.loadImport(&syntax.Import{Path: target.path, Name: "documented"}); err != nil {
-		return nil, nil, err
+	if !target.builtin {
+		if err := l.loadImport(&syntax.Import{Path: target.path, Name: "documented"}); err != nil {
+			return nil, nil, err
+		}
 	}
 	if diags.Len() != 0 {
 		return nil, nil, &DiagError{Diags: diags}
@@ -275,5 +298,5 @@ func loadDocTarget(target docTarget, inputs *sourceSnapshot) (*loadedSources, *g
 	if err != nil {
 		return nil, nil, err
 	}
-	return &loadedSources{Files: l.files, Root: target.path, Diags: diags, Inputs: inputs}, goModule, nil
+	return &loadedSources{Files: l.files, Root: root, Diags: diags, Inputs: inputs}, goModule, nil
 }

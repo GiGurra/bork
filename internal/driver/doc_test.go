@@ -200,3 +200,50 @@ func TestDocExternalGoNamesCurrent(t *testing.T) {
 		t.Fatal("changed external Go names accepted")
 	}
 }
+
+func TestDocBuiltin(t *testing.T) {
+	for _, html := range []bool{false, true} {
+		out, err := Doc("builtin", DocOptions{HTML: html})
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(out)
+		for _, want := range []string{"builtin", "println", "eprintln", "toInt8", "String", "List[T]", "Map[K, V]", "Option", "Seq", "Bytes", "Channel", "Task", "Atom", "Scope", "Mock", "prepend", "onClose", "scopeOf", "waitFor", "uses io", "where", "= []", "prelude/"} {
+			if !strings.Contains(text, want) {
+				t.Errorf("missing builtin API %q (html=%v)", want, html)
+			}
+		}
+		for _, hidden := range []string{"compilerSelect", "compilerCallerLocation", "SelectHandle", "_bork", "unsafe Go", "## bork/"} {
+			if strings.Contains(text, hidden) {
+				t.Errorf("internal API %q leaked (html=%v)", hidden, html)
+			}
+		}
+		again, err := Doc("builtin", DocOptions{HTML: html})
+		if err != nil || !bytes.Equal(out, again) {
+			t.Fatalf("builtin output is not deterministic: %v", err)
+		}
+	}
+	if _, err := Doc("builtin", DocOptions{All: true}); err == nil {
+		t.Fatal("builtin --all accepted")
+	}
+}
+
+func TestDocBuiltinOutsideProject(t *testing.T) {
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(old) }()
+	if _, err := Doc("builtin", DocOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ModFile, []byte("invalid manifest\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Doc("builtin", DocOptions{}); err != nil {
+		t.Fatalf("caller manifest affected embedded API: %v", err)
+	}
+}

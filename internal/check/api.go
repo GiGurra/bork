@@ -32,10 +32,18 @@ func API(info *Info, files []*syntax.File, path string) *PackageAPI {
 	if pkg == nil {
 		return nil
 	}
+	return packageAPI(pkg, files, path, false)
+}
+
+func packageAPI(pkg *Package, files []*syntax.File, path string, builtin bool) *PackageAPI {
+	visible := Exported
+	if builtin {
+		visible = PreludeVisible
+	}
 	out := &PackageAPI{Path: path}
 	var sources []*syntax.File
 	for _, f := range files {
-		if !f.Prelude && f.Package == path {
+		if builtin && f.Prelude || !builtin && !f.Prelude && f.Package == path {
 			sources = append(sources, f)
 		}
 	}
@@ -55,12 +63,12 @@ func API(info *Info, files []*syntax.File, path string) *PackageAPI {
 		out.Declarations = append(out.Declarations, APIDeclaration{kind, name, receiver, signature, doc, pos})
 	}
 	for name, e := range pkg.types {
-		if Exported(name) {
+		if visible(name) {
 			add("type", name, "", apiType(e.decl, sources), e.decl.Pos)
 		}
 	}
 	for name, fn := range pkg.Funcs {
-		if fn.Decl == nil || fn.Of != nil || fn.Synthetic || fn.Class != nil || !Exported(name) {
+		if fn.Decl == nil || fn.Of != nil || fn.Synthetic || fn.Class != nil || !visible(name) {
 			continue
 		}
 		kind := "function"
@@ -73,19 +81,19 @@ func API(info *Info, files []*syntax.File, path string) *PackageAPI {
 		add(kind, name, "", apiFunction(fn), fn.Decl.Pos)
 	}
 	for name, helper := range pkg.deriveHelpers {
-		if Exported(name) {
+		if visible(name) {
 			add("derive helper", name, "", DeriveHelperSignature(helper), helper.Pos)
 		}
 	}
 	for _, methods := range pkg.methods {
 		for name, fn := range methods {
-			if Exported(name) {
+			if visible(name) {
 				add("method", name, writtenTypeText(fn.Decl.Params[0].Type), apiFunction(fn), fn.Decl.Pos)
 			}
 		}
 	}
 	for name, class := range pkg.classes {
-		if !Exported(name) {
+		if !visible(name) {
 			continue
 		}
 		var signatures []string
@@ -99,7 +107,7 @@ func API(info *Info, files []*syntax.File, path string) *PackageAPI {
 		add("class", name, "", "class "+name+apiParams(class.Decl.TypeParams)+" {\n"+strings.Join(signatures, "\n")+"\n}", class.Decl.Pos)
 	}
 	for _, instance := range pkg.instances {
-		if Exported(instance.Name) && instance.Decl != nil {
+		if visible(instance.Name) && instance.Decl != nil {
 			sig := "instance " + instance.Name + apiParams(instance.Decl.TypeParams) + ": " + qualify(instance.Class.Name, instance.Class.Pkg, pkg) + "[" + writtenTypeText(instance.Decl.Type) + "]"
 			if instance.Derived != "" {
 				sig = "instance " + instance.Name + apiParams(instance.Decl.TypeParams) + ": " + qualify(instance.Class.Name, instance.Class.Pkg, pkg) + "[" + TypeText(instance.Type, pkg) + "]"
@@ -111,7 +119,7 @@ func API(info *Info, files []*syntax.File, path string) *PackageAPI {
 		}
 	}
 	for name, bundle := range pkg.bundles {
-		if Exported(name) {
+		if visible(name) {
 			var names []string
 			for _, item := range bundle.decl.Items {
 				names = append(names, item.Name)
@@ -121,7 +129,7 @@ func API(info *Info, files []*syntax.File, path string) *PackageAPI {
 	}
 
 	for name, a := range pkg.ambients {
-		if Exported(name) {
+		if visible(name) {
 			sig := "ambient " + name + ": " + writtenTypeText(a.Decl.Type)
 			if a.Logged {
 				sig = "logged " + sig
@@ -133,7 +141,7 @@ func API(info *Info, files []*syntax.File, path string) *PackageAPI {
 		}
 	}
 	for name, b := range pkg.bindings {
-		if Exported(name) {
+		if visible(name) {
 			typ := TypeText(b.Type, pkg)
 			if b.Decl.Type != nil {
 				typ = writtenTypeText(b.Decl.Type)

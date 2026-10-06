@@ -162,7 +162,7 @@ func (e *deriveEffects) call(call *syntax.Call, signature *deriveCallSignature, 
 		return
 	}
 	if signature == nil {
-		if kind := builtins[id.Name]; kind == BuiltinPrintln || kind == BuiltinAssertSnapshot {
+		if kind := builtins[id.Name]; kind == BuiltinPrintln || kind == BuiltinEprintln || kind == BuiltinAssertSnapshot {
 			e.uses.add(EffIO, call.Pos, id.Name)
 		}
 		return
