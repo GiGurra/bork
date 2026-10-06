@@ -347,6 +347,10 @@ func (a *executionAuditor) dict(dict *Dict, depth int) {
 		a.reject("unresolved or generic dictionary")
 		return
 	}
+	if len(dict.Inst.Captures) != 0 {
+		a.reject("dictionary captures runtime predicate arguments")
+		return
+	}
 	for _, arg := range dict.Args {
 		a.dict(arg, depth+1)
 	}

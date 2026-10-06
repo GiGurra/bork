@@ -37,22 +37,26 @@ type Enricher = (List[FieldSpec], FieldSpec) uses nothing => FieldSpec
 fn resolve[T: codec.Decode](flags: List[Flag], settings: Settings, name: String): List[FieldSpec] | Error {
   resolveFields[T](flags, settings, name, flagName)
 }
-fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: String, makeName: (String) => String): List[FieldSpec] | Error unsafe go {
+fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: String, makeName: (String) => String): List[FieldSpec] | Error {
+  resolveFieldsWithSchema[T](codec.Schema[T](), flags, settings, name, makeName)
+}
+fn resolveFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchema], flags: List[Flag], settings: Settings, name: String, makeName: (String) => String): List[FieldSpec] | Error unsafe go {
   import "fmt"
   import "strings"
   import "unicode"
-  schema, supported := _borkDecodeFields(_d_T_Decode)
+  record, supported := _borkOptionGet(recordSchema)
+  schema := record.fields
   if !supported { return Error{errors: []codec.DecodeError{{path: name, message: "CLI options require a derived record decoder"}}} }
   errors := []codec.DecodeError{}
   fail := func(field, message string) { errors = append(errors, codec.DecodeError{path: field, message: message}) }
   metadata := map[string]Flag{}
   for _, flag := range flags {
     found := false
-    for _, field := range schema { if field.Name == flag.field { found = true; break } }
+    for _, field := range schema { if field.name == flag.field { found = true; break } }
     if !found {
       closest, distance := "", int(^uint(0)>>1)
       for _, field := range schema {
-        left, right := []rune(flag.field), []rune(field.Name)
+        left, right := []rune(flag.field), []rune(field.name)
         row := make([]int, len(right)+1)
         for j := range row { row[j] = j }
         for i, a := range left {
@@ -60,7 +64,7 @@ fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: S
           for j, b := range right { old := row[j+1]; cost := 0; if a != b { cost = 1 }; row[j+1] = min(row[j]+1, row[j+1]+1, prev+cost); prev = old }
         }
         d := row[len(right)]
-        if d < distance || d == distance && field.Name < closest { closest, distance = field.Name, d }
+        if d < distance || d == distance && field.name < closest { closest, distance = field.name, d }
       }
       message := "unknown CLI field"
       if closest != "" { message += fmt.Sprintf("; closest field is %q", closest) }
@@ -95,7 +99,7 @@ fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: S
   positions := map[int64]string{}
   positionalNames := map[string]string{}
   schemaIndex := map[string]int{}
-  for i, field := range schema { schemaIndex[field.Name] = i }
+  for i, field := range schema { schemaIndex[field.name] = i }
   isPositional := func(spec FieldSpec) bool { _, positioned := spec.position.(Option_Some[int64]); return spec.positional || positioned }
   validLong := func(name string) bool {
     return name != "" && !strings.HasPrefix(name, "-") && strings.IndexFunc(name, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' }) < 0
@@ -106,11 +110,11 @@ fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: S
     return true
   }
   for _, field := range schema {
-    flag, exists := metadata[field.Name]
-    if !exists { flag = Flag{field: field.Name, long: Mapping_Auto{}, shortName: Mapping_Auto{}, envName: Mapping_Auto{}, description: Option_None[string]{}, config: true, position: Option_None[int64]{}} }
-    doc := field.Doc
+    flag, exists := metadata[field.name]
+    if !exists { flag = Flag{field: field.name, long: Mapping_Auto{}, shortName: Mapping_Auto{}, envName: Mapping_Auto{}, description: Option_None[string]{}, config: true, position: Option_None[int64]{}} }
+    doc := field.doc
     if description, ok := flag.description.(Option_Some[string]); ok { doc = description.E0 }
-    spec := FieldSpec{field: field.Name, long: flag.long, short: flag.shortName, env: flag.envName, description: doc, positional: flag.positional, position: flag.position, configFile: flag.configFile, config: flag.config, hidden: flag.hidden, deprecated: flag.deprecated, choices: flag.choices, strictChoices: flag.strictChoices, files: flag.files, directories: flag.directories, keepOrder: flag.keepOrder}
+    spec := FieldSpec{field: field.name, long: flag.long, short: flag.shortName, env: flag.envName, description: doc, positional: flag.positional, position: flag.position, configFile: flag.configFile, config: flag.config, hidden: flag.hidden, deprecated: flag.deprecated, choices: flag.choices, strictChoices: flag.strictChoices, files: flag.files, directories: flag.directories, keepOrder: flag.keepOrder}
     derive := func(spec FieldSpec) FieldSpec {
       if _, auto := spec.long.(Mapping_Auto); auto {
         spec.long = Mapping_Disabled{}
@@ -135,68 +139,63 @@ fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: S
     }
     spec = derive(spec)
     for _, enrich := range settings.enrichers { spec = enrich(append([]FieldSpec{}, specs...), spec) }
-    if spec.field != field.Name { fail(field.Name, "enricher must preserve field identity") }
+    if spec.field != field.name { fail(field.name, "enricher must preserve field identity") }
     spec = derive(spec)
     long, short, env := nameOf(spec.long), nameOf(spec.short), nameOf(spec.env)
     if _, named := spec.long.(Mapping_Named); named {
-      if !validLong(long) { fail(field.Name, "long flag must contain letters, digits, hyphens, or underscores and not start with a hyphen") }
-      if long == "help" { fail(field.Name, "flag name is reserved for help") }
-      if isPositional(spec) { fail(field.Name, "positional field cannot have a long flag") }
-      if previous, duplicate := names[long]; duplicate { fail(field.Name, "flag name duplicates " + previous) }
-      names[long] = field.Name
+      if !validLong(long) { fail(field.name, "long flag must contain letters, digits, hyphens, or underscores and not start with a hyphen") }
+      if long == "help" { fail(field.name, "flag name is reserved for help") }
+      if isPositional(spec) { fail(field.name, "positional field cannot have a long flag") }
+      if previous, duplicate := names[long]; duplicate { fail(field.name, "flag name duplicates " + previous) }
+      names[long] = field.name
     }
     if _, named := spec.short.(Mapping_Named); named {
-      if len(short) != 1 || short[0] > 127 { fail(field.Name, "short flag must be one ASCII character") }
-      if short == "h" { fail(field.Name, "short flag h is reserved for help") }
-      if long == "" || isPositional(spec) { fail(field.Name, "short flag requires an enabled long flag") }
-      if previous, duplicate := shorts[short]; duplicate { fail(field.Name, "short flag duplicates " + previous) }
-      shorts[short] = field.Name
+      if len(short) != 1 || short[0] > 127 { fail(field.name, "short flag must be one ASCII character") }
+      if short == "h" { fail(field.name, "short flag h is reserved for help") }
+      if long == "" || isPositional(spec) { fail(field.name, "short flag requires an enabled long flag") }
+      if previous, duplicate := shorts[short]; duplicate { fail(field.name, "short flag duplicates " + previous) }
+      shorts[short] = field.name
       occupied[short] = true
     }
     if _, named := spec.env.(Mapping_Named); named {
-      if !validEnv(env) { fail(field.Name, "environment variable must be an identifier") }
-      if previous, duplicate := envs[env]; duplicate { fail(field.Name, "environment variable duplicates " + previous) }
-      envs[env] = field.Name
+      if !validEnv(env) { fail(field.name, "environment variable must be an identifier") }
+      if previous, duplicate := envs[env]; duplicate { fail(field.name, "environment variable duplicates " + previous) }
+      envs[env] = field.name
     }
     if isPositional(spec) {
-      display := makeName(field.Name)
-      if previous, duplicate := positionalNames[display]; duplicate { fail(field.Name, "positional name duplicates " + previous) }
-      positionalNames[display] = field.Name
+      display := makeName(field.name)
+      if previous, duplicate := positionalNames[display]; duplicate { fail(field.name, "positional name duplicates " + previous) }
+      positionalNames[display] = field.name
     }
     if spec.positional {
-      if positional != "" { fail(field.Name, "positional field duplicates " + positional) }
-      positional = field.Name
+      if positional != "" { fail(field.name, "positional field duplicates " + positional) }
+      positional = field.name
     }
     if position, positioned := spec.position.(Option_Some[int64]); positioned {
-      if spec.positional { fail(field.Name, "position and positional cannot both be specified") }
-      if position.E0 < 0 { fail(field.Name, "position must be nonnegative") }
-      if previous, duplicate := positions[position.E0]; duplicate { fail(field.Name, "position duplicates " + previous) }
-      positions[position.E0] = field.Name
+      if spec.positional { fail(field.name, "position and positional cannot both be specified") }
+      if position.E0 < 0 { fail(field.name, "position must be nonnegative") }
+      if previous, duplicate := positions[position.E0]; duplicate { fail(field.name, "position duplicates " + previous) }
+      positions[position.E0] = field.name
       spec.positional = true
     }
     if spec.configFile {
-      if configField != "" { fail(field.Name, "config-file field duplicates " + configField) }
-      if field.Kind != "string" || field.Type != "String" && field.Type != "Option[String]" { fail(field.Name, "config-file field must be String or Option[String]") }
-      configField = field.Name
+      if configField != "" { fail(field.name, "config-file field duplicates " + configField) }
+      if field.kind != "string" || field.typeName != "String" && field.typeName != "Option[String]" { fail(field.name, "config-file field must be String or Option[String]") }
+      configField = field.name
     }
-    if spec.files && spec.directories { fail(field.Name, "choose files or directories, not both") }
+    if spec.files && spec.directories { fail(field.name, "choose files or directories, not both") }
     for _, choice := range spec.choices {
-      if choice.value == "" || strings.ContainsAny(choice.value+choice.description, "\t\n\r") { fail(field.Name, "completion choices must be nonempty and contain no tabs or newlines") }
+      if choice.value == "" || strings.ContainsAny(choice.value+choice.description, "\t\n\r") { fail(field.name, "completion choices must be nonempty and contain no tabs or newlines") }
     }
     if spec.strictChoices {
-      if field.Type != "String" && field.Type != "Option[String]" && field.Type != "List[String]" && field.Type != "Option[List[String]]" { fail(field.Name, "strict choices require String or List[String], optionally wrapped in Option") }
-      if len(spec.choices) == 0 { fail(field.Name, "strict choices require at least one choice") }
+      if field.typeName != "String" && field.typeName != "Option[String]" && field.typeName != "List[String]" && field.typeName != "Option[List[String]]" { fail(field.name, "strict choices require String or List[String], optionally wrapped in Option") }
+      if len(spec.choices) == 0 { fail(field.name, "strict choices require at least one choice") }
       allowed := map[string]bool{}
       for _, choice := range spec.choices { allowed[choice.value] = true }
-      if field.HasDefault {
+      if field.hasDefault {
         defaults := []string{}
-        switch value := field.Default().(type) {
-        case string: defaults = []string{value}
-        case []string: defaults = value
-        case Option_Some[string]: defaults = []string{value.E0}
-        case Option_Some[[]string]: defaults = value.E0
-        }
-        for _, value := range defaults { if !allowed[value] { fail(field.Name, "default is not one of the allowed choices"); break } }
+        if provider, found := _borkOptionGet(field.defaultValue); found { defaults = provider().choices }
+        for _, value := range defaults { if !allowed[value] { fail(field.name, "default is not one of the allowed choices"); break } }
       }
     }
     specs = append(specs, spec)
@@ -208,10 +207,10 @@ fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: S
       name, found := positions[int64(i)]
       if !found { fail("position", "positions must be contiguous starting at zero"); continue }
       field := schema[schemaIndex[name]]
-      list := strings.HasPrefix(field.Kind, "list:")
+      list := strings.HasPrefix(field.kind, "list:")
       if list && i != len(positions)-1 { fail(name, "a List positional must be last") }
-      if !list && !field.Optional && !field.HasDefault && earlierOptional != "" { fail(name, "required positional cannot follow optional/default positional " + earlierOptional) }
-      if !list && (field.Optional || field.HasDefault) { earlierOptional = name }
+      if !list && !field.optional && !field.hasDefault && earlierOptional != "" { fail(name, "required positional cannot follow optional/default positional " + earlierOptional) }
+      if !list && (field.optional || field.hasDefault) { earlierOptional = name }
     }
   }
   if len(errors) != 0 { return Error{errors: errors} }

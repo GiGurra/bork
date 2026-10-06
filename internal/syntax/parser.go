@@ -59,6 +59,19 @@ func parseMode(path, src string, toks []Token, comments []Comment, diags *diag.L
 			break
 		}
 		switch {
+		case p.at(TIdent) && p.tok().Text == "derive" && (p.peekKind() == KwFn || p.peekKind() == TIdent && p.toks[p.i+1].Text == "instance"):
+			p.next()
+			p.inDerivation = true
+			if p.at(KwFn) {
+				if fn := p.funcDecl(); fn != nil {
+					fn.Derivation = true
+					f.DeriveHelpers = append(f.DeriveHelpers, fn)
+				}
+			} else if id := p.instanceDecl(); id != nil {
+				id.Derivation = true
+				f.Templates = append(f.Templates, id)
+			}
+			p.inDerivation = false
 		case p.at(TIdent) && p.tok().Text == "derive" && p.peekKind() == TIdent:
 			if d := p.deriveDecl(); d != nil {
 				f.Derives = append(f.Derives, d)
@@ -193,6 +206,7 @@ func (p *parser) lazyBinding() *Binding {
 type bailout struct{}
 
 type parser struct {
+	inDerivation                bool
 	typeDepth, patternTypeDepth int
 	spans                       *[]ExpressionSpan
 	spanSeen                    map[Expr][]SourceSpan
@@ -694,6 +708,13 @@ func (p *parser) instanceDecl() (id *InstanceDecl) {
 			break
 		}
 		if !p.at(KwFn) {
+			if p.at(TIdent) && p.tok().Text == "metadata" {
+				position := p.next().Pos
+				key := p.typeExpr()
+				p.expect(Assign, "after the metadata type")
+				id.Metadata = append(id.Metadata, &InstanceMetadata{Pos: position, Type: key, Value: p.expr()})
+				continue
+			}
 			p.errorf(p.tok().Pos, "expected a method (fn name(...) { ... }) or '}', found %s", p.tok().Kind)
 			panic(bailout{})
 		}
@@ -1041,6 +1062,10 @@ func (p *parser) typeAtom() *TypeExpr {
 	}
 	t := p.expect(TIdent, "(type name)")
 	te := &TypeExpr{Pos: t.Pos, Name: p.qualify(t)}
+	if p.inDerivation && p.at(Dot) && p.peekKind() == TIdent {
+		p.next()
+		te.Name += "." + p.next().Text
+	}
 	if p.at(LBrack) {
 		p.next()
 		for {
@@ -1835,7 +1860,25 @@ func (p *parser) primary() Expr {
 		if p.peekKind() == Arrow && !p.noLambda {
 			return p.lambda()
 		}
-		// `comptime` is contextual only before a computation block.
+		// Staged controls belong to a derive template; ordinary comptime
+		// blocks retain their existing evaluation semantics.
+		if t.Text == "comptime" && (p.peekKind() == KwFor || p.peekKind() == KwIf || p.peekKind() == KwMatch) {
+			p.next()
+			if !p.inDerivation {
+				p.errorf(t.Pos, "comptime controls are available only inside derive templates and derive helpers")
+			}
+			x := p.primary()
+			switch x := x.(type) {
+			case *For:
+				x.Comptime = true
+			case *If:
+				x.Comptime = true
+			case *Match:
+				x.Comptime = true
+			}
+			return x
+		}
+		// `comptime` is contextual before a computation block.
 		if t.Text == "comptime" && p.peekKind() == LBrace {
 			p.next()
 			return &Comptime{Pos: t.Pos, Body: p.block()}
@@ -1879,6 +1922,35 @@ func (p *parser) primary() Expr {
 	case LBrack:
 		p.next()
 		lit := &ListLit{Pos: t.Pos}
+		p.skipNewlines()
+		if p.at(TIdent) && p.tok().Text == "comptime" && p.peekKind() == KwFor {
+			prefix := p.next()
+			if !p.inDerivation {
+				p.errorf(prefix.Pos, "comptime list comprehensions are available only inside derive templates and derive helpers")
+			}
+			loop := p.forHeader()
+			loop.Comptime, loop.Comprehension = true, true
+			p.skipNewlines()
+			var guard Expr
+			if p.at(TIdent) && p.tok().Text == "comptime" && p.peekKind() == KwIf {
+				p.next()
+				pos := p.next().Pos
+				p.expect(LParen, "after comptime if")
+				guard = &If{Pos: pos, Comptime: true, Cond: p.expr()}
+				p.expect(RParen, "after the comprehension guard")
+				p.skipNewlines()
+			}
+			value := p.expr()
+			if guarded, ok := guard.(*If); ok {
+				guarded.Then = &Block{Pos: value.Position(), Tail: value}
+				value = guarded
+			}
+			loop.Body = &Block{Pos: value.Position(), Tail: value}
+			lit.Elems = []Expr{loop}
+			p.skipNewlines()
+			p.expect(RBrack, "after the comptime list comprehension")
+			return lit
+		}
 		p.list(RBrack, "a list element", func() {
 			p.skipNewlines()
 			lit.Elems = append(lit.Elems, p.expr())
@@ -2228,7 +2300,7 @@ func matchingBrace(s string, from int) int {
 // subExpr parses the expression inside ${...}, starting at pos.
 func (p *parser) subExpr(src string, pos diag.Pos) (x Expr) {
 	toks, _ := lexAt(pos.File, []byte(src), pos.Line, pos.Col, p.diags, p.compiler)
-	sub := &parser{toks: toks, diags: p.diags, imports: p.imports, compiler: p.compiler, spans: p.spans, spanSeen: p.spanSeen}
+	sub := &parser{toks: toks, diags: p.diags, imports: p.imports, compiler: p.compiler, spans: p.spans, spanSeen: p.spanSeen, inDerivation: p.inDerivation}
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(bailout); !ok {
@@ -2445,4 +2517,26 @@ func (p *parser) patternTestTypeAhead() bool {
 		}
 	}
 	return false
+}
+
+// forHeader is shared by block loops and derive list comprehensions.
+func (p *parser) forHeader() *For {
+	pos := p.expect(KwFor, "").Pos
+	p.expect(LParen, "after for")
+	p.skipNewlines()
+	var n Token
+	if p.at(Underscore) {
+		n = p.next()
+	} else {
+		n = p.expect(TIdent, "(iteration variable)")
+	}
+	in := p.expect(TIdent, "in after the iteration variable")
+	if in.Text != "in" {
+		p.errorf(in.Pos, "expected in after the iteration variable")
+	}
+	p.skipNewlines()
+	items := p.expr()
+	p.skipNewlines()
+	p.expect(RParen, "after the iteration source")
+	return &For{Pos: pos, Name: n.Text, NamePos: n.Pos, Items: items}
 }

@@ -99,9 +99,10 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 	f.validatorRequirements()
 	for _, fn := range info.FuncOf {
 		if fn.Requires != nil {
-			f.fn = fn
-			f.walk(fn.Requires, env{})
-			f.constantRequirements(fn.Requires)
+			f.withFunction(fn, func() {
+				f.walk(fn.Requires, env{})
+				f.constantRequirements(fn.Requires)
+			})
 		}
 	}
 	f.fn = nil
@@ -114,6 +115,9 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 				f.function(fn)
 			}
 		}
+	}
+	for _, fn := range info.ExpandedFunctions {
+		f.function(fn)
 	}
 	for _, binding := range info.PackageBindings {
 		f.function(binding.Boundary)
@@ -195,6 +199,7 @@ type factChecker struct {
 	info                *Info
 	diags               *diag.List
 	fn                  *Func
+	deriveRequest       diag.Pos
 	defaultUse          diag.Pos
 	defaultDecl         diag.Pos
 	pending             []pendingQuery
@@ -378,10 +383,11 @@ type obligation struct {
 }
 
 type pendingQuery struct {
-	query Query
-	pos   diag.Pos
-	ob    obligation
-	from  *Package // the package whose code needs it
+	query   Query
+	pos     diag.Pos
+	ob      obligation
+	from    *Package // the package whose code needs it
+	request diag.Pos // derive request for target-dependent template obligations
 }
 
 func (f *factChecker) function(fn *Func) {
@@ -390,9 +396,27 @@ func (f *factChecker) function(fn *Func) {
 	if fn.Decl.Constructor != nil {
 		return
 	}
+	f.withFunction(fn, func() { f.tail(fn.Body, f.entryFacts(fn), f.checkResult) })
+}
+
+// Requirement prewalks and body walks share the same request provenance,
+// including obligations queued for evaluation after either walk finishes.
+func (f *factChecker) withFunction(fn *Func, walk func()) {
+	outerFn, outerRequest := f.fn, f.deriveRequest
+	start := f.diags.Len()
 	f.fn = fn
-	f.tail(fn.Body, f.entryFacts(fn), f.checkResult)
-	f.fn = nil
+	if fn.TemplateScope != nil {
+		f.deriveRequest = fn.TemplateScope.Decl.Pos
+	} else {
+		f.deriveRequest = diag.Pos{}
+	}
+	defer func() {
+		if f.deriveRequest.File != "" {
+			f.diags.DeriveContext(start, f.deriveRequest)
+		}
+		f.fn, f.deriveRequest = outerFn, outerRequest
+	}()
+	walk()
 }
 
 // --- Walking function bodies ---
@@ -1198,7 +1222,7 @@ func (f *factChecker) settle(x Expr, ob obligation, ok bool, pending []Query) {
 		return
 	}
 	for _, q := range pending {
-		f.pending = append(f.pending, pendingQuery{query: q, pos: pos, ob: ob, from: f.from()})
+		f.pending = append(f.pending, pendingQuery{query: q, pos: pos, ob: ob, from: f.from(), request: f.deriveRequest})
 	}
 }
 
@@ -2574,6 +2598,20 @@ func (f *factChecker) declaredMember(x Expr, m Type) []known {
 		for _, con := range f.argFactsFor(x, m) {
 			out = append(out, f.knownOf(con, noParams)...)
 		}
+	case *CallBuiltin:
+		if x.Builtin == BuiltinShapeValidate && x.Validation != nil && x.Validation.ReturnValue && identical(x.Validation.Field.Type, m) {
+			for _, con := range x.Validation.Constraints {
+				out = append(out, f.knownOf(con, noParams)...)
+			}
+		}
+		if x.Builtin == BuiltinShapeFinish && x.Construction != nil && identical(x.Construction.Owner, m) {
+			for _, con := range x.Construction.Constraints {
+				out = append(out, f.knownOf(con, noParams)...)
+			}
+			for _, con := range variantConstraints(x.Construction.Variant) {
+				out = append(out, f.knownOf(con, noParams)...)
+			}
+		}
 	case *VarRef:
 		if x.Var.Kind == VarLet && x.Var.Let.Initializer == nil {
 			out = append(out, f.declaredMember(x.Var.Let.Value, m)...)
@@ -3327,30 +3365,44 @@ func (f *factChecker) evaluate(eval Evaluator) {
 	}
 	results, err := eval(queries)
 	if err != nil {
+		start := f.diags.Len()
 		f.diags.AddCode(f.pending[0].pos, "facts.error", "cannot run predicates at compile time: %v", err)
+		if request := f.pending[0].request; request.File != "" {
+			f.diags.DeriveContext(start, request)
+		}
 		return
 	}
 	for _, p := range f.pending {
 		if !results[index[queryKey(p.query)]] {
-			var returned constant.Value
-			if len(p.query.Args) > 0 {
-				returned = p.query.Args[0]
-			} else if len(p.query.Values) > 0 {
-				if v, ok := p.query.Values[0].(*Const); ok {
-					returned = v.Value
-				}
-			}
-			if p.query.Via != "" && p.query.Pred != nil && p.query.Subject == nil && returned != nil {
-				f.diags.AddCode(p.pos, "facts.error", "%s, but %s can return %s, and %s is false", p.ob.requirement, p.query.Via, CArg{Const: returned}, p.query.Text(p.from))
-				continue
-			}
-			if p.query.Via != "" {
-				f.diags.AddCode(p.pos, "facts.error", "%s, but for a value %s can return, %s is false", p.ob.requirement, p.query.Via, p.query.Text(p.from))
-				continue
-			}
-			f.diags.AddCode(p.pos, "facts.error", "%s, but %s is false", p.ob.requirement, p.query.Text(p.from))
+			f.failedQuery(p)
 		}
 	}
+}
+
+func (f *factChecker) failedQuery(p pendingQuery) {
+	// A query is evaluated after its function's walk has ended; retain
+	// the same derive provenance for this delayed diagnostic.
+	start := f.diags.Len()
+	if p.request.File != "" {
+		defer func() { f.diags.DeriveContext(start, p.request) }()
+	}
+	var returned constant.Value
+	if len(p.query.Args) > 0 {
+		returned = p.query.Args[0]
+	} else if len(p.query.Values) > 0 {
+		if v, ok := p.query.Values[0].(*Const); ok {
+			returned = v.Value
+		}
+	}
+	if p.query.Via != "" && p.query.Pred != nil && p.query.Subject == nil && returned != nil {
+		f.diags.AddCode(p.pos, "facts.error", "%s, but %s can return %s, and %s is false", p.ob.requirement, p.query.Via, CArg{Const: returned}, p.query.Text(p.from))
+		return
+	}
+	if p.query.Via != "" {
+		f.diags.AddCode(p.pos, "facts.error", "%s, but for a value %s can return, %s is false", p.ob.requirement, p.query.Via, p.query.Text(p.from))
+		return
+	}
+	f.diags.AddCode(p.pos, "facts.error", "%s, but %s is false", p.ob.requirement, p.query.Text(p.from))
 }
 
 func queryKey(q Query) string {

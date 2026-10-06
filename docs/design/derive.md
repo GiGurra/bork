@@ -213,8 +213,12 @@ The proposal adds AST forms and meaning, not a new keyword inventory.
 | shape.variants[T]() | Ordered sealed variant descriptors |
 | variant.fields | Ordered named fields or positional slots |
 | variant.project(x) | Runtime Option of a typed, read-only view of the matching payload |
+| variant.Type | Payload view type projection for annotations and helper arguments |
 | variant.name, variant.positional, variant.index | Declared tag, payload kind and ordinal |
-| field.Type | Type projection usable in type arguments/annotations during expansion |
+| field.Type | Type projection retaining independent facts for dictionary selection and proven inputs |
+| field.RawType | The stored value type without the destination field's facts; no unchecked record representation |
+| field.validate(value) | Validate independent field obligations; return the typed value or shape.ValidationError |
+| field.check(value) | Check the same obligations without returning a field value; return Ok or shape.ValidationError |
 | field.name, field.index, field.doc, field.computed | Declared metadata; slots have index, no wire name |
 | field.facts, shape.facts[T](), variant.facts | Opaque typed obligations with source/path metadata |
 | field.hasDefault, field.default() | Presence and typed runtime default provider |
@@ -283,8 +287,19 @@ code cannot invent a proof by returning a raw unchecked record.
 
 Facts are callable typed obligations with resolved predicates, arguments,
 dictionaries, sibling references and traversal paths, plus display text.
-They are not parsed predicate strings. A field validator exposed through
-metadata checks only independent field obligations. It cannot promise
+They are not parsed predicate strings. The generic field.validate operation,
+also used by metadata callbacks, checks only independent field obligations.
+field.RawType permits an erased input annotation without claiming the destination
+field facts. RawType's root obligations guide dictionary selection only for
+class methods producing the target from inputs independent of that target.
+They never become an ArgFacts value promise: a raw result still needs check,
+validate, or completed construction. Consumers and ordinary generic functions
+receive no additional facts or constrained dictionary preference from RawType.
+Successful validation supplies the independent facts on that value;
+it supplies no fact about an incomplete owner. Success types must be provably
+distinct from ValidationError, including through union members. For unresolved
+root parameters or failure-typed fields, field.check supplies an unambiguous
+Ok-or-error result without promising a typed field value. It cannot promise
 sibling/type invariants before a complete value exists. An independent check
 may return a typed field value; it never returns an incomplete record as T.
 Private construction is permitted only in its owning package and within the
@@ -324,29 +339,35 @@ of Decode. Duplicate keys and mismatched metadata types are definition errors.
 Handwritten instances without metadata return None; an explicit metadata block
 can opt them in without a new required class method.
 
+The first implementation requires closed, resolved metadata key types, such as
+`RecordSchema` and `FieldSchema`. Generic targets and typed callbacks in their
+metadata values remain supported. Keys use checked Bork type identity, including
+callback effects and structural tuple equivalence; runtime Go reflection does
+not define identity. Parameter-dependent metadata keys are possible future work.
+Metadata initializers run lazily when their key is queried, rather than when the
+dictionary is constructed or one of its ordinary methods is called.
+
 `codec.Schema[T: codec.Decode](): Option[codec.RecordSchema]` and corresponding
 field-kind metadata replace hidden decoder members. Schemas contain ordered
 fields, names, docs, fact descriptions, default/optional flags and independent
 validation callbacks `Value => Ok | DecodeError`. Generic field kinds come
 from the actual selected field decoder metadata, preserving custom codecs.
-Default metadata also includes optional lazy providers for display text and
-String/Option[String] config-file selection: `displayDefault: Option[() => String]`
-and `defaultText: Option[() => Option[String]]`. The template uses the typed
-field.default() and the field's static type to build them; Option.None remains
-distinct from the absence of a declared default. Display formatting must match
-the existing CLI help behavior, including nested values. These projections
-avoid exposing arbitrary erased values or adding an Encode requirement to
-Decode. Inspecting schema flags does not run the providers; consumers invoke
-them only for the current help/config-default behavior. The temporary Go
-adapter retains the existing typed-to-Go default provider until those consumers
-switch to the public projections. Builder default evaluation is separately
+Default metadata includes `defaultValue: Option[() => DefaultSchema]`, with
+`display`, `configPath: Option[String]` and `choices: List[String]` projections.
+The template uses the typed field.default() and the field's static type to build
+them; Option.None remains distinct from the absence of a declared default.
+Display formatting matches the existing CLI help behavior, including nested
+values. These projections avoid exposing arbitrary erased values or adding an
+Encode requirement to Decode. Inspecting schema flags does not run the provider;
+consumers invoke it once for the current help/config-default behavior.
+Builder default evaluation is separately
 once per omitted field when constructing the final value.
 
 Schema consumers validate fields, assemble codec.Value, then call the complete
 Decode method before returning T. CLI Partial.Get additionally performs its
-requested U decoding; it never obtains T from a partial schema. Existing
-`_borkDecodeFields` is a temporary Go compatibility adapter, removed after its
-std consumers migrate. Metadata initializer functions remain runtime code;
+requested U decoding; it never obtains T from a partial schema.
+`_borkDecodeFields` was a temporary Go compatibility adapter; typed schema
+metadata now replaces it in standard consumers. Metadata initializer functions remain runtime code;
 only their template structure is expanded at compile time.
 
 GoStruct moves to a library derivation using generic foreign-record shape
@@ -406,14 +427,16 @@ and CLI PR #342 users after rebase, rather than carrying divergent codec APIs.
 ## Caching and performance contract
 
 Expansion performs no native Go build or execution. Programs with no derive
-pay only declaration dispatch; unchanged derivations are reused. Within one
-check, memoize normalized expansion plans per template/head/scope; do not
-retain mutable checked pointer graphs across checks. Store immutable plans
-with stable declaration references and reconstruct request-local typed nodes.
-Session reuse and a bounded versioned content cache for plans are part of the
-shape delivery, not deferred until after codec porting.
+pay only declaration dispatch. Preserve existing checked-program session reuse
+and check-local typed helper memoization; do not retain mutable checked pointer
+graphs across checks. Broader retained expansion caching requires a measured
+benefit on realistic warm edits. The initial metadata-only session/content
+plan prototype was removed after the 200-record codec/Labels workload regressed;
+see [the experiment](derive-performance.md). If broader plans are reintroduced,
+store immutable plans with stable declaration references and reconstruct
+request-local typed nodes.
 
-Keys include compiler/shape ABI, template and reachable helper bodies, full
+Retained plan keys must include compiler/shape ABI, template and reachable helper bodies, full
 target shape (types, defaults, computed bodies, facts, variant order/payload
 kind, privacy, foreign tags), generic arguments, library lexical dependencies,
 and the requester's visible dictionaries/rules. Candidate changes that alter

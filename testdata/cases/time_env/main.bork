@@ -30,10 +30,14 @@ fn seed(s: Scope) uses io unsafe go {
   s.Defer(func() { if jsonFound { os.Setenv("BORK_ENV_JSON_TEST", jsonOld) } else { os.Unsetenv("BORK_ENV_JSON_TEST") } })
   s.Defer(func() { if found { os.Setenv("BORK_ENV_TEST", old) } else { os.Unsetenv("BORK_ENV_TEST") } })
 }
-fn schema[T: codec.Decode](): String unsafe go {
-  fields, supported := _borkDecodeFields(_d_T_Decode)
-  if !supported { return "unsupported" }
-  return fields[1].Name + ":" + fields[1].Type + ":" + fields[1].Constraints[0]
+fn schema[T: codec.Decode](): String {
+  match (codec.Schema[T]()) {
+    Option.Some(info) => match (info.fields.get(1)) {
+      Option.Some(field) => field.name + ":" + field.typeName + ":" + field.facts.get(0).getOr("")
+      Option.None => "unsupported"
+    }
+    Option.None => "unsupported"
+  }
 }
 fn main() {
   println(schema[Config]())

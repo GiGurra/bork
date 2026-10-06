@@ -21,15 +21,18 @@ type Options = {
 } derive (codec.Decode, codec.Encode)
 type Box[T] = { value: T, extras: List[T] = [] } derive (codec.Decode, codec.Encode)
 type Choice = sealed { Item { count: Int = 1 }, Empty } derive (codec.Decode, codec.Encode)
-fn Schema[T: codec.Decode](): List[String] unsafe go {
- fields, supported := _borkDecodeFields(_d_T_Decode)
- if !supported { return nil }
- var out []string
- for _, field := range fields {
-  if field.Doc != "" { out=append(out,field.Name+": "+field.Doc) }
-  if field.HasDefault { out=append(out,field.Name+": "+_show(field.Default())) }
- }
- return out
+fn Schema[T: codec.Decode](): List[String] {
+  match (codec.Schema[T]()) {
+    Option.Some(info) => info.fields.flatMap(field => {
+      docs = if (field.doc != "") { [field.name + ": " + field.doc] } else { [] }
+      defaults = match (field.defaultValue) {
+        Option.Some(provider) => [field.name + ": " + provider().display]
+        Option.None => []
+      }
+      docs.concat(defaults)
+    })
+    Option.None => []
+  }
 }
 type CsvDefault = { name: String = "default", value: Int } derive (codec.Decode, codec.Encode)
 fn main() uses io {

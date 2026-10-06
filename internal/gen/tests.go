@@ -653,7 +653,7 @@ func (g *gen) constraintCond(con *check.Constraint, x ast.Expr, t check.Type) as
 	}
 	if con.PredParam != "" {
 		// The function value the caller passed.
-		return &ast.CallExpr{Fun: name(con.PredParam), Args: []ast.Expr{x}}
+		return &ast.CallExpr{Fun: g.shapeCaptureArgument(con.PredParam), Args: []ast.Expr{x}}
 	}
 	inst := con.InstanceFor(t)
 	if inst == nil || !g.info.PredicateDicts(con.Pkg, inst) {
@@ -668,7 +668,7 @@ func (g *gen) constraintCond(con *check.Constraint, x ast.Expr, t check.Type) as
 		if a.Const != nil {
 			args = append(args, g.constant(a.Const, inst.Params[i+1]))
 		} else {
-			args = append(args, name(a.Param))
+			args = append(args, g.shapeCaptureArgument(a.Param))
 		}
 	}
 	return &ast.CallExpr{Fun: g.instance(inst), Args: args}

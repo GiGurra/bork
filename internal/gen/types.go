@@ -1556,7 +1556,7 @@ func _seqfirst[T any](source _Seq[T]) Option[T] {
 }
 `)
 	}
-	if g.usesDecodeSchema || g.usesGoStruct {
+	if g.usesGoStruct {
 		src = append(src, g.codecRuntime(decodeSchemaHelpers))
 	}
 	if g.usesGoStruct {

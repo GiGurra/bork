@@ -18,6 +18,9 @@ func WalkComptime(x Expr, visit func(Expr) bool) {
 	case *Comptime:
 		walk(x.Body)
 	case *Call:
+		for _, capture := range x.Captures {
+			walk(capture)
+		}
 		for _, arg := range x.Needs {
 			walk(arg)
 		}
@@ -25,6 +28,9 @@ func WalkComptime(x Expr, visit func(Expr) bool) {
 			walk(arg)
 		}
 	case *CallBuiltin:
+		for _, capture := range x.Captures {
+			walk(capture)
+		}
 		for _, arg := range x.Args {
 			walk(arg)
 		}
@@ -34,6 +40,9 @@ func WalkComptime(x Expr, visit func(Expr) bool) {
 			walk(arg)
 		}
 	case *FuncRef:
+		for _, capture := range x.Captures {
+			walk(capture)
+		}
 		for _, arg := range x.Needs {
 			walk(arg)
 		}

@@ -6,7 +6,7 @@ use codec.Defaults
 use settings.*
 type Alias = settings.Config
 type Outer = { config: settings.Config, name: String }
-type ExportBox = settings.Box[Int] derive (codec.Encode)
+type ExportBox = settings.Box[Int]
 type Envelope = { config: settings.Config } derive (codec.Decode, codec.Encode)
 fn read(c: settings.Config): Int { match (c) { settings.Config { port } => port } }
 fn GoRound[T: GoStruct](value: T): T | GoValueError unsafe go {

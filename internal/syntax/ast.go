@@ -22,9 +22,11 @@ type File struct {
 	Bundles []*Bundle
 	Rules   []*RuleDecl
 	// Classes and Instances; the instances' methods are also in Funcs.
-	Classes   []*ClassDecl
-	Instances []*InstanceDecl
-	Derives   []*DeriveDecl
+	Classes       []*ClassDecl
+	Instances     []*InstanceDecl
+	Derives       []*DeriveDecl
+	Templates     []*InstanceDecl
+	DeriveHelpers []*FuncDecl
 	// Prelude is set for the compiler's built-in prelude.
 	Prelude  bool
 	Types    []*TypeDecl
@@ -136,6 +138,8 @@ type VariantDecl struct {
 type FuncDecl struct {
 	// ScriptMain is the synthetic entrypoint of a script.
 	ScriptMain bool
+	// Derivation marks a compile-time helper, available only to derive templates.
+	Derivation bool
 	// Constructor names the owning record in `fn New = Config.new`.
 	Constructor *TypeExpr
 	Pos         diag.Pos
@@ -180,10 +184,20 @@ type ClassDecl struct {
 	Methods    []*FuncDecl
 }
 
+// InstanceMetadata associates a checked expression with its resolved type key.
+// Metadata is contextual instance syntax, not a reserved word.
+type InstanceMetadata struct {
+	Pos   diag.Pos
+	Type  *TypeExpr
+	Value Expr
+}
+
 // InstanceDecl is a named instance of a class for a type:
 // `instance showInt: Show[Int] { fn show(x: Int): String { ... } }`, or
 // generic: `instance showList[T: Show]: Show[List[T]] { ... }`.
 type InstanceDecl struct {
+	// Derivation marks a template rather than a selectable instance.
+	Derivation bool
 	Pos        diag.Pos
 	Name       string
 	TypeParams []*TypeParam
@@ -191,6 +205,7 @@ type InstanceDecl struct {
 	ClassPos   diag.Pos
 	Type       *TypeExpr
 	Methods    []*FuncDecl
+	Metadata   []*InstanceMetadata
 }
 
 // Bundle names a set of instances, which `use` brings into scope at
@@ -489,11 +504,13 @@ type Yield struct {
 // binds the loop's header names and whose Post rebinds them for the
 // next iteration; Cond may then be nil.
 type For struct {
-	Pos     diag.Pos
-	Name    string
-	NamePos diag.Pos
-	Items   Expr
-	Body    *Block
+	Comptime      bool
+	Comprehension bool
+	Pos           diag.Pos
+	Name          string
+	NamePos       diag.Pos
+	Items         Expr
+	Body          *Block
 
 	Cond    Expr
 	Clauses bool
@@ -649,10 +666,11 @@ type Argument struct {
 // If is `if (cond) { ... } else { ... }`. Else is nil, a *Block, or an
 // *If (for `else if`).
 type If struct {
-	Pos  diag.Pos
-	Cond Expr
-	Then *Block
-	Else Expr
+	Comptime bool
+	Pos      diag.Pos
+	Cond     Expr
+	Then     *Block
+	Else     Expr
 }
 
 // Block is `{ stmts; tail }`. Tail is the block's value; nil means the
@@ -725,6 +743,7 @@ type CopyUpdate struct {
 
 // Match is `match (x) { pattern => value, ... }`.
 type Match struct {
+	Comptime          bool
 	Pos               diag.Pos
 	Close             diag.Pos // the closing brace, before which new arms can be inserted
 	TrailingSeparator bool     // the final arm already has a comma or newline

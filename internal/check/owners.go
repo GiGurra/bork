@@ -382,7 +382,7 @@ func (l *lifeChecker) callLife(x *Call) lifetime {
 		}
 		return life
 	}
-	life := l.call(x.Func, true, x.Args, x.ArgOrder)
+	life := l.call(x.Func, true, x.Args, x.ArgOrder).union(l.captureLife(x.Captures))
 	// An acquisition, or an attach to a simple scope, gives a new
 	// registration, which may be moved.
 	var h *handle

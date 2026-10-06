@@ -166,10 +166,7 @@ type _borkDecodeField struct {
  Optional bool
  Decode func(Json) any
 }
-func _borkDecodeFields[T any](dict @Decode@[T]) ([]_borkDecodeField, bool) {
- if dict.fields == nil { return nil, false }
- return dict.fields(), true
-}
+
 `
 
 // bytesRuntime keeps binary values distinct from lists in unions and printing.

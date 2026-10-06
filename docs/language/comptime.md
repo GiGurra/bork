@@ -110,3 +110,6 @@ To include files as they are, without processing them, [bork/embed](../std/embed
 ---
 
 Previous: [Channels](channels.md) · Next: [Typed interpolation](interpolators.md) · [All pages](../README.md#the-language)
+
+Derivation templates also use `comptime if`, `comptime for`, and `comptime match`
+to select or repeat typed source code. See [derivation templates](derivation.md).

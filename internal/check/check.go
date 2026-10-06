@@ -28,11 +28,12 @@ type Package struct {
 	scriptLocals map[string]diag.Pos
 	// methods holds the package's methods, by receiver type (see
 	// methodKey) and name.
-	methods map[string]map[string]*Func
-	types   map[string]*typeEntry
-	imports map[string]*Package // by the name files use for them
-	used    map[string]bool     // the imports that are used
-	classes map[string]*Class
+	methods       map[string]map[string]*Func
+	types         map[string]*typeEntry
+	imports       map[string]*Package // by the name files use for them
+	used          map[string]bool     // the imports that are used
+	classes       map[string]*Class
+	deriveHelpers map[string]*syntax.FuncDecl
 	// instances holds the package's own class instances, and inScope
 	// those its code can use: its own, the prelude's, and those it uses.
 	instances []*ClassInstance
@@ -66,7 +67,10 @@ func Exported(name string) bool {
 
 // Func is a declared function's signature.
 type Func struct {
+	TemplatePkg         *Package
+	TemplateScope       *ClassInstance
 	RuntimePackageReads bool
+	CaptureVars         []*Var
 
 	Decl *syntax.FuncDecl
 	Pkg  *Package
@@ -163,6 +167,9 @@ const (
 	BuiltinAssertSnapshot // assertSnapshot(x)
 	BuiltinAssemble
 	BuiltinAssertIsFailure
+	BuiltinShapeFinish
+	BuiltinShapeValidate
+	BuiltinShapeMetadata
 )
 
 var builtins = map[string]Builtin{
@@ -244,12 +251,18 @@ type Info struct {
 	// Classes and ClassInstances list every class and instance.
 	Classes        []*Class
 	ClassInstances []*ClassInstance
+	// Structural source plans belong to request-wide state, including
+	// specializations discovered while temporary initializer scopes restore
+	// their checker state.
+	deriveTupleCodecs map[string]*ClassInstance
 	// Funcs holds the functions visible to the root package by name: its
 	// own, and the prelude's that it does not replace.
 	Funcs map[string]*Func
 	// FuncOf holds every declared function, including prelude functions
 	// the package replaced (the prelude still uses its own).
 	FuncOf map[*syntax.FuncDecl]*Func
+	// ExpandedFunctions holds typed derive methods and helpers without changing parsed declarations.
+	ExpandedFunctions []*Func
 	// Named holds every declared type: *Record, *Sealed, or (for an
 	// alias) the aliased type.
 	Named map[string]Type
@@ -305,6 +318,21 @@ type Info struct {
 	// selectMatches are the matches selects are lowered to.
 	selectMatches          map[*syntax.Match]bool
 	assemblyTypes          map[*syntax.TypeExpr]Type
+	deriveSourceKinds      map[diag.Pos]string
+	shapeBuildCalls        map[*syntax.Call]*shapeBuildCall
+	shapeBuilderLayouts    map[*Record]*ShapeConstruction
+	shapeBuilderPlans      map[string]*ShapeConstruction
+	shapeProjects          map[*syntax.Call]*shapeProjection
+	shapeExhaustions       map[*syntax.Call]bool
+	shapeViewReads         map[*syntax.Selector]*shapeViewRead
+	shapeViews             map[*Variant]*Record
+	shapeReadOwners        map[*syntax.Selector]Type
+	shapeTypeFacts         map[*syntax.TypeExpr][]*Constraint
+	shapeRawHeads          map[*syntax.TypeExpr][]*Constraint
+	shapeDefaults          map[*syntax.Call]*Field
+	shapeValidations       map[*syntax.Call]*shapeValidationCall
+	shapeMetadataCalls     map[*syntax.Call]*Dict
+	metadataKeyTypes       []Type
 	assemblyNames          map[any]string
 	interpolatorCalls      map[*syntax.Interp]*syntax.Call
 	interpolatorValidators map[*syntax.Interp]*Dict
@@ -446,8 +474,17 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 // ProgramObserved is Program with optional phase notifications for benchmarks.
 // observe is called before lowering and contract checks; checking starts in the caller.
 func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goTypes GoTypes, observe func(string)) *Info {
+	if templateFiles(files) {
+		return programWithDeriveRequirements(files, root, diags, goTypes, observe)
+	}
+	return programObserved(files, root, diags, goTypes, observe, nil, nil)
+}
+
+func programObserved(files []*syntax.File, root string, diags *diag.List, goTypes GoTypes, observe func(string), bounds deriveBounds, discovery *deriveDiscovery) *Info {
 	c := &checker{
 		recordPredicateRefs: true,
+		deriveBounds:        bounds,
+		deriveDiscovery:     discovery,
 		files:               files,
 		bindingFiles:        map[string]*syntax.File{},
 		diags:               diags,
@@ -553,6 +590,8 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 	}
 	c.declareClasses(files)
 	c.declareClassMethods()
+	c.declareDeriveHelpers(files)
+	c.declareDeriveTemplates(files)
 	c.collectDerived(files)
 	c.resolveGoStructs(files)
 	c.resolveGoMirrors(files, false)
@@ -608,6 +647,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 	c.resolveConstraints(files)
 	c.ambientConstraints(files)
 	c.instanceConstraints()
+	c.checkDeriveDefinitions(files)
 	c.checkDerivedDuplicates()
 	c.ensureAllFieldDefaults()
 	for _, checkKey := range c.mapKeyChecks {
@@ -637,6 +677,19 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 	for _, binding := range c.info.PackageBindings {
 		c.ensurePackageBinding(binding)
 	}
+	c.expandDeriveBodies()
+	// Establish template bounds before ordinary callers select their dictionaries.
+	expandedChecked := 0
+	checkExpanded := func() {
+		for expandedChecked < len(c.info.ExpandedFunctions) {
+			fn := c.info.ExpandedFunctions[expandedChecked]
+			expandedChecked++
+			c.checkFunc(fn)
+		}
+	}
+	checkExpanded()
+	c.checkDeriveDefinitionBounds()
+	checkExpanded()
 	// Pass 3: check bodies.
 	for _, f := range files {
 		for _, fd := range f.Funcs {
@@ -655,6 +708,9 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 			c.checkTest(td, names)
 		}
 	}
+	// Implicit structural dictionaries discovered in ordinary functions and
+	// tests can add source specializations after the initial template pass.
+	checkExpanded()
 	c.materializeDefaultUses()
 	c.ensureAllFieldDefaults()
 	c.unappliedWheres(files)
@@ -673,7 +729,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 	}
 	// The later passes read the typed tree, which is built once the
 	// program checks.
-	if c.diags.Len() == 0 {
+	if c.diags.Len() == 0 && c.deriveDiscovery == nil {
 		c.zonkInfo()
 		c.checkInterpolationValidators()
 		c.checkOpaqueFields()
@@ -806,11 +862,18 @@ func (c *checker) inFile(f *syntax.File) {
 }
 
 type checker struct {
-	files            []*syntax.File
-	tupleDerives     []*ClassInstance
-	tupleBindingMode bool
-	patternTest      bool
-	derives          []*deriveRequest
+	files                     []*syntax.File
+	tupleDerives              []*ClassInstance
+	tupleBindingMode          bool
+	patternTest               bool
+	derives                   []*deriveRequest
+	deriveDefinitionBounds    []deriveDefinitionBound
+	deriveCalls               map[*syntax.Call]*Func
+	deriveHelperSerial        int
+	deriveSpecializations     map[string]*Func
+	deriveSpecializationCosts map[string]deriveSpecializationCost
+	deriveBounds              deriveBounds
+	deriveDiscovery           *deriveDiscovery
 	// Only compilation retains source identities; read-only queries do not.
 	recordPredicateRefs bool
 	bindingFiles        map[string]*syntax.File
@@ -1035,9 +1098,16 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 }
 
 func (c *checker) checkFunc(fn *Func) {
+	if fn.TemplateScope != nil {
+		start := c.diags.Len()
+		defer func() { c.diags.DeriveContext(start, fn.TemplateScope.Decl.Pos) }()
+	}
 	c.fn = fn
 	c.inForce = nil
 	c.pkg = fn.Pkg
+	if fn.TemplatePkg != nil {
+		c.pkg = fn.TemplatePkg
+	}
 	c.inPrelude = fn.Prelude
 	defer func() { c.inPrelude = false }()
 	c.useTypeParams(fn)
@@ -1758,8 +1828,48 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 }
 
 func (c *checker) call(e *syntax.Call, want Type) Type {
+	if result, handled := c.shapeExhaustionCall(e); handled {
+		return result
+	}
+	if result, handled := c.shapeMetadataCall(e); handled {
+		return result
+	}
 	if t, ok := c.positionalVariantCall(e, want); ok {
 		return t
+	}
+	if operation := c.info.shapeBuildCalls[e]; operation != nil {
+		if result, handled := c.shapeBuildCall(e, operation); handled {
+			return result
+		}
+	}
+	if operation := c.info.shapeValidations[e]; operation != nil {
+		return c.shapeValidateCall(e, operation)
+	}
+	if project := c.info.shapeProjects[e]; project != nil {
+		actual := c.expr(e.Args[0])
+		if !identical(actual, project.variant.Parent) {
+			c.errorf(e.Pos, "variant.project requires its proven sealed owner %s, found %s", project.variant.Parent, actual)
+			return Invalid
+		}
+		return instantiate(c.preludePkg.TypeNamed("Option"), []Type{project.view})
+	}
+	if field := c.info.shapeDefaults[e]; field != nil {
+		return field.Type
+	}
+	if fn := c.deriveCalls[e]; fn != nil {
+		return c.callFunc(e, fn.Decl.Name, fn, e.Args, nil, e.TypeArgs, want)
+	}
+	if id, ok := e.Fun.(*syntax.Ident); ok {
+		if helper, _ := c.deriveHelperNamed(c.pkg, id.Name); helper != nil {
+			c.errorf(e.Pos, "derive helper %s is available only during template expansion", id.Name)
+			return Invalid
+		}
+		alias, _, qualified := strings.Cut(id.Name, ".")
+		if pkg := c.pkg.imports[alias]; qualified && pkg != nil && pkg.Path == "bork/shape" {
+			c.pkg.used[alias] = true
+			c.errorf(e.Pos, "shape operations are available only during derive template expansion")
+			return Invalid
+		}
 	}
 	if sel, ok := e.Fun.(*syntax.Selector); ok && sel.Name == "into" {
 		return c.into(e, sel)
@@ -2180,6 +2290,11 @@ func (c *checker) conversion(e *syntax.Call, fname string) Type {
 func (c *checker) paramScope() map[string]Type {
 	scope := map[string]Type{}
 	if c.fn != nil {
+		if c.fn.TemplateScope != nil {
+			for _, capture := range c.fn.TemplateScope.Captures {
+				scope[capture.Name] = capture.Type
+			}
+		}
 		for i, p := range c.fn.Decl.Params {
 			scope[p.Name] = c.fn.Params[i]
 		}

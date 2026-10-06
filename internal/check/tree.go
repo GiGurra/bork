@@ -161,6 +161,7 @@ type VarRef struct {
 
 // FuncRef is a declared function used as a value: `xs.map(double)`.
 type FuncRef struct {
+	Captures []Expr
 	expr
 	Name string // as written
 	Inst *Instance
@@ -187,6 +188,7 @@ type Binary struct {
 // arguments as the function takes them: a method's receiver first, then
 // the arguments written, then the defaults of those left out.
 type Call struct {
+	Captures []Expr
 	expr
 	Func *Func
 	Inst *Instance
@@ -234,6 +236,7 @@ func (c *Call) EvaluationArgs() []Expr {
 
 // CallBuiltin is a call of a function the compiler provides.
 type CallBuiltin struct {
+	Captures []Expr
 	expr
 	Builtin Builtin
 	// DebugText is the original argument text for dbg.
@@ -242,8 +245,11 @@ type CallBuiltin struct {
 	Args      []Expr
 	// Conv describes a numeric conversion of a value that is not a
 	// constant; nil for other builtins.
-	Conv     *Conversion
-	Expected string
+	Conv         *Conversion
+	Expected     string
+	Construction *ShapeConstruction
+	Validation   *ShapeFieldValidation
+	Dictionary   *Dict
 }
 
 // CallValue is a call of a function value: `f(x)`, `r.handler(x)`.

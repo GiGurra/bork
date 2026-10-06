@@ -443,7 +443,11 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 			var cons []*Constraint
 			for _, con := range c.constraintsOf(ta, t, c.paramScope()) {
 				tuple, isRecord := t.(*Record)
-				if con.Path != "" && (!isRecord || !tuple.Tuple) {
+				// Compiler-resolved field projections may carry nested facts
+				// into a consuming class method: its checked argument keeps
+				// those facts, and no result promises an unvalidated value.
+				projectedConsumer := len(c.info.shapeTypeFacts[ta]) > 0 && fn.Class != nil && !producesParam(fn.Class)
+				if con.Path != "" && (!isRecord || !tuple.Tuple) && !projectedConsumer {
 					c.errorf(ta.Pos, "facts inside a type argument (on the parts of %s) are not supported yet, so they would not be checked; only facts on the whole type argument are", t)
 					break
 				}
@@ -493,8 +497,14 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 		_, isLambda := a.(*syntax.Lambda)
 		return isLambda || c.genericFuncRef(a)
 	}
+	// A method receiver was already checked before this inference session.
+	// Solve it immediately so an optional receiver can type the callback.
 	var pending []int
 	for i, a := range args {
+		if i == 0 && recv != nil {
+			check(i, a)
+			continue
+		}
 		if !later(a) {
 			if i < len(params) && c.contextNeedsType(a, params[i]) {
 				pending = append(pending, i)
@@ -574,6 +584,25 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 				}
 				have[j] = common
 			}
+		}
+	}
+	// An erased field head supplies requirements to a pure producer's dictionary
+	// selection, but is not an input/value proof. Consumers and general generic
+	// functions must use only their ordinarily established argument facts.
+	if fn.Class != nil && len(fn.TypeParams) == 1 && mentionsMember(fn.Result, fn.TypeParams[0]) {
+		producer := true
+		for _, parameter := range fn.Params {
+			if mentionsParam(parameter, fn.TypeParams[0]) {
+				producer = false
+			}
+		}
+		if producer && len(typeArgs) == 1 && len(c.info.shapeRawHeads[typeArgs[0]]) != 0 {
+			copyHave := make([][]*Constraint, len(fn.TypeParams))
+			for i := range have {
+				copyHave[i] = append([]*Constraint(nil), have[i]...)
+			}
+			copyHave[0] = append(copyHave[0], c.info.shapeRawHeads[typeArgs[0]]...)
+			have = copyHave
 		}
 	}
 	s := c.session
@@ -798,6 +827,10 @@ func (c *checker) callFuncValue(e *syntax.Call, t Type) Type {
 func (c *checker) funcValue(e syntax.Expr, name string, fn *Func, want Type) Type {
 	if assertIsIntrinsic(fn) {
 		c.errorf(e.Position(), "test.AssertIs must be called directly with an explicit target type")
+		return Invalid
+	}
+	if fn.Pkg != nil && fn.Pkg.Path == "bork/shape" {
+		c.errorf(e.Position(), "shape operations cannot be used as runtime function values")
 		return Invalid
 	}
 	if c.fn != nil {

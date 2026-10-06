@@ -388,6 +388,15 @@ func (b *sourceIndexBuilder) declarations(file *syntax.File, info *Info) {
 		}
 		add(fn.Pos, fn.Name, kind, "")
 	}
+	for _, helper := range file.DeriveHelpers {
+		add(helper.Pos, helper.Name, "function", "")
+	}
+	for _, template := range file.Templates {
+		add(template.Pos, template.Name, "instance", "")
+		for _, method := range template.Methods {
+			add(method.Pos, method.Name, "method", template.Name)
+		}
+	}
 	for _, class := range file.Classes {
 		add(class.Pos, class.Name, "class", "")
 		for _, fn := range class.Methods {
@@ -418,6 +427,12 @@ func (b *sourceIndexBuilder) declarations(file *syntax.File, info *Info) {
 
 	sourceWalk(reflect.ValueOf(file), func(node any) {
 		switch n := node.(type) {
+		case *syntax.Binding:
+			kind := "variable"
+			if n.Package {
+				kind = "value"
+			}
+			add(n.Pos, n.Name, kind, "")
 		case *syntax.Param:
 			add(n.Pos, n.Name, "parameter", "")
 		case *syntax.TypeParam:

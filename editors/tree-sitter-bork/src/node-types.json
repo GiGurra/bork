@@ -47,6 +47,10 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
@@ -191,6 +195,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "comptime_control_expression",
             "named": true
           },
           {
@@ -418,6 +426,10 @@
             "named": true
           },
           {
+            "type": "comptime_control_expression",
+            "named": true
+          },
+          {
             "type": "comptime_expression",
             "named": true
           },
@@ -581,6 +593,10 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
@@ -740,6 +756,10 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
@@ -889,6 +909,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "comptime_control_expression",
             "named": true
           },
           {
@@ -1056,6 +1080,29 @@
     }
   },
   {
+    "type": "comptime_control_expression",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "for_expression",
+          "named": true
+        },
+        {
+          "type": "if_expression",
+          "named": true
+        },
+        {
+          "type": "match_expression",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "comptime_expression",
     "named": true,
     "fields": {},
@@ -1128,6 +1175,36 @@
     }
   },
   {
+    "type": "derive_helper_declaration",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "function_declaration",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "derive_template_declaration",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "instance_declaration",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "field_declaration",
     "named": true,
     "fields": {
@@ -1160,6 +1237,10 @@
         },
         {
           "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "comptime_control_expression",
           "named": true
         },
         {
@@ -1340,6 +1421,10 @@
             "named": true
           },
           {
+            "type": "comptime_control_expression",
+            "named": true
+          },
+          {
             "type": "comptime_expression",
             "named": true
           },
@@ -1510,6 +1595,10 @@
         },
         {
           "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "comptime_control_expression",
           "named": true
         },
         {
@@ -1752,6 +1841,10 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
@@ -1948,6 +2041,10 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
@@ -2105,11 +2202,162 @@
           "named": true
         },
         {
+          "type": "instance_metadata",
+          "named": true
+        },
+        {
           "type": "type",
           "named": true
         },
         {
           "type": "type_parameters",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "instance_metadata",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "binary_expression",
+          "named": true
+        },
+        {
+          "type": "block",
+          "named": true
+        },
+        {
+          "type": "boolean",
+          "named": true
+        },
+        {
+          "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
+          "type": "comptime_expression",
+          "named": true
+        },
+        {
+          "type": "for_expression",
+          "named": true
+        },
+        {
+          "type": "generate_expression",
+          "named": true
+        },
+        {
+          "type": "generic_expression",
+          "named": true
+        },
+        {
+          "type": "go_body",
+          "named": true
+        },
+        {
+          "type": "if_expression",
+          "named": true
+        },
+        {
+          "type": "interpolated_string",
+          "named": true
+        },
+        {
+          "type": "is_expression",
+          "named": true
+        },
+        {
+          "type": "lambda_expression",
+          "named": true
+        },
+        {
+          "type": "list_literal",
+          "named": true
+        },
+        {
+          "type": "map_literal",
+          "named": true
+        },
+        {
+          "type": "match_expression",
+          "named": true
+        },
+        {
+          "type": "mock_expression",
+          "named": true
+        },
+        {
+          "type": "number",
+          "named": true
+        },
+        {
+          "type": "parenthesized_expression",
+          "named": true
+        },
+        {
+          "type": "qualified_name",
+          "named": true
+        },
+        {
+          "type": "record_expression",
+          "named": true
+        },
+        {
+          "type": "return_expression",
+          "named": true
+        },
+        {
+          "type": "rune",
+          "named": true
+        },
+        {
+          "type": "scope_expression",
+          "named": true
+        },
+        {
+          "type": "select_expression",
+          "named": true
+        },
+        {
+          "type": "selector_expression",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        },
+        {
+          "type": "try_expression",
+          "named": true
+        },
+        {
+          "type": "tuple_literal",
+          "named": true
+        },
+        {
+          "type": "type",
+          "named": true
+        },
+        {
+          "type": "unary_expression",
+          "named": true
+        },
+        {
+          "type": "with_expression",
+          "named": true
+        },
+        {
+          "type": "yield_expression",
           "named": true
         }
       ]
@@ -2186,6 +2434,10 @@
         },
         {
           "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "comptime_control_expression",
           "named": true
         },
         {
@@ -2346,6 +2598,10 @@
             "named": true
           },
           {
+            "type": "comptime_control_expression",
+            "named": true
+          },
+          {
             "type": "comptime_expression",
             "named": true
           },
@@ -2501,6 +2757,10 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
@@ -2639,9 +2899,20 @@
     }
   },
   {
-    "type": "list_literal",
+    "type": "list_comprehension",
     "named": true,
-    "fields": {},
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
       "multiple": true,
       "required": false,
@@ -2660,6 +2931,10 @@
         },
         {
           "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "comptime_control_expression",
           "named": true
         },
         {
@@ -2778,6 +3053,153 @@
     }
   },
   {
+    "type": "list_literal",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "binary_expression",
+          "named": true
+        },
+        {
+          "type": "block",
+          "named": true
+        },
+        {
+          "type": "boolean",
+          "named": true
+        },
+        {
+          "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
+          "type": "comptime_expression",
+          "named": true
+        },
+        {
+          "type": "for_expression",
+          "named": true
+        },
+        {
+          "type": "generate_expression",
+          "named": true
+        },
+        {
+          "type": "generic_expression",
+          "named": true
+        },
+        {
+          "type": "go_body",
+          "named": true
+        },
+        {
+          "type": "if_expression",
+          "named": true
+        },
+        {
+          "type": "interpolated_string",
+          "named": true
+        },
+        {
+          "type": "is_expression",
+          "named": true
+        },
+        {
+          "type": "lambda_expression",
+          "named": true
+        },
+        {
+          "type": "list_comprehension",
+          "named": true
+        },
+        {
+          "type": "list_literal",
+          "named": true
+        },
+        {
+          "type": "map_literal",
+          "named": true
+        },
+        {
+          "type": "match_expression",
+          "named": true
+        },
+        {
+          "type": "mock_expression",
+          "named": true
+        },
+        {
+          "type": "number",
+          "named": true
+        },
+        {
+          "type": "parenthesized_expression",
+          "named": true
+        },
+        {
+          "type": "qualified_name",
+          "named": true
+        },
+        {
+          "type": "record_expression",
+          "named": true
+        },
+        {
+          "type": "return_expression",
+          "named": true
+        },
+        {
+          "type": "rune",
+          "named": true
+        },
+        {
+          "type": "scope_expression",
+          "named": true
+        },
+        {
+          "type": "select_expression",
+          "named": true
+        },
+        {
+          "type": "selector_expression",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        },
+        {
+          "type": "try_expression",
+          "named": true
+        },
+        {
+          "type": "tuple_literal",
+          "named": true
+        },
+        {
+          "type": "unary_expression",
+          "named": true
+        },
+        {
+          "type": "with_expression",
+          "named": true
+        },
+        {
+          "type": "yield_expression",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "loop_binding",
     "named": true,
     "fields": {
@@ -2813,6 +3235,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "comptime_control_expression",
             "named": true
           },
           {
@@ -2970,6 +3396,10 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
@@ -3106,6 +3536,10 @@
         },
         {
           "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "comptime_control_expression",
           "named": true
         },
         {
@@ -3249,6 +3683,10 @@
         },
         {
           "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "comptime_control_expression",
           "named": true
         },
         {
@@ -3510,6 +3948,10 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
@@ -3669,6 +4111,10 @@
         },
         {
           "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "comptime_control_expression",
           "named": true
         },
         {
@@ -3987,6 +4433,10 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
@@ -4145,6 +4595,10 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
@@ -4299,6 +4753,10 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
@@ -4447,6 +4905,10 @@
         },
         {
           "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "comptime_control_expression",
           "named": true
         },
         {
@@ -4630,6 +5092,10 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
@@ -4787,6 +5253,10 @@
             "named": true
           },
           {
+            "type": "comptime_control_expression",
+            "named": true
+          },
+          {
             "type": "comptime_expression",
             "named": true
           },
@@ -4923,6 +5393,10 @@
         },
         {
           "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "comptime_control_expression",
           "named": true
         },
         {
@@ -5095,6 +5569,10 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
@@ -5263,11 +5741,23 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
         {
           "type": "derive_declaration",
+          "named": true
+        },
+        {
+          "type": "derive_helper_declaration",
+          "named": true
+        },
+        {
+          "type": "derive_template_declaration",
           "named": true
         },
         {
@@ -5668,6 +6158,10 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
@@ -5807,6 +6301,10 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
@@ -5943,6 +6441,10 @@
         },
         {
           "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "comptime_control_expression",
           "named": true
         },
         {
@@ -6238,6 +6740,10 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
@@ -6456,6 +6962,10 @@
           "named": true
         },
         {
+          "type": "comptime_control_expression",
+          "named": true
+        },
+        {
           "type": "comptime_expression",
           "named": true
         },
@@ -6592,6 +7102,10 @@
         },
         {
           "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "comptime_control_expression",
           "named": true
         },
         {
@@ -6964,6 +7478,10 @@
   },
   {
     "type": "match",
+    "named": false
+  },
+  {
+    "type": "metadata",
     "named": false
   },
   {

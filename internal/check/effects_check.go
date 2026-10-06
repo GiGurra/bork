@@ -15,6 +15,10 @@ import (
 // runtime effect, unless main declares some. It reads the typed tree, so it
 // runs once the program type-checks.
 func CheckEffects(files []*syntax.File, info *Info, diags *diag.List) {
+	for _, fn := range info.ExpandedFunctions {
+		checkRuntimeBuildSignature(fn, diags)
+		checkEffects(fn, diags)
+	}
 	// Tests may use every runtime effect, but not call main.
 	for _, fn := range info.Tests {
 		checkRuntimeBuildSignature(fn, diags)

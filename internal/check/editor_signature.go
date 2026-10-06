@@ -55,6 +55,13 @@ func EditorCheckedSignature(info *Info, from *Package, open diag.Pos) *EditorSig
 		if selector, ok := call.Fun.(*syntax.Selector); ok && instance.Func.Decl.IsMethod {
 			bound = info.types[selector.X] != nil
 		}
+		if pkg := instance.Func.TemplatePkg; pkg != nil && instance.Func.Decl.Instance == nil {
+			for _, helper := range pkg.deriveHelpers {
+				if helper.Pos == instance.Func.Decl.Pos {
+					return editorDeriveSignature(helper)
+				}
+			}
+		}
 		signature := editorSignature(instance.Func, instance.Params, instance.Result, from, bound)
 		if assertion := info.patternAssertions[call]; assertion != nil {
 			signature.Result = assertion.Expected
@@ -94,6 +101,9 @@ func EditorNamedSignature(info *Info, from *Package, name string, receiver Type,
 	if receiver != nil {
 		fn, _ = c.methodNamed(receiver, name)
 	} else {
+		if helper, _ := c.deriveHelperNamed(from, name); helper != nil {
+			return editorDeriveSignature(helper)
+		}
 		fn, _ = c.funcNamed(name)
 		if fn == nil {
 			if split := strings.LastIndexByte(name, '.'); split > 0 {
@@ -103,6 +113,11 @@ func EditorNamedSignature(info *Info, from *Package, name string, receiver Type,
 		}
 	}
 	if fn == nil {
+		if receiver == nil {
+			if helper, _ := c.deriveHelperNamed(from, name); helper != nil {
+				return editorDeriveSignature(helper)
+			}
+		}
 		return nil
 	}
 	in := newInference(fn)
@@ -232,4 +247,40 @@ func (c *checker) editorVariantSignatureNamed(name string, from *Package, site d
 		return nil
 	}
 	return editorVariantSignature(variant, from)
+}
+
+// A source helper can have descriptors erased from runtime specializations.
+// Signature help shows its complete declaration rather than a generated name.
+func editorDeriveSignature(helper *syntax.FuncDecl) *EditorSignature {
+	callable := &CallableDescription{NamedArguments: true, ParameterNamesAreAPI: true}
+	for _, param := range helper.Params {
+		callable.Parameters = append(callable.Parameters, ParameterDescription{Name: param.Name, Type: writtenTypeText(param.Type)})
+	}
+	if helper.Requires != nil {
+		callable.Requires = []string{deriveSignatureExpr(helper.Requires)}
+	}
+	if helper.Needs != nil {
+		for _, need := range helper.Needs.Items {
+			name := need.Name
+			if need.Optional {
+				name += "?"
+			}
+			callable.Needs = append(callable.Needs, name)
+		}
+	}
+	var effects []string
+	if helper.Uses != nil {
+		for _, effect := range helper.Uses.Effects {
+			effects = append(effects, effect.Name)
+		}
+	}
+	if len(effects) == 0 {
+		effects = append(effects, "nothing")
+	}
+	result := "Ok"
+	if helper.Result != nil {
+		result = writtenTypeText(helper.Result)
+	}
+	pos := helper.Pos
+	return &EditorSignature{Name: helper.Name, Result: result, Effects: strings.Join(effects, " + "), Callable: callable, Definition: &pos}
 }

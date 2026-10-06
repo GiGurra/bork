@@ -153,33 +153,43 @@ func (c *checker) resolveConstraints(files []*syntax.File) {
 			if fn == nil {
 				continue
 			}
-			fd = fn.Decl
-			c.pkg = fn.Pkg
-			c.inPrelude = fn.Prelude
-			scope := map[string]Type{}
-			for i, p := range fd.Params {
-				scope[p.Name] = fn.Params[i]
-			}
-			positions := map[string]diag.Pos{}
-			for _, p := range fd.Params {
-				positions[p.Name] = p.Pos
-			}
-			c.useTypeParams(fn)
-			c.fieldWhere = fd.Constructor != nil
-			fn.ParamConstraints = make([][]*Constraint, len(fd.Params))
-			for i, p := range fd.Params {
-				fn.ParamConstraints[i] = c.constraintsOf(p.Type, fn.Params[i], scope)
-				c.noteConstraintSources(fn.ParamConstraints[i], positions)
-			}
-			c.fieldWhere = false
-			fn.ResultConstraints = c.memberConstraints(fd.Result, fn.Result, scope)
-			for _, member := range fn.ResultConstraints {
-				c.noteConstraintSources(member.Constraints, positions)
-			}
-			c.useTypeParams(nil)
-			c.inPrelude = false
+			c.resolveFunctionConstraints(fn)
 		}
 	}
+	for _, fn := range c.info.ExpandedFunctions {
+		c.resolveFunctionConstraints(fn)
+	}
+}
+
+func (c *checker) resolveFunctionConstraints(fn *Func) {
+	fd := fn.Decl
+	c.pkg = fn.Pkg
+	if fn.TemplatePkg != nil {
+		c.pkg = fn.TemplatePkg
+	}
+	c.inPrelude = fn.Prelude
+	scope := map[string]Type{}
+	for i, p := range fd.Params {
+		scope[p.Name] = fn.Params[i]
+	}
+	positions := map[string]diag.Pos{}
+	for _, p := range fd.Params {
+		positions[p.Name] = p.Pos
+	}
+	c.useTypeParams(fn)
+	c.fieldWhere = fd.Constructor != nil
+	fn.ParamConstraints = make([][]*Constraint, len(fd.Params))
+	for i, p := range fd.Params {
+		fn.ParamConstraints[i] = c.constraintsOf(p.Type, fn.Params[i], scope)
+		c.noteConstraintSources(fn.ParamConstraints[i], positions)
+	}
+	c.fieldWhere = false
+	fn.ResultConstraints = c.memberConstraints(fd.Result, fn.Result, scope)
+	for _, member := range fn.ResultConstraints {
+		c.noteConstraintSources(member.Constraints, positions)
+	}
+	c.useTypeParams(nil)
+	c.inPrelude = false
 }
 
 func (c *checker) typeConstraints(refs []*syntax.PredRef, typ Type) []*Constraint {
@@ -282,7 +292,7 @@ func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]T
 		c.bindErr(t.Pos, "facts cannot apply to %s, which holds a Go value that can change", typ)
 		return nil
 	}
-	var out []*Constraint
+	out := append([]*Constraint(nil), c.info.shapeTypeFacts[t]...)
 	_, isParam := typ.(*TypeParam)
 	if t.Union == nil && len(t.Args) == 0 && !isParam {
 		if e := c.lookupType(t.Name); e != nil && e.decl.Kind == syntax.AliasType {

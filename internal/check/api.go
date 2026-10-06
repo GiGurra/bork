@@ -72,6 +72,11 @@ func API(info *Info, files []*syntax.File, path string) *PackageAPI {
 		}
 		add(kind, name, "", apiFunction(fn), fn.Decl.Pos)
 	}
+	for name, helper := range pkg.deriveHelpers {
+		if Exported(name) {
+			add("derive helper", name, "", DeriveHelperSignature(helper), helper.Pos)
+		}
+	}
 	for _, methods := range pkg.methods {
 		for name, fn := range methods {
 			if Exported(name) {
@@ -175,6 +180,75 @@ func apiParams(params []*syntax.TypeParam) string {
 		parts = append(parts, text)
 	}
 	return "[" + strings.Join(parts, ", ") + "]"
+}
+
+// DeriveHelperSignature preserves source type projections and symbolic parameters
+// without exposing any generated runtime specialization.
+func DeriveHelperSignature(fd *syntax.FuncDecl) string {
+	var params []string
+	for _, param := range fd.Params {
+		params = append(params, param.Name+": "+writtenTypeText(param.Type))
+	}
+	text := "derive fn " + fd.Name + apiParams(fd.TypeParams) + "(" + strings.Join(params, ", ") + ")"
+	if fd.Requires != nil {
+		text += " where " + deriveSignatureExpr(fd.Requires)
+	}
+	if fd.Uses != nil {
+		var effects []string
+		for _, effect := range fd.Uses.Effects {
+			effects = append(effects, effect.Name)
+		}
+		if len(effects) == 0 {
+			effects = append(effects, "nothing")
+		}
+		text += " uses " + strings.Join(effects, " + ")
+	}
+	if fd.Needs != nil {
+		var needs []string
+		for _, need := range fd.Needs.Items {
+			name := need.Name
+			if need.Optional {
+				name += "?"
+			}
+			needs = append(needs, name)
+		}
+		text += " needs " + strings.Join(needs, " + ")
+	}
+	result := "Ok"
+	if fd.Result != nil {
+		result = writtenTypeText(fd.Result)
+	}
+	return text + ": " + result
+}
+
+func deriveSignatureExpr(expr syntax.Expr) string {
+	switch expr := expr.(type) {
+	case *syntax.Call:
+		var types, args []string
+		for _, typ := range expr.TypeArgs {
+			types = append(types, writtenTypeText(typ))
+		}
+		for i, arg := range expr.Args {
+			text := deriveSignatureExpr(arg)
+			if i < len(expr.Arguments) && expr.Arguments[i].Name != "" {
+				text = expr.Arguments[i].Name + ": " + text
+			}
+			args = append(args, text)
+		}
+		head := deriveSignatureExpr(expr.Fun)
+		if len(types) > 0 {
+			head += "[" + strings.Join(types, ", ") + "]"
+		}
+		return head + "(" + strings.Join(args, ", ") + ")"
+	case *syntax.Binary:
+		return "(" + deriveSignatureExpr(expr.X) + " " + strings.Trim(expr.Op.String(), "'") + " " + deriveSignatureExpr(expr.Y) + ")"
+	case *syntax.Unary:
+		return strings.Trim(expr.Op.String(), "'") + deriveSignatureExpr(expr.X)
+	}
+	if text := defaultText(expr); text != "" {
+		return text
+	}
+	return "<expression>"
 }
 
 func apiFunction(fn *Func) string {

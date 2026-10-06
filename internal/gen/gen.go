@@ -228,6 +228,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	// Instances are used through their dictionaries, so all are emitted.
 	for _, ci := range info.ClassInstances {
 		roots = append(roots, ci.Methods...)
+		roots = append(roots, ci.Metadata...)
 		if ci.Derived != "" {
 			for _, con := range ci.Constraints {
 				roots = append(roots, constraintPreds(con)...)
@@ -333,17 +334,17 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 			funcs = append(funcs, decl)
 		}
 	}
+	for _, fn := range info.ExpandedFunctions {
+		if emit[fn] {
+			funcs = append(funcs, g.funcDecl(fn.Decl))
+		}
+	}
 	if g.usesBind {
 		// The wrappers' runtime returns both.
 		g.goType(info.Named["GoError"])
 		g.goType(info.Named["GoValueError"])
 	}
 	for _, ci := range info.ClassInstances {
-		for _, m := range ci.Methods {
-			if m.Derived != nil {
-				goFuncs = append(goFuncs, g.derivedFunc(m))
-			}
-		}
 		funcs = append(funcs, g.instanceDecl(ci))
 	}
 	if main != nil {
@@ -470,6 +471,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 }
 
 type gen struct {
+	shapeScope     *check.ClassInstance
 	debugSource    string
 	debugFiles     map[string]bool
 	debugTypes     map[check.Type]ast.Expr
@@ -520,7 +522,6 @@ type gen struct {
 	loops           []loopFrame
 	// tail is the function being generated, if its self calls jump.
 	tail             *tailFrame
-	usesDecodeSchema bool
 	usesGoStruct     bool
 	usesBytes        bool
 	usesIoFailure    bool
@@ -898,6 +899,9 @@ func (g *gen) signature(fd *syntax.FuncDecl) *ast.FuncDecl {
 			Type:  g.goType(fn.Params[i]),
 		})
 	}
+	for i, capture := range shapeCaptures(fn) {
+		ftype.Params.List = append(ftype.Params.List, &ast.Field{Names: []*ast.Ident{shapeCaptureParameter(i)}, Type: g.goType(capture.Type)})
+	}
 	// The ambient values it needs are hidden parameters, after the
 	// others.
 	for _, v := range fn.NeedVars {
@@ -928,6 +932,9 @@ func (g *gen) signature(fd *syntax.FuncDecl) *ast.FuncDecl {
 
 func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
 	fn := g.info.FuncOf[fd]
+	savedShapeScope := g.shapeScope
+	g.shapeScope = fn.TemplateScope
+	defer func() { g.shapeScope = savedShapeScope }()
 	g.tmp = 0
 	g.fnResult = fn.Result
 	savedCaller := g.callerAt
@@ -1394,6 +1401,7 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		g.genericCall(inst, e.Pos())
 		// The ambient values it needs follow the arguments.
 		needStmts, needs := g.values(e.Needs)
+		needs = append(g.shapeCaptureArguments(inst.Func.TemplateScope), needs...)
 		stmts = append(stmts, needStmts...)
 		if inst.Func.TrackCaller {
 			needs = append(needs, g.callerLocation(e.Pos()))
@@ -1544,6 +1552,12 @@ func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 		return &ast.CallExpr{Fun: &ast.SelectorExpr{X: ast.NewIdent("fmt"), Sel: ast.NewIdent(fn)}, Args: args}
 	}
 	switch e.Builtin {
+	case check.BuiltinShapeMetadata:
+		return g.shapeMetadata(e)
+	case check.BuiltinShapeValidate:
+		return g.shapeValidate(e, args[0])
+	case check.BuiltinShapeFinish:
+		return g.shapeFinish(e, args[0])
 	case check.BuiltinCallerLocation:
 		return g.callerLocation(e.Pos())
 	case check.BuiltinPrintln:

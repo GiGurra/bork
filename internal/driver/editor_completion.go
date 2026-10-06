@@ -63,6 +63,27 @@ func (a *EditorAnalysis) EditorSymbols(pos diag.Pos) []EditorCompletion {
 	}
 	before := func(p diag.Pos) bool { return p.Line < pos.Line || p.Line == pos.Line && p.Col <= pos.Col }
 	inside := func(body *check.Block) bool { return body != nil && before(body.Pos()) && !before(body.End) }
+	insideDerivation := false
+	inSourceBody := func(body *syntax.Block) bool {
+		return body != nil && before(body.Pos) && !before(body.End)
+	}
+	for _, helper := range file.DeriveHelpers {
+		insideDerivation = insideDerivation || inSourceBody(helper.Body)
+	}
+	for _, template := range file.Templates {
+		for _, method := range template.Methods {
+			insideDerivation = insideDerivation || inSourceBody(method.Body)
+		}
+	}
+	if insideDerivation {
+		for _, source := range a.program.files {
+			if source.Package == file.Package {
+				for _, helper := range source.DeriveHelpers {
+					add(helper.Name, check.DeriveHelperSignature(helper), "function", 1, nil)
+				}
+			}
+		}
+	}
 	tokens, _ := syntax.Lex(file.Path, []byte(file.Source), &diag.List{})
 	ends := map[diag.Pos]diag.Pos{}
 	for _, t := range tokens {
@@ -169,6 +190,9 @@ func (a *EditorAnalysis) EditorSymbols(pos diag.Pos) []EditorCompletion {
 		})
 	}
 	for _, fn := range a.program.info.Funcs {
+		if fn.TemplatePkg != nil && fn.Decl.Instance == nil {
+			continue
+		}
 		if !fn.Decl.ScriptMain && !fn.Decl.IsMethod {
 			add(fn.Decl.Name, check.TypeText(&check.FuncType{Params: fn.Params, Result: fn.Result, Effects: fn.Effects}, from), "function", 1, nil)
 		}
@@ -408,6 +432,11 @@ func (a *EditorAnalysis) EditorPackageSymbols(path, alias string) []EditorComple
 			fn := a.program.info.FuncOf[decl]
 			if fn != nil && check.Exported(decl.Name) && !decl.IsMethod {
 				out = append(out, EditorCompletion{Name: decl.Name, Kind: "function", Detail: check.TypeText(&check.FuncType{Params: fn.Params, Result: fn.Result, Effects: fn.Effects}, from)})
+			}
+		}
+		for _, helper := range target.DeriveHelpers {
+			if check.Exported(helper.Name) {
+				out = append(out, EditorCompletion{Name: helper.Name, Kind: "function", Detail: check.DeriveHelperSignature(helper)})
 			}
 		}
 		for _, decl := range target.Types {

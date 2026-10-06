@@ -6,7 +6,7 @@ DecodeError { path: ".port", message: "must be positive" }
 Box { value: 1, extras: [] }
 Box { value: "generic", extras: [] }
 Choice.Item { count: 1 }
-["port: Port for incoming traffic.\nUses the application default when omitted.", "port: 8080", "verbose: false", "names: [\"one\", \"two\"]", "labels: {:}", "child: Child { name: \"child\" }", "level: Level.Quiet", "optional: Option.Some(7)"]
+["port: Port for incoming traffic.\nUses the application default when omitted.", "port: 8080", "verbose: false", "names: [one two]", "labels: {:}", "child: Child { name: \"child\" }", "level: Level.Quiet", "optional: Option.Some(7)"]
 ["extras: []"]
 Child { name: "child" }
 [CsvDefault { name: "", value: 1 }]

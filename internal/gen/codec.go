@@ -35,12 +35,8 @@ func (g *gen) codecRuntime(src string) string {
 				}
 			}
 		}
-		src = strings.ReplaceAll(src, "@Decode@", className(pkg.ClassNamed("Decode")).Name)
 	} else {
 		names["Json"] = "any"
-		if index := strings.Index(src, "func _borkDecodeFields"); index >= 0 {
-			src = src[:index]
-		}
 	}
 	var scan scanner.Scanner
 	fset := token.NewFileSet()

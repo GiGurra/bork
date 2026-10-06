@@ -199,7 +199,7 @@ func (g *gen) atFailurePath(x ast.Expr, t check.Type, steps []string, path ast.E
 		}}
 	case *check.Record:
 		if f := t.Field(step); f != nil {
-			return g.atFailurePath(g.fieldRead(x, f), f.Type, rest, &ast.BinaryExpr{X: path, Op: token.ADD, Y: stringLit("." + step)}, leaf)
+			return g.atFailurePath(g.fieldRead(x, f), f.Type, rest, diagnosticFieldPath(path, t, step), leaf)
 		}
 	case *check.Sealed:
 		var out []ast.Stmt

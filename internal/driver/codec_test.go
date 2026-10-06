@@ -130,3 +130,59 @@ fn main(){println(Both(1))}`
 		t.Fatalf("output: %s", output)
 	}
 }
+
+func TestCodecSourceEncodeSiblingFacts(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/codec"
+import "bork/json"
+use codec.Defaults
+pred atLeast(n: Int, lo: Int) { n >= lo }
+type Row = { lo: Int, hi: Int where atLeast(lo) } derive(codec.Encode)
+fn main() { println(json.Encode(Row { lo: 2, hi: 3 })) }`
+	exe, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(exe).CombinedOutput()
+	if err != nil || string(out) != "{\"lo\":2,\"hi\":3}\n" {
+		t.Fatalf("sibling constrained encoding: %s, %v", out, err)
+	}
+}
+
+func TestCodecProjectedNestedEncodeFactsStillRequireProof(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `import "bork/codec"
+import "bork/shape"
+use codec.Defaults
+pred positive(n: Int) { n > 0 }
+class Wrong[T] { fn wrong(x: T): List[codec.Value] }
+derive instance wrong[T]: Wrong[T] {
+  fn wrong(x: T): List[codec.Value] {
+    [comptime for (field in shape.fields[T]()) codec.encode[field.Type](Option.Some(-1))]
+  }
+}
+type Row = { value: Option[Int where positive] } derive(Wrong)
+fn main() {}`, "positive(-1) is false")
+}
+
+func TestCodecSourceTupleEncodeGenericAndComptime(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/codec"
+import "bork/json"
+use codec.Defaults
+fn pair[A: codec.Encode, B: codec.Encode](left: A, right: B): String { json.Encode((left, right)) }
+encoded: codec.Value = comptime { codec.encode((1, "compile")) }
+fn main() {
+  println(pair(2, "runtime"))
+  println(json.Render(encoded))
+  println(json.Encode(((3,), ("nested", true))))
+}`
+	exe, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(exe).CombinedOutput()
+	if err != nil || string(out) != "[2,\"runtime\"]\n[1,\"compile\"]\n[[3],[\"nested\",true]]\n" {
+		t.Fatalf("source tuple encoding: %s, %v", out, err)
+	}
+}

@@ -1,6 +1,7 @@
 package check
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/syntax"
@@ -136,45 +137,51 @@ func (c *checker) packageBindingRead(node *syntax.Ident, binding *PackageBinding
 }
 
 type packageDependencies struct {
-	info      *Info
-	values    map[*PackageBinding]bool
-	calls     map[*Func]bool
-	fields    map[*Field]bool
-	instances map[*Func]bool
+	info               *Info
+	values             map[*PackageBinding]bool
+	calls              map[*Func]bool
+	fields             map[*Field]bool
+	instances          map[*Func][]*Instance
+	constructionFields map[string]bool
+	exhausted          *bool
+	remaining          *int
 }
 
 func newPackageDependencies(info *Info) packageDependencies {
-	return packageDependencies{info: info, values: map[*PackageBinding]bool{}, calls: map[*Func]bool{}, fields: map[*Field]bool{}, instances: map[*Func]bool{}}
+	remaining := 100000
+	return packageDependencies{info: info, values: map[*PackageBinding]bool{}, calls: map[*Func]bool{}, fields: map[*Field]bool{}, instances: map[*Func][]*Instance{}, constructionFields: map[string]bool{}, exhausted: new(bool), remaining: &remaining}
 }
 
 func (dependencies packageDependencies) instance(instance *Instance) {
 	if instance == nil {
 		return
 	}
+	if *dependencies.exhausted {
+		return
+	}
+	*dependencies.remaining--
+	if *dependencies.remaining < 0 {
+		*dependencies.exhausted = true
+		return
+	}
 	dependencies.calls[instance.Func] = true
-	if instance.Func != nil && len(instance.TypeArgs) != 0 && !dependencies.instances[instance.Func] {
-		dependencies.instances[instance.Func] = true
+	active := false
+	for _, previous := range dependencies.instances[instance.Func] {
+		if sameDependencyInstance(previous, instance) {
+			active = true
+			break
+		}
+	}
+	if instance.Func != nil && len(instance.TypeArgs) != 0 && !active {
+		previous := dependencies.instances[instance.Func]
+		if len(previous) >= 64 {
+			*dependencies.exhausted = true
+			return
+		}
+		dependencies.instances[instance.Func] = append(previous, instance)
 		bound := bindParams(instance.Func.TypeParams, instance.TypeArgs)
-		WalkComptime(instance.Func.Body, func(node Expr) bool {
-			switch node := node.(type) {
-			case *Interp:
-				for _, value := range node.Exprs {
-					dependencies.render(subst(value.Type(), bound), map[Type]bool{})
-				}
-			case *CallBuiltin:
-				if node.Builtin == BuiltinToString || node.Builtin == BuiltinPrintln || node.Builtin == BuiltinDbg {
-					for _, value := range node.Args {
-						dependencies.render(subst(value.Type(), bound), map[Type]bool{})
-					}
-				}
-			case *Call:
-				dependencies.specializedInstance(node.Inst, bound)
-			case *FuncRef:
-				dependencies.specializedInstance(node.Inst, bound)
-			}
-			return true
-		})
-		delete(dependencies.instances, instance.Func)
+		dependencies.specializedTree(instance.Func.Body, bound, instance.Dicts)
+		dependencies.instances[instance.Func] = previous
 	}
 	seen := map[*Dict]bool{}
 	var dict func(*Dict)
@@ -186,6 +193,9 @@ func (dependencies packageDependencies) instance(instance *Instance) {
 		if dictionary.Inst != nil {
 			for _, method := range dictionary.Inst.Methods {
 				dependencies.calls[method] = true
+				if len(method.TypeParams) != 0 && len(method.TypeParams) == len(dictionary.TypeArgs) {
+					dependencies.instance(&Instance{Func: method, TypeArgs: dictionary.TypeArgs, Dicts: dictionary.Args})
+				}
 			}
 		}
 		for _, argument := range dictionary.Args {
@@ -197,7 +207,72 @@ func (dependencies packageDependencies) instance(instance *Instance) {
 	}
 }
 
-func (dependencies packageDependencies) specializedInstance(instance *Instance, bound map[*TypeParam]Type) {
+// Follow implicit construction calls under the same generic bindings as the
+// calling function; a predicate dictionary may be concrete only at this point.
+func (dependencies packageDependencies) specializedTree(root Expr, bound map[*TypeParam]Type, dictionaries ...[]*Dict) {
+	var available []*Dict
+	if len(dictionaries) != 0 {
+		available = dictionaries[0]
+	}
+	WalkComptime(root, func(node Expr) bool {
+		if *dependencies.exhausted {
+			return false
+		}
+		switch node := node.(type) {
+		case *Interp:
+			for _, value := range node.Exprs {
+				dependencies.render(subst(value.Type(), bound), map[Type]bool{})
+			}
+		case *CallBuiltin:
+			if node.Builtin == BuiltinShapeMetadata {
+				dependencies.metadata(substituteRequirementDict(node.Dictionary, bound, available), subst(TypeArgs(node.Type())[0], bound))
+			}
+			if node.Builtin == BuiltinShapeFinish && node.Construction != nil {
+				dependencies.construction(node.Construction, bound)
+			}
+			if node.Builtin == BuiltinShapeValidate && node.Validation != nil {
+				dependencies.validation(node.Validation, bound)
+			}
+			if node.Builtin == BuiltinToString || node.Builtin == BuiltinPrintln || node.Builtin == BuiltinDbg {
+				for _, value := range node.Args {
+					dependencies.render(subst(value.Type(), bound), map[Type]bool{})
+				}
+			}
+		case *Call:
+			dependencies.specializedInstance(node.Inst, bound, available)
+		case *FuncRef:
+			dependencies.specializedInstance(node.Inst, bound, available)
+		}
+		return true
+	})
+}
+
+func (dependencies packageDependencies) construction(layout *ShapeConstruction, bound map[*TypeParam]Type) {
+	owner := subst(layout.Owner, bound)
+	constraints := func(facts []*Constraint, subject Type) {
+		for _, fact := range substConstraints(facts, bound) {
+			dependencies.constraint(fact, subject)
+		}
+	}
+	for _, field := range layout.Fields {
+		if field.Default != nil {
+			key := fmt.Sprintf("%p:%s", field, typeKey(owner))
+			if !dependencies.constructionFields[key] {
+				dependencies.constructionFields[key] = true
+				dependencies.tree(field.Default)
+				if len(bound) != 0 {
+					dependencies.specializedTree(field.Default, bound)
+				}
+			}
+		}
+		constraints(field.Constraints, subst(field.Type, bound))
+	}
+	constraints(TypeConstraints(layout.Owner), owner)
+	constraints(variantConstraints(layout.Variant), owner)
+	constraints(layout.Constraints, owner)
+}
+
+func (dependencies packageDependencies) specializedInstance(instance *Instance, bound map[*TypeParam]Type, available []*Dict) {
 	if instance == nil {
 		return
 	}
@@ -206,17 +281,33 @@ func (dependencies packageDependencies) specializedInstance(instance *Instance, 
 	for i, typ := range instance.TypeArgs {
 		specialized.TypeArgs[i] = subst(typ, bound)
 	}
+	specialized.Dicts = make([]*Dict, len(instance.Dicts))
+	for i, dictionary := range instance.Dicts {
+		specialized.Dicts[i] = substituteRequirementDict(dictionary, bound, available)
+	}
 	dependencies.instance(&specialized)
 }
 
 func (dependencies packageDependencies) tree(root Expr) {
 	WalkComptime(root, func(node Expr) bool {
+		if *dependencies.exhausted {
+			return false
+		}
 		switch node := node.(type) {
 		case *Interp:
 			for _, value := range node.Exprs {
 				dependencies.render(value.Type(), map[Type]bool{})
 			}
 		case *CallBuiltin:
+			if node.Builtin == BuiltinShapeMetadata {
+				dependencies.metadata(node.Dictionary, TypeArgs(node.Type())[0])
+			}
+			if node.Builtin == BuiltinShapeFinish && node.Construction != nil {
+				dependencies.construction(node.Construction, nil)
+			}
+			if node.Builtin == BuiltinShapeValidate && node.Validation != nil {
+				dependencies.validation(node.Validation, nil)
+			}
 			if node.Builtin == BuiltinToString || node.Builtin == BuiltinPrintln || node.Builtin == BuiltinDbg {
 				for _, value := range node.Args {
 					dependencies.render(value.Type(), map[Type]bool{})
@@ -418,8 +509,11 @@ func (c *checker) packageDependencyGraph() {
 				}
 			}
 		}
+		if *dependencies.exhausted {
+			c.errorf(function.Decl.Pos, "generic package dependency expansion exceeds the work or specialization depth limit")
+		}
 		graph[function] = dependencies
-		function.RuntimePackageReads = len(dependencies.values) != 0
+		function.RuntimePackageReads = *dependencies.exhausted || len(dependencies.values) != 0
 	}
 	for changed := true; changed; {
 		changed = false
@@ -439,7 +533,10 @@ func (c *checker) packageDependencyGraph() {
 	for field := range c.info.fieldDefaults {
 		dependencies := newPackageDependencies(c.info)
 		dependencies.tree(field.Default)
-		field.RuntimePackageReads = len(dependencies.values) != 0
+		if *dependencies.exhausted {
+			c.errorf(field.Default.Pos(), "generic field default dependency expansion exceeds the work or specialization depth limit")
+		}
+		field.RuntimePackageReads = *dependencies.exhausted || len(dependencies.values) != 0
 		for callee := range dependencies.calls {
 			field.RuntimePackageReads = field.RuntimePackageReads || (callee != nil && callee.RuntimePackageReads)
 		}
@@ -447,6 +544,9 @@ func (c *checker) packageDependencyGraph() {
 	for _, binding := range c.info.PackageBindings {
 		dependencies := newPackageDependencies(c.info)
 		dependencies.tree(binding.Value.Value)
+		if *dependencies.exhausted {
+			c.errorf(binding.Decl.Pos, "generic package value dependency expansion exceeds the work or specialization depth limit")
+		}
 		seen := map[*Func]bool{}
 		var visit func(*Func)
 		visit = func(function *Func) {
@@ -510,6 +610,9 @@ func (c *checker) packageDependencyGraph() {
 func packageRuntimeReads(info *Info, value Expr) bool {
 	dependencies := newPackageDependencies(info)
 	dependencies.tree(value)
+	if *dependencies.exhausted {
+		return true
+	}
 	if len(dependencies.values) != 0 {
 		return true
 	}
@@ -529,10 +632,77 @@ func packageInstanceRuntimeReads(info *Info, instance *Instance) bool {
 	}
 	dependencies := newPackageDependencies(info)
 	dependencies.instance(instance)
+	if *dependencies.exhausted {
+		return true
+	}
 	for function := range dependencies.calls {
 		if function != nil && function.RuntimePackageReads {
 			return true
 		}
 	}
 	return false
+}
+
+func (dependencies packageDependencies) validation(layout *ShapeFieldValidation, bound map[*TypeParam]Type) {
+	subject := subst(layout.Field.Type, bound)
+	for _, constraint := range substConstraints(layout.Constraints, bound) {
+		dependencies.constraint(constraint, subject)
+	}
+}
+
+// A metadata query invokes only the initializer for its resolved key. Other
+// dictionary methods and metadata providers remain lazy.
+func (dependencies packageDependencies) metadata(dictionary *Dict, key Type) {
+	if dictionary == nil || dictionary.Inst == nil {
+		return
+	}
+	bound := bindParams(dictionary.Inst.TypeParams, dictionary.TypeArgs)
+	for _, initializer := range dictionary.Inst.Metadata {
+		if identical(subst(initializer.Result, bound), key) {
+			dependencies.instance(&Instance{Func: initializer, TypeArgs: dictionary.TypeArgs, Dicts: dictionary.Args})
+		}
+	}
+}
+
+func sameDependencyInstance(left, right *Instance) bool {
+	if len(left.TypeArgs) != len(right.TypeArgs) || len(left.Dicts) != len(right.Dicts) {
+		return false
+	}
+	for i, argument := range left.TypeArgs {
+		if !identical(argument, right.TypeArgs[i]) {
+			return false
+		}
+	}
+	seen := map[[2]*Dict]bool{}
+	var sameDictionary func(*Dict, *Dict) bool
+	sameDictionary = func(left, right *Dict) bool {
+		if left == right {
+			return true
+		}
+		if left == nil || right == nil || left.Class != right.Class || left.Inst != right.Inst || left.Param != right.Param || left.Builtin != right.Builtin || !identical(left.Type, right.Type) || len(left.TypeArgs) != len(right.TypeArgs) || len(left.Args) != len(right.Args) {
+			return false
+		}
+		pair := [2]*Dict{left, right}
+		if seen[pair] {
+			return true
+		}
+		seen[pair] = true
+		for i, argument := range left.TypeArgs {
+			if !identical(argument, right.TypeArgs[i]) {
+				return false
+			}
+		}
+		for i, argument := range left.Args {
+			if !sameDictionary(argument, right.Args[i]) {
+				return false
+			}
+		}
+		return true
+	}
+	for i, dictionary := range left.Dicts {
+		if !sameDictionary(dictionary, right.Dicts[i]) {
+			return false
+		}
+	}
+	return true
 }

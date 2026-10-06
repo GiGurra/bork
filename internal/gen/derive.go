@@ -12,36 +12,8 @@ import (
 	"github.com/GiGurra/bork/internal/check"
 )
 
-// Derived instances (`derive (Decode, Encode)`) are written by the
-// compiler, as Go.
-//
-// JSON objects map to records by field name. A sealed type's value is an
-// object whose "type" field names the variant ({"type": "Circle",
-// "radius": 2}); a variant without fields may also be just its name
-// ("Empty").
-//
-// A derived decoder checks each field's where clause, so the record it
-// returns is proven: the compiler trusts it like Go code, and it is
-// right by construction.
-
-// derivedFunc generates a derived instance method.
-func (g *gen) derivedFunc(fn *check.Func) string {
-	g.tmp = 0
-	g.fnResult = fn.Result
-	g.usesDerive = true
-	g.goType(g.codecType("Value"))
-	g.goType(g.codecType("Field"))
-	var sig bytes.Buffer
-	_ = printer.Fprint(&sig, token.NewFileSet(), g.signature(fn.Decl))
-	var body string
-	switch fn.Of.Class.Name {
-	case "Decode":
-		body = g.deriveDecode(fn)
-	case "Encode":
-		body = g.deriveEncode(fn)
-	}
-	return sig.String() + " {\n" + body + "}\n"
-}
+// Checked source templates implement structural codecs. The construction
+// helpers below remain in use by foreign Go conversion.
 
 func (g *gen) text(x ast.Node) string {
 	var buf bytes.Buffer
@@ -53,53 +25,19 @@ func (g *gen) typeText(t check.Type) string { return g.text(g.goType(t)) }
 
 // decodeError is Go code returning a DecodeError.
 func (g *gen) decodeError(path, message string) string {
-	return fmt.Sprintf("return %s{path: %s, message: %s}\n", g.typeText(g.codecType("DecodeError")), path, message)
-}
-
-func (g *gen) deriveDecode(fn *check.Func) string {
-	var b strings.Builder
-	jsonVariant := func(name string) string {
-		return g.text(g.variantType(g.codecType("Value").(*check.Sealed).Variant(name)))
-	}
-	fmt.Fprintf(&b, "_obj, _isObj := json.(%s)\n", jsonVariant("Object"))
-	switch t := fn.Of.Type.(type) {
-	case *check.Record:
-		if len(t.Fields) == 0 {
-			b.WriteString("_ = _obj\n")
-		}
-		b.WriteString("if !_isObj {\n" + g.decodeError(`""`, `"expected an object, found " + _jsonKind(json)`) + "}\n")
-		b.WriteString(g.decodeFields(t.Fields, fn.Derived.FieldDicts[0], g.typeText(t), decodeInvariant{typ: t, constraints: append(append([]*check.Constraint{}, t.Constraints...), fn.Of.Constraints...)}))
-	case *check.Sealed:
-		b.WriteString("var _tag string\n")
-		fmt.Fprintf(&b, "if _s, _isStr := json.(%s); _isStr {\n_tag = _s.value\n} else if _isObj {\n", jsonVariant("String"))
-		b.WriteString("_t, _present := _jsonField(_obj, \"type\")\n")
-		fmt.Fprintf(&b, "_ts, _isStr := _t.(%s)\n", jsonVariant("String"))
-		b.WriteString("if !_present || !_isStr {\n" + g.decodeError(`".type"`, `"expected the variant's name, as a string"`) + "}\n")
-		b.WriteString("_tag = _ts.value\n} else {\n")
-		b.WriteString(g.decodeError(`""`, `"expected an object, found " + _jsonKind(json)`) + "}\n")
-		b.WriteString("switch _tag {\n")
-		for i, v := range t.Variants {
-			fmt.Fprintf(&b, "case %q:\n", v.Name)
-			cons := append(append([]*check.Constraint{}, t.Constraints...), v.Constraints...)
-			cons = append(cons, fn.Of.Constraints...)
-			b.WriteString(g.decodeFields(v.Fields, fn.Derived.FieldDicts[i], g.text(g.variantType(v)), decodeInvariant{typ: t, constraints: cons, positional: v.Positional}))
-		}
-		b.WriteString("}\n")
-		g.imports["strconv"] = true
-		b.WriteString(g.decodeError(`".type"`, strconv.Quote("unknown variant ")+" + strconv.Quote(_tag) + "+strconv.Quote(" of "+t.Name)))
-	}
-	return b.String()
+	return g.constructionError(g.codecType("DecodeError"), path, message)
 }
 
 // decodeFields decodes the fields of a record (or variant) from _obj,
 // and returns the value built from them.
-type decodeInvariant struct {
+type constructionInvariant struct {
+	fieldPath   func(*check.Field) string
 	positional  bool
 	typ         check.Type
 	constraints []*check.Constraint
 }
 
-func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType string, invariants ...decodeInvariant) string {
+func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType string, invariants ...constructionInvariant) string {
 	var b strings.Builder
 	var inits []string
 	positional := len(invariants) > 0 && invariants[0].positional
@@ -155,110 +93,8 @@ func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType st
 	if len(invariants) > 0 {
 		owner = invariants[0].typ
 	}
-	phases := 1
-	if hasComputedFields(fields) {
-		phases = 2
-	}
-	for phase := 0; phase < phases; phase++ {
-		if phase == 1 {
-			for _, stmt := range g.computedCells(ast.NewIdent("_out"), fields, owner) {
-				b.WriteString(g.text(stmt) + "\n")
-			}
-		}
-		for _, f := range fields {
-			for _, con := range f.Constraints {
-				early := !f.Computed && !con.HasSiblingArgs()
-				if phases == 2 && (phase == 0) != early {
-					continue
-				}
-				stmts := g.atFailurePath(g.fieldRead(ast.NewIdent("_out"), f), f.Type, splitPath(con.Path), stringLit(fieldPath(f)), func(x ast.Expr, t check.Type, path ast.Expr) []ast.Stmt {
-					runtime := fieldConstraint(con, func(n string) string {
-						for _, sibling := range fields {
-							if sibling.Name == n {
-								return g.fieldReadText("_out", sibling)
-							}
-						}
-						return name(n).Name
-					})
-					cond := g.constraintCond(runtime, x, t)
-					if cond == nil {
-						return nil
-					}
-					setup, failurePath, message := g.constraintFailure(runtime, x, t, path, con)
-					ret := &ast.ReturnStmt{Results: []ast.Expr{&ast.CompositeLit{Type: g.goType(g.codecType("DecodeError")), Elts: []ast.Expr{
-						&ast.KeyValueExpr{Key: ast.NewIdent("path"), Value: failurePath},
-						&ast.KeyValueExpr{Key: ast.NewIdent("message"), Value: message},
-					}}}}
-					return []ast.Stmt{&ast.IfStmt{Cond: &ast.UnaryExpr{Op: token.NOT, X: paren(cond)}, Body: &ast.BlockStmt{List: append(setup, ret)}}}
-				})
-				for _, s := range stmts {
-					b.WriteString(g.text(s) + "\n")
-				}
-			}
-		}
-	}
-
-	for _, inv := range invariants {
-		for _, con := range inv.constraints {
-			if cond := g.constraintCond(con, ast.NewIdent("_out"), inv.typ); cond != nil {
-				setup, path, message := g.constraintFailure(con, ast.NewIdent("_out"), inv.typ, stringLit(""))
-				fmt.Fprintf(&b, "if !(%s) {\n", g.text(cond))
-				for _, stmt := range setup {
-					b.WriteString(g.text(stmt) + "\n")
-				}
-				b.WriteString(g.decodeError(g.text(path), g.text(message)) + "}\n")
-			}
-		}
-	}
+	b.WriteString(g.constructionChecks(fields, owner, invariants, g.codecType("DecodeError")))
 	b.WriteString("return _out\n")
-	return b.String()
-}
-
-func (g *gen) deriveEncode(fn *check.Func) string {
-	var b strings.Builder
-	obj := g.text(g.variantType(g.codecType("Value").(*check.Sealed).Variant("Object")))
-	str := g.text(g.variantType(g.codecType("Value").(*check.Sealed).Variant("String")))
-	field := g.typeText(g.codecType("Field"))
-	fields := func(x string, fs []*check.Field, dicts []*check.Dict, tag string) string {
-		var parts []string
-		if tag != "" {
-			parts = append(parts, fmt.Sprintf("{name: \"type\", value: %s{value: %q}}", str, tag))
-		}
-		for i, f := range fs {
-			if f.Computed {
-				continue
-			}
-			fun, ds := g.dictMethod(dicts[i], "encode")
-			call := g.text(&ast.CallExpr{Fun: fun, Args: append(ds, g.fieldRead(ast.NewIdent(x), f))})
-			parts = append(parts, fmt.Sprintf("{name: %q, value: %s}", f.Name, call))
-		}
-		return fmt.Sprintf("return %s{fields: []%s{%s}}\n", obj, field, strings.Join(parts, ", "))
-	}
-	switch t := fn.Of.Type.(type) {
-	case *check.Record:
-		b.WriteString(fields("x", t.Fields, fn.Derived.FieldDicts[0], ""))
-	case *check.Sealed:
-		b.WriteString("switch _v := x.(type) {\n")
-		for i, v := range t.Variants {
-			fmt.Fprintf(&b, "case %s:\n", g.text(g.variantType(v)))
-			if len(v.Fields) == 0 {
-				b.WriteString("_ = _v\n")
-			}
-			if v.Positional {
-				var values []string
-				for slot, f := range v.Fields {
-					fun, ds := g.dictMethod(fn.Derived.FieldDicts[i][slot], "encode")
-					values = append(values, g.text(&ast.CallExpr{Fun: fun, Args: append(ds, g.fieldRead(ast.NewIdent("_v"), f))}))
-				}
-				json := g.codecType("Value").(*check.Sealed)
-				array := g.text(g.variantType(json.Variant("Array")))
-				fmt.Fprintf(&b, "return %s{fields: []%s{{name: \"type\", value: %s{value: %q}}, {name: \"values\", value: %s{items: []%s{%s}}}}}\n", obj, field, str, v.Name, array, g.typeText(json), strings.Join(values, ", "))
-			} else {
-				b.WriteString(fields("_v", v.Fields, fn.Derived.FieldDicts[i], v.Name))
-			}
-		}
-		b.WriteString("}\npanic(\"bork: unreachable\")\n")
-	}
 	return b.String()
 }
 
