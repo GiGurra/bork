@@ -30,8 +30,12 @@ func (c *checker) collectDerived(files []*syntax.File) {
 			if entry == nil || entry.decl != td {
 				continue
 			}
+			var written *syntax.TypeExpr
+			if td.Kind == syntax.AliasType {
+				written = &syntax.TypeExpr{Pos: td.Pos, Name: td.Name}
+			}
 			for _, class := range td.Derive {
-				c.collectDerive(td.DerivePos, td.Name, entry.typ, nil, class, file.Prelude, false)
+				c.collectDerive(td.DerivePos, td.Name, entry.typ, written, class, file.Prelude, false)
 			}
 		}
 		for _, decl := range file.Derives {
