@@ -2,6 +2,10 @@ import "bork/shape"
 
 class Counts[T] { fn counts(): (Int, Bool, Int, Int, String) }
 
+class Labels[T] { fn labels(): (String, String) }
+
+type Info = { label: String }
+
 // Runtime bindings with compile-time-known list values stay readable.
 derive instance counts[T]: Counts[T] {
   fn counts(): (Int, Bool, Int, Int, String) {
@@ -14,10 +18,20 @@ derive instance counts[T]: Counts[T] {
   }
 }
 
-type Row = { name: String, age: Int } derive (Counts)
+// Chains and projections on runtime bindings read them too.
+derive instance labels[T]: Labels[T] {
+  fn labels(): (String, String) {
+    s = shape.name[T]()
+    info = Info { label: s }
+    (s.toLower().toUpper(), info.label.toLower())
+  }
+}
+
+type Row = { name: String, age: Int } derive (Counts, Labels)
 type Empty = {} derive (Counts)
 
 fn main() {
   println(counts[Row]())
   println(counts[Empty]())
+  println(labels[Row]())
 }
