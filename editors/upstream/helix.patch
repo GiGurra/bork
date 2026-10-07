@@ -29,13 +29,13 @@ index a5403e6..e69a200 100644
 +
 +[[grammar]]
 +name = "bork"
-+source = { git = "https://github.com/GiGurra/bork", rev = "399a24d2b6818f2786dcb417cf1b289cac9a1227", subpath = "editors/tree-sitter-bork" }
++source = { git = "https://github.com/GiGurra/bork", rev = "28e2772a1bbe7a9480d76e5dd6cedbc9d238e51a", subpath = "editors/tree-sitter-bork" }
 diff --git a/runtime/queries/bork/folds.scm b/runtime/queries/bork/folds.scm
 new file mode 100644
 --- /dev/null
 +++ b/runtime/queries/bork/folds.scm
 @@ -0,0 +1,6 @@
-+[(block) (record_type) (record_literal) (match_expression) (select_expression) (class_declaration)
++[(block) (comprehension_expression) (record_type) (record_literal) (match_expression) (select_expression) (class_declaration)
 + (instance_declaration) (instances_declaration)
 + (list_literal) (list_comprehension) (map_literal) (tuple_literal) (tuple_type) (tuple_pattern)
 + (go_body) (comment)] @fold
@@ -99,7 +99,7 @@ new file mode 100644
 --- /dev/null
 +++ b/runtime/queries/bork/indents.scm
 @@ -0,0 +1,9 @@
-+[(block) (record_literal) (record_type) (list_literal) (list_comprehension) (map_literal)
++[(block) (comprehension_expression) (record_literal) (record_type) (list_literal) (list_comprehension) (map_literal)
 + (tuple_literal) (tuple_type) (tuple_pattern)
 + (parameters) (type_arguments) (match_expression) (select_expression) (class_declaration)
 + (instance_declaration) (instances_declaration)] @indent
@@ -119,7 +119,7 @@ diff --git a/runtime/queries/bork/locals.scm b/runtime/queries/bork/locals.scm
 new file mode 100644
 --- /dev/null
 +++ b/runtime/queries/bork/locals.scm
-@@ -0,0 +1,26 @@
+@@ -0,0 +1,28 @@
 +(block) @local.scope
 +(function_declaration) @local.scope
 +(parameter name: (identifier) @local.definition)
@@ -136,6 +136,8 @@ new file mode 100644
 +(lambda_expression parameter: (identifier) @local.definition)
 +(for_expression name: (identifier) @local.definition)
 +(for_expression init: (loop_binding name: (identifier) @local.definition))
++(comprehension_expression) @local.scope
++(comprehension_generator name: (identifier) @local.definition)
 +(scope_expression name: (identifier) @local.definition)
 +(select_arm name: (identifier) @local.definition)
 +(mock_parameters name: (identifier) @local.definition)

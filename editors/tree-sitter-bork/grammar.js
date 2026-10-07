@@ -135,7 +135,7 @@ module.exports = grammar({
     binding: $ => seq(optional(choice('lazy', seq('async', '(', $._expression, ')'))), field('name', choice($._identifier, alias('lazy', $.identifier), '_', $.tuple_pattern)), optional(seq(':', $.type)), '=', $._expression),
     trust_statement: $ => seq('trust', $._expression),
     block: $ => seq('{', statements($._statement, $), '}'),
-    _expression: $ => choice($.generic_expression, $.qualified_name, $.number, $.string, $.rune, $.boolean, $.interpolated_string, $.block, $.record_expression, $.list_literal, $.map_literal, $.parenthesized_expression, $.tuple_literal, $.call_expression, $.selector_expression, $.try_expression, $.unary_expression, $.binary_expression, $.is_expression, $.lambda_expression, $.if_expression, $.match_expression, $.select_expression, $.return_expression, $.scope_expression, $.with_expression, $.generate_expression, $.yield_expression, $.for_expression, $.comptime_expression, $.comptime_control_expression, $.mock_expression, 'break', 'continue', $.go_body),
+    _expression: $ => choice($.generic_expression, $.qualified_name, $.number, $.string, $.rune, $.boolean, $.interpolated_string, $.block, $.record_expression, $.list_literal, $.map_literal, $.parenthesized_expression, $.tuple_literal, $.call_expression, $.selector_expression, $.try_expression, $.unary_expression, $.binary_expression, $.is_expression, $.lambda_expression, $.if_expression, $.match_expression, $.select_expression, $.return_expression, $.scope_expression, $.with_expression, $.generate_expression, $.yield_expression, $.for_expression, $.comprehension_expression, $.comptime_expression, $.comptime_control_expression, $.mock_expression, 'break', 'continue', $.go_body),
     // A bare Name { in a head begins the body. Delimited operands restore
     // ordinary expression parsing, including record literals.
     _head_expression: $ => choice($.qualified_name, $.number, $.string, $.rune, $.boolean, $.interpolated_string, $.block, $.list_literal, $.map_literal, $.parenthesized_expression, $.tuple_literal, alias($._head_context_record, $.record_expression),
@@ -203,6 +203,13 @@ module.exports = grammar({
     for_expression: $ => seq('for', optional(choice(
       seq('(', $._for_header, ')'), $._bare_for_header,
     )), $.block),
+    // The first line is a generator, which no for { } loop body starts with.
+    comprehension_expression: $ => prec.right(seq('for', '{', repeat(semis($)), $.comprehension_generator,
+      repeat(seq(repeat1(semis($)), choice($.comprehension_generator, $.comprehension_filter, alias($._comprehension_binding, $.binding)))),
+      repeat(semis($)), '}', 'yield', field('value', $._expression))),
+    comprehension_generator: $ => seq($._iteration_binding, 'in', field('source', $._expression)),
+    comprehension_filter: $ => seq('if', field('condition', $._head_expression)),
+    _comprehension_binding: $ => seq(field('name', choice($._identifier, '_', $.tuple_pattern)), optional(seq(':', $.type)), '=', $._expression),
     _iteration_binding: $ => choice(field('name', choice($._identifier, '_')), field('pattern', choice($.tuple_pattern, $.parenthesized_pattern))),
     _for_header: $ => choice(
       seq($._iteration_binding, 'in', $._expression),

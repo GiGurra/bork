@@ -524,10 +524,16 @@ type Comptime struct {
 func (*Comptime) exprNode()            {}
 func (e *Comptime) Position() diag.Pos { return e.Pos }
 
+// Generate is `generate[T] { ... }`. A comprehension,
+// `for { x in xs; if p; y = f(x) } yield v`, is parsed as the generator
+// it means: Comprehension is set, Elem is nil (the element type is the
+// yield's), and Body nests a loop for each generator and an if for each
+// filter around the bindings and the single yield.
 type Generate struct {
-	Pos  diag.Pos
-	Elem *TypeExpr
-	Body *Block
+	Pos           diag.Pos
+	Elem          *TypeExpr
+	Body          *Block
+	Comprehension bool
 }
 type Yield struct {
 	Pos   diag.Pos

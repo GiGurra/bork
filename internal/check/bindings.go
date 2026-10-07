@@ -12,7 +12,9 @@ import (
 // (parameters and patterns) use bind, which also rejects duplicate names.
 func (c *checker) bindRebinding(name string, pos diag.Pos, t Type, node any) {
 	if b, ok := node.(*syntax.Binding); ok && !c.headers[b] {
-		if l, i := c.lookupAt(name); l != nil && l.carry != nil {
+		if l, i := c.lookupAt(name); l != nil && c.comprehensionRebinding(name, pos, node, i) {
+			return
+		} else if l != nil && l.carry != nil {
 			c.rebindCarried(b, l, i, t)
 			return
 		} else if l != nil && i < len(c.scopes)-1 && c.misplacedRebinding(name, pos, i) {

@@ -1,6 +1,7 @@
 package check
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -208,5 +209,56 @@ func TestLoopTupleBindingIdentities(t *testing.T) {
 	}
 	if len(definitions) != 4 {
 		t.Fatalf("got %d distinct loop bindings, want 4", len(definitions))
+	}
+}
+
+func TestComprehensionBindingIdentities(t *testing.T) {
+	d := &diag.List{}
+	files := prelude.Parse(d)
+	file := syntax.Parse("comprehension.bork", []byte(`fn main() {
+  pairs = for {
+    row in [[1, 2], [3]]
+    (index, cell) in row.indexed()
+    if cell > index
+    total = cell + index
+  } yield (row, total)
+  println(pairs.toList())
+}
+`), d)
+	file.Package = "comprehension"
+	files = append(files, file)
+	info := Program(files, file.Package, d, nil)
+	if d.Len() != 0 {
+		t.Fatal(d.Error())
+	}
+	index := BuildSourceIndex(files, info)
+	// Each name's references: its later clauses and the yield.
+	want := map[string][]int{"row": {3, 4, 7}, "index": {4, 5, 6}, "cell": {4, 5, 6}, "total": {6, 7}}
+	tokens := SemanticTokens(file, info)
+	for _, symbol := range index.Symbols() {
+		lines, ok := want[symbol.Name]
+		if symbol.Definition.File != file.Path || !ok {
+			continue
+		}
+		delete(want, symbol.Name)
+		var got []int
+		for _, ref := range index.References(symbol.Definition) {
+			got = append(got, ref.Start.Line)
+		}
+		if fmt.Sprint(got) != fmt.Sprint(lines) {
+			t.Errorf("%s: reference lines = %v, want %v", symbol.Name, got, lines)
+		}
+		found := false
+		for _, token := range tokens {
+			if token.Start == symbol.Definition && token.Kind == "variable" && token.Declaration {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("no semantic declaration for %+v", symbol)
+		}
+	}
+	if len(want) != 0 {
+		t.Errorf("no symbols for %v", want)
 	}
 }

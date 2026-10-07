@@ -75,6 +75,10 @@ fn main() {
 }
 ```
 
+A comprehension builds a lazy sequence:
+`for { n in xs; if n > 0; sq = n * n } yield sq` is a `Seq[Int]`. See
+[comprehensions](language/collections.md#comprehensions).
+
 Rebinding eligible outer names carries their values to the next round and out
 of the loop. `continue` runs the three-part loop's post clause; `break` ends the
 loop. See [loops](language/collections.md#loops) for carrying restrictions.

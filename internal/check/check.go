@@ -1507,7 +1507,7 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 	case *syntax.Comptime:
 		return c.record(e, c.comptimeInitializer(e, want))
 	case *syntax.Generate:
-		return c.record(e, c.generate(e))
+		return c.record(e, c.generate(e, want))
 	case *syntax.Yield:
 		return c.record(e, c.yieldExpr(e))
 	case *syntax.For:
@@ -1521,6 +1521,8 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 			c.inPostClause(e.Pos, word)
 		} else if c.loopCond == c.lambdaDepth+1 {
 			c.errorf(e.Pos, "a loop's condition cannot use %s; test in the body instead", word)
+		} else if len(c.loops) != 0 && c.loops[len(c.loops)-1].comprehension && c.loops[len(c.loops)-1].depth == c.lambdaDepth {
+			c.errorf(e.Pos, "%s cannot be used in a comprehension; filter with an if line instead", word)
 		} else if len(c.loops) == 0 || c.loops[len(c.loops)-1].depth != c.lambdaDepth {
 			c.errorf(e.Pos, "break and continue require a loop in the same function or producer")
 		} else {
@@ -2278,6 +2280,13 @@ func (c *checker) returnExpr(e *syntax.Return) {
 		return
 	}
 	if c.producer != nil && c.producer.depth == c.lambdaDepth {
+		if c.producer.comprehension != nil {
+			if e.Value != nil {
+				c.expr(e.Value)
+			}
+			c.errorf(e.Pos, "return cannot be used in a comprehension")
+			return
+		}
 		if e.Value != nil {
 			c.expr(e.Value)
 			c.errorf(e.Pos, "a generator can only use bare return; yield a value instead")

@@ -274,3 +274,15 @@ test('loop tuple patterns keep expression scopes', () => {
     assert.ok(!scopes(ls, line, 'index').includes('entity.name.namespace.bork'));
   }
 });
+
+test('comprehension lines keep keyword and expression scopes', () => {
+  const ls = tokenize('xs = for {\n  row in rows\n  (i, cell) in row.indexed()\n  if cell > i\n  total = cell + i\n} yield (row, total)');
+  has(ls, 0, 'for', 'keyword.control.bork');
+  has(ls, 1, 'in', 'keyword.control.bork');
+  has(ls, 2, 'in', 'keyword.control.bork');
+  has(ls, 3, 'if', 'keyword.control.bork');
+  has(ls, 5, 'yield', 'keyword.control.bork');
+  for (const [row, word] of [[1, 'row'], [2, 'cell'], [3, 'cell'], [4, 'total']]) {
+    assert.ok(!scopes(ls, row, word).includes('entity.name.namespace.bork'));
+  }
+});

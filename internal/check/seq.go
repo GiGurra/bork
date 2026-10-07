@@ -1,24 +1,56 @@
 package check
 
-import "github.com/GiGurra/bork/internal/syntax"
+import (
+	"github.com/GiGurra/bork/internal/diag"
+	"github.com/GiGurra/bork/internal/syntax"
+)
 
 type producerContext struct {
 	elem  Type
 	depth int
+	// comprehension is set for a comprehension's generator; elem is nil
+	// until its yield gives it.
+	comprehension *comprehension
 }
 
-func (c *checker) generate(e *syntax.Generate) Type {
-	elem := c.resolveType(e.Elem)
-	c.info.generateConstraints[e] = c.constraintsOf(e.Elem, elem, c.paramScope())
-	if elem != Invalid && !isValue(elem) {
-		c.errorf(e.Pos, "a sequence cannot yield %s", elem)
-		elem = Invalid
+// comprehension is what the checker knows of a comprehension's parsed
+// form: its generator loops and its one yield.
+type comprehension struct {
+	loops map[*syntax.For]bool
+	yield *syntax.Yield
+	// base is the number of scopes outside the comprehension; reported
+	// holds the bindings already reported as not new.
+	base     int
+	reported map[diag.Pos]bool
+}
+
+func (c *checker) generate(e *syntax.Generate, want Type) Type {
+	var elem Type
+	var comp *comprehension
+	if e.Comprehension {
+		comp = c.comprehension(e)
+		if seq, ok := want.(*Seq); ok && !mentionsOpen(seq.Elem) {
+			elem = seq.Elem
+		}
+	} else {
+		elem = c.resolveType(e.Elem)
+		c.info.generateConstraints[e] = c.constraintsOf(e.Elem, elem, c.paramScope())
+		if elem != Invalid && !isValue(elem) {
+			c.errorf(e.Pos, "a sequence cannot yield %s", elem)
+			elem = Invalid
+		}
 	}
 	outer, loops, producer := c.used, c.loops, c.producer
 	c.used, c.loops = 0, nil
-	c.producer = &producerContext{elem: elem, depth: c.lambdaDepth}
+	c.producer = &producerContext{elem: elem, depth: c.lambdaDepth, comprehension: comp}
 	body := c.block(e.Body, Ok)
 	effects := c.used
+	if elem == nil {
+		elem = c.producer.elem
+		if elem == nil {
+			elem = Invalid
+		}
+	}
 	c.used, c.loops, c.producer = outer, loops, producer
 	if body != Ok && body != Never && body != Invalid && !isOkTask(body) {
 		c.errorf(e.Body.Pos, "a generator body must have type Ok, found %s", body)
@@ -36,9 +68,35 @@ func (c *checker) yieldExpr(e *syntax.Yield) Type {
 		c.errorf(e.Pos, "yield requires a generator body and cannot cross a lambda boundary")
 		return Invalid
 	}
+	if comp := c.producer.comprehension; comp != nil {
+		if e != comp.yield {
+			c.expr(e.Value)
+			c.errorf(e.Pos, "a comprehension yields only its final value, after the closing '}'")
+			return Invalid
+		}
+		if c.producer.elem == nil {
+			errors := c.diags.Len()
+			got := c.expr(e.Value)
+			if got == Never && c.diags.Len() == errors {
+				c.errorf(e.Value.Position(), "a comprehension's yield never produces a value")
+			}
+			if got == Never || got != Invalid && !isValue(got) {
+				if got != Never {
+					c.errorf(e.Value.Position(), "a comprehension cannot yield %s", got)
+				}
+				got = Invalid
+			}
+			c.producer.elem = got
+			return Ok
+		}
+	}
 	got := c.exprWant(e.Value, c.producer.elem)
 	if !assignable(got, c.producer.elem) {
-		c.errorf(e.Pos, "generator yields %s, but this value is %s", c.producer.elem, got)
+		what := "generator"
+		if c.producer.comprehension != nil {
+			what = "comprehension"
+		}
+		c.errorf(e.Pos, "%s yields %s, but this value is %s", what, c.producer.elem, got)
 	}
 	return Ok
 }
@@ -49,6 +107,9 @@ type loopContext struct {
 	depth  int
 	broken bool
 	carry  *carryLoop
+	// comprehension is set for a comprehension's generator clause,
+	// which break and continue cannot leave.
+	comprehension bool
 }
 
 func (c *checker) forExpr(e *syntax.For) Type {
@@ -77,8 +138,11 @@ func (c *checker) forExpr(e *syntax.For) Type {
 		c.bind(e.Name, e.NamePos, elem, e)
 	}
 	loop := c.carry(e, outer, names)
-	c.loops = append(c.loops, &loopContext{depth: c.lambdaDepth, carry: loop})
-	ctx := c.loops[len(c.loops)-1]
+	ctx := &loopContext{depth: c.lambdaDepth, carry: loop}
+	if p := c.producer; p != nil && p.comprehension != nil && p.comprehension.loops[e] {
+		ctx.comprehension = true
+	}
+	c.loops = append(c.loops, ctx)
 	body := c.loopBodyCarrying(loop, e.Body)
 	c.loops = c.loops[:len(c.loops)-1]
 	loop.broken = ctx.broken
@@ -357,4 +421,81 @@ func (c *checker) seqMethod(e *syntax.Call, sel *syntax.Selector, receiver Type)
 	}
 	c.info.seqCalls[e] = &seqCallInfo{op: op, args: append([]syntax.Expr{sel.X}, e.Args...), effects: charged}
 	return result, true
+}
+
+// comprehension collects a comprehension's generator loops and yield,
+// and reports a binding line that rebinds one of the comprehension's
+// earlier names: each name it binds is new. (A generator's names already
+// cannot shadow; bindRebinding reports names bound outside.)
+func (c *checker) comprehension(e *syntax.Generate) *comprehension {
+	comp := &comprehension{loops: map[*syntax.For]bool{}, base: len(c.scopes), reported: map[diag.Pos]bool{}}
+	seen := map[string]bool{}
+	var names func(syntax.Pattern, func(string, diag.Pos))
+	names = func(p syntax.Pattern, visit func(string, diag.Pos)) {
+		switch p := p.(type) {
+		case *syntax.VariantPat:
+			if len(p.Path) == 1 && !p.Context && !p.Braces && c.typeNamed(p.Path[0]) == nil {
+				visit(p.Path[0], p.Pos)
+			}
+		case *syntax.TuplePat:
+			for _, elem := range p.Elems {
+				names(elem, visit)
+			}
+		}
+	}
+	bound := func(name string, pos diag.Pos) {
+		if name != "_" && seen[name] && !comp.reported[pos] {
+			comp.reported[pos] = true
+			c.errorf(pos, "a comprehension's names are new, and %s is already bound", name)
+		}
+		seen[name] = true
+	}
+	for body := e.Body; body != nil; {
+		next := (*syntax.Block)(nil)
+		for _, stmt := range body.Stmts {
+			switch s := stmt.(type) {
+			case *syntax.Binding:
+				bound(s.Name, s.Pos)
+			case *syntax.TupleBinding:
+				names(s.Pattern, bound)
+			case *syntax.ExprStmt:
+				switch x := s.X.(type) {
+				case *syntax.For:
+					comp.loops[x] = true
+					if x.Pattern != nil {
+						names(x.Pattern, func(name string, _ diag.Pos) { seen[name] = true })
+					} else {
+						seen[x.Name] = true
+					}
+					next = x.Body
+				case *syntax.If:
+					next = x.Then
+				case *syntax.Yield:
+					comp.yield = x
+				}
+			}
+		}
+		body = next
+	}
+	return comp
+}
+
+// comprehensionRebinding reports a binding, directly in a comprehension
+// being checked, of a name bound outside it or already reported, and
+// whether it did. Its new value then has no type.
+func (c *checker) comprehensionRebinding(name string, pos diag.Pos, node any, i int) bool {
+	p := c.producer
+	if p == nil || p.comprehension == nil || p.depth != c.lambdaDepth {
+		return false
+	}
+	comp := p.comprehension
+	if !comp.reported[pos] {
+		if i >= comp.base {
+			return false
+		}
+		comp.reported[pos] = true
+		c.errorf(pos, "a comprehension's names are new, and %s is already bound", name)
+	}
+	c.scopes[len(c.scopes)-1][name] = &local{typ: Invalid, decl: node, used: true}
+	return true
 }

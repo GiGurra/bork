@@ -442,6 +442,10 @@ func (c *checker) copyTarget(rec *Record, u *syntax.CopyUpdate) *Field {
 func (c *checker) try(e *syntax.Try) Type {
 	xt := c.expr(e.X)
 	if c.producer != nil && c.producer.depth == c.lambdaDepth {
+		if c.producer.comprehension != nil {
+			c.errorf(e.Pos, "? cannot be used in a comprehension; yield an explicit error value instead")
+			return Invalid
+		}
 		c.errorf(e.Pos, "? cannot be used in a generator; yield an explicit error value instead")
 		return Invalid
 	}

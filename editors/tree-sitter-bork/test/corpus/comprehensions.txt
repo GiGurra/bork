@@ -1,0 +1,63 @@
+==================
+Comprehensions
+==================
+fn main() {
+  xs = for {
+    row in rows
+
+    (i, cell) in row.indexed(); if cell > i
+    total: Int = cell + i
+  } yield (row, total)
+  for { break }
+}
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    (parameters)
+    (block
+      (binding
+        name: (identifier)
+        (comprehension_expression
+          (comprehension_generator
+            name: (identifier)
+            source: (qualified_name
+              (identifier)))
+          (comprehension_generator
+            pattern: (tuple_pattern
+              (pattern
+                (qualified_name
+                  (identifier)))
+              (pattern
+                (qualified_name
+                  (identifier))))
+            source: (call_expression
+              function: (selector_expression
+                (qualified_name
+                  (identifier))
+                field: (identifier))))
+          (comprehension_filter
+            condition: (binary_expression
+              left: (qualified_name
+                (identifier))
+              right: (qualified_name
+                (identifier))))
+          (binding
+            name: (identifier)
+            (type
+              (qualified_name
+                (identifier)))
+            (binary_expression
+              left: (qualified_name
+                (identifier))
+              right: (qualified_name
+                (identifier))))
+          value: (tuple_literal
+            (qualified_name
+              (identifier))
+            (qualified_name
+              (identifier)))))
+      (for_expression
+        (block)))))

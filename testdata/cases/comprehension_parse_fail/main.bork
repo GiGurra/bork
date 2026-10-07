@@ -1,0 +1,11 @@
+fn noYield() { _ = for { x in [1] } }
+fn yieldNextLine() {
+  _ = for { x in [1] }
+  yield 1
+}
+fn loopYield() { for { break } yield 1 }
+fn filterBlock() { _ = for { x in [1]; if x > 0 { 1 } } yield x }
+fn expression() { _ = for { x in [1]; println(x) } yield x }
+fn lazyLine() { _ = for { x in [1]; lazy y = x } yield y }
+
+fn main() {}
