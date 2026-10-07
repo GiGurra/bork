@@ -188,24 +188,22 @@ func TestDebugEvaluateFloatStages(t *testing.T) {
 	first := start(41, "f + 1.0 == f")
 	second := start(42, "f * 2.0")
 	respond(second, "4611686018427387904 = 0x4000000000000000", true)
-	second = takeDebugMessage(t, &upstream)
-	if second["seq"].(float64) >= 0 {
-		t.Fatal("intermediate query escaped its internal sequence")
-	}
-	respond(second, "4", true)
-	completed := takeDebugMessage(t, &upstream)
-	if completed["seq"] != float64(42) || completed["arguments"].(map[string]any)["expression"] != "(float64(0x1p+02))" || r.evaluationTypes[42] != "float64" {
+	completed := takeDebugMessage(t, &downstream)
+	if completed["request_seq"] != float64(42) || completed["body"].(map[string]any)["result"] != "4.0" || completed["body"].(map[string]any)["type"] != "Float" {
 		t.Fatalf("second result: %v", completed)
 	}
-	for _, result := range []string{"4611686018427387904", "3", "4611686018427387904"} {
-		respond(first, result, true)
-		first = takeDebugMessage(t, &upstream)
+	respond(first, "4611686018427387904", true)
+	first = takeDebugMessage(t, &upstream)
+	if first["seq"].(float64) >= 0 {
+		t.Fatal("operand query escaped its internal sequence")
 	}
-	if first["seq"] != float64(41) || !strings.Contains(first["arguments"].(map[string]any)["expression"].(string), "==") || r.evaluationTypes[41] != "bool" {
-		t.Fatalf("first result: %v", first)
+	respond(first, "4611686018427387904", true)
+	completed = takeDebugMessage(t, &downstream)
+	if completed["request_seq"] != float64(41) || completed["body"].(map[string]any)["result"] != "false" {
+		t.Fatalf("first result: %v", completed)
 	}
 	for _, failure := range []string{"moved", "invalid", "delve"} {
-		query := start(43, "f / 1.0")
+		query := start(43, "f / f")
 		respond(query, "4611686018427387904", true)
 		query = takeDebugMessage(t, &upstream)
 		if failure == "moved" {

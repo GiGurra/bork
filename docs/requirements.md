@@ -3420,7 +3420,7 @@ lazy; generated temporaries are hidden and helper frames are marked subtle.
 Inspection does not execute custom Show methods. Clients without the sidecar map
 retain Delve's Go views.
 
-### Debugger expressions (implemented: bork-m7fjim, bork-s00vvm, bork-easlx5)
+### Debugger expressions (implemented: bork-m7fjim, bork-s00vvm, bork-easlx5, bork-95iqqx)
 
 Debug Console, watch and hover requests use the bork parser, ordinary checker
 and Go expression lowering, with compiler-generated type/name metadata and raw
@@ -3428,13 +3428,13 @@ locals from the selected Delve frame. The relay contains no language parser,
 operator table or naming rules. Supported expressions are available locals and
 parameters, scalar literals, parentheses, eager nested record fields (including
 concrete generics), integer arithmetic and scalar comparisons/boolean/bitwise
-operators. Finite Float/Float32 arithmetic uses compiler-owned staged reads of
-IEEE operand bits and exact hexadecimal substitution after each rounded operation.
-Both widths preserve nearest-even runtime rounding for basic arithmetic; the
-Float32 double-rounding argument is documented in docs/debugger-rounding.md.
-Non-finite and negative-zero operands, computed zero/non-finite results, division
-by zero and short-circuit floating arithmetic remain unsupported and fail clearly.
-Float inspection/literals and noncomputed comparisons remain available.
+operators. Float/Float32 arithmetic uses compiler-owned staged reads of IEEE
+operand bits and typed Go scalar operations matching runtime lowering. Both
+widths preserve nearest-even rounding after every operation, including signed
+zero, subnormal, infinity and NaN behavior. Compiler-produced typed scalar
+results bypass Delve's lossy temporaries; the relay transports and presents them.
+The argument is documented in docs/debugger-rounding.md. Short-circuit floating
+arithmetic/comparisons remain unsupported and fail clearly.
 Literal types and integer unary widths retain their checked semantics. Unsupported expressions return readable
 errors without executing user code. Standalone List.get(Int) uses compiler-owned
 bounds and temporary Option-variant reads, preserving Some/None for valid,

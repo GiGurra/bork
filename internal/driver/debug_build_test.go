@@ -305,6 +305,7 @@ func testDebugDAPSession(t *testing.T, types bool) {
 		{"boundary + tiny == boundary", "true"}, {"boundary - tiny == boundary", "true"}, {"boundary32 + tiny32 == boundary32", "true"}, {"boundary32 - tiny32 == boundary32", "true"}, {"boundary32 + 1.0 == boundary32", "true"}, {"(boundary32 + 1.0) + 1.0 == boundary32", "true"}, {"boundary32 - -1.0 == boundary32", "true"},
 		{"boundary32 * 1.0000001 == 16777218.0", "true"}, {"boundary32 / 3.0 == 5592405.5", "true"},
 		{"tiny * 1.5 == 1e-323", "true"}, {"tiny32 * 1.5 == 2.8e-45", "true"}, {"-fraction < 0.0", "true"},
+		{"negativeZero + 1.0", "1.0"}, {"negativeZero + negativeZero", "-0.0"}, {"1.0 / negativeZero", "-Inf"}, {"notANumber + 1.0", "NaN"}, {"notANumber == notANumber", "false"}, {"notANumber != notANumber", "true"}, {"infinity + 1.0", "+Inf"}, {"infinity - infinity", "NaN"}, {"boundary - boundary", "0.0"}, {"boundary / (boundary - boundary)", "+Inf"}, {"tiny / 2.0", "0.0"}, {"-tiny / 2.0", "-0.0"}, {"tiny32 / 2.0", "0.0"}, {"-tiny32 / 2.0", "-0.0"}, {"huge * 2.0", "+Inf"}, {"huge32 * 2.0", "+Inf"}, {"1.0 / (boundary32 - boundary32)", "+Inf"}, {"(tiny32 - tiny32) / (tiny32 - tiny32)", "NaN"}, {"-(tiny32 - tiny32)", "-0.0"}, {"(tiny32 / (tiny32 - tiny32)) == (tiny32 / (tiny32 - tiny32))", "true"}, {"((tiny32 - tiny32) / (tiny32 - tiny32)) != tiny32", "true"},
 		{"numbers.get(0)", "Some(3)"}, {"numbers.get(range - 2)", "Some(7)"}, {"numbers.get(-1)", "None"}, {"numbers.get(2)", "None"}, {"numbers.get(9223372036854775807)", "None"}, {"emptyNumbers.get(0)", "None"}, {"fraction32 == 1.1", "true"}, {"fraction32 > 1.1", "false"}, {"fraction == 1.1", "true"}, {"fraction > 1.1", "false"}, {"suffix.range_", "4"}, {"^unsigned == 255", "true"}, {"-signed == signed", "true"}, {"range + chan", "6"}, {"nested.inner.range + y * 2", "19"}, {"boxed.item > 1.5", "true"}, {"!(range > 4) && y == 7", "true"}, {"^range & 7", "4"},
 		{"(1 + 2) * 3", "9"}, {"1 / 2", "0"}, {"1.0", "1.0"}, {"'å'", "229"}, {"-range", "-3"}, {`"hé" + "llo"`, `"héllo"`},
 	} {
@@ -313,6 +314,11 @@ func testDebugDAPSession(t *testing.T, types bool) {
 			response = d.until(t, "", seq)
 			if got := response["body"].(map[string]any)["result"]; got != test.want {
 				t.Fatalf("%s in %s: %v; want %s", test.expression, context, response, test.want)
+			}
+			if !types {
+				if _, exists := response["body"].(map[string]any)["type"]; exists {
+					t.Fatalf("unexpected result type for %s: %v", test.expression, response)
+				}
 			}
 			if test.expression == "numbers.get(0)" {
 				seq = d.send(t, "variables", map[string]any{"variablesReference": response["body"].(map[string]any)["variablesReference"]})
@@ -323,14 +329,14 @@ func testDebugDAPSession(t *testing.T, types bool) {
 				}
 			}
 			if types {
-				wantType := map[string]string{"1.0": "Float", "'å'": "Rune", "(1 + 2) * 3": "Int", "numbers.get(0)": "Option[Int]", "numbers.get(-1)": "Option[Int]", "fraction + 0.5": "Float", "fraction32 + 0.5": "Float32"}[test.expression]
+				wantType := map[string]string{"1.0": "Float", "'å'": "Rune", "(1 + 2) * 3": "Int", "numbers.get(0)": "Option[Int]", "numbers.get(-1)": "Option[Int]", "fraction + 0.5": "Float", "fraction32 + 0.5": "Float32", "negativeZero + negativeZero": "Float", "tiny32 / 2.0": "Float32", "notANumber == notANumber": "Bool"}[test.expression]
 				if wantType != "" && response["body"].(map[string]any)["type"] != wantType {
 					t.Fatalf("literal result type for %s: %v", test.expression, response)
 				}
 			}
 		}
 	}
-	for _, expression := range []string{"negativeZero + 1.0", "notANumber + 1.0", "infinity + 1.0", "boundary - boundary", "boundary / 0.0", "tiny / 2.0", "tiny32 / 2.0", "huge * 2.0", "huge32 * 2.0", "false && boundary + 1.0 > boundary", "suffix.range", "range_", "missing", "nested.inner.nope", "chan_", "nested.inner.range_", "chan + true", "println(y)", "shapes.get(0)", "shapes[0]", "numbers.get(true)", "floatNumbers.get(0)", "float32Numbers.get(0)", "numbers.get(0).getOr(1)", "nested.inner.label.runeAt(0)", "some.value", "nested == nested", "y = 1", "1; println(y)"} {
+	for _, expression := range []string{"boundary / 0.0", "false && boundary + 1.0 > boundary", "suffix.range", "range_", "missing", "nested.inner.nope", "chan_", "nested.inner.range_", "chan + true", "println(y)", "shapes.get(0)", "shapes[0]", "numbers.get(true)", "floatNumbers.get(0)", "float32Numbers.get(0)", "numbers.get(0).getOr(1)", "nested.inner.label.runeAt(0)", "some.value", "nested == nested", "y = 1", "1; println(y)"} {
 		seq = d.send(t, "evaluate", map[string]any{"expression": expression, "frameId": frame["id"], "context": "repl"})
 		response = d.untilAny(t, "", seq)
 		if response["success"] != false || response["message"] == "" {

@@ -42,18 +42,16 @@ For example, `user.address.zip`, `count + 1`, `price > minimum`, and
 checks and lowers expressions using type information from the build's debug map
 and locals from the selected frame. Evaluation does not execute user functions.
 
-Finite Float/Float32 arithmetic uses staged reads: the compiler rounds each
-operation to its checked width before evaluating the next. This preserves
-runtime rounding for `+`, `-`, `*`, `/`, unary negation and comparisons of their
-results. For example, if `large: Float32` is 16777216, `large + 1.0 == large`
-is true. See the [rounding argument](debugger-rounding.md) for both widths.
+Float/Float32 arithmetic uses staged reads of raw IEEE operand bits. The compiler
+runs each checked scalar operation at its Go runtime width, preserving signed
+zero, subnormals, infinity and NaN through nested arithmetic and comparisons.
+For example, if `large: Float32` is 16777216, `large + 1.0 == large` is true;
+`1.0 / negativeZero` returns `-Inf`. Results are presented directly, avoiding
+Delve's lossy arithmetic temporaries. See the [rounding argument](debugger-rounding.md).
 
-Non-finite operands/results, negative-zero operands, runtime-computed zero
-results, division by zero and floating arithmetic involving boolean short-circuit
-expressions are rejected with readable errors. These limits avoid Delve's IEEE
-special-value and evaluation-order differences. Direct value inspection, float
-literals and comparisons without arithmetic remain available. Literal
-comparisons use exact representations of the compiler-rounded values.
+Floating arithmetic and comparisons involving boolean short-circuit expressions
+remain unsupported to preserve evaluation order. Float literals retain normal
+compiler rounding. No user functions execute.
 
 A standalone `xs.get(i)` reads an immutable list and returns `Some(value)` or
 `None`, including for negative and out-of-range indexes. The compiler checks the
