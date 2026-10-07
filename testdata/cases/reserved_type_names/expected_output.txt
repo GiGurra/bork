@@ -1,0 +1,6 @@
+fmt { value: 1 } fmt_ { value: "x" } fmt__ { value: true } function
+2 x
+cap { value: 5 } 6
+range.Item(2) range.Empty range_ { value: "record" }
+int.Some(("tuple",)) roundtrip int_ { value: 3 }
+fmt { value: 4 } fmt_ { value: "imported" }

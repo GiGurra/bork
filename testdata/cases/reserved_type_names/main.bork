@@ -1,0 +1,37 @@
+import "example.com/reservednames/api"
+
+type fmt = { value: Int }
+type fmt_ = { value: String }
+type fmt__ = { value: Bool }
+fn fmt___(): String { "function" }
+
+type cap = { value: Int }
+class cap_[T] { fn capValue(value: T): Int }
+instance intCap: cap_[Int] { fn capValue(value: Int): Int { value } }
+
+type range = sealed { Item(Int), Empty }
+type range_ = { value: String }
+
+type int[T] = sealed { Some(T), None }
+type int_[T] = { value: T }
+
+fn (value: fmt) next(): Int { value.value + 1 }
+fn (value: fmt_) text(): String { value.value }
+fn wrap[T](value: T): int[(T,)] { int.Some((value,)) }
+fn unwrap[T](value: int[(T,)]): T {
+  match (value) {
+    int.Some(pair) => pair.0
+    int.None => panic("empty")
+  }
+}
+
+fn main() {
+  first = fmt { value: 1 }
+  second = fmt_ { value: "x" }
+  println(first, second, fmt__ { value: true }, fmt___())
+  println(first.next(), second.text())
+  println(cap { value: 5 }, capValue(6))
+  println(range.Item(2), range.Empty, range_ { value: "record" })
+  println(wrap("tuple"), unwrap(wrap("roundtrip")), int_ { value: 3 })
+  println(api.Values())
+}
