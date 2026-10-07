@@ -23,10 +23,15 @@ fn fileLines(path: String): Seq[String | fs.Error] uses io {
   generate[String | fs.Error] {
     scope producer {
       onClose(producer, () => println("file scope closed"))
-      // fs.Lines opens on traversal and closes on exhaustion or early stop.
-      // Stopping this generator also stops its source before scope cleanup.
-      println("file traversal started")
-      for line in fs.Lines(path) { yield line }
+      // Open inside the generator: its scope owns the file across yields.
+      // Cleanup runs in reverse order, so the file closes before the message.
+      match fs.Open(path, producer) {
+        file: fs.File => {
+          println("file opened")
+          for line in fs.ReadLines(file) { yield line }
+        }
+        error: fs.Error => { yield error }
+      }
     }
   }
 }

@@ -1,0 +1,16 @@
+take zero: []
+first: ["one"]
+continue: ["", "two", "last\r"]
+exhausted: []
+still open: 
+break: one
+remaining bytes: Bytes(0a74776f0a6c6173740d)
+construction did not read: []
+empty: []
+blank lines: ["", ""]
+long lines: [100000, 3]
+pipe first: ["pipe first"]
+pipe rest: pipe second
+last
+errors: ["io"]
+Ok

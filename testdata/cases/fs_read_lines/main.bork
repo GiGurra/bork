@@ -1,0 +1,87 @@
+import "bork/encoding"
+import "bork/fs"
+
+fn stringsOnly(value: String | fs.Error): String {
+  match value {
+    text: String => text
+    _: fs.Error => "unexpected read error"
+  }
+}
+
+// Inject an OS-level read failure; ordinary bork callers cannot close a file.
+fn closeForTest(file: fs.File) uses io unsafe go {
+  import "os"
+  _ = file.handle.(*os.File).Close()
+}
+
+// Replace a scoped test handle with a pipe, preserving its original cleanup.
+fn pipeForTest(file: fs.File) uses io: fs.File unsafe go {
+  import "os"
+  reader, writer, err := os.Pipe()
+  if err != nil { panic(err) }
+  if _, err := writer.Write([]byte("pipe first\r\npipe second\nlast")); err != nil { panic(err) }
+  if err := writer.Close(); err != nil { panic(err) }
+  closeOriginal := file.owner.closeFn
+  file.owner.closeFn = func() { reader.Close(); closeOriginal() }
+  file.handle = reader
+  return file
+}
+
+fn exercise() uses io: Ok | fs.Error {
+  scope app {
+    directory = fs.TempDir(app)?
+    path = fs.Join([fs.DirectoryPath(directory), "lines.txt"])
+    fs.Write(path, encoding.Utf8("one\r\n\ntwo\nlast\r"))?
+
+    reader = fs.Open(path, app)?
+    lines = fs.ReadLines(reader)
+    println("take zero:", lines.take(0).toList())
+    println("first:", lines.take(1).toList())
+    println("continue:", lines.toList())
+    println("exhausted:", lines.toList())
+    // Exhaustion leaves the caller-owned file open.
+    println("still open:", fs.ReadAllText(reader)?)
+
+    other = fs.Open(path, app)?
+    for line in fs.ReadLines(other) {
+      println("break:", line)
+      break
+    }
+    println("remaining bytes:", fs.ReadAll(other)?)
+
+    lazyReader = fs.Open(path, app)?
+    lazyLines = fs.ReadLines(lazyReader)
+    _ = fs.ReadAllText(lazyReader)?
+    println("construction did not read:", lazyLines.toList())
+
+    fs.Write(path, encoding.Utf8(""))?
+    empty = fs.Open(path, app)?
+    println("empty:", fs.ReadLines(empty).toList())
+    fs.Write(path, encoding.Utf8("\n\n"))?
+    blank = fs.Open(path, app)?
+    println("blank lines:", fs.ReadLines(blank).toList())
+
+    long = "x".repeat(100_000)
+    fs.Write(path, encoding.Utf8(long + "\r\nend"))?
+    longReader = fs.Open(path, app)?
+    println("long lines:", fs.ReadLines(longReader).map(value => stringsOnly(value).byteLength()).toList())
+
+    pipe = pipeForTest(fs.TempFile(app)?)
+    pipeLines = fs.ReadLines(pipe)
+    println("pipe first:", pipeLines.take(1).toList())
+    println("pipe rest:", fs.ReadAllText(pipe)?)
+
+    broken = fs.Open(path, app)?
+    failedLines = fs.ReadLines(broken)
+    closeForTest(broken)
+    failures = failedLines.map(value => match value {
+      _: IoError => "io"
+      _: fs.NotFound | fs.PermissionDenied | fs.Exists => "unexpected error"
+      _: String => "unexpected line"
+    })
+    println("errors:", failures.toList())
+  }
+  Ok
+}
+
+fn main() { println(exercise()) }

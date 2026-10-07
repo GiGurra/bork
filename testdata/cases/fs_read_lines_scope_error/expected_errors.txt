@@ -1,0 +1,1 @@
+main.bork:4:3: function escaped cannot return this value: it belongs to scope producer, which ends on line 7

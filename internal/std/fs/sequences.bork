@@ -32,6 +32,55 @@ fn Lines(path: String): Seq[String | Error] uses io unsafe go {
   }}
 }
 
+// ReadLines borrows a scoped file and consumes from its current position.
+// Seekable files rewind unread buffered bytes; other handles avoid read-ahead.
+fn ReadLines(file: File) uses io: Seq[String | Error] uses io unsafe go {
+  import "os"
+  import "io"
+  import "bufio"
+  import "strings"
+  return _Seq[any]{run: func(yield func(any) bool) {
+    handle := file.handle.(*os.File)
+    readLine := func(delimiter byte) (string, error) {
+      var line strings.Builder
+      var next [1]byte
+      for {
+        n, err := handle.Read(next[:])
+        if n > 0 {
+          line.WriteByte(next[0])
+          if next[0] == delimiter { return line.String(), err }
+        }
+        if err != nil { return line.String(), err }
+      }
+    }
+    if _, err := handle.Seek(0, io.SeekCurrent); err == nil {
+      reader := bufio.NewReader(handle)
+      readLine = reader.ReadString
+      defer func() {
+        if unread := reader.Buffered(); unread > 0 {
+          // The caller must not move or close the handle during traversal.
+          _, _ = handle.Seek(-int64(unread), io.SeekCurrent)
+        }
+      }()
+    }
+    for {
+      line, err := readLine('\n')
+      if len(line) > 0 {
+        if strings.HasSuffix(line, "\n") {
+          line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+        }
+        if !yield(line) { return }
+      }
+      if err == io.EOF { return }
+      if err != nil {
+        kind, message := _borkIoFailure(err)
+        yield(classify(fileFailure{path: handle.Name(), message: message, kind: kind}))
+        return
+      }
+    }
+  }}
+}
+
 // Entries opens a fresh directory per traversal and visits filesystem order.
 // It reads one entry at a time and closes the handle on exhaustion or stop.
 fn Entries(path: String): Seq[DirEntry | Error] uses io unsafe go {
