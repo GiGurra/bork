@@ -256,9 +256,9 @@ derive fn u[T](app: Scope, path: String) uses io: fs.File | fs.Error { scope s {
   owner = openScope(app); closeScope(owner)
   comptime for (field in shape.fields[T]()) { closeScope(owner); _ = 1 }
 }`, "owned scope owner was already closed"},
-		{"move again in copy", `derive fn u[T](app: Scope, other: Scope, path: String) uses io: Ok | fs.Error {
-  scope s { f = fs.Open(path, s)?; move(f, app); comptime for (field in shape.fields[T]()) { move(f, other); _ = 1 } }
-}`, ""},
+		{"move again in copy", `derive fn u[T](app: Scope, other: Scope, path: String) uses io: fs.File | fs.Error {
+  scope s { f = fs.Open(path, s)?; g = move(f, app); comptime for (field in shape.fields[T]()) { _ = move(f, other); _ = 1 }; g }
+}`, "f was moved to scope app"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
