@@ -14,6 +14,8 @@ type LegacyStagedList struct {
 type File struct {
 	// HeadParentheses holds removable control-head pairs (End is the closing paren).
 	HeadParentheses []SourceSpan
+	// PatternLineStarts marks leading dots whose newlines separate pattern-list items.
+	PatternLineStarts []diag.Pos
 	// PatternTestOperators includes contextual is positions, including unfinished edits.
 	PatternTestOperators []diag.Pos
 	// IterationOperators marks the contextual in tokens of loop headers.

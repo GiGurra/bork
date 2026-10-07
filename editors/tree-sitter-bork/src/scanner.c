@@ -102,7 +102,7 @@ bool tree_sitter_bork_external_scanner_scan(void *payload, TSLexer *lexer, const
   if (!valid[0]) {
     while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r') lexer->advance(lexer, true);
   }
-  if (valid[1]) {
+  if (valid[1] || valid[8]) {
     bool newline = scanner->comment_newline;
     scanner->comment_newline = false;
     while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r' || lexer->lookahead == '\n') {
@@ -129,16 +129,23 @@ bool tree_sitter_bork_external_scanner_scan(void *payload, TSLexer *lexer, const
         } else break;
         while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r' || lexer->lookahead == '\n') lexer->advance(lexer, false);
       }
+      bool dot = lexer->lookahead == '.';
       bool continuation = line_continuation(lexer);
-      if (!continuation || scanner->control_newline) {
-        scanner->control_newline = false;
+      if ((!continuation || scanner->control_newline) && valid[1]) {
         lexer->result_symbol = 1;
+        scanner->control_newline = false;
+        return true;
+      }
+      // The grammar also accepts this token before an expression selector,
+      // so ambiguous comprehension/loop lists keep both parses alive.
+      if (dot && continuation && valid[8]) {
+        lexer->result_symbol = 8;
         return true;
       }
       return false;
     }
   }
-  if (!valid[0] && valid[7] && (valid[1] || valid[6] || scanner->control_newline) && lexer->lookahead == '/') {
+  if (!valid[0] && valid[7] && (valid[1] || valid[8] || valid[6] || scanner->control_newline) && lexer->lookahead == '/') {
     lexer->advance(lexer, false);
     if (lexer->lookahead == '/') {
       while (!lexer->eof(lexer) && lexer->lookahead != '\n') lexer->advance(lexer, false);
@@ -155,14 +162,17 @@ bool tree_sitter_bork_external_scanner_scan(void *payload, TSLexer *lexer, const
       }
       // Preserve the comment node, then emit a separator when it crosses
       // a line at a position where the grammar can end an item.
-      scanner->comment_newline = newline && (valid[1] || valid[6] || scanner->control_newline);
+      scanner->comment_newline = newline && (valid[1] || valid[8] || valid[6] || scanner->control_newline);
     } else return false;
     lexer->mark_end(lexer);
     if (scanner->comment_newline && !scanner->control_newline) {
       // Decide before returning the comment: a failed newline scan cannot
       // persist cleared state, which would split a continued call later.
       skip_space_comments(lexer);
-      if (line_continuation(lexer)) scanner->comment_newline = false;
+      bool dot = lexer->lookahead == '.';
+      bool continuation = line_continuation(lexer);
+      bool dot_newline = dot && continuation && valid[8];
+      if (continuation ? !dot_newline : !valid[1] && !valid[6]) scanner->comment_newline = false;
     }
     lexer->result_symbol = 7;
     return true;

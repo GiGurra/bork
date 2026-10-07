@@ -4133,7 +4133,7 @@ Standalone script header comments `// bork:require <Go module> <canonical pinned
 
 ### Method-chain continuation (bork-e6seng)
 
-Method and field selectors can continue an expression on a following line with a leading dot, across whitespace and comments. A leading-dot variant pattern followed by `in` separates comprehension generator lines, and one followed by `=>` separates match arms. Other leading-dot selectors continue expressions, including comprehension sources, filters, bindings and yields. Trailing-dot continuations remain accepted. The formatter indents continuation lines one level and distinguishes contextual variant dots from receiver selectors (bork-e6seng).
+Method and field selectors can continue an expression on a following line with a leading dot, across whitespace and comments. A leading-dot variant pattern followed by `in` separates comprehension generator lines, and one followed by `=>` separates match arms. Inside list and positional payload patterns, newlines separate completed items even before a leading-dot variant; this also applies inside `is` tests and comprehension generator patterns. Other leading-dot selectors continue expressions, including list values, call and constructor arguments, comprehension sources, filters, bindings and yields. Qualified pattern names stay on one line or break after the dot. Trailing-dot continuations remain accepted. The formatter indents continuation lines one level and distinguishes contextual variant dots from receiver selectors (bork-e6seng).
 
 Standalone script requirements also resolve Bork libraries, including the
 complete transitive graph, into the script resolution cache. Editor checks use

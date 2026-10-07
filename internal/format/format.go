@@ -56,7 +56,11 @@ func SourceWithOptions(path string, src []byte, options Options) ([]byte, error)
 		return nil, fmt.Errorf("%s", d.Error())
 	}
 	patternTests := map[diag.Pos]bool{}
+	patternLines := map[diag.Pos]bool{}
 	parsed := syntax.ParseScript(path, src, &diag.List{})
+	for _, pos := range parsed.PatternLineStarts {
+		patternLines[pos] = true
+	}
 	for _, pos := range parsed.PatternTestOperators {
 		patternTests[pos] = true
 	}
@@ -79,6 +83,9 @@ func SourceWithOptions(path string, src []byte, options Options) ([]byte, error)
 				prev = syntax.Semi
 			}
 			continue
+		}
+		if patternLines[t.Pos] {
+			prev = syntax.Semi
 		}
 		text := t.Text
 		// Operators have no text and print as their name; an empty Go body has

@@ -4169,8 +4169,25 @@
             "type": "CHOICE",
             "members": [
               {
-                "type": "SYMBOL",
-                "name": "_head_expression"
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "_head_expression"
+                  },
+                  {
+                    "type": "CHOICE",
+                    "members": [
+                      {
+                        "type": "SYMBOL",
+                        "name": "_pattern_newline"
+                      },
+                      {
+                        "type": "BLANK"
+                      }
+                    ]
+                  }
+                ]
               },
               {
                 "type": "BLANK"
@@ -5051,6 +5068,10 @@
                                   {
                                     "type": "SYMBOL",
                                     "name": "_newline"
+                                  },
+                                  {
+                                    "type": "SYMBOL",
+                                    "name": "_pattern_newline"
                                   }
                                 ]
                               }
@@ -5089,6 +5110,10 @@
                                                     {
                                                       "type": "SYMBOL",
                                                       "name": "_newline"
+                                                    },
+                                                    {
+                                                      "type": "SYMBOL",
+                                                      "name": "_pattern_newline"
                                                     }
                                                   ]
                                                 }
@@ -5107,6 +5132,10 @@
                                                 {
                                                   "type": "SYMBOL",
                                                   "name": "_newline"
+                                                },
+                                                {
+                                                  "type": "SYMBOL",
+                                                  "name": "_pattern_newline"
                                                 }
                                               ]
                                             }
@@ -5167,6 +5196,10 @@
                           {
                             "type": "SYMBOL",
                             "name": "_newline"
+                          },
+                          {
+                            "type": "SYMBOL",
+                            "name": "_pattern_newline"
                           }
                         ]
                       }
@@ -5235,6 +5268,10 @@
                                             {
                                               "type": "SYMBOL",
                                               "name": "_newline"
+                                            },
+                                            {
+                                              "type": "SYMBOL",
+                                              "name": "_pattern_newline"
                                             }
                                           ]
                                         }
@@ -5253,6 +5290,10 @@
                                         {
                                           "type": "SYMBOL",
                                           "name": "_newline"
+                                        },
+                                        {
+                                          "type": "SYMBOL",
+                                          "name": "_pattern_newline"
                                         }
                                       ]
                                     }
@@ -5965,8 +6006,25 @@
             "type": "CHOICE",
             "members": [
               {
-                "type": "SYMBOL",
-                "name": "_expression"
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "_expression"
+                  },
+                  {
+                    "type": "CHOICE",
+                    "members": [
+                      {
+                        "type": "SYMBOL",
+                        "name": "_pattern_newline"
+                      },
+                      {
+                        "type": "BLANK"
+                      }
+                    ]
+                  }
+                ]
               },
               {
                 "type": "BLANK"
@@ -7785,6 +7843,10 @@
                                     {
                                       "type": "SYMBOL",
                                       "name": "_newline"
+                                    },
+                                    {
+                                      "type": "SYMBOL",
+                                      "name": "_pattern_newline"
                                     }
                                   ]
                                 }
@@ -7823,6 +7885,10 @@
                                                       {
                                                         "type": "SYMBOL",
                                                         "name": "_newline"
+                                                      },
+                                                      {
+                                                        "type": "SYMBOL",
+                                                        "name": "_pattern_newline"
                                                       }
                                                     ]
                                                   }
@@ -7841,6 +7907,10 @@
                                                   {
                                                     "type": "SYMBOL",
                                                     "name": "_newline"
+                                                  },
+                                                  {
+                                                    "type": "SYMBOL",
+                                                    "name": "_pattern_newline"
                                                   }
                                                 ]
                                               }
@@ -7903,6 +7973,10 @@
                         {
                           "type": "SYMBOL",
                           "name": "_newline"
+                        },
+                        {
+                          "type": "SYMBOL",
+                          "name": "_pattern_newline"
                         }
                       ]
                     }
@@ -7971,6 +8045,10 @@
                                           {
                                             "type": "SYMBOL",
                                             "name": "_newline"
+                                          },
+                                          {
+                                            "type": "SYMBOL",
+                                            "name": "_pattern_newline"
                                           }
                                         ]
                                       }
@@ -7989,6 +8067,10 @@
                                       {
                                         "type": "SYMBOL",
                                         "name": "_newline"
+                                      },
+                                      {
+                                        "type": "SYMBOL",
+                                        "name": "_pattern_newline"
                                       }
                                     ]
                                   }
@@ -8478,6 +8560,10 @@
                                       {
                                         "type": "SYMBOL",
                                         "name": "_newline"
+                                      },
+                                      {
+                                        "type": "SYMBOL",
+                                        "name": "_pattern_newline"
                                       }
                                     ]
                                   }
@@ -8516,6 +8602,10 @@
                                                         {
                                                           "type": "SYMBOL",
                                                           "name": "_newline"
+                                                        },
+                                                        {
+                                                          "type": "SYMBOL",
+                                                          "name": "_pattern_newline"
                                                         }
                                                       ]
                                                     }
@@ -8534,6 +8624,10 @@
                                                     {
                                                       "type": "SYMBOL",
                                                       "name": "_newline"
+                                                    },
+                                                    {
+                                                      "type": "SYMBOL",
+                                                      "name": "_pattern_newline"
                                                     }
                                                   ]
                                                 }
@@ -8596,6 +8690,10 @@
                           {
                             "type": "SYMBOL",
                             "name": "_newline"
+                          },
+                          {
+                            "type": "SYMBOL",
+                            "name": "_pattern_newline"
                           }
                         ]
                       }
@@ -8664,6 +8762,10 @@
                                             {
                                               "type": "SYMBOL",
                                               "name": "_newline"
+                                            },
+                                            {
+                                              "type": "SYMBOL",
+                                              "name": "_pattern_newline"
                                             }
                                           ]
                                         }
@@ -8682,6 +8784,10 @@
                                         {
                                           "type": "SYMBOL",
                                           "name": "_newline"
+                                        },
+                                        {
+                                          "type": "SYMBOL",
+                                          "name": "_pattern_newline"
                                         }
                                       ]
                                     }
@@ -10800,6 +10906,10 @@
     {
       "type": "SYMBOL",
       "name": "_comment_content"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_pattern_newline"
     }
   ],
   "inline": [],

@@ -28,8 +28,7 @@ func lexAt(file string, src []byte, line, col int, diags *diag.List, compiler bo
 	for i, t := range lx.toks {
 		if i > 0 && t.Kind == Dot && t.Pos.Line > lx.toks[i-1].End.Line && contextPatternAhead(lx.toks[i:]) {
 			prev := lx.toks[i-1]
-			switch prev.Kind {
-			case TIdent, TInt, TFloat, TRune, TString, TInterp, TGoCode, KwTrue, KwFalse, RParen, RBrace, RBrack, Quest:
+			if canEndStatement(prev.Kind) {
 				toks = append(toks, lx.toks[last:i]...)
 				toks = append(toks, Token{Kind: Semi, Text: "\n", Pos: prev.End, End: prev.End})
 				last = i
@@ -111,10 +110,11 @@ func (lx *lexer) emit(k Kind, text string, pos diag.Pos) {
 // endsStatement reports whether a newline after the last emitted token
 // should terminate the statement.
 func (lx *lexer) endsStatement() bool {
-	if len(lx.toks) == 0 {
-		return false
-	}
-	switch lx.toks[len(lx.toks)-1].Kind {
+	return len(lx.toks) > 0 && canEndStatement(lx.toks[len(lx.toks)-1].Kind)
+}
+
+func canEndStatement(kind Kind) bool {
+	switch kind {
 	case TIdent, TInt, TFloat, TRune, TString, TInterp, TGoCode, KwTrue, KwFalse, KwReturn, KwBreak, KwContinue, RParen, RBrace, RBrack, Quest, Underscore:
 		return true
 	}
