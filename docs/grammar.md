@@ -18,6 +18,7 @@
 - **String literals:** double-quoted, with Go's escape sequences (`\n`, `\t`, `\"`, `\\`, ...).
 - **`unsafe go { ... }`:** after `unsafe go`, everything up to the matching `}` is raw Go, not bork tokens (braces inside Go strings, runes, and comments do not count).
 - **Statement endings:** a newline ends a statement when the line's last token is an identifier, a literal, `true`/`false`, `return`, `break`, `continue`, `_`, `)`, `]`, `}`, or `?`, as in Go. A `;` can also separate statements on one line. Newlines inside parentheses are ignored, so argument and parameter lists can span lines. A line starting with `|>` or a selector (`.method`) continues the previous expression across blank lines and comments. An explicit semicolon ends the statement. Method-chain continuation lines format one level deeper; trailing-dot continuation remains valid.
+- **List and block separators:** record fields, sealed variants, tag entries, record/list literals, field/payload/list patterns, match/select arms, instance bundles, and `with` bindings require a comma, semicolon, or newline between items. Leading, repeated, and trailing semicolons are accepted, including in empty lists and blocks. A comma must follow an item and may precede semicolons; leading or repeated commas and a comma after a semicolon are invalid. Blocks require semicolons or newlines between statements.
 
 ## Syntax
 
@@ -30,7 +31,7 @@ PackageBinding = [ "lazy" ] Ident [ ":" Type ] "=" Expr . (* pure memo; comptime
 AmbientDecl = { "logged" | "propagated" "(" String ")" } "ambient" Ident ":" Type .     (* ambient traceId: String: a value functions read with needs, bound by with *)
 Use        = "use" UseItem .                (* use money.DecodeAmount, use money.*, use api.Json *)
 UseItem    = Ident | Ident "." ( Ident | "*" ) .
-Instances  = "instances" Ident "{" [ UseItem { Sep UseItem } [ Sep ] ] "}" .
+Instances  = "instances" Ident "{" { EOL } { UseItem Sep } [ UseItem ] "}" .
                                              (* instances Json { ItemDecode, ItemEncode, money.Defaults } *)
 ClassDecl  = "class" Ident "[" Ident "]" "{" { EOL } [ MethodSig { EOL { EOL } MethodSig } { EOL } ] "}" .  (* class Show[T] { fn show(x: T): String } *)
 MethodSig  = "fn" Ident "(" [ Params ] ")" [ FunctionWhere ] [ Uses ] [ ":" Type ] .
@@ -51,13 +52,13 @@ Derive     = "derive" "(" ( Ident | QualIdent ) { "," ( Ident | QualIdent ) } ")
 DeriveDecl = "derive" ( Ident | QualIdent ) "for" Type . (* package declaration; bare generic names request universal instances *)
 DeriveTemplate = "derive" InstanceDecl . (* one unconstrained target parameter, declared by the class owner *)
 DeriveHelper = "derive" FuncDecl . (* expansion-only Bork helper *)
-Fields     = "{" [ Field { Sep Field } [ Sep ] ] "}" .
+Fields     = "{" { EOL } { Field Sep } [ Field ] "}" .
 Field      = [ "lazy" ] Ident ":" Type [ "=" Expr ] { TagGroup } . (* eager defaults are closed values; pure lazy defaults may depend on siblings; preceding // lines are field docs *)
-TagGroup   = Ident "{" [ TagEntry { Sep TagEntry } [ Sep ] ] "}" . (* starts on the same line as the token it follows; go values remain String only *)
+TagGroup   = Ident "{" { EOL } { TagEntry Sep } [ TagEntry ] "}" . (* starts on the same line as the token it follows; go values remain String only *)
 TagEntry   = Ident ":" Expr .
-Sealed     = "sealed" "{" [ Variant { Sep Variant } [ Sep ] ] "}" .
+Sealed     = "sealed" "{" { EOL } { Variant Sep } [ Variant ] "}" .
 Variant    = Ident [ Fields | "(" Type { "," Type } [ "," ] ")" ] { TagGroup } [ Where ] .
-Sep        = "," | newline .                 (* commas or one item per line *)
+Sep        = ( "," | EOL ) { EOL } .        (* commas, semicolons, or newlines; only one comma per separator *)
 
 FuncDecl   = "fn" [ Receiver ] Ident [ TypeParams ] "(" [ Params ] ")" [ FunctionWhere ] [ Uses ] [ Needs ] [ ":" Type ] ( Block | GoBody )
            | "fn" Ident "=" Ident "." "new" .
@@ -92,7 +93,7 @@ TypeAtom   = Ident [ "[" Type { "," Type } "]" ] [ Uses ] | "(" Type ")" | Tuple
 TupleType  = "(" Type "," [ Type { "," Type } [ "," ] ] ")" .
 FuncType   = "(" [ Type { "," Type } ] ")" [ Uses ] "=>" Type .  (* (Int, String) => Bool, (String) uses io => Ok; TypeAtom Uses applies only to Seq *)
 
-Block      = "{" { Stmt EOL } [ Expr ] "}" .
+Block      = "{" { EOL } { Stmt EOL { EOL } } [ Stmt ] "}" .  (* the final expression is the block value; commas do not separate statements *)
 Stmt       = Binding | Trust | Mock | Expr .
 Mock       = [ Ident "=" ] "mock" ( Ident | QualIdent ) [ "." Ident ] "(" [ ( Ident | "_" ) { "," ( Ident | "_" ) } ] ")" Block .
                                              (* in tests: mock payments.Charge(card, amount) { ... }, calls = mock Store.save(s, x) { ... } *)
@@ -115,7 +116,7 @@ Postfix    = Primary { [ "[" Type { "," Type } "]" ] "(" [ Args ] ")"
                      | ".into" "[" Type "]" "(" [ Update { Sep Update } [ Sep ] ] ")"
                      | "?"
                      | RecordLit } .
-RecordLit  = "{" [ FieldInit { Sep FieldInit } [ Sep ] ] "}" .  (* after User, Box[Int], Shape[Int].Circle, ".", or "." Ident *)
+RecordLit  = "{" { EOL } { FieldInit Sep } [ FieldInit ] "}" .  (* after User, Box[Int], Shape[Int].Circle, ".", or "." Ident *)
 FieldInit  = Ident ":" Expr .
 Update     = Ident { "." Ident } ":" Expr .  (* u.copy(address.city: "Oslo") *)
 Args       = Argument { "," Argument } [ "," ] .
@@ -139,30 +140,30 @@ LoopInit   = Ident [ ":" Type ] "=" Expr .         (* in order: each sees the na
 LoopPost   = Ident "=" Expr .                      (* the next values of header names, computed together *)
 StagedControl = "comptime" ( If | For | Match ) . (* inside derive definitions only *)
 LoopControl = "break" | "continue" .
-WithExpr   = "with" "(" WithBind { Sep WithBind } [ Sep ] ")" Block .  (* with (traceId: id, principal: p) { ... } *)
+WithExpr   = "with" "(" { EOL } { WithBind Sep } [ WithBind ] ")" Block .  (* with (traceId: id, principal: p) { ... } *)
 WithBind   = ( Ident | QualIdent ) ":" Expr .
 ScopeExpr  = "scope" Ident [ "with" Expr { "," Expr } ] Block .  (* scope s { f = fs.Open(path, s)? ... }; scope s with taskTimeout(100), cleanupTimeout(500) { ... } *)
 Lambda     = ( Ident | "(" [ LParam { "," LParam } ] ")" ) "=>" Expr .  (* x => x + 1 *)
 LParam     = Ident [ ":" Type ] .
-ListLit    = "[" ( [ Expr { Sep Expr } [ Sep ] ] | ListComprehension ) "]" .
+ListLit    = "[" ( { EOL } { Expr Sep } [ Expr ] | ListComprehension ) "]" .
 ListComprehension = "comptime" "for" "(" Ident "in" Expr ")" [ "comptime" "if" "(" Expr ")" ] Expr .
 MapLit     = "{" ":" "}" | "{" Entry { Sep Entry } [ Sep ] "}" .  (* {"a": 1, "b": 2}; {:} is the empty map *)
 Entry      = Expr ":" Expr .
 If         = "if" "(" Expr ")" Block [ "else" ( If | Block ) ] .
 Return     = "return" [ Expr ] .
-Match      = "match" "(" Expr ")" "{" [ Arm { Sep Arm } [ Sep ] ] "}" .
+Match      = "match" "(" Expr ")" "{" { EOL } { Arm Sep } [ Arm ] "}" .
 Arm        = Pattern "=>" Expr .
 TupleLit   = "(" Expr "," [ Expr { "," Expr } [ "," ] ] ")" .
 TuplePat   = "(" Pattern "," [ Pattern { "," Pattern } [ "," ] ] ")" .
-Select     = "select" "{" [ SelectArm { Sep SelectArm } [ Sep ] ] "}" .  (* "select" before "{" where an expression starts *)
+Select     = "select" "{" { EOL } { SelectArm Sep } [ SelectArm ] "}" .  (* "select" before "{" where an expression starts *)
 SelectArm  = ( [ ( Ident | "_" ) "=" ] Expr | "_" ) "=>" Expr .
                                              (* n = ch.receive(s) => n; out.send(s, x) => Ok; _ => "none ready" *)
 Pattern    = TuplePat | "(" Pattern ")" | "_"                             (* anything *)
            | Literal                         (* 1, -1, 1.5, 'a', "a", true *)
-           | "[" [ ListElems ] "]"            (* [], [x], [first, ...rest], [0, ...] *)
+           | "[" { EOL } [ ListElems ] "]"            (* [], [x], [first, ...rest], [0, ...] *)
            | ( Ident | "_" ) ":" Type                  (* n: Int, e: NotFound | DbError *)
            | ( "." Ident | Ident [ "." Ident ] | Ident TypeArgs "." Ident )
-             [ "{" FieldPat { Sep FieldPat } [ Sep ] "}" | "(" [ Pattern { Sep Pattern } [ Sep ] ] ")" ] .
+             [ "{" { EOL } { FieldPat Sep } [ FieldPat ] "}" | "(" { EOL } { Pattern Sep } [ Pattern ] ")" ] .
                                              (* Shape.Circle { radius }, NotFound, User { name }, n *)
 ListElems  = ( Pattern { Sep Pattern } [ Sep "..." [ Ident ] ] | "..." [ Ident ] ) [ Sep ] .
 FieldPat   = Ident [ ":" Pattern ] .         (* radius, radius: r, radius: 0, center: Point { x: 0 } *)

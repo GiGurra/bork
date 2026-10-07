@@ -164,6 +164,8 @@ Go struct value with positional E0/E1 fields. See [design](design/tuples.md).
 - **Pragmatic local type inference, like Go and Scala.** Function signatures are written out, which doubles as documentation, and local values are inferred.
 - **Scala-style inline lambdas.** Lambda parameter types are inferred from the expected type at the call site, so `users.map(u => u.name)` needs no annotations.
 
+- **List and block separators.** Record fields and sealed variants require commas, semicolons, or newlines between items. Leading, repeated, and trailing semicolons are accepted in lists and blocks, including empty bodies. Commas must follow list items; blocks require semicolons or newlines between statements and reject commas.
+
 ### Type classes
 
 - **Class and instance member separators.** Newlines and semicolons separate members; leading, repeated, and trailing semicolons are accepted. Commas are not member separators.

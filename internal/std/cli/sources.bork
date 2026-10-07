@@ -1,0 +1,32 @@
+import "bork/codec"
+use codec.Defaults
+
+// Source describes the winning input for a CLI field. An omitted optional
+// value (including a leaf below an inactive optional group) is Absent.
+type Source = sealed {
+  Default
+  Config { path: String }
+  Env { name: String }
+  Flag { name: String }
+  Absent
+}
+type FieldSource = { field: String, source: Source }
+type Resolved[T] = { value: T, sources: List[FieldSource], warnings: List[String] }
+
+// Source uses dotted bork field paths, independent of wire names and aliases.
+// Unknown fields give None; known omitted optional fields give Some(Absent).
+fn (resolved: Resolved[T]) Source[T](field: String): Option[Source] {
+  resolved.sources.find(entry => entry.field == field).map(entry => entry.source)
+}
+
+// ParseResolved exposes the same proven options as Parse, plus winning sources
+// and accepted deprecation warnings. Help and errors never return a snapshot.
+fn ParseResolved[T: codec.Decode](name: String, description: String, args: List[String], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}) uses io: Resolved[T] | Error | Help {
+  specs = resolve[T](flags, settings, name)?
+  fields = inputFields[T](name)?
+  input = parseInput(name, description, args, specs, fields, configFiles, settings.completion, settings.version)?
+  match (codec.decode[T](input.value)) {
+    error: codec.DecodeError => withWarnings(Error { errors: [error] }, input.warnings, input.path)
+    value: T => Resolved[T] { value: value, sources: input.sources, warnings: input.warnings }
+  }
+}

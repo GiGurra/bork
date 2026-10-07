@@ -454,6 +454,99 @@ bound. The decoder validates supplied values and final sibling-dependent facts;
 only a proven immutable record reaches the handler. Help never reads config
 files or invokes a handler. See [entry points](#entry-points) for result handling.
 
+## Configuration discovery
+
+`FindConfig(appName, searchPaths = []) uses io` opts into discovery and returns
+`Option[String] | cli.Error`. Without search paths, it searches `./<appName>.*`,
+`$XDG_CONFIG_HOME/<appName>/config.*` (falling back to
+`~/.config/<appName>/config.*` when unset), then `/etc/<appName>/config.*`.
+The home directory comes from the operating system (`HOME` on Unix) and is
+looked up only when needed.
+Within each directory, the extension order is `.json`, `.yaml`, `.yml`.
+The first regular file wins; discovery does not merge multiple matches or read
+file contents. Directories are skipped, symlinks to regular files are followed,
+missing candidates give `None`, and other filesystem errors give `cli.Error`.
+The app name must be a nonempty file name without slashes, other than `.` or `..`.
+
+Explicit search paths are file stems without extensions and replace the
+defaults in priority order. For example, `["./app", "/etc/app/config"]` tries
+`./app.json`, `./app.yaml`, `./app.yml`, then `/etc/app/config.json`, and so on. To load the match, pass it in
+`configFiles`. For example:
+
+```bork
+import "bork/cli"
+import "bork/codec"
+use codec.Defaults
+
+type Options = { port: Int = 8080 } derive (codec.Decode)
+
+fn main() {
+  match (cli.FindConfig("app")) {
+    Option.Some(path) => println(cli.Parse[Options]("app", "Example", [], configFiles: [path]))
+    Option.None => println(cli.Parse[Options]("app", "Example", []))
+    error: cli.Error => println(error)
+  }
+}
+```
+
+Place the discovered path before explicit overlay files in `configFiles` to
+keep those overlays higher priority. Environment and command-line inputs still
+win over every file. `Parse` and `Run` never discover files automatically.
+Calling `FindConfig` before parsing performs filesystem access even for help;
+applications that require help without filesystem access can check for help
+before opting into discovery.
+
+## Winning value sources
+
+`ParseResolved[T: codec.Decode](name, description, args, flags = [],
+configFiles = [], settings = .{}) uses io` returns `cli.Resolved[T] | cli.Error |
+cli.Help`. It uses the same precedence, validation, naming settings and warnings
+as `ParseDetailed`; `Parse` and `Run` keep their existing return types.
+`Resolved` contains `value: T`, `sources: List[cli.FieldSource]`, and
+`warnings: List[String]`. No resolved value is returned for help or a failure.
+
+`resolved.Source("db.port")` returns `Option[cli.Source]` for a dotted **bork
+field path**, independent of config wire names or flag aliases. Flattened records
+have one entry per leaf; `cli { flatten: false }` fields have one entry for the
+whole value. The sources list follows schema order. Unknown paths return `None`.
+
+| Source | Meaning |
+| --- | --- |
+| `cli.Source.Default` | The declared default, an inherited parent record default, or the implicit false boolean default won. |
+| `cli.Source.Config { path }` | This file supplied the final value, including an explicit null. |
+| `cli.Source.Env { name }` | This environment variable supplied the value; aliases retain the selected variable name. |
+| `cli.Source.Flag { name }` | A flag or positional supplied the value. Flags identify the canonical long name, including when an alias or short flag was used; positionals identify the bork field path. |
+| `cli.Source.Absent` | An optional field was omitted, or its enclosing optional flattened group is inactive. |
+
+A null at a flattened group clears its inherited parent default and deactivates
+its leaves until the group is supplied again. Inactive leaves have source
+`Absent`; reactivated leaves report their actual supplying layer or their own
+default. The group itself has no leaf entry. A null at an ordinary optional
+leaf is still a `Config` source. Empty environment values remain absent.
+False, zero, empty strings and empty lists retain their supplying layer.
+
+```bork
+import "bork/cli"
+import "bork/codec"
+use codec.Defaults
+
+type Options = { port: Int = 8080 } derive (codec.Decode)
+
+fn main() {
+  match (cli.ParseResolved[Options]("app", "Example", ["--port", "9000"])) {
+    resolved: cli.Resolved[Options] => {
+      println(resolved.value.port)
+      println(resolved.Source("port"))
+    }
+    error: cli.Error => println(error)
+    help: cli.Help => println(help.text)
+  }
+}
+```
+
+Source-aware parsing of persistent root flags through `RunRoot` is tracked
+separately; this API resolves one options record.
+
 ## Configuration files
 
 `configFiles` accepts JSON and YAML files using canonical codec wire keys

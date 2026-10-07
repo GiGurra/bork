@@ -24,6 +24,11 @@ fn main() {
 - `==` compares records by their contents.
 - Printing a record shows its type name and fields, much as it is written in code.
 
+Record fields and sealed variants can be separated by commas, newlines, or
+semicolons. Leading, repeated, and trailing semicolons are accepted, even in
+empty bodies. Blocks also accept these semicolons, but use newlines or
+semicolons between statements rather than commas.
+
 ### Changed copies
 
 Values never change. `copy` makes a new record with some fields replaced, and it can reach into nested records:

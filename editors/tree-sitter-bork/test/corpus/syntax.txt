@@ -181,9 +181,7 @@ scope app with taskTimeout(100) {
             (pattern
               (qualified_name
                 (identifier)))
-            (pattern
-              (qualified_name
-                (identifier))))
+            (identifier))
           (call_expression
             (qualified_name
               (identifier))
