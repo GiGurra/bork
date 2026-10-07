@@ -24,9 +24,9 @@ type inputField = {
 }
 type nativeBuilder = (String, String, List[FieldSpec], List[inputField], List[String], (String) uses nothing => codec.Value | codecs.JsonError, (String) uses nothing => String, List[Completion], (Completion, CompletionRequest) uses io + net + clock + random + state => Suggestions | Error, Scope) uses nothing => adapter | Error
 type pending = {}
-type inputCollection = { fields: List[codec.Field], errors: List[codec.DecodeError] }
-type adapter = { native: nativeCommand, result: () uses io => codec.Value | Error | pending }
-type parsedInput = { value: codec.Value, warnings: List[String], path: String }
+type inputCollection = { fields: List[codec.Field], errors: List[codec.DecodeError], sources: List[FieldSource] }
+type adapter = { native: nativeCommand, result: () uses io => codec.Value | Error | pending, sources: () uses io => List[FieldSource] }
+type parsedInput = { value: codec.Value, warnings: List[String], path: String, sources: List[FieldSource] = [] }
 
 fn inputFields[T: codec.Decode](name: String): List[inputField] | Error {
   inputFieldsWithSchema[T](codec.Schema[T](), name)
@@ -163,6 +163,8 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
   var result any = pending{}
   parameters := map[string]boa.Param{}
   environmentInputs := map[string]string{}
+  environmentNames := map[string]string{}
+  resultSources := []FieldSource{}
   var configuredFlags *pflag.FlagSet
   collect := func(arguments []string, partial bool) any {
       // Boa joins List positionals with commas. Keep original words, including
@@ -211,6 +213,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
       }
       config := map[string]codec.Value{}
       configNames := map[string]string{}
+      configSources := map[string]string{}
       configGroups := map[string]bool{}
       configExtras := map[string]flatConfigEntry{}
       var err error
@@ -229,7 +232,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
             if entry.group {
               _, object := entry.value.(codec.Value_Object)
               configGroups[entry.field] = object
-              for source := range config { if strings.HasPrefix(source, entry.field+".") { delete(config, source); delete(configNames, source) } }
+              for source := range config { if strings.HasPrefix(source, entry.field+".") { delete(config, source); delete(configNames, source); delete(configSources, source) } }
               for source := range configExtras { if strings.HasPrefix(source, entry.field+".") { delete(configExtras, source) } }
               for source := range configGroups { if strings.HasPrefix(source, entry.field+".") { delete(configGroups, source) } }
               continue
@@ -238,6 +241,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
             if !metadata[entry.field].config { return fmt.Errorf("CLI config field %q is disabled", entry.key) }
             config[entry.field] = entry.value
             configNames[entry.field] = entry.key
+            configSources[entry.field] = path
           }
           return nil
         })
@@ -260,9 +264,20 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
       } }
       jsonFields := []codec.Field{}
       failures := []codec.DecodeError{}
+      sources := []FieldSource{}
       for i, field := range schema {
         enabled := true
         for group, active := range activeGroups { if strings.HasPrefix(field.field, group+".") && !active { enabled = false } }
+        var source Source = Source_Absent{}
+        if enabled {
+          if field.hasDefault { source = Source_Default{} }
+          if path, configured := configSources[field.field]; configured { source = Source_Config{path: path} }
+          if !shadow.Elem().Field(i).IsNil() {
+            spec := metadata[field.field]
+            if spec.positional && len(arguments) > positionalIndex(spec) { source = Source_Flag{name: field.field} } else if flag := configuredFlags.Lookup(mappingName(spec.long)); flag != nil && flag.Changed { source = Source_Flag{name: flag.Name} } else if env := environmentNames[field.field]; env != "" { source = Source_Env{name: env} }
+          }
+        }
+        sources = append(sources, FieldSource{field: field.field, source: source})
         if !enabled { continue }
         if errors := collectionFailures[field.field]; len(errors) != 0 { failures = append(failures, errors...); continue }
         key := inputKey(field)
@@ -343,7 +358,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
         sort.Slice(extras, func(i, j int) bool { return extras[i].key < extras[j].key })
         jsonFields = rebuildNestedFields(jsonFields, schema, active, nullGroups, extras)
       }
-      return inputCollection{fields: jsonFields, errors: failures}
+      return inputCollection{fields: jsonFields, errors: failures, sources: sources}
   }
   command := boa.Cmd{
     Use: name, Short: description, Params: shadow.Interface(),
@@ -354,6 +369,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
       input := collected.(inputCollection)
       if len(input.errors) != 0 { result = Error{errors: input.errors}; return }
       result = codec.Value_Object{fields: input.fields}
+      resultSources = input.sources
 
     },
   }
@@ -367,6 +383,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
     for index, field := range schema {
       spec := metadata[field.field]
       delete(environmentInputs, field.field)
+      delete(environmentNames, field.field)
       long := mappingName(spec.long)
       canonical := configuredFlags.Lookup(long)
       supplied := ""
@@ -392,6 +409,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
         selected, selectedInput = candidate, raw
       }
       environmentInputs[field.field] = selectedInput
+      environmentNames[field.field] = selected
       if selected == "" { selected = env }
       if param := parameters[fmt.Sprintf("Field%d", index)]; param != nil { param.SetEnv(selected) }
     }
@@ -522,7 +540,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
       return nil, cobra.ShellCompDirectiveNoFileComp
     }
   }
-  return adapter{native: native, result: func() any { return result }}
+  return adapter{native: native, result: func() any { return result }, sources: func() []FieldSource { return append([]FieldSource{}, resultSources...) }}
 }
 
 fn evaluate(prepared: adapter, args: List[String], completion: Bool, configure: (nativeCommand, List[String], Bool) => Error | Ok) uses io: parsedInput | Error | Help unsafe go {
@@ -555,7 +573,7 @@ fn evaluate(prepared: adapter, args: List[String], completion: Bool, configure: 
     for _, warning := range warnings { failure.errors = append(failure.errors, codec.DecodeError{path: cmd.CommandPath(), message: warning}) }
     return failure
   }
-  return parsedInput{value: result.(codec.Value), warnings: warnings, path: cmd.CommandPath()}
+  return parsedInput{value: result.(codec.Value), warnings: warnings, path: cmd.CommandPath(), sources: prepared.sources()}
 }
 fn withWarnings(error: Error, warnings: List[String], path: String): Error {
   error.copy(errors: error.errors.concat(warnings.map(warning => codec.DecodeError { path: path, message: warning })))
