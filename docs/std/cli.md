@@ -458,16 +458,19 @@ files or invokes a handler. See [entry points](#entry-points) for result handlin
 
 `FindConfig(appName, searchPaths = []) uses io` opts into discovery and returns
 `Option[String] | cli.Error`. Without search paths, it searches `./<appName>.*`,
-`~/.config/<appName>/config.*`, then `/etc/<appName>/config.*`. The home directory
-comes from the operating system (`HOME` on Unix); `XDG_CONFIG_HOME` is not used.
+`$XDG_CONFIG_HOME/<appName>/config.*` (falling back to
+`~/.config/<appName>/config.*` when unset), then `/etc/<appName>/config.*`.
+The home directory comes from the operating system (`HOME` on Unix) and is
+looked up only when needed.
 Within each directory, the extension order is `.json`, `.yaml`, `.yml`.
 The first regular file wins; discovery does not merge multiple matches or read
 file contents. Directories are skipped, symlinks to regular files are followed,
 missing candidates give `None`, and other filesystem errors give `cli.Error`.
 The app name must be a nonempty file name without slashes, other than `.` or `..`.
 
-Explicit search paths replace the defaults, in priority order. The first path
-uses `<appName>.*`; subsequent paths use `config.*`. To load the match, pass it in
+Explicit search paths are file stems without extensions and replace the
+defaults in priority order. For example, `["./app", "/etc/app/config"]` tries
+`./app.json`, `./app.yaml`, `./app.yml`, then `/etc/app/config.json`, and so on. To load the match, pass it in
 `configFiles`. For example:
 
 ```bork

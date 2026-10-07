@@ -1,6 +1,6 @@
 // FindConfig opts into conventional config discovery. Search paths are ordered
-// highest first: the first uses appName, later paths use "config". Within each
-// path JSON precedes YAML (.yaml, then .yml). No match is None.
+// highest first and contain file stems without extensions. Within each stem
+// JSON precedes YAML (.yaml, then .yml). No match is None.
 fn FindConfig(appName: String, searchPaths: List[String] = []) uses io: Option[String] | Error unsafe go {
   import "os"
   import "path/filepath"
@@ -11,17 +11,19 @@ fn FindConfig(appName: String, searchPaths: List[String] = []) uses io: Option[S
   }
   paths := append([]string{}, searchPaths...)
   defaults := len(paths) == 0
-  if defaults { paths = []string{".", "", filepath.Join("/etc", appName)} }
-  for i, dir := range paths {
+  if defaults { paths = []string{appName, "", filepath.Join("/etc", appName, "config")} }
+  for i, stem := range paths {
     if defaults && i == 1 {
-      home, err := os.UserHomeDir()
-      if err != nil { return failure(appName, err.Error()) }
-      dir = filepath.Join(home, ".config", appName)
+      configHome := os.Getenv("XDG_CONFIG_HOME")
+      if configHome == "" {
+        home, err := os.UserHomeDir()
+        if err != nil { return failure(appName, err.Error()) }
+        configHome = filepath.Join(home, ".config")
+      }
+      stem = filepath.Join(configHome, appName, "config")
     }
-    base := "config"
-    if i == 0 { base = appName }
     for _, ext := range []string{".json", ".yaml", ".yml"} {
-      candidate := filepath.Join(dir, base+ext)
+      candidate := stem+ext
       info, err := os.Stat(candidate)
       if os.IsNotExist(err) { continue }
       if err != nil { return failure(candidate, err.Error()) }

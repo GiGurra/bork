@@ -32,6 +32,7 @@ fn main() {
 		want     string
 		defaults bool
 		noHome   bool
+		xdg      bool
 	}{
 		{name: "missing", want: "None"},
 		{name: "json-first", files: []string{"cwd/app.yml", "cwd/app.yaml", "cwd/app.json"}, want: "cwd/app.json"},
@@ -43,6 +44,7 @@ fn main() {
 		{name: "skip-directory", dirs: []string{"cwd/app.json"}, files: []string{"cwd/app.yaml"}, want: "cwd/app.yaml"},
 		{name: "default-cwd-no-home", defaults: true, noHome: true, files: []string{"cwd/app.json"}, want: "app.json"},
 		{name: "default-cwd", defaults: true, files: []string{"cwd/app.json", "home/.config/app/config.json"}, want: "app.json"},
+		{name: "default-xdg", defaults: true, xdg: true, noHome: true, files: []string{"xdg/app/config.yaml", "home/.config/app/config.json"}, want: "xdg/app/config.yaml"},
 		{name: "default-home", defaults: true, files: []string{"home/.config/app/config.yaml"}, want: "home/.config/app/config.yaml"},
 	}
 	for _, tt := range tests {
@@ -67,13 +69,16 @@ fn main() {
 					t.Fatal(err)
 				}
 			}
-			args := []string{filepath.Join(dir, "cwd"), filepath.Join(dir, "home/.config/app"), filepath.Join(dir, "system")}
+			args := []string{filepath.Join(dir, "cwd/app"), filepath.Join(dir, "home/.config/app/config"), filepath.Join(dir, "system/config")}
 			if tt.defaults {
 				args = nil
 			}
 			cmd := exec.Command(exe, args...)
 			cmd.Dir = filepath.Join(dir, "cwd")
-			cmd.Env = append(os.Environ(), "HOME="+filepath.Join(dir, "home"))
+			cmd.Env = append(os.Environ(), "HOME="+filepath.Join(dir, "home"), "XDG_CONFIG_HOME=")
+			if tt.xdg {
+				cmd.Env = append(cmd.Env, "XDG_CONFIG_HOME="+filepath.Join(dir, "xdg"))
+			}
 			if tt.noHome {
 				cmd.Env = append(cmd.Env, "HOME=")
 			}
