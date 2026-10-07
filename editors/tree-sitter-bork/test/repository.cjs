@@ -7,6 +7,7 @@ const grammar = path.resolve(__dirname, '..');
 const cli = path.join(grammar, 'node_modules/.bin/tree-sitter');
 const recovery = new Set([
   'bitwise_not_fail', // ~ is rejected in favor of ^.
+  'else_on_new_line_fails', // else must follow the closing brace on the same line.
   'copy_separator_fail', // Assignment in a named update.
   'go_bindings_parse_fail', // A numeric unsafe Go body.
   'interpolation_errors_fail', // Invalid interpolation holes.

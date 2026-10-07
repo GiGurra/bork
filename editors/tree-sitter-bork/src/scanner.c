@@ -59,16 +59,31 @@ static bool context_arm(TSLexer *lexer) {
   return lexer->lookahead == '>';
 }
 
-typedef struct { bool comment_newline; } Scanner;
+static bool line_continuation(TSLexer *lexer) {
+  if (lexer->lookahead == '|') {
+    lexer->advance(lexer, false);
+    return lexer->lookahead == '>';
+  }
+  if (lexer->lookahead == '.') {
+    lexer->advance(lexer, false);
+    int c = lexer->lookahead;
+    return ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c >= 0x80) && !context_arm(lexer);
+  }
+  return false;
+}
+
+typedef struct { bool comment_newline; bool control_newline; } Scanner;
 
 void *tree_sitter_bork_external_scanner_create(void) { return calloc(1, sizeof(Scanner)); }
 void tree_sitter_bork_external_scanner_destroy(void *payload) { free(payload); }
 unsigned tree_sitter_bork_external_scanner_serialize(void *payload, char *buffer) {
   buffer[0] = ((Scanner *)payload)->comment_newline;
-  return 1;
+  buffer[1] = ((Scanner *)payload)->control_newline;
+  return 2;
 }
 void tree_sitter_bork_external_scanner_deserialize(void *payload, const char *buffer, unsigned length) {
   ((Scanner *)payload)->comment_newline = length > 0 && buffer[0];
+  ((Scanner *)payload)->control_newline = length > 1 && buffer[1];
 }
 
 // Go is opaque to the bork parser. Count braces outside Go literals/comments;
@@ -106,19 +121,16 @@ bool tree_sitter_bork_external_scanner_scan(void *payload, TSLexer *lexer, const
         } else break;
         while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r' || lexer->lookahead == '\n') lexer->advance(lexer, false);
       }
-      bool continuation = false;
-      if (lexer->lookahead == '|') {
-        lexer->advance(lexer, false); continuation = lexer->lookahead == '>';
-      } else if (lexer->lookahead == '.') {
-        lexer->advance(lexer, false);
-        int c = lexer->lookahead;
-        continuation = ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c >= 0x80) && !context_arm(lexer);
+      bool continuation = line_continuation(lexer);
+      if (!continuation || scanner->control_newline) {
+        scanner->control_newline = false;
+        lexer->result_symbol = 1;
+        return true;
       }
-      if (!continuation) { lexer->result_symbol = 1; return true; }
       return false;
     }
   }
-  if (!valid[0] && valid[6] && valid[7] && lexer->lookahead == '/') {
+  if (!valid[0] && valid[7] && (valid[1] || valid[6] || scanner->control_newline) && lexer->lookahead == '/') {
     lexer->advance(lexer, false);
     if (lexer->lookahead == '/') {
       while (!lexer->eof(lexer) && lexer->lookahead != '\n') lexer->advance(lexer, false);
@@ -134,10 +146,16 @@ bool tree_sitter_bork_external_scanner_scan(void *payload, TSLexer *lexer, const
         previous = c;
       }
       // Preserve the comment node, then emit a separator when it crosses
-      // a line at a position where the grammar can end a declaration.
-      scanner->comment_newline = newline && valid[6];
+      // a line at a position where the grammar can end an item.
+      scanner->comment_newline = newline && (valid[1] || valid[6] || scanner->control_newline);
     } else return false;
     lexer->mark_end(lexer);
+    if (scanner->comment_newline && !scanner->control_newline) {
+      // Decide before returning the comment: a failed newline scan cannot
+      // persist cleared state, which would split a continued call later.
+      skip_space_comments(lexer);
+      if (line_continuation(lexer)) scanner->comment_newline = false;
+    }
     lexer->result_symbol = 7;
     return true;
   }
@@ -216,6 +234,8 @@ bool tree_sitter_bork_external_scanner_scan(void *payload, TSLexer *lexer, const
       if (ends_line) break;
     }
     if (!ends_line) return false;
+    // Bare control keywords end before a following selector continuation.
+    scanner->control_newline = true;
     lexer->result_symbol = i + 3;
     return true;
   }
