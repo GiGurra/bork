@@ -45,8 +45,8 @@ test "CSV uses canonical headers and accepts aliases with supplied error paths" 
   match (encoding.DecodeCsv[Row]("listen_port,old-port\n3,4\n")) { error: encoding.CsvErrors => assertEqual(at(error.errors, 0).message, "same field as listen_port"), _ => assert(false) }
   match (encoding.DecodeCsv[Row]("old-port,listen_port\n3,4\n")) { error: encoding.CsvErrors => assertEqual(at(error.errors, 0).message, "same field as old-port"), _ => assert(false) }
 }
-test "CSV explains omitted columns" {
-  match (encoding.EncodeCsv([Omitted {}])) { error: encoding.CsvError => { assertEqual(error.column, "value"); assert(error.message.contains("Omit.Never")) }, _ => assert(false) }
+test "CSV completes omitted defaults" {
+  match (encoding.EncodeCsv([Omitted {}])) { text: String => assertEqual(text, "value\n1\n"), _ => assert(false) }
 }
 test "HTTP query and path use aliases, defaults and unknown policy" {
   match (http.QueryAs[Row](request("old-port=4"))) { row: Row => { assertEqual(row.HTTPPort, 4); assertEqual(row.userName, "guest") }, _ => assert(false) }

@@ -1,0 +1,7 @@
+ok    omitted None and defaults keep every column and selected field codec
+ok    custom Encode completion follows custom Decode schema
+ok    custom Encode without completion still rejects omissions
+ok    completion does not hide extra or duplicate encoded fields
+ok    derived completion refuses fields without omission and unknown wire names
+5 passed, 0 failed
+exit code 0
