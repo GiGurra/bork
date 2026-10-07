@@ -149,6 +149,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Require grammar pins from main history
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          python3 -m unittest discover -s editors/tests -p 'test_grammar_pin.py'
+          python3 editors/tests/check-grammar-pin.py
       - uses: ./.github/actions/setup-go
         with:
           cache-name: editors
