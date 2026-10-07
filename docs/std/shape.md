@@ -110,6 +110,12 @@ as context. Unsupported staged computations also produce compile-time diagnostic
 | `Type` | Field type retaining independent field facts. |
 | `RawType` | Field type without its field facts. |
 
+For a derive target or helper type parameter `T`, `T.RawType` names its base
+type without whole-type alias facts. Stored-field obligations remain intact.
+The projection adds no value proof or constrained dictionary preference,
+including for producing methods; returning it as constrained `T` still requires
+proving the target facts.
+
 Package tag descriptors expose `package: String` as the canonical import path,
 `Type` as the concrete tag record type, and `value(): tag.Type` as the checked
 record value including defaults. They retain lexical references from the tag

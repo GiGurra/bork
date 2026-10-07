@@ -139,7 +139,7 @@ func (c *checker) checkDeriveDefinitions(files []*syntax.File) {
 						return
 					}
 					projected := false
-					if owner, member, qualified := strings.Cut(written.Name, "."); qualified && (member == "Type" || member == "RawType") && locals[owner] {
+					if owner, member, qualified := strings.Cut(written.Name, "."); qualified && ((member == "Type" || member == "RawType") && locals[owner] || member == "RawType" && typeNames[owner]) {
 						projected = true
 					}
 					if typeNames[written.Name] || projected {
