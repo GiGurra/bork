@@ -2113,7 +2113,7 @@ func (p *parser) primary() Expr {
 			if !p.inDerivation {
 				p.errorf(prefix.Pos, "comptime list comprehensions are available only inside derive templates and derive helpers")
 			}
-			open := p.toks[p.i+1] // forHeader expects '(' right after for
+			headOpen := p.toks[p.i+1] // the '(' after for
 			loop := p.forHeader()
 			loop.Comptime, loop.Comprehension = true, true
 			headClose := p.toks[p.i-1]
@@ -2138,7 +2138,9 @@ func (p *parser) primary() Expr {
 			last := p.toks[p.i-1]
 			p.skipNewlines()
 			closeTok := p.expect(RBrack, "after the comptime list comprehension")
-			p.legacyStagedList(t, open, headClose, guardOpen, guardClose, last, closeTok, guard != nil)
+			if headOpen.Kind == LParen && headClose.Kind == RParen {
+				p.legacyStagedList(t, headOpen, headClose, guardOpen, guardClose, last, closeTok, guard != nil)
+			}
 			return lit
 		}
 		p.list(RBrack, "a list element", func() {
@@ -3023,15 +3025,16 @@ func stmtPos(s Stmt) diag.Pos {
 
 // legacyStagedList records how to rewrite the bracket form
 // `[comptime for (x in xs) comptime if (c) v]` as
-// `comptime for { x in xs; if (c) } yield v`. The brackets become
+// `comptime for { x in xs; if c } yield v`. The guard keeps its
+// parentheses only when it contains a brace. The brackets become
 // parentheses where the list is an operand, so the yielded value cannot
 // take in what follows.
-func (p *parser) legacyStagedList(open, headOpen, headClose, guardOpen, guardClose, last, closeTok Token, guarded bool) {
+func (p *parser) legacyStagedList(bracket, headOpen, headClose, guardOpen, guardClose, last, closeTok Token, guarded bool) {
 	if p.legacyStaged == nil {
 		return
 	}
 	i := 0
-	for i < len(p.toks) && p.toks[i].Pos != open.Pos {
+	for i < len(p.toks) && p.toks[i].Pos != bracket.Pos {
 		i++
 	}
 	before, after := Semi, Semi
@@ -3053,21 +3056,32 @@ func (p *parser) legacyStagedList(open, headOpen, headClose, guardOpen, guardClo
 	if bare {
 		openText, closeText = "", ""
 	}
+	index := func(t Token) int {
+		j := i
+		for j < len(p.toks) && p.toks[j].Pos != t.Pos {
+			j++
+		}
+		return j
+	}
+	brace := "{ "
+	if next := p.toks[index(headOpen)+1]; next.Pos.Line != headOpen.Pos.Line {
+		brace = "{"
+	}
 	edits := []diag.TextEdit{
-		{Start: open.Pos, End: open.End, Replacement: openText},
-		{Start: headOpen.Pos, End: headOpen.End, Replacement: "{ "},
+		{Start: bracket.Pos, End: bracket.End, Replacement: openText},
+		{Start: headOpen.Pos, End: headOpen.End, Replacement: brace},
 	}
 	// The yielded value joins the yield's line: a value left on the next
 	// line would lose its continuation indent.
 	value := func(after Token) diag.Pos {
-		j := i
-		for j < len(p.toks) && p.toks[j].Pos != after.Pos {
-			j++
-		}
+		j := index(after)
 		for j++; j < len(p.toks) && p.toks[j].Kind == Semi; j++ {
 		}
 		return p.toks[min(j, len(p.toks)-1)].Pos
 	}
+	// A filter follows the generator on its line, even when the header's
+	// closing parenthesis stood on a line of its own.
+	headEnd := p.toks[index(headClose)-1].End
 	if guarded {
 		// The guard's parentheses go, unless a brace in it could start a
 		// record literal, which a filter's condition cannot.
@@ -3078,16 +3092,29 @@ func (p *parser) legacyStagedList(open, headOpen, headClose, guardOpen, guardClo
 		}
 		if braced {
 			edits = append(edits,
-				diag.TextEdit{Start: headClose.Pos, End: guardOpen.Pos, Replacement: "; if "},
+				diag.TextEdit{Start: headEnd, End: guardOpen.Pos, Replacement: "; if "},
 				diag.TextEdit{Start: guardClose.End, End: value(guardClose), Replacement: " } yield "})
 		} else {
 			edits = append(edits,
-				diag.TextEdit{Start: headClose.Pos, End: guardOpen.End, Replacement: "; if "},
+				diag.TextEdit{Start: headEnd, End: guardOpen.End, Replacement: "; if "},
 				diag.TextEdit{Start: guardClose.Pos, End: value(guardClose), Replacement: " } yield "})
 		}
 	} else {
 		edits = append(edits, diag.TextEdit{Start: headClose.Pos, End: value(headClose), Replacement: " } yield "})
 	}
 	edits = append(edits, diag.TextEdit{Start: last.End, End: closeTok.End, Replacement: closeText})
-	*p.legacyStaged = append(*p.legacyStaged, LegacyStagedList{Pos: open.Pos, End: closeTok.End, Edits: edits})
+	// Edits replace the text between tokens; a comment there would be lost,
+	// so such a list gets the warning without a fix.
+	for _, comment := range p.comments {
+		for _, edit := range edits {
+			if !positionBefore(comment.Pos, edit.Start) && positionBefore(comment.Pos, edit.End) {
+				edits = nil
+			}
+		}
+	}
+	*p.legacyStaged = append(*p.legacyStaged, LegacyStagedList{Pos: bracket.Pos, End: closeTok.End, Edits: edits})
+}
+
+func positionBefore(a, b diag.Pos) bool {
+	return a.Line < b.Line || a.Line == b.Line && a.Col < b.Col
 }

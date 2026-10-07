@@ -10,8 +10,10 @@ class Build[T] { fn build(input: Int): T | shape.ValidationError }
 derive instance build[T]: Build[T] {
   fn build(input: Int): T | shape.ValidationError {
     initial = shape.builder[T]()
-    steps: List[(initial.Type) => initial.Type] =
-    comptime for { field in shape.fields[T](); if !field.computed && !field.hasDefault } yield (state: initial.Type) => state.set(field, input)
+    steps: List[(initial.Type) => initial.Type] = comptime for {
+      field in shape.fields[T]()
+      if !field.computed && !field.hasDefault
+    } yield (state: initial.Type) => state.set(field, input)
     steps.fold(initial, (state, step) => step(state)).finish()
   }
 }

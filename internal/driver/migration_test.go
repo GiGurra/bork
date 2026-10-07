@@ -111,12 +111,18 @@ derive instance info[T]: Info[T] {
     names = [comptime for (field in shape.fields[T]()) comptime if (!field.computed) field.name]
     empty = ![comptime for (field in shape.fields[T]()) comptime if (field.name == "zzz")
       true].isEmpty()
+    multi = [comptime for (
+      field in shape.fields[T]()
+    ) comptime if (!field.computed)
+      field.name]
+    kept = [comptime for (field in shape.fields[T]()) // every field
+      field.name]
     meta = Meta {
       names: [comptime for ((i, field) in shape.fields[T]().indexed())
         field.name + toString(i)],
       count: [comptime for (field in shape.fields[T]()) 1].length(),
     }
-    (names.concat(meta.names), empty, meta.count)
+    (names.concat(meta.names).concat(multi).concat(kept), empty, meta.count)
   }
 }
 
@@ -133,17 +139,19 @@ fn main() { println(info(Row { name: "Ada", age: 37 })) }
 		t.Fatal(err)
 	}
 	var edits []diag.TextEdit
+	unfixed := 0
 	for _, warning := range check.MigrationWarnings(info).Sorted() {
-		if warning.Pos.File != path {
-			continue
-		}
-		if warning.Code != "migration.comptime-comprehension" || warning.Severity != "warning" || len(warning.Fixes) != 1 {
+		if warning.Code != "migration.comptime-comprehension" || warning.Severity != "warning" || len(warning.Fixes) > 1 {
 			t.Fatalf("unexpected migration warning: %+v", warning)
+		}
+		if len(warning.Fixes) == 0 {
+			unfixed++ // a comment inside the list would be lost
+			continue
 		}
 		edits = append(edits, warning.Fixes[0].Edits...)
 	}
-	if len(edits) == 0 {
-		t.Fatal("no migration fixes")
+	if len(edits) == 0 || unfixed != 1 {
+		t.Fatalf("expected fixes and one unfixed list, got %d edits and %d unfixed", len(edits), unfixed)
 	}
 	offset := func(p diag.Pos) int {
 		n := 0
@@ -161,6 +169,8 @@ fn main() { println(info(Row { name: "Ada", age: 37 })) }
 		"empty = !(comptime for { field in shape.fields[T](); if field.name == \"zzz\" } yield true).isEmpty()",
 		"names: comptime for { (i, field) in shape.fields[T]().indexed() } yield field.name + toString(i),",
 		"count: (comptime for { field in shape.fields[T]() } yield 1).length(),",
+		"multi = comptime for {\n      field in shape.fields[T](); if !field.computed } yield field.name\n",
+		"kept = [comptime for (field in shape.fields[T]()) // every field\n      field.name]",
 	} {
 		if !strings.Contains(source, want) {
 			t.Fatalf("missing %q in\n%s", want, source)
@@ -170,7 +180,7 @@ fn main() { println(info(Row { name: "Ada", age: 37 })) }
 		t.Fatal(err)
 	}
 	_, info, err = Check(path)
-	if err != nil || check.MigrationWarnings(info).Len() != 0 {
-		t.Fatalf("migration did not produce a warning-free program: %v\n%s", err, source)
+	if err != nil || check.MigrationWarnings(info).Len() != 1 {
+		t.Fatalf("migration left more than the commented list: %v\n%s", err, source)
 	}
 }

@@ -22,10 +22,12 @@ func MigrationWarnings(info *Info) *diag.List {
 	for _, list := range info.legacyStaged {
 		const code = "migration.comptime-comprehension"
 		warnings.Warn(list.Pos, code, "[comptime for (x in xs) comptime if (c) v] is the older form; write comptime for { x in xs; if c } yield v")
-		warnings.Suggest(list.Pos, code, list.End, diag.Fix{
-			Message: "rewrite as comptime for { ... } yield",
-			Edits:   list.Edits,
-		})
+		if len(list.Edits) > 0 {
+			warnings.Suggest(list.Pos, code, list.End, diag.Fix{
+				Message: "rewrite as comptime for { ... } yield",
+				Edits:   list.Edits,
+			})
+		}
 	}
 	return warnings
 }
