@@ -27,6 +27,18 @@
         "expandable": false
       },
       {
+        "name": "float32Numbers",
+        "type": "List[Float32]",
+        "value": "[]Float32 len: 1, cap: 1, [1.1]",
+        "expandable": true
+      },
+      {
+        "name": "floatNumbers",
+        "type": "List[Float]",
+        "value": "[]Float len: 1, cap: 1, [1.1]",
+        "expandable": true
+      },
+      {
         "name": "fraction",
         "type": "Float",
         "value": "1.1",

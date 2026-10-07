@@ -3434,7 +3434,8 @@ errors without executing user code. Standalone List.get(Int) uses compiler-owned
 bounds and temporary Option-variant reads, preserving Some/None for valid,
 negative, empty and oversized accesses. It requires concrete Option payload
 representations in the executable; otherwise inspection falls back to expanding
-the list. Chained/nested calls remain unsupported. Source match-bound Option and
+the list. Float/Float32 list payloads are rejected because temporary Option
+construction can lose IEEE special values. Chained/nested calls remain unsupported. Source match-bound Option and
 union payload locals support ordinary scalar/record expressions; direct payload
 projections without checked source narrowing are rejected. Persistent map lookup,
 Unicode string access, other calls/methods, aggregate construction/comparison,

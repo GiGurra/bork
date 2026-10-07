@@ -106,6 +106,12 @@ func (r *dapRelay) evaluate(msg map[string]any, requests bool) (bool, error) {
 		}
 		seq, _ := evaluation.request["seq"].(float64)
 		r.evaluationTypes[seq] = resultType
+		if evaluation.plan.ReadFailure != "" {
+			if r.evaluationFailures == nil {
+				r.evaluationFailures = map[float64]string{}
+			}
+			r.evaluationFailures[seq] = evaluation.plan.ReadFailure
+		}
 	}
 	return true, r.writeDebugMessage(r.upstream, evaluation.request, true)
 }

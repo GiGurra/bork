@@ -159,8 +159,12 @@ func DebugExpression(source string, shapes map[string]DebugShape, locals []Debug
 	if call, ok := x.(*syntax.Call); ok {
 		selector := call.Fun.(*syntax.Selector)
 		receiver := c.expr(selector.X)
-		if _, ok := receiver.(*List); !ok {
+		list, ok := receiver.(*List)
+		if !ok {
 			return nil, nil, fmt.Errorf("debug expression: unsupported expression; collection lookup requires runtime helpers (only List.get is supported)")
+		}
+		if list.Elem == Float || list.Elem == Float32 {
+			return nil, nil, fmt.Errorf("debug expression: List.get with floating payloads is unsupported because Delve's temporary Option can lose IEEE special values; inspect the list's children instead")
 		}
 		index := c.exprWant(call.Args[0], Int)
 		if index != Invalid && !assignable(index, Int) {

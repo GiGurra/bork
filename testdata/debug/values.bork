@@ -33,6 +33,8 @@ fn debugFrame(range: Int) uses io {
   boxed = Box[Float] { item: 2.0 }
   shapes = [shape]
   numbers = [3, 7]
+  floatNumbers = [fraction]
+  float32Numbers = [fraction32]
   emptyNumbers: List[Int] = []
   none: Option[Int] = .None
   nested = Outer { inner: Inner { label: "main.Shape_Circle {radius: 9}", range: 5 }, shape: shape, optional: some }
@@ -41,5 +43,5 @@ fn debugFrame(range: Int) uses io {
   listUnion: List[Int] | Int = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   chosen = match (shape) { Shape.Circle { radius } => radius, Shape.Empty => 0.0 }
   println(y)
-  println(payload, x, shape, some, none, nested, recordUnion, scalarUnion, chosen, someFloat, boxed, shapes, numbers, emptyNumbers, listUnion, fraction, fraction32, unsigned, signed, suffix)
+  println(payload, x, shape, some, none, nested, recordUnion, scalarUnion, chosen, someFloat, boxed, shapes, numbers, floatNumbers, float32Numbers, emptyNumbers, listUnion, fraction, fraction32, unsigned, signed, suffix)
 }

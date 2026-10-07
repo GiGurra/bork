@@ -324,7 +324,7 @@ func testDebugDAPSession(t *testing.T, types bool) {
 			}
 		}
 	}
-	for _, expression := range []string{"boxed.item + 0.5", "boxed.item * 1.0", "fraction + 1.0 == fraction", "suffix.range", "range_", "missing", "nested.inner.nope", "chan_", "nested.inner.range_", "chan + true", "println(y)", "shapes.get(0)", "shapes[0]", "numbers.get(true)", "numbers.get(0).getOr(1)", "nested.inner.label.runeAt(0)", "some.value", "nested == nested", "y = 1", "1; println(y)"} {
+	for _, expression := range []string{"boxed.item + 0.5", "boxed.item * 1.0", "fraction + 1.0 == fraction", "suffix.range", "range_", "missing", "nested.inner.nope", "chan_", "nested.inner.range_", "chan + true", "println(y)", "shapes.get(0)", "shapes[0]", "numbers.get(true)", "floatNumbers.get(0)", "float32Numbers.get(0)", "numbers.get(0).getOr(1)", "nested.inner.label.runeAt(0)", "some.value", "nested == nested", "y = 1", "1; println(y)"} {
 		seq = d.send(t, "evaluate", map[string]any{"expression": expression, "frameId": frame["id"], "context": "repl"})
 		response = d.untilAny(t, "", seq)
 		if response["success"] != false || response["message"] == "" {

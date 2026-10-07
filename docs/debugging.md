@@ -52,7 +52,9 @@ A standalone `xs.get(i)` reads an immutable list and returns `Some(value)` or
 Int index and supplies a bounds read followed by the selected Option read;
 the relay transports these reads without implementing collection semantics.
 This requires concrete Option payload types in the built executable. If those
-types are unavailable, expand the list's children instead. Chaining or combining
+types are unavailable, expand the list's children instead. Float/Float32 payloads
+are rejected because Delve's temporary Option can lose NaN, infinity and signed
+zero; expand those lists directly. Chaining or combining
 `get` with other expressions is currently unsupported.
 
 Option and union payloads can be inspected through locals bound by a source

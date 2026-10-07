@@ -148,4 +148,8 @@ func TestDebugListGetPlan(t *testing.T) {
 	if _, err := DebugExpressionPlan("r.items.get(0)", metadata, site, locals); err == nil || !strings.Contains(err.Error(), "concrete Option") {
 		t.Fatalf("unavailable Option types: %v", err)
 	}
+	metadata.Expressions["[]int64"] = check.DebugShape{Name: "List[Float]", Kind: "list", Element: "float64", Option: "main.Option[float64]", Some: "main.Option_Some[float64]", None: "main.Option_None[float64]"}
+	if _, err := DebugExpressionPlan("r.items.get(0)", metadata, site, locals); err == nil || !strings.Contains(err.Error(), "IEEE special values") {
+		t.Fatalf("floating payloads: %v", err)
+	}
 }

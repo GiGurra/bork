@@ -29,6 +29,7 @@ type DebugEvaluation struct {
 	Expression      string
 	Type            string
 	Predicate       string
+	ReadFailure     string
 	present, absent string
 }
 
@@ -125,7 +126,7 @@ func DebugExpressionPlan(source string, metadata *DebugMap, site diag.Pos, local
 			}
 			texts[i] = result.String()
 		}
-		return &DebugEvaluation{Type: access.Option, Predicate: texts[0], present: texts[1], absent: texts[2]}, nil
+		return &DebugEvaluation{Type: access.Option, Predicate: texts[0], present: texts[1], absent: texts[2], ReadFailure: "debug expression: debugger could not construct the Option payload; this executable may lack its concrete variant type; inspect the list's children instead"}, nil
 	}
 	stmts, out := g.value(expr)
 	if len(stmts) != 0 || out == nil {
