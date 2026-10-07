@@ -1521,7 +1521,7 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 			c.inPostClause(e.Pos, word)
 		} else if c.loopCond == c.lambdaDepth+1 {
 			c.errorf(e.Pos, "a loop's condition cannot use %s; test in the body instead", word)
-		} else if len(c.loops) != 0 && c.loops[len(c.loops)-1].comprehension {
+		} else if len(c.loops) != 0 && c.loops[len(c.loops)-1].comprehension && c.loops[len(c.loops)-1].depth == c.lambdaDepth {
 			c.errorf(e.Pos, "%s cannot be used in a comprehension; filter with an if line instead", word)
 		} else if len(c.loops) == 0 || c.loops[len(c.loops)-1].depth != c.lambdaDepth {
 			c.errorf(e.Pos, "break and continue require a loop in the same function or producer")

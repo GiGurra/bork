@@ -4,7 +4,6 @@ main.bork:6:3: binding y is never read; discard explicitly with _
 main.bork:7:19: a comprehension's names are new, and y is already bound
 main.bork:9:33: binding x is never read; discard explicitly with _
 main.bork:9:43: x is already defined in an enclosing scope (bork does not allow shadowing)
-main.bork:10:40: binding y is never read; discard explicitly with _
 main.bork:10:47: a comprehension's names are new, and y is already bound
 main.bork:11:58: continue cannot be used in a comprehension; filter with an if line instead
 main.bork:12:32: binding x is never read; discard explicitly with _
@@ -13,3 +12,10 @@ main.bork:13:47: ? cannot be used in a comprehension; yield an explicit error va
 main.bork:14:47: a comprehension yields only its final value, after the closing '}'
 main.bork:15:51: a comprehension cannot yield Ok
 main.bork:16:48: comprehension yields String, but this value is Int
+main.bork:18:3: binding y is never read; discard explicitly with _
+main.bork:20:5: a comprehension's names are new, and y is already bound
+main.bork:24:63: a comprehension's names are new, and a is already bound
+main.bork:25:24: binding x is never read; discard explicitly with _
+main.bork:25:41: a comprehension's yield never produces a value
+main.bork:26:42: binding x is never read; discard explicitly with _
+main.bork:26:67: break and continue require a loop in the same function or producer

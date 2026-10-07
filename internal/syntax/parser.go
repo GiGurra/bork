@@ -2783,6 +2783,7 @@ func (p *parser) comprehensionAhead() bool {
 func (p *parser) comprehension() *Generate {
 	pos := p.next().Pos
 	saved := p.noRecordLit
+	defer func() { p.noRecordLit = saved }()
 	p.noRecordLit = false // within the braces, '{' is a literal again
 	p.expect(LBrace, "after for")
 	var clauses []any // *For, *If, or a binding Stmt
@@ -2801,8 +2802,8 @@ func (p *parser) comprehension() *Generate {
 			panic(bailout{})
 		}
 	}
-	end := p.next().Pos
-	p.noRecordLit = saved
+	p.next() // }
+	p.noRecordLit = saved // the yielded value is in the enclosing context
 	if !p.at(KwYield) {
 		if p.at(Semi) && p.peekKind() == KwYield {
 			p.errorf(p.toks[p.i+1].Pos, "a comprehension's yield goes on the line of its closing '}', as in } yield value")
@@ -2812,7 +2813,10 @@ func (p *parser) comprehension() *Generate {
 		panic(bailout{})
 	}
 	y := p.next()
-	body := &Block{Pos: y.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: &Yield{Pos: y.Pos, Value: p.expr()}}}}
+	value := p.expr()
+	// The blocks end with the yielded value, which their names reach.
+	end := p.toks[p.i-1].End
+	body := &Block{Pos: y.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: &Yield{Pos: y.Pos, Value: value}}}}
 	for i := len(clauses) - 1; i >= 0; i-- {
 		switch clause := clauses[i].(type) {
 		case *For:
@@ -2845,11 +2849,7 @@ func (p *parser) comprehensionClause() any {
 		f.Items = p.expr()
 		return f
 	case p.at(KwIf):
-		// As in an if head, a bare `Name {` is not a record literal.
-		x := &If{Pos: p.next().Pos}
-		p.noRecordLit = true
-		x.Cond = p.expr()
-		p.noRecordLit = false
+		x := &If{Pos: p.next().Pos, Cond: p.expr()}
 		if p.at(LBrace) || p.at(KwElse) {
 			p.errorf(p.tok().Pos, "a comprehension's filter is if cond alone, without a block or else")
 			panic(bailout{})

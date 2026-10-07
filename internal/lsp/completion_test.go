@@ -490,3 +490,23 @@ fn matches(x: Choice): Bool { x is .Some { value: _ } }
 		t.Fatal(err)
 	}
 }
+
+func TestCompletionComprehensionNames(t *testing.T) {
+	src := "fn main() uses io {\n  xs = for {\n    alpha in [1]\n    beta = alpha\n  } yield beta + alpha\n  println(xs.toList())\n}\n"
+	s, path := newTestServer(t, src)
+	for _, tc := range []struct{ needle, marked string }{
+		{"beta = alpha\n", "beta = al|\n"},
+		{"yield beta + alpha", "yield beta + al|"},
+		{"yield beta + alpha", "yield be| + alpha"},
+	} {
+		items := completeAt(t, s, path, strings.Replace(src, tc.needle, tc.marked, 1))
+		name := map[bool]string{true: "alpha", false: "beta"}[strings.Contains(tc.marked, "al|")]
+		if completionItem(items, name) == nil {
+			t.Fatalf("%s: missing %s", tc.marked, name)
+		}
+	}
+	items := completeAt(t, s, path, strings.Replace(src, "println(xs.toList())", "println(al|)", 1))
+	if completionItem(items, "alpha") != nil {
+		t.Fatal("offered a comprehension name after the comprehension")
+	}
+}

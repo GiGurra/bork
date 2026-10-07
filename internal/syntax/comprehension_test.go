@@ -69,14 +69,14 @@ func TestInfiniteLoopStaysALoop(t *testing.T) {
 
 func TestComprehensionErrors(t *testing.T) {
 	cases := map[string]string{
-		"_ = for { x in xs }":                     "a comprehension ends with } yield value",
-		"_ = for { x in xs }\n  yield x":          "a comprehension's yield goes on the line of its closing '}'",
-		"for { break } yield 1":                   "only a comprehension ends with yield",
-		"_ = for { x in xs; if x { 1 } } yield x": "a comprehension's filter is if cond alone",
-		"_ = for { x in xs; if x else } yield x":  "a comprehension's filter is if cond alone",
-		"_ = for { x in xs; f(x) } yield x":       "a comprehension line is a generator",
-		"_ = for { x in xs; lazy y = x } yield y": "a comprehension line is a generator",
-		"_ = for { x in xs; trust p(x) } yield x": "a comprehension line is a generator",
+		"_ = for { x in xs }":                         "a comprehension ends with } yield value",
+		"_ = for { x in xs }\n  yield x":              "a comprehension's yield goes on the line of its closing '}'",
+		"for { break } yield 1":                       "only a comprehension ends with yield",
+		"_ = for { x in xs; if x > 0 { 1 } } yield x": "a comprehension's filter is if cond alone",
+		"_ = for { x in xs; if x else } yield x":      "a comprehension's filter is if cond alone",
+		"_ = for { x in xs; f(x) } yield x":           "a comprehension line is a generator",
+		"_ = for { x in xs; lazy y = x } yield y":     "a comprehension line is a generator",
+		"_ = for { x in xs; trust p(x) } yield x":     "a comprehension line is a generator",
 	}
 	for body, want := range cases {
 		diags := &diag.List{}

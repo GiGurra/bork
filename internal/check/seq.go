@@ -1,6 +1,7 @@
 package check
 
 import (
+	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
@@ -17,6 +18,10 @@ type producerContext struct {
 type comprehension struct {
 	loops map[*syntax.For]bool
 	yield *syntax.Yield
+	// base is the number of scopes outside the comprehension; reported
+	// holds the bindings already reported as not new.
+	base     int
+	reported map[diag.Pos]bool
 }
 
 func (c *checker) generate(e *syntax.Generate, want Type) Type {
@@ -70,9 +75,15 @@ func (c *checker) yieldExpr(e *syntax.Yield) Type {
 			return Invalid
 		}
 		if c.producer.elem == nil {
+			errors := c.diags.Len()
 			got := c.expr(e.Value)
-			if got != Invalid && got != Never && !isValue(got) {
-				c.errorf(e.Value.Position(), "a comprehension cannot yield %s", got)
+			if got == Never && c.diags.Len() == errors {
+				c.errorf(e.Value.Position(), "a comprehension's yield never produces a value")
+			}
+			if got == Never || got != Invalid && !isValue(got) {
+				if got != Never {
+					c.errorf(e.Value.Position(), "a comprehension cannot yield %s", got)
+				}
 				got = Invalid
 			}
 			c.producer.elem = got
@@ -413,24 +424,49 @@ func (c *checker) seqMethod(e *syntax.Call, sel *syntax.Selector, receiver Type)
 }
 
 // comprehension collects a comprehension's generator loops and yield,
-// and reports binding lines whose names are already bound: each name a
-// comprehension binds is new. (Generator names already cannot shadow.)
+// and reports a binding line that rebinds one of the comprehension's
+// earlier names: each name it binds is new. (A generator's names already
+// cannot shadow; bindRebinding reports names bound outside.)
 func (c *checker) comprehension(e *syntax.Generate) *comprehension {
-	comp := &comprehension{loops: map[*syntax.For]bool{}}
+	comp := &comprehension{loops: map[*syntax.For]bool{}, base: len(c.scopes), reported: map[diag.Pos]bool{}}
 	seen := map[string]bool{}
+	var names func(syntax.Pattern, func(string, diag.Pos))
+	names = func(p syntax.Pattern, visit func(string, diag.Pos)) {
+		switch p := p.(type) {
+		case *syntax.VariantPat:
+			if len(p.Path) == 1 && !p.Context && !p.Braces && c.typeNamed(p.Path[0]) == nil {
+				visit(p.Path[0], p.Pos)
+			}
+		case *syntax.TuplePat:
+			for _, elem := range p.Elems {
+				names(elem, visit)
+			}
+		}
+	}
+	bound := func(name string, pos diag.Pos) {
+		if name != "_" && seen[name] && !comp.reported[pos] {
+			comp.reported[pos] = true
+			c.errorf(pos, "a comprehension's names are new, and %s is already bound", name)
+		}
+		seen[name] = true
+	}
 	for body := e.Body; body != nil; {
 		next := (*syntax.Block)(nil)
 		for _, stmt := range body.Stmts {
 			switch s := stmt.(type) {
 			case *syntax.Binding:
-				if s.Name != "_" && (seen[s.Name] || c.lookup(s.Name) != nil) {
-					c.errorf(s.Pos, "a comprehension's names are new, and %s is already bound", s.Name)
-				}
-				seen[s.Name] = true
+				bound(s.Name, s.Pos)
+			case *syntax.TupleBinding:
+				names(s.Pattern, bound)
 			case *syntax.ExprStmt:
 				switch x := s.X.(type) {
 				case *syntax.For:
 					comp.loops[x] = true
+					if x.Pattern != nil {
+						names(x.Pattern, func(name string, _ diag.Pos) { seen[name] = true })
+					} else {
+						seen[x.Name] = true
+					}
 					next = x.Body
 				case *syntax.If:
 					next = x.Then
@@ -442,4 +478,24 @@ func (c *checker) comprehension(e *syntax.Generate) *comprehension {
 		body = next
 	}
 	return comp
+}
+
+// comprehensionRebinding reports a binding, directly in a comprehension
+// being checked, of a name bound outside it or already reported, and
+// whether it did. Its new value then has no type.
+func (c *checker) comprehensionRebinding(name string, pos diag.Pos, node any, i int) bool {
+	p := c.producer
+	if p == nil || p.comprehension == nil || p.depth != c.lambdaDepth {
+		return false
+	}
+	comp := p.comprehension
+	if !comp.reported[pos] {
+		if i >= comp.base {
+			return false
+		}
+		comp.reported[pos] = true
+		c.errorf(pos, "a comprehension's names are new, and %s is already bound", name)
+	}
+	c.scopes[len(c.scopes)-1][name] = &local{typ: Invalid, decl: node, used: true}
+	return true
 }
