@@ -47,14 +47,30 @@ rounding, even with explicit Float/Float32 conversions. Float literals,
 inspection and comparisons of noncomputed operands remain available. Literal
 comparisons use exact representations of the compiler-rounded values.
 
-Calls and methods, aggregate literals and comparisons, interpolated strings,
-blocks, `if`/`match`, pipes, assignments, `?`, deferred bindings/fields, and
-option/union payload access are unsupported and produce readable errors.
-Whole available option/union/container variables can still be inspected.
-Collection access is also unsupported: bork uses methods such as `xs.get(i)`,
-which return an `Option` and require runtime helpers. Go's `xs[i]` would change
-those semantics and is not bork syntax. Ambiguous generated bindings are rejected
-rather than choosing a value with the wrong source identity.
+A standalone `xs.get(i)` reads an immutable list and returns `Some(value)` or
+`None`, including for negative and out-of-range indexes. The compiler checks the
+Int index and supplies a bounds read followed by the selected Option read;
+the relay transports these reads without implementing collection semantics.
+This requires concrete Option payload types in the built executable. If those
+types are unavailable, expand the list's children instead. Float/Float32 payloads
+are rejected because Delve's temporary Option can lose NaN, infinity and signed
+zero; expand those lists directly. Chaining or combining
+`get` with other expressions is currently unsupported.
+
+Option and union payloads can be inspected through locals bound by a source
+`match`: pause inside `.Some(number) => ...` to evaluate `number`, or inside
+`inner: Inner => ...` to evaluate `inner.range`. Direct projections such as
+`some.value` require checked narrowing and are rejected. The Console does not
+evaluate `match` itself.
+
+Other calls and methods, aggregate literals and comparisons, interpolated strings,
+blocks, `if`/`match`, pipes, assignments, `?`, and deferred bindings/fields are
+unsupported and produce readable errors. Whole available option/union/container
+variables can still be inspected. Map lookup needs the persistent map runtime's
+hashing, equality and traversal; Unicode string access needs decoding. These
+remain unsupported rather than using Go map or byte indexing. Go's `xs[i]` is
+not bork syntax. Ambiguous generated bindings are rejected rather than choosing
+a value with the wrong source identity.
 
 Rebuild to include expression metadata. Old debug maps without that metadata,
 and sessions without a compatible map, retain Delve's Go expression behavior.

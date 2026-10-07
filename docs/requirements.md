@@ -3420,7 +3420,7 @@ lazy; generated temporaries are hidden and helper frames are marked subtle.
 Inspection does not execute custom Show methods. Clients without the sidecar map
 retain Delve's Go views.
 
-### Debugger expressions (implemented: bork-m7fjim)
+### Debugger expressions (implemented: bork-m7fjim, bork-s00vvm)
 
 Debug Console, watch and hover requests use the bork parser, ordinary checker
 and Go expression lowering, with compiler-generated type/name metadata and raw
@@ -3431,10 +3431,17 @@ concrete generics), integer arithmetic and scalar comparisons/boolean/bitwise
 operators. Floating-point arithmetic is rejected because Delve does not preserve
 runtime rounding; float inspection/literals and noncomputed comparisons remain.
 Literal types and integer unary widths retain their checked semantics. Unsupported expressions return readable
-errors without executing user code. Calls, methods, collection access, aggregate
-construction/comparison, deferred reads, interpolation, control flow, pipes, `?`
-and option/union payload projections are excluded. List access is `get(i)`, not
-Go indexing: returning an Option needs runtime helpers. Old maps without
+errors without executing user code. Standalone List.get(Int) uses compiler-owned
+bounds and temporary Option-variant reads, preserving Some/None for valid,
+negative, empty and oversized accesses. It requires concrete Option payload
+representations in the executable; otherwise inspection falls back to expanding
+the list. Float/Float32 list payloads are rejected because temporary Option
+construction can lose IEEE special values. Chained/nested calls remain unsupported. Source match-bound Option and
+union payload locals support ordinary scalar/record expressions; direct payload
+projections without checked source narrowing are rejected. Persistent map lookup,
+Unicode string access, other calls/methods, aggregate construction/comparison,
+deferred reads, interpolation, control flow, pipes and `?` remain excluded.
+Go indexing is not bork syntax. Old maps without
 expression metadata keep their existing Go evaluation fallback. Acceptance uses
 real pinned Delve with renamed locals/parameters/fields, generic records, Console,
 watch and hover contexts, invalid operands and unsupported syntax.

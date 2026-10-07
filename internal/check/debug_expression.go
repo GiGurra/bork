@@ -12,9 +12,21 @@ import (
 // DebugShape retains only the compiler type information needed for read-only
 // expressions. Keys in the shape graph are concrete generated Go type names.
 type DebugShape struct {
-	Name   string                 `json:"name"`
-	Kind   string                 `json:"kind"`
-	Fields map[string]DebugMember `json:"fields,omitempty"`
+	Name    string                 `json:"name"`
+	Kind    string                 `json:"kind"`
+	Fields  map[string]DebugMember `json:"fields,omitempty"`
+	Element string                 `json:"element,omitempty"`
+	Option  string                 `json:"option,omitempty"`
+	Some    string                 `json:"some,omitempty"`
+	None    string                 `json:"none,omitempty"`
+}
+
+// DebugListGet is evaluated in two read-only steps: test the bounds, then read
+// the element into a temporary Option variant. The compiler owns both steps.
+type DebugListGet struct {
+	expr
+	List, Index        Expr
+	Option, Some, None string
 }
 
 type DebugMember struct {
@@ -57,6 +69,11 @@ func DebugExpression(source string, shapes map[string]DebugShape, locals []Debug
 				return t
 			}
 		}
+		if shape.Kind == "list" {
+			list := &List{Elem: resolve(shape.Element)}
+			types[key] = list
+			return list
+		}
 		if shape.Kind != "record" {
 			return debugOpaque(shape.Name)
 		}
@@ -79,6 +96,7 @@ func DebugExpression(source string, shapes map[string]DebugShape, locals []Debug
 	}
 	// Reject unsupported syntax before checking; queries cannot trigger calls,
 	// inference, effects, or declaration lookup outside the supplied frame.
+	root := x
 	var validate func(syntax.Expr) error
 	validate = func(x syntax.Expr) error {
 		switch e := x.(type) {
@@ -106,15 +124,73 @@ func DebugExpression(source string, shapes map[string]DebugShape, locals []Debug
 				return err
 			}
 			return validate(e.Y)
+		case *syntax.Call:
+			selector, ok := e.Fun.(*syntax.Selector)
+			if !ok {
+				return fmt.Errorf("debug expression: unsupported expression; function calls require execution")
+			}
+			if err := validate(selector.X); err != nil {
+				return err
+			}
+			if selector.Name == "runeAt" || selector.Name == "substring" {
+				return fmt.Errorf("debug expression: unsupported expression; Unicode string access requires runtime decoding; inspect the string or a source-bound result")
+			}
+			if selector.Name != "get" || root != e {
+				return fmt.Errorf("debug expression: unsupported expression; only a standalone List.get(index) read is supported")
+			}
+			if len(e.Args) != 1 || len(e.TypeArgs) != 0 {
+				return fmt.Errorf("debug expression: List.get expects one Int index")
+			}
+			for _, argument := range e.Arguments {
+				if argument.Name != "" {
+					return fmt.Errorf("debug expression: use List.get(index) with a positional Int index")
+				}
+			}
+			return validate(e.Args[0])
 		default:
-			return fmt.Errorf("debug expression: unsupported expression; use locals, scalar literals, record fields and scalar operators (calls and collection access are not supported)")
+			return fmt.Errorf("debug expression: unsupported expression; use locals, scalar literals, record fields, scalar operators or a standalone List.get(index)")
 		}
 		return nil
 	}
 	if err := validate(x); err != nil {
 		return nil, nil, err
 	}
-	c.expr(x)
+	var access *DebugListGet
+	if call, ok := x.(*syntax.Call); ok {
+		selector := call.Fun.(*syntax.Selector)
+		receiver := c.expr(selector.X)
+		list, ok := receiver.(*List)
+		if !ok {
+			return nil, nil, fmt.Errorf("debug expression: unsupported expression; collection lookup requires runtime helpers (only List.get is supported)")
+		}
+		if list.Elem == Float || list.Elem == Float32 {
+			return nil, nil, fmt.Errorf("debug expression: List.get with floating payloads is unsupported because Delve's temporary Option can lose IEEE special values; inspect the list's children instead")
+		}
+		index := c.exprWant(call.Args[0], Int)
+		if index != Invalid && !assignable(index, Int) {
+			return nil, nil, fmt.Errorf("debug expression: List.get index must be Int, got %s", index)
+		}
+		var shape DebugShape
+		for key, typ := range types {
+			if typ == receiver {
+				shape = shapes[key]
+				break
+			}
+		}
+		if shape.Some == "" || shape.None == "" || shape.Option == "" {
+			return nil, nil, fmt.Errorf("debug expression: List.get needs concrete Option payload types in this build; inspect the list's children instead")
+		}
+		access = &DebugListGet{expr: expr{pos: x.Position(), typ: debugOpaque(shape.Option)}, Option: shape.Option, Some: shape.Some, None: shape.None}
+	} else {
+		c.expr(x)
+	}
+	for node, typ := range info.types {
+		if selector, ok := node.(*syntax.Selector); ok && typ == Invalid {
+			if _, opaque := info.types[selector.X].(debugOpaque); opaque {
+				return nil, nil, fmt.Errorf("debug expression: payload projection needs checked narrowing in source; pause inside a match arm and inspect its bound locals")
+			}
+		}
+	}
 	if diags.Len() != 0 {
 		return nil, nil, fmt.Errorf("%s", diags.Error())
 	}
@@ -148,5 +224,11 @@ func DebugExpression(source string, shapes map[string]DebugShape, locals []Debug
 		}
 	}
 	l := &lowerer{info: info, vars: vars}
+	if access != nil {
+		call := x.(*syntax.Call)
+		access.List = l.expr(call.Fun.(*syntax.Selector).X)
+		access.Index = l.expr(call.Args[0])
+		return access, info, nil
+	}
 	return l.expr(x), info, nil
 }

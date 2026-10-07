@@ -16,6 +16,7 @@ type dapEvaluation struct {
 	request map[string]any
 	locals  []check.DebugLocal
 	scopes  []float64
+	plan    *gen.DebugEvaluation
 }
 
 // evaluate collects raw frame locals; the compiler owns expression semantics.
@@ -74,6 +75,11 @@ func (r *dapRelay) evaluate(msg map[string]any, requests bool) (bool, error) {
 			typ, _ := variable["type"].(string)
 			evaluation.locals = append(evaluation.locals, check.DebugLocal{Name: name, GoName: name, Type: typ})
 		}
+	case "evaluate":
+		result, _ := body["result"].(string)
+		if err := evaluation.plan.Select(result); err != nil {
+			return true, r.evaluateError(evaluation.request, err.Error())
+		}
 	}
 	if len(evaluation.scopes) > 0 {
 		ref := evaluation.scopes[0]
@@ -82,17 +88,30 @@ func (r *dapRelay) evaluate(msg map[string]any, requests bool) (bool, error) {
 	}
 	args, _ := evaluation.request["arguments"].(map[string]any)
 	source, _ := args["expression"].(string)
-	translated, resultType, err := gen.DebugExpressionTyped(source, r.metadata, evaluation.site, evaluation.locals)
-	if err != nil {
-		return true, r.evaluateError(evaluation.request, err.Error())
+	if evaluation.plan == nil {
+		plan, err := gen.DebugExpressionPlan(source, r.metadata, evaluation.site, evaluation.locals)
+		if err != nil {
+			return true, r.evaluateError(evaluation.request, err.Error())
+		}
+		evaluation.plan = plan
 	}
-	args["expression"] = translated
+	if evaluation.plan.Predicate != "" {
+		return true, r.evaluateRequest(evaluation, "evaluate", map[string]any{"frameId": args["frameId"], "expression": evaluation.plan.Predicate, "context": args["context"]})
+	}
+	args["expression"] = evaluation.plan.Expression
+	resultType := evaluation.plan.Type
 	if resultType != "" {
 		if r.evaluationTypes == nil {
 			r.evaluationTypes = map[float64]string{}
 		}
 		seq, _ := evaluation.request["seq"].(float64)
 		r.evaluationTypes[seq] = resultType
+		if evaluation.plan.ReadFailure != "" {
+			if r.evaluationFailures == nil {
+				r.evaluationFailures = map[float64]string{}
+			}
+			r.evaluationFailures[seq] = evaluation.plan.ReadFailure
+		}
 	}
 	return true, r.writeDebugMessage(r.upstream, evaluation.request, true)
 }

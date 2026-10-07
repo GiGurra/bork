@@ -104,3 +104,56 @@ func TestDebugEvaluateFailure(t *testing.T) {
 		})
 	}
 }
+
+func TestDebugEvaluateBounds(t *testing.T) {
+	for _, outcome := range []string{"true", "false", "invalid", "moved", "delve"} {
+		t.Run(outcome, func(t *testing.T) {
+			r := presentationFixture()
+			r.metadata.Expressions = map[string]check.DebugShape{
+				"int64":   {Name: "Int", Kind: "scalar"},
+				"[]int64": {Name: "List[Int]", Kind: "list", Element: "int64", Option: "main.Option[int64]", Some: "main.Option_Some[int64]", None: "main.Option_None[int64]"},
+			}
+			r.frames = map[float64]diag.Pos{100: {File: "main.bork", Line: 5}}
+			r.metadata.Bindings = []gen.DebugBindings{{Start: diag.Pos{File: "main.bork", Line: 1}, End: diag.Pos{File: "main.bork", Line: 10}, Names: map[string]string{"xs": "xs"}}}
+			var upstream, downstream bytes.Buffer
+			r.upstream, r.downstream = &upstream, &downstream
+			handle := func(message map[string]any, request bool) {
+				t.Helper()
+				if skip, err := r.evaluate(message, request); !skip || err != nil {
+					t.Fatalf("evaluate: %v %v", skip, err)
+				}
+			}
+			handle(map[string]any{"seq": float64(42), "type": "request", "command": "evaluate", "arguments": map[string]any{"expression": "xs.get(0)", "frameId": float64(100), "context": "watch"}}, true)
+			scopes := takeDebugMessage(t, &upstream)
+			handle(map[string]any{"type": "response", "command": "scopes", "request_seq": scopes["seq"], "success": true, "body": map[string]any{"scopes": []any{map[string]any{"name": "Locals", "variablesReference": float64(10)}}}}, false)
+			variables := takeDebugMessage(t, &upstream)
+			handle(map[string]any{"type": "response", "command": "variables", "request_seq": variables["seq"], "success": true, "body": map[string]any{"variables": []any{map[string]any{"name": "xs", "type": "[]int64"}}}}, false)
+			bounds := takeDebugMessage(t, &upstream)
+			if bounds["command"] != "evaluate" || bounds["seq"].(float64) >= 0 || bounds["arguments"].(map[string]any)["expression"] != "0 >= 0 && 0 < len(xs)" {
+				t.Fatalf("bounds request: %v", bounds)
+			}
+			if outcome == "moved" {
+				r.evaluationEpoch++
+			}
+			handle(map[string]any{"type": "response", "command": "evaluate", "request_seq": bounds["seq"], "success": outcome != "delve", "message": "not stopped", "body": map[string]any{"result": outcome}}, false)
+			if outcome == "true" || outcome == "false" {
+				translated := takeDebugMessage(t, &upstream)
+				want := "main.Option_Some[int64]{E0: xs[0]}"
+				if outcome == "false" {
+					want = "main.Option_None[int64]{}"
+				}
+				if translated["seq"] != float64(42) || translated["arguments"].(map[string]any)["expression"] != want || r.evaluationTypes[42] != "main.Option[int64]" {
+					t.Fatalf("selected read: %v", translated)
+				}
+			} else {
+				failure := takeDebugMessage(t, &downstream)
+				if failure["request_seq"] != float64(42) || failure["success"] != false {
+					t.Fatalf("failure: %v", failure)
+				}
+			}
+			if upstream.Len() != 0 || downstream.Len() != 0 || len(r.evaluations) != 0 {
+				t.Fatal("staged evaluation leaked messages or requests")
+			}
+		})
+	}
+}

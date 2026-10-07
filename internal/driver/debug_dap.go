@@ -119,23 +119,24 @@ func debugDAPRelay(ctx context.Context, binary, address string, stdout, stderr i
 }
 
 type dapRelay struct {
-	scopeFrames     map[float64]diag.Pos
-	referenceSites  map[float64]diag.Pos
-	evaluationTypes map[float64]string
-	frames          map[float64]diag.Pos
-	evaluationEpoch uint64
-	omitTypes       bool
-	clientWriteMu   sync.Mutex
-	downstream      io.Writer
-	evaluations     map[float64]*dapEvaluation
-	mu              sync.Mutex
-	metadata        *gen.DebugMap
-	writeMu         sync.Mutex
-	upstream        io.Writer
-	pending         map[float64]float64
-	references      map[float64]gen.DebugType
-	internal        map[float64]map[string]any
-	internalSeq     float64
+	scopeFrames        map[float64]diag.Pos
+	referenceSites     map[float64]diag.Pos
+	evaluationTypes    map[float64]string
+	evaluationFailures map[float64]string
+	frames             map[float64]diag.Pos
+	evaluationEpoch    uint64
+	omitTypes          bool
+	clientWriteMu      sync.Mutex
+	downstream         io.Writer
+	evaluations        map[float64]*dapEvaluation
+	mu                 sync.Mutex
+	metadata           *gen.DebugMap
+	writeMu            sync.Mutex
+	upstream           io.Writer
+	pending            map[float64]float64
+	references         map[float64]gen.DebugType
+	internal           map[float64]map[string]any
+	internalSeq        float64
 }
 
 func readDAP(reader *bufio.Reader) ([]byte, error) {
@@ -257,9 +258,18 @@ func (r *dapRelay) copy(dst io.Writer, src io.Reader, requests bool, stderr io.W
 				seq, _ := msg["request_seq"].(float64)
 				if typ, ok := r.evaluationTypes[seq]; ok {
 					delete(r.evaluationTypes, seq)
+					failure := r.evaluationFailures[seq]
+					delete(r.evaluationFailures, seq)
+					if msg["success"] != true && failure != "" {
+						msg["message"] = failure
+						msg["body"] = map[string]any{"error": map[string]any{"id": 1, "format": failure, "showUser": true}}
+						changed = true
+					}
 					if body, ok := msg["body"].(map[string]any); ok && msg["success"] == true {
-						body["type"] = typ
+						// Retain the concrete result's field metadata before presenting
+						// its checked type (for example Some's fields under Option[Int]).
 						r.value(body, "result")
+						body["type"] = r.prettyType(typ)
 						changed = true
 					}
 				}

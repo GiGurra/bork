@@ -104,3 +104,52 @@ func TestDebugExpressionFloatLimits(t *testing.T) {
 		}
 	}
 }
+
+func TestDebugListGetPlan(t *testing.T) {
+	metadata, locals := expressionFixture()
+	metadata.Expressions["[]int64"] = check.DebugShape{Name: "List[Int]", Kind: "list", Element: "int64", Option: "main.Option[int64]", Some: "main.Option_Some[int64]", None: "main.Option_None[int64]"}
+	site := diag.Pos{File: "main.bork", Line: 5}
+	for _, result := range []string{"true", "false", "invalid"} {
+		plan, err := DebugExpressionPlan("r.items.get(range - 1)", metadata, site, locals)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if plan.Predicate != "range_-1 >= 0 && range_-1 < len(r.items)" || plan.Type != "main.Option[int64]" {
+			t.Fatalf("plan: %+v", plan)
+		}
+		err = plan.Select(result)
+		if result == "invalid" {
+			if err == nil {
+				t.Fatal("accepted invalid predicate result")
+			}
+			continue
+		}
+		want := "main.Option_Some[int64]{E0: r.items[range_-1]}"
+		if result == "false" {
+			want = "main.Option_None[int64]{}"
+		}
+		if err != nil || plan.Expression != want || plan.Predicate != "" {
+			t.Fatalf("selected %s: %+v, %v", result, plan, err)
+		}
+	}
+	for _, test := range []struct{ source, message string }{
+		{"r.items.get(true)", "must be Int"}, {"r.items.get(n)", "must be Int"},
+		{"r.items.get()", "one Int index"}, {"r.items.get(0, 1)", "one Int index"},
+		{"r.items.get(0).getOr(1)", "standalone List.get"},
+		{"r.items.get(0) == r.items.get(1)", "standalone List.get"},
+		{"r.items.get(r.deferred)", "deferred field"}, {"r.deferred.get(0)", "collection lookup"},
+	} {
+		_, err := DebugExpressionPlan(test.source, metadata, site, locals)
+		if err == nil || !strings.Contains(err.Error(), test.message) {
+			t.Fatalf("%s: %v; want %s", test.source, err, test.message)
+		}
+	}
+	metadata.Expressions["[]int64"] = check.DebugShape{Name: "List[Int]", Kind: "list", Element: "int64"}
+	if _, err := DebugExpressionPlan("r.items.get(0)", metadata, site, locals); err == nil || !strings.Contains(err.Error(), "concrete Option") {
+		t.Fatalf("unavailable Option types: %v", err)
+	}
+	metadata.Expressions["[]int64"] = check.DebugShape{Name: "List[Float]", Kind: "list", Element: "float64", Option: "main.Option[float64]", Some: "main.Option_Some[float64]", None: "main.Option_None[float64]"}
+	if _, err := DebugExpressionPlan("r.items.get(0)", metadata, site, locals); err == nil || !strings.Contains(err.Error(), "IEEE special values") {
+		t.Fatalf("floating payloads: %v", err)
+	}
+}

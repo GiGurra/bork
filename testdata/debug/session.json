@@ -21,6 +21,24 @@
         "expandable": false
       },
       {
+        "name": "emptyNumbers",
+        "type": "List[Int]",
+        "value": "[]Int len: 0, cap: 0, []",
+        "expandable": false
+      },
+      {
+        "name": "float32Numbers",
+        "type": "List[Float32]",
+        "value": "[]Float32 len: 1, cap: 1, [1.1]",
+        "expandable": true
+      },
+      {
+        "name": "floatNumbers",
+        "type": "List[Float]",
+        "value": "[]Float len: 1, cap: 1, [1.1]",
+        "expandable": true
+      },
+      {
         "name": "fraction",
         "type": "Float",
         "value": "1.1",
@@ -49,6 +67,12 @@
         "type": "Option[Int]",
         "value": "None",
         "expandable": false
+      },
+      {
+        "name": "numbers",
+        "type": "List[Int]",
+        "value": "[]Int len: 2, cap: 2, [3,7]",
+        "expandable": true
       },
       {
         "name": "payload",
