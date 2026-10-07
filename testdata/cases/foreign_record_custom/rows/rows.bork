@@ -20,7 +20,7 @@ derive fn entry[T](field: shape.Field[T]): shape.ForeignField {
 
 derive instance row[T]: Row[T] {
   metadata shape.ForeignRecord = shape.ForeignRecord {
-    fields: [comptime for (field in shape.fields[T]()) comptime if (!field.computed) entry[T](field)]
+    fields: comptime for { field in shape.fields[T](); if !field.computed } yield entry[T](field)
   }
   fn table(value: T): String { shape.name[T]().toLower() + "s" }
 }

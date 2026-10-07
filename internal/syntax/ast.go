@@ -2,6 +2,14 @@ package syntax
 
 import "github.com/GiGurra/bork/internal/diag"
 
+// LegacyStagedList is a `[comptime for (x in xs) comptime if (c) v]`
+// at Pos, and the edits that rewrite it.
+type LegacyStagedList struct {
+	Pos   diag.Pos
+	End   diag.Pos
+	Edits []diag.TextEdit
+}
+
 // File is one parsed .bork source file.
 type File struct {
 	// HeadParentheses holds removable control-head pairs (End is the closing paren).
@@ -10,6 +18,10 @@ type File struct {
 	PatternTestOperators []diag.Pos
 	// IterationOperators marks the contextual in tokens of loop headers.
 	IterationOperators []diag.Pos
+	// LegacyStagedLists are the staged list comprehensions written in the
+	// older bracket form, with the edits that rewrite each one as
+	// comptime for { ... } yield value.
+	LegacyStagedLists []LegacyStagedList
 	// ExpressionSpans retains parser ranges, including grouping, for compiler
 	// source queries and refactorings. One node can have several grouped spans.
 	ExpressionSpans []ExpressionSpan

@@ -52,11 +52,10 @@ derive fn shapeDefaultInput[T](value: T): Value | DecodeError {
   comptime match (shape.kind[T]()) {
     shape.Record => {
       comptime if (shape.positional[T]()) {
-        values: List[Value] = [comptime for (field in shape.fields[T]()) defaultAt(materializeDefault[field.RawType](field.read(value)), s"[${field.index}]")?]
+        values: List[Value] = comptime for { field in shape.fields[T]() } yield defaultAt(materializeDefault[field.RawType](field.read(value)), s"[${field.index}]")?
         Value.Array { items: values }
       } else {
-        fields: List[Field] = [comptime for (field in shape.fields[T]()) comptime if (!field.computed)
-          Field { name: FieldWireName[T](field), value: defaultAt(materializeDefault[field.RawType](field.read(value)), s".${FieldWireName[T](field)}")? }]
+        fields: List[Field] = comptime for { field in shape.fields[T](); if !field.computed } yield Field { name: FieldWireName[T](field), value: defaultAt(materializeDefault[field.RawType](field.read(value)), s".${FieldWireName[T](field)}")? }
         Value.Object { fields: fields }
       }
     }
@@ -72,11 +71,10 @@ derive fn shapeDefaultInput[T](value: T): Value | DecodeError {
                 return Value.String { value: VariantWireName[T](variant) }
               } else {
                 comptime if (variant.positional) {
-                  values: List[Value] = [comptime for (field in variant.fields) defaultAt(materializeDefault[field.RawType](field.read(payload)), s".values[${field.index}]")?]
+                  values: List[Value] = comptime for { field in variant.fields } yield defaultAt(materializeDefault[field.RawType](field.read(payload)), s".values[${field.index}]")?
                   return Value.Object { fields: [Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } }, Field { name: "values", value: Value.Array { items: values } }] }
                 } else {
-                  fields: List[Field] = [comptime for (field in variant.fields) comptime if (!field.computed)
-                    Field { name: FieldWireName[T](field), value: defaultAt(materializeDefault[field.RawType](field.read(payload)), s".${FieldWireName[T](field)}")? }]
+                  fields: List[Field] = comptime for { field in variant.fields; if !field.computed } yield Field { name: FieldWireName[T](field), value: defaultAt(materializeDefault[field.RawType](field.read(payload)), s".${FieldWireName[T](field)}")? }
                   return Value.Object { fields: prepend(Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } }, fields) }
                 }
               }

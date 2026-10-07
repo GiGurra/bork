@@ -10,11 +10,10 @@ class Build[T] { fn build(input: Int): T | shape.ValidationError }
 derive instance build[T]: Build[T] {
   fn build(input: Int): T | shape.ValidationError {
     initial = shape.builder[T]()
-    steps: List[(initial.Type) => initial.Type] = [
-      comptime for (field in shape.fields[T]())
-      comptime if (!field.computed && !field.hasDefault)
-      (state: initial.Type) => state.set(field, input)
-    ]
+    steps: List[(initial.Type) => initial.Type] = comptime for {
+      field in shape.fields[T]()
+      if !field.computed && !field.hasDefault
+    } yield (state: initial.Type) => state.set(field, input)
     steps.fold(initial, (state, step) => step(state)).finish()
   }
 }
@@ -157,7 +156,7 @@ class Labels[T] { fn labels(value: T): List[String] }
 
 derive instance labels[T]: Labels[T] {
   fn labels(value: T): List[String] {
-    [comptime for (field in shape.fields[T]()) comptime if (!field.computed) field.name]
+    comptime for { field in shape.fields[T](); if !field.computed } yield field.name
   }
 }
 
@@ -237,7 +236,7 @@ class VariantDocs[T] { fn variantDocs(value: T): List[String] }
 
 derive instance variantDocs[T]: VariantDocs[T] {
   fn variantDocs(value: T): List[String] {
-    [comptime for (variant in shape.variants[T]()) variant.name + ": " + variant.doc]
+    comptime for { variant in shape.variants[T]() } yield variant.name + ": " + variant.doc
   }
 }
 
@@ -344,14 +343,12 @@ class Row[T] {}
 
 derive instance row[T]: Row[T] {
   metadata shape.ForeignRecord = shape.ForeignRecord {
-    fields: [comptime for (field in shape.fields[T]()) comptime if (!field.computed)
-      shape.ForeignField {
-        slot: field.index,
-        name: field.name.capitalize(),
-        tags: [shape.Tag { name: "db", value: field.name }],
-        option: shape.ForeignOption.Reject
-      }
-    ]
+    fields: comptime for { field in shape.fields[T](); if !field.computed } yield shape.ForeignField {
+      slot: field.index,
+      name: field.name.capitalize(),
+      tags: [shape.Tag { name: "db", value: field.name }],
+      option: shape.ForeignOption.Reject
+    }
   }
 }
 

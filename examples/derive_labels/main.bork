@@ -6,7 +6,7 @@ class Labels[T] {
 
 derive instance labels[T]: Labels[T] {
   fn labels(x: T): List[String] {
-    [comptime for (field in shape.fields[T]()) comptime if (!field.computed) field.name]
+    comptime for { field in shape.fields[T](); if !field.computed } yield field.name
   }
 }
 

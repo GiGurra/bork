@@ -3,10 +3,12 @@ package driver
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/GiGurra/bork/internal/check"
+	"github.com/GiGurra/bork/internal/diag"
 )
 
 func TestUnitMigrationFixes(t *testing.T) {
@@ -93,5 +95,92 @@ func TestDescribeOk(t *testing.T) {
 		if result := describeAt(t, source, "Ok }", ""); result.typ != "Ok" {
 			t.Fatalf("wrong success expression type: %+v", result)
 		}
+	}
+}
+
+func TestComptimeComprehensionMigrationFixes(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+
+class Info[T] { fn info(value: T): (List[String], Bool, Int) }
+
+type Meta = { names: List[String], count: Int }
+
+derive instance info[T]: Info[T] {
+  fn info(value: T): (List[String], Bool, Int) {
+    names = [comptime for (field in shape.fields[T]()) comptime if (!field.computed) field.name]
+    empty = ![comptime for (field in shape.fields[T]()) comptime if (field.name == "zzz")
+      true].isEmpty()
+    multi = [comptime for (
+      field in shape.fields[T]()
+    ) comptime if (!field.computed)
+      field.name]
+    kept = [comptime for (field in shape.fields[T]()) // every field
+      field.name]
+    meta = Meta {
+      names: [comptime for ((i, field) in shape.fields[T]().indexed())
+        field.name + toString(i)],
+      count: [comptime for (field in shape.fields[T]()) 1].length(),
+    }
+    (names.concat(meta.names).concat(multi).concat(kept), empty, meta.count)
+  }
+}
+
+type Row = { name: String, age: Int } derive (Info)
+
+fn main() { println(info(Row { name: "Ada", age: 37 })) }
+`
+	path := filepath.Join(t.TempDir(), "main.bork")
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, info, err := Check(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var edits []diag.TextEdit
+	unfixed := 0
+	for _, warning := range check.MigrationWarnings(info).Sorted() {
+		if warning.Code != "migration.comptime-comprehension" || warning.Severity != "warning" || len(warning.Fixes) > 1 {
+			t.Fatalf("unexpected migration warning: %+v", warning)
+		}
+		if len(warning.Fixes) == 0 {
+			unfixed++ // a comment inside the list would be lost
+			continue
+		}
+		edits = append(edits, warning.Fixes[0].Edits...)
+	}
+	if len(edits) == 0 || unfixed != 1 {
+		t.Fatalf("expected fixes and one unfixed list, got %d edits and %d unfixed", len(edits), unfixed)
+	}
+	offset := func(p diag.Pos) int {
+		n := 0
+		for _, line := range strings.SplitAfter(source, "\n")[:p.Line-1] {
+			n += len(line)
+		}
+		return n + p.Col - 1
+	}
+	sort.SliceStable(edits, func(i, j int) bool { return offset(edits[i].Start) > offset(edits[j].Start) })
+	for _, edit := range edits {
+		source = source[:offset(edit.Start)] + edit.Replacement + source[offset(edit.End):]
+	}
+	for _, want := range []string{
+		"names = comptime for { field in shape.fields[T](); if !field.computed } yield field.name",
+		"empty = !(comptime for { field in shape.fields[T](); if field.name == \"zzz\" } yield true).isEmpty()",
+		"names: comptime for { (i, field) in shape.fields[T]().indexed() } yield field.name + toString(i),",
+		"count: (comptime for { field in shape.fields[T]() } yield 1).length(),",
+		"multi = comptime for {\n      field in shape.fields[T](); if !field.computed } yield field.name\n",
+		"kept = [comptime for (field in shape.fields[T]()) // every field\n      field.name]",
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("missing %q in\n%s", want, source)
+		}
+	}
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, info, err = Check(path)
+	if err != nil || check.MigrationWarnings(info).Len() != 1 {
+		t.Fatalf("migration left more than the commented list: %v\n%s", err, source)
 	}
 }

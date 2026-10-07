@@ -11,7 +11,7 @@ class Names[T] {
 derive fn fieldOptions[T](field: shape.Field[T]): FieldTags { field.tagged[FieldTags]().getOr(FieldTags {}) }
 derive instance names[T]: Names[T] {
   fn options(value: T): List[FieldTags] {
-    comptime if (shape.kind[T]() == shape.Record) { [comptime for (field in shape.fields[T]()) fieldOptions[T](field)] } else { [] }
+    comptime if (shape.kind[T]() == shape.Record) { comptime for { field in shape.fields[T]() } yield fieldOptions[T](field) } else { [] }
   }
   fn typeTags(value: T): Option[TypeTags] { shape.tagged[T, TypeTags]() }
   fn names(value: T): List[String] {
@@ -26,9 +26,9 @@ derive instance names[T]: Names[T] {
           comptime if (fieldOptions[T](field).name.getOr("") == "") { shape.fail("empty explicit tag name") }
         }
       }
-      [prefix].concat([comptime for (field in shape.fields[T]()) fieldOptions[T](field).name.getOr("default")])
+      [prefix].concat(comptime for { field in shape.fields[T]() } yield fieldOptions[T](field).name.getOr("default"))
     } else {
-      [prefix].concat([comptime for (variant in shape.variants[T]()) variant.tagged[VariantTags]().getOr(VariantTags {}).name])
+      [prefix].concat(comptime for { variant in shape.variants[T]() } yield variant.tagged[VariantTags]().getOr(VariantTags {}).name)
     }
   }
 }

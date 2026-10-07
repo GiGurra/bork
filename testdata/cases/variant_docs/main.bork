@@ -6,7 +6,7 @@ class Described[T] {
 
 derive instance described[T]: Described[T] {
   fn docs(): List[String] {
-    [comptime for (variant in shape.variants[T]()) variant.name + ":" + variant.doc]
+    comptime for { variant in shape.variants[T]() } yield variant.name + ":" + variant.doc
   }
 }
 
