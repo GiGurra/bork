@@ -1,0 +1,8 @@
+import "bork/codec"
+
+// Reload resolves a fresh snapshot from current files and environment using
+// the supplied arguments and metadata. Validation runs again; callers choose
+// whether to replace their previous snapshot. No watcher is installed.
+fn Reload[T: codec.Decode](name: String, description: String, args: List[String], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}) uses io: Resolved[T] | Error | Help {
+  ParseResolved[T](name, description, args, flags, configFiles, settings)
+}
