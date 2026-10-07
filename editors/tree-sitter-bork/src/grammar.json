@@ -9029,21 +9029,25 @@
       ]
     },
     "context_pattern": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "STRING",
-          "value": "."
-        },
-        {
-          "type": "FIELD",
-          "name": "name",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_identifier"
+      "type": "PREC",
+      "value": 15,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "STRING",
+            "value": "."
+          },
+          {
+            "type": "FIELD",
+            "name": "name",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_identifier"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "field_pattern": {
       "type": "SEQ",
@@ -9720,8 +9724,25 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "SYMBOL",
-          "name": "_iteration_binding"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "PREC_DYNAMIC",
+              "value": 5,
+              "content": {
+                "type": "SYMBOL",
+                "name": "_iteration_binding"
+              }
+            },
+            {
+              "type": "FIELD",
+              "name": "pattern",
+              "content": {
+                "type": "SYMBOL",
+                "name": "pattern"
+              }
+            }
+          ]
         },
         {
           "type": "STRING",
@@ -10475,6 +10496,23 @@
     }
   ],
   "conflicts": [
+    [
+      "pattern",
+      "_iteration_binding"
+    ],
+    [
+      "qualified_name",
+      "_iteration_binding"
+    ],
+    [
+      "qualified_name",
+      "binding",
+      "pattern"
+    ],
+    [
+      "selector_expression",
+      "context_pattern"
+    ],
     [
       "parenthesized_expression",
       "list_comprehension"

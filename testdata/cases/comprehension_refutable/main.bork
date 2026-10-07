@@ -1,0 +1,27 @@
+// A generator whose pattern can fail to match skips the values it does not match.
+type User = { name: String, age: Int }
+type Bot = { id: Int }
+type Shape = sealed { Circle { radius: Int }, Square { side: Int } }
+
+pred positive(n: Int) { n > 0 }
+fn need(n: Int where positive): Int { n }
+
+fn main() {
+  maybes = [Option.Some(1), Option.None, Option.Some(3)]
+  println((for { .Some(v) in maybes } yield v * 10).toList())
+  println((for { Option.Some(v) in maybes; if v > 1 } yield v).toList())
+  mixed: List[User | Bot] = [User { name: "ada", age: 36 }, Bot { id: 7 }, User { name: "bo", age: 3 }]
+  println((for { u: User in mixed; if u.age > 10 } yield u.name).toList())
+  println((for { User { name } in mixed } yield name).toList())
+  shapes = [Shape.Circle { radius: 2 }, Shape.Square { side: 3 }]
+  println((for { .Circle { radius } in shapes } yield radius).toList())
+  pairs = [("a", Option.Some(1)), ("b", Option.None)]
+  println((for { (k, .Some(v)) in pairs } yield (k, v)).toList())
+  println((for { 2 in [1, 2, 2, 3] } yield "two").toList())
+  println((for { [first, ...rest] in [[1, 2], [], [3]] } yield (first, rest)).toList())
+  println((for { n: Int where positive in [-1, 2] } yield need(n)).toList())
+  nested = [[Option.Some(1)], [Option.None, Option.Some(2)]]
+  println((for { row in nested; .Some(v) in row } yield v).toList())
+  every = [User { name: "x", age: 1 }]
+  println((for { u: User in every } yield u.age).toList())
+}

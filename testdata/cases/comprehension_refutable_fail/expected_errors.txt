@@ -1,0 +1,7 @@
+main.bork:3:37: .Some needs an expected sealed type with variant Some, found Int
+main.bork:3:64: undefined: v
+main.bork:4:34: pattern type Bot does not match a value of type Int
+main.bork:6:3: binding v is never read; discard explicitly with _
+main.bork:7:15: v is already defined in an enclosing scope (bork does not allow shadowing)
+main.bork:9:38: binding v is never read; discard explicitly with _
+main.bork:9:62: a comprehension's names are new, and v is already bound

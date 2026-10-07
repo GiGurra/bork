@@ -196,9 +196,27 @@ fn main() {
 ```
 
 - `x in xs` goes through a `List` or `Seq`, and its name can be a [loop pattern](#loops) such as `(k, v)`. A later line can use earlier names, as `item in order.items` does.
+- A generator's pattern can also be any [match pattern](matching.md). Values it does not match are skipped: `.Some(v) in maybes` goes through the values in `Some`, and `u: User in accounts` through the `User`s of a union.
 - `if cond` skips the values for which it is false. What it proves holds in the lines after it and in the yield.
 - `name = value` binds a name for the lines after it.
 - The first line is a generator, and `yield` goes on the line of the closing `}`.
+
+```bork
+type User = { name: String }
+type Bot = { id: Int }
+
+fn main() {
+  accounts: List[User | Bot] = [User { name: "ada" }, Bot { id: 7 }, User { name: "bo" }]
+  println((for { u: User in accounts } yield u.name).toList())
+  scores = [Option.Some(3), Option.None, Option.Some(5)]
+  println((for { .Some(s) in scores; if s > 4 } yield s).toList())
+}
+```
+
+```text
+["ada", "bo"]
+[5]
+```
 
 A comprehension is a `generate` block written another way. It is lazy, including its first source: nothing runs until the sequence is consumed, and each consumption starts again. It has the effects of what it runs. When its consumer stops early, it stops its sources, so a generator that holds a resource releases it then. The element type is the yield's type, or the one the context expects (`xs: Seq[Int | String] = for { ... } yield n`).
 

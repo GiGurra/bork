@@ -262,3 +262,48 @@ func TestComprehensionBindingIdentities(t *testing.T) {
 		t.Errorf("no symbols for %v", want)
 	}
 }
+
+func TestRefutableGeneratorIdentities(t *testing.T) {
+	d := &diag.List{}
+	files := prelude.Parse(d)
+	file := syntax.Parse("refutable.bork", []byte(`fn main() {
+  values = for {
+    .Some(value) in [Option.Some(1), Option.None]
+    if value > 0
+  } yield value
+  println(values.toList())
+}
+`), d)
+	file.Package = "refutable"
+	files = append(files, file)
+	info := Program(files, file.Package, d, nil)
+	if d.Len() != 0 {
+		t.Fatal(d.Error())
+	}
+	index := BuildSourceIndex(files, info)
+	found := false
+	for _, symbol := range index.Symbols() {
+		if strings.HasPrefix(symbol.Name, "_") {
+			t.Fatalf("hidden generator element is a symbol: %+v", symbol)
+		}
+		if symbol.Name != "value" || symbol.Definition.File != file.Path {
+			continue
+		}
+		found = true
+		var lines []int
+		for _, ref := range index.References(symbol.Definition) {
+			lines = append(lines, ref.Start.Line)
+		}
+		if fmt.Sprint(lines) != "[3 4 5]" {
+			t.Fatalf("value: reference lines = %v", lines)
+		}
+	}
+	if !found {
+		t.Fatal("no symbol for value")
+	}
+	for _, token := range SemanticTokens(file, info) {
+		if token.Start.Line == 3 && token.Start.Col == 5 && token.Kind == "variable" {
+			t.Fatalf("hidden generator element has a semantic token: %+v", token)
+		}
+	}
+}

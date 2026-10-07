@@ -1,6 +1,7 @@
 package syntax
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -84,6 +85,46 @@ func TestComprehensionErrors(t *testing.T) {
 		Parse("t.bork", []byte("fn f() {\n  "+body+"\n}"), diags)
 		if diags.Len() == 0 || !strings.Contains(diags.Error(), want) {
 			t.Errorf("%q: expected %q, got %q", body, want, diags.Error())
+		}
+	}
+}
+
+func TestRefutableGeneratorDesugars(t *testing.T) {
+	src := "fn f() {\n  _ = for { (k, .Some(v)) in pairs; u: User in us } yield (k, v, u)\n}"
+	diags := &diag.List{}
+	file := Parse("t.bork", []byte(src), diags)
+	if diags.Len() != 0 {
+		t.Fatalf("unexpected errors: %s", diags.Error())
+	}
+	g := file.Funcs[0].Body.Stmts[0].(*Binding).Value.(*Generate)
+	for _, want := range []string{"*syntax.TuplePat", "*syntax.TypePat"} {
+		loop := g.Body.Stmts[0].(*ExprStmt).X.(*For)
+		if loop.Pattern != nil || !strings.HasPrefix(loop.Name, "_elem_") {
+			t.Fatalf("expected a hidden element name, got %#v", loop)
+		}
+		m := loop.Body.Stmts[0].(*ExprStmt).X.(*Match)
+		if !m.Filter || len(m.Arms) != 2 || fmt.Sprintf("%T", m.Arms[0].Pattern) != want {
+			t.Fatalf("expected a filter match on %s, got %#v", want, m)
+		}
+		if x, ok := m.X.(*Ident); !ok || x.Name != loop.Name {
+			t.Fatalf("the match tests the element: %#v", m.X)
+		}
+		if _, ok := m.Arms[1].Pattern.(*WildcardPat); !ok {
+			t.Fatalf("the last arm skips: %#v", m.Arms[1])
+		}
+		g = &Generate{Body: m.Arms[0].Body.(*Block)}
+	}
+}
+
+func TestRefutableGeneratorLineDetection(t *testing.T) {
+	for _, body := range []string{"for x in xs { f(x) }\n    break", "_ = g(x)\n    break", "f(a, b)\n    break"} {
+		diags := &diag.List{}
+		file := Parse("t.bork", []byte("fn f() {\n  for {\n    "+body+"\n  }\n}"), diags)
+		if diags.Len() != 0 {
+			t.Fatalf("%q: unexpected errors: %s", body, diags.Error())
+		}
+		if f, ok := file.Funcs[0].Body.Tail.(*For); !ok || f.Form() != ForInfinite {
+			t.Fatalf("%q: expected an infinite loop, got %#v", body, file.Funcs[0].Body.Tail)
 		}
 	}
 }

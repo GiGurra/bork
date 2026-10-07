@@ -3554,6 +3554,10 @@ element type of an expected `Seq[U]`. Sources are evaluated on consumption,
 each consumption restarts, effects are the producer's, and early consumer exit
 stops nested sources. Clause names cannot shadow or rebind; clauses and the
 yield reject break, continue, return, `?` and nested yield.
+A generator pattern may be any match pattern; one that can fail to match
+becomes a match on a hidden element name inside the loop, whose `_` arm skips
+the value (no exhaustiveness check, and no unreachable-arm error for that arm).
+Plain for loops keep irrefutable header patterns.
 
 Yield is legal only in the lexical producer body (including its if/match,
 loop and scope blocks). It is rejected in nested lambdas, declared functions,

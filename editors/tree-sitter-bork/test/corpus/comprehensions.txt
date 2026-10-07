@@ -61,3 +61,72 @@ fn main() {
               (identifier)))))
       (for_expression
         (block)))))
+
+==================
+Refutable comprehension generators
+==================
+fn main() {
+  xs = for {
+    .Some(v) in maybes
+    u: User in mixed
+    (k, Option.Some(w)) in pairs
+    x in xs
+  } yield (v, u, k, w, x)
+}
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    (parameters)
+    (block
+      (binding
+        name: (identifier)
+        (comprehension_expression
+          (comprehension_generator
+            pattern: (pattern
+              (context_pattern
+                name: (identifier))
+              (pattern
+                (qualified_name
+                  (identifier))))
+            source: (qualified_name
+              (identifier)))
+          (comprehension_generator
+            pattern: (pattern
+              name: (identifier)
+              (type
+                (qualified_name
+                  (identifier))))
+            source: (qualified_name
+              (identifier)))
+          (comprehension_generator
+            pattern: (tuple_pattern
+              (pattern
+                (qualified_name
+                  (identifier)))
+              (pattern
+                (qualified_name
+                  (identifier)
+                  (identifier))
+                (pattern
+                  (qualified_name
+                    (identifier)))))
+            source: (qualified_name
+              (identifier)))
+          (comprehension_generator
+            name: (identifier)
+            source: (qualified_name
+              (identifier)))
+          value: (tuple_literal
+            (qualified_name
+              (identifier))
+            (qualified_name
+              (identifier))
+            (qualified_name
+              (identifier))
+            (qualified_name
+              (identifier))
+            (qualified_name
+              (identifier))))))))
