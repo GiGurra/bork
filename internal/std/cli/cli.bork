@@ -42,22 +42,10 @@ fn Parse[T: codec.Decode](name: String, description: String, args: List[String],
 
 // ParseDetailed also returns warnings from accepted deprecated flags.
 fn ParseDetailed[T: codec.Decode](name: String, description: String, args: List[String], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}) uses io: Parsed[T] | Error | Help {
-  match (resolve[T](flags, settings, name)) {
+  match (ParseResolved[T](name, description, args, flags, configFiles, settings)) {
+    resolved: Resolved[T] => Parsed[T] { options: resolved.value, warnings: resolved.warnings }
     error: Error => error
-    fields: List[FieldSpec] => prepare[T](name, description, args, fields, configFiles, settings.completion, settings.version)
-  }
-}
-fn prepare[T: codec.Decode](name: String, description: String, args: List[String], specs: List[FieldSpec], configFiles: List[String], completion: Bool, version: String) uses io: Parsed[T] | Error | Help {
-  match (inputFields[T](name)) {
-    error: Error => error
-    fields: List[inputField] => match (parseInput(name, description, args, specs, fields, configFiles, completion, version)) {
-      error: Error => error
-      help: Help => help
-      input: parsedInput => match (codec.decode[T](input.value)) {
-        error: codec.DecodeError => withWarnings(Error { errors: [error] }, input.warnings, input.path)
-        options: T => Parsed[T] { options: options, warnings: input.warnings }
-      }
-    }
+    help: Help => help
   }
 }
 
