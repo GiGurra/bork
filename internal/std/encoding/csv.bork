@@ -171,9 +171,12 @@ fn encodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSch
   if len(schema) == 0 { return CsvError{row: 1, column: "", message: "expected a record with at least one field"} }
   if len(values) == 0 { return [][]string{} }
   headers := []string{}
+  seenHeaders := map[string]bool{}
   for _, field := range schema {
     key := field.wireName
     if key == "" { key = field.name }
+    if seenHeaders[key] { return CsvError{row: 1, column: key, message: "duplicate schema field name"} }
+    seenHeaders[key] = true
     headers = append(headers, key)
   }
   rows := [][]string{headers}

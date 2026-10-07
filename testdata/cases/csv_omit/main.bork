@@ -1,11 +1,14 @@
 import "bork/codec"
 import "bork/encoding"
+import "example/csvomit/optional"
 use codec.Defaults
 use customEncode
 use customDecode
 use tokenEncode
 use tokenDecode
 use missingEncode
+use duplicateEncode
+use duplicateDecode
 
 type Row = {
   optionalValue: Option[Int] codec { omit: codec.Omit.None, name: "maybe" }
@@ -94,6 +97,9 @@ test "omitted None and defaults keep every column and selected field codec" {
   ])
   assertEqual(text, "maybe,count,optionalDefault,someDefault,numbers,nested,unrelated\n,3,,4,[],encoded:default,encoded:9\n1,5,2,,\"[1,2]\",encoded:other,encoded:8\n")
 }
+test "omitted None honors a custom Option codec" {
+  optional.Check()
+}
 test "custom Encode completion follows custom Decode schema" {
   assertEqual(round([Custom { text: "custom-default" }, Custom { text: "present" }]), "wire\ncustom-default\npresent\n")
 }
@@ -122,5 +128,30 @@ test "derived completion refuses fields without omission and unknown wire names"
     Option.None => assert(false)
   }
   match (codec.Encoding[Int]()) { Option.None => {}, _ => assert(false) }
+}
+type DuplicateSchema = { value: String }
+instance duplicateEncode: codec.Encode[DuplicateSchema] {
+  metadata codec.RecordEncoding = codec.RecordEncoding { omittedField: name => Option.Some(codec.Value.String { value: "default" }) }
+  fn encode(value: DuplicateSchema): codec.Value { codec.Value.Object { fields: [] } }
+}
+instance duplicateDecode: codec.Decode[DuplicateSchema] {
+  metadata codec.RecordSchema = codec.RecordSchema { fields: [duplicateField(), duplicateField()] }
+  fn decode(input: codec.Value): DuplicateSchema | codec.DecodeError { DuplicateSchema { value: "default" } }
+}
+fn duplicateField(): codec.RecordField {
+  codec.RecordField { name: "value", typeName: "String", doc: "", facts: [], kind: "string", optional: false,
+    hasDefault: true, defaultValue: Option.None, validate: input => Ok }
+}
+test "completion cannot create duplicate custom schema headers" {
+  match (encoding.EncodeCsv([DuplicateSchema { value: "default" }])) {
+    error: encoding.CsvError => { assertEqual(error.row, 1); assertEqual(error.column, "value"); assertEqual(error.message, "duplicate schema field name") }
+    _ => assert(false)
+  }
+}
+type Positional = (Int, Int) derive (codec.Encode)
+type Sealed = sealed { One, Two { value: Int } } derive (codec.Encode)
+test "positional and sealed encoders do not publish record completion" {
+  match (codec.Encoding[Positional]()) { Option.None => {}, _ => assert(false) }
+  match (codec.Encoding[Sealed]()) { Option.None => {}, _ => assert(false) }
 }
 fn main() {}
