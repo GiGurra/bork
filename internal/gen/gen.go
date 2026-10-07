@@ -741,7 +741,14 @@ func (g *gen) goFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 	if abs, err := filepath.Abs(file); err == nil {
 		file = abs
 	}
-	fmt.Fprintf(&buf, " {%s/*line %s:%d:%d*/%s}\n", g.packageAliases(fd), file, pos.Line, pos.Col+1, g.goBodyAliases(fd))
+	aliases := g.packageAliases(fd)
+	body := g.goBodyAliases(fd)
+	if aliases != "" && g.info.FuncOf[fd].Pkg.GoPrefix == "" {
+		// Root-package aliases are new; preserve existing local shadowing.
+		fmt.Fprintf(&buf, " {%s{/*line %s:%d:%d*/%s}}\n", aliases, file, pos.Line, pos.Col+1, body)
+	} else {
+		fmt.Fprintf(&buf, " {%s/*line %s:%d:%d*/%s}\n", aliases, file, pos.Line, pos.Col+1, body)
+	}
 	return buf.String(), nil
 }
 
@@ -751,11 +758,17 @@ func (g *gen) goFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 func (g *gen) packageAliases(fd *syntax.FuncDecl) string {
 	fn := g.info.FuncOf[fd]
 	pkg := fn.Pkg
-	if pkg == nil || pkg.GoPrefix == "" {
+	if pkg == nil {
 		return ""
 	}
 	var out strings.Builder
 	seen := map[string]bool{}
+	for _, param := range fd.Params {
+		seen[param.Name] = true
+	}
+	for _, variable := range fn.NeedVars {
+		seen[varIdent(variable).Name] = true
+	}
 	var sc goscanner.Scanner
 	src := []byte(fd.GoBody.Body)
 	sc.Init(token.NewFileSet().AddFile("", -1, len(src)), src, nil, 0)
@@ -773,30 +786,34 @@ func (g *gen) packageAliases(fd *syntax.FuncDecl) string {
 		seen[lit] = true
 		if t := pkg.TypeNamed(lit); t != nil && len(check.TypeArgs(t)) == 0 {
 			g.goType(t)
-			fmt.Fprintf(&out, "type %s = %s%s; ", lit, pkg.GoPrefix, lit)
-		} else if t, v, ok := strings.Cut(lit, "_"); ok && isVariantOf(pkg.TypeNamed(t), v) {
-			g.goType(pkg.TypeNamed(t))
-			fmt.Fprintf(&out, "type %s = %s%s; ", lit, pkg.GoPrefix, lit)
-		} else if f := pkg.Funcs[lit]; f != nil && f != fn && len(f.TypeParams) == 0 {
+			if pkg.GoPrefix != "" {
+				fmt.Fprintf(&out, "type %s = %s%s; ", lit, pkg.GoPrefix, lit)
+			}
+		} else if t, v, ok := strings.Cut(lit, "_"); ok && variantOf(pkg.TypeNamed(t), v) != nil {
+			variant := variantOf(pkg.TypeNamed(t), v)
+			g.goType(variant.Parent)
+			if generated := variantName(variant).Name; generated != lit {
+				fmt.Fprintf(&out, "type %s = %s; ", lit, generated)
+			}
+		} else if f := pkg.Funcs[lit]; pkg.GoPrefix != "" && f != nil && f != fn && len(f.TypeParams) == 0 {
 			fmt.Fprintf(&out, "%s := %s%s; _ = %s; ", lit, pkg.GoPrefix, lit, lit)
 		}
 	}
 	return out.String()
 }
 
-// isVariantOf reports whether t is a non-generic sealed type with a
-// variant named v.
-func isVariantOf(t check.Type, v string) bool {
+// variantOf finds a variant of a non-generic sealed type.
+func variantOf(t check.Type, v string) *check.Variant {
 	st, ok := t.(*check.Sealed)
 	if !ok || len(check.TypeArgs(st)) > 0 {
-		return false
+		return nil
 	}
 	for _, x := range st.Variants {
 		if x.Name == v {
-			return true
+			return x
 		}
 	}
-	return false
+	return nil
 }
 
 // goReserved holds names a bork identifier may not use verbatim in Go:

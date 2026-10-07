@@ -301,9 +301,9 @@ func (g *gen) representationConversion(value ast.Expr, from, to check.Type, from
 				typ := repr(v.Parent, declaration)
 				switch typ := typ.(type) {
 				case *ast.Ident:
-					typ.Name += "_" + v.Name
+					typ.Name = variantName(v).Name
 				case *ast.IndexListExpr:
-					typ.X.(*ast.Ident).Name += "_" + v.Name
+					typ.X.(*ast.Ident).Name = variantName(v).Name
 				}
 				return typ
 			}

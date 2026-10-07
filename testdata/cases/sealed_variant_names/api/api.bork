@@ -1,0 +1,2 @@
+type A = sealed { B_C(String) }
+fn Native(): A unsafe go { return A_B_C{E0: "imported native"} }

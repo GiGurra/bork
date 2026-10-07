@@ -182,10 +182,22 @@ func typeName(s string, pkg *check.Package) *ast.Ident {
 	return name(s)
 }
 
+// variantName keeps simple variant names readable, but encodes ambiguous
+// boundaries and clashes with declared types in a namespace source names cannot use.
+func variantName(v *check.Variant) *ast.Ident {
+	parent := typeName(v.Parent.Name, v.Parent.Pkg).Name
+	candidate := v.Parent.Name + "_" + v.Name
+	declared := v.Parent.Pkg != nil && v.Parent.Pkg.TypeNamed(candidate) != nil
+	if strings.Contains(v.Parent.Name, "_") || strings.Contains(v.Name, "_") || name(v.Parent.Name).Name != v.Parent.Name || declared {
+		return ast.NewIdent("_variant_" + strconv.Itoa(len(parent)) + "_" + parent + "_" + v.Name)
+	}
+	return ast.NewIdent(parent + "_" + v.Name)
+}
+
 // variantType is the Go struct type of a sealed type's variant.
 func (g *gen) variantType(v *check.Variant) ast.Expr {
 	g.usedTypes[baseOf(v.Parent)] = true
-	return g.instantiated(ast.NewIdent(typeName(v.Parent.Name, v.Parent.Pkg).Name+"_"+v.Name), v.Parent)
+	return g.instantiated(variantName(v), v.Parent)
 }
 
 func markerMethod(t *check.Sealed) string { return "is" + typeName(t.Name, t.Pkg).Name }
@@ -285,7 +297,7 @@ func (g *gen) typeDecl(t check.Type) []ast.Decl {
 			}}}},
 		}}})
 		for _, v := range t.Variants {
-			vname := ast.NewIdent(typeName(t.Name, t.Pkg).Name + "_" + v.Name)
+			vname := variantName(v)
 			recv := g.instantiated(vname, t)
 			decls = append(decls, g.structDecl(vname, t.TypeParams, v.Fields))
 			decls = append(decls, &ast.FuncDecl{

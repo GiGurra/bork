@@ -1,0 +1,9 @@
+10
+7 8 9
+fmt.A fmt__A {}
+A.B_C("native") A.B_C("imported native") A.B_C("qualified native")
+A_B.C("x") A.B_C("y")
+Plain.Item("z") Plain_Item { value: "record" }
+Generic_A.B((1, "x")) Generic.A_B((2, "y"))
+Generic_A.B(("tuple",)) roundtrip
+matched

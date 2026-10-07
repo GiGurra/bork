@@ -1,0 +1,44 @@
+import "example.com/variantnames/api"
+
+type fmt = sealed { A }
+type fmt__A = {}
+
+type A_B = sealed { C(String) }
+type A = sealed { B_C(String) }
+type Plain = sealed { Item(String) }
+type Plain_Item = { value: String }
+type Generic_A[T] = sealed { B(T) }
+type Generic[T] = sealed { A_B(T) }
+
+fn wrap[T](value: T): Generic_A[(T,)] { Generic_A.B((value,)) }
+fn unwrap[T](value: Generic_A[(T,)]): T {
+  match (value) {
+    Generic_A.B(pair) => pair.0
+  }
+}
+
+fn native(): A unsafe go { return A_B_C{E0: "native"} }
+
+fn importedNative(): api.A unsafe go { return api.A_B_C{E0: "qualified native"} }
+
+type Ambient = sealed { Variant_Name }
+ambient Ambient_Variant_Name: Int
+fn ambientValue() needs Ambient_Variant_Name: Int unsafe go { return Ambient_Variant_Name }
+
+fn shadowed(): Int unsafe go { A_B_C := int64(7); return A_B_C }
+fn parameter(A_B_C: Int): Int unsafe go { return A_B_C }
+fn localType(): Int unsafe go { type A_B_C = int64; return A_B_C(9) }
+
+fn main() {
+  println(with (Ambient_Variant_Name: 10) { ambientValue() })
+  println(shadowed(), parameter(8), localType())
+  println(fmt.A, fmt__A {})
+  println(native(), api.Native(), importedNative())
+  println(A_B.C("x"), A.B_C("y"))
+  println(Plain.Item("z"), Plain_Item { value: "record" })
+  println(Generic_A.B((1, "x")), Generic.A_B((2, "y")))
+  println(wrap("tuple"), unwrap(wrap("roundtrip")))
+  match (A_B.C("matched")) {
+    A_B.C(value) => println(value)
+  }
+}
