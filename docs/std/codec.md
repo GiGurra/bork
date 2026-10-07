@@ -210,10 +210,49 @@ Field adapters need more than a value decoder. The selected decoder can publish 
 | `codec.Schema[T: codec.Decode](): Option[codec.RecordSchema]` | Read the selected decoder's record metadata, or None. |
 | `codec.TagGroup` | `{ package: String, value: codec.Value }` |
 | `codec.RecordSchema` | `{ fields: List[codec.RecordField] }` |
-| `codec.RecordField` | `name: String`, `wireName: String`, `aliases: List[String]`, `words: List[String]`, `tags: List[codec.TagGroup]`, `typeName: String`, `doc: String`, `facts: List[String]`, `kind: String`, `optional: Bool`, `variants: List[codec.VariantSchema] = []`, `hasDefault: Bool`, `defaultValue: Option[() => codec.DefaultSchema]`, `recordSchema: Option[() => Option[codec.RecordSchema]]`, `validate: (codec.Value) => Ok \| codec.DecodeError` |
+| `codec.RecordField` | `name: String`, `wireName: String`, `aliases: List[String]`, `words: List[String]`, `tags: List[codec.TagGroup]`, `typeName: String`, `doc: String`, `facts: List[String]`, `kind: String`, `optional: Bool`, `variants: List[codec.VariantSchema] = []`, `hasDefault: Bool`, `defaultValue: Option[() => codec.DefaultSchema]`, `defaultInput: Option[() => codec.Value \| codec.DecodeError] = Option.None`, `recordSchema: Option[() => Option[codec.RecordSchema]]`, `validate: (codec.Value) => Ok \| codec.DecodeError` |
 | `codec.DefaultSchema` | `{ display: String, configPath: Option[String], choices: List[String] }` |
+| `codec.DefaultInput` | Private selected-Decode metadata constructed by `codec.Input[T]`. |
+| `codec.Input[T: codec.Decode](convert: (T) => codec.Value \| codec.DecodeError): codec.DefaultInput` | Advertise a pure conversion from typed values to accepted decoder input. |
 
 Container metadata delegates to its selected element decoder, preserving variant choices through Option and List wrappers. Missing field metadata uses the general `json` kind and a required input. Record schemas describe named fields, typed validation and optional default-display callbacks. Looking up the schema does not evaluate defaults. A record field can publish a lazy `recordSchema` callback for the selected decoder of its value; `Option` forwards its inner record schema. Custom decoders without record metadata remain opaque. A field's defaultValue callback returns display text, an optional configuration path and choices from one default evaluation.
+
+A field's optional `defaultInput` callback materializes its declared default as
+a codec.Value. It follows the selected Decode instance's DefaultInput metadata,
+without requiring Encode or interpreting DefaultSchema display text. Standard
+primitive, Option, List and String-keyed Map decoders publish this metadata;
+derived decoders traverse stored fields using selected child providers and codec
+wire names. Computed fields are omitted. Missing child providers return a
+DecodeError with the child path. Merely reading a schema still evaluates no defaults.
+
+Custom decoders opt in with a typed conversion that produces input accepted by
+the same decoder and reconstructs the supplied value. For example:
+
+```bork
+import "bork/codec"
+use codec.Defaults
+
+type Token = { text: String }
+instance tokenDecode: codec.Decode[Token] {
+  metadata codec.FieldSchema = codec.FieldSchema { kind: "string", optional: false }
+  metadata codec.DefaultInput = codec.Input[Token](token => codec.Value.String { value: token.text })
+  fn decode(input: codec.Value): Token | codec.DecodeError {
+    match (input) {
+      codec.Value.String { value } => Token { text: value }
+      _ => codec.DecodeError { path: "", message: "expected a token string" }
+    }
+  }
+}
+fn main() {}
+```
+
+The constructor type must match the selected decoder's target. Incompatible
+metadata returns a provider error before conversion. Providers support concrete
+and sealed targets; unions inside target type arguments require generic metadata
+keys and currently return a provider error. An enclosing record or sealed provider
+can handle its union fields explicitly. CLI flattened parent
+defaults use this callback and preserve the final selected decoder and its facts;
+ordinary Decode object/default behavior is unchanged.
 
 Field validation checks independent facts; facts involving sibling fields require complete `codec.decode[T]`. CLI, environment, HTTP field adapters and CSV read this metadata. Tuple constraints capturing caller values use typed helper parameters with ordinary lifetime checks and pure predicate callbacks. See [the Go schema helpers](../std-go.md) for integration details.
 

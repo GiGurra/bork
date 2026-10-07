@@ -59,8 +59,12 @@ fn resolveMetadataWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordS
   import "unicode"
   flattened := flattenRecordSchema(recordSchema, name)
   if failure, bad := flattened.(Error); bad { return failure }
-  record, supported := _borkOptionGet(flattened.(cliSchema).record)
+  cliRecord := flattened.(cliSchema)
+  record, supported := _borkOptionGet(cliRecord.record)
   schema := record.fields
+  parentDefaults := map[string]codec.Value{}
+  for _, leaf := range cliRecord.leaves { if value, present := _borkOptionGet(leaf.defaultValue); present { parentDefaults[leaf.field] = value } }
+  hasDefault := func(field codec.RecordField) bool { _, inherited := parentDefaults[field.name]; return field.hasDefault || inherited }
   if !supported { return Error{errors: []codec.DecodeError{{path: name, message: "CLI options require a derived record decoder"}}} }
   errors := []codec.DecodeError{}
   fail := func(field, message string) { errors = append(errors, codec.DecodeError{path: field, message: message}) }
@@ -253,9 +257,16 @@ fn resolveMetadataWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordS
       if len(spec.choices) == 0 { fail(field.name, "strict choices require at least one choice") }
       allowed := map[string]bool{}
       for _, choice := range spec.choices { allowed[choice.value] = true }
-      if field.hasDefault {
+      if hasDefault(field) {
         defaults := []string{}
-        if provider, found := _borkOptionGet(field.defaultValue); found { defaults = provider().choices }
+        if input, inherited := parentDefaults[field.name]; inherited {
+          var choices func(codec.Value)
+          choices = func(value codec.Value) {
+            if text, ok := value.(codec.Value_String); ok { defaults = append(defaults, text.value) }
+            if list, ok := value.(codec.Value_Array); ok { for _, item := range list.items { choices(item) } }
+          }
+          choices(input)
+        } else if provider, found := _borkOptionGet(field.defaultValue); found { defaults = provider().choices }
         for _, value := range defaults { if !allowed[value] { fail(field.name, "default is not one of the allowed choices"); break } }
       }
     }
@@ -275,8 +286,8 @@ fn resolveMetadataWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordS
       if list && i != len(positions)-1 {
         if keyValue { fail(name, "a KeyValue positional must be last") } else { fail(name, "a List positional must be last") }
       }
-      if !list && !field.optional && !field.hasDefault && earlierOptional != "" { fail(name, "required positional cannot follow optional/default positional " + earlierOptional) }
-      if !list && (field.optional || field.hasDefault) { earlierOptional = name }
+      if !list && !field.optional && !hasDefault(field) && earlierOptional != "" { fail(name, "required positional cannot follow optional/default positional " + earlierOptional) }
+      if !list && (field.optional || hasDefault(field)) { earlierOptional = name }
     }
   }
   if len(errors) != 0 { return Error{errors: errors} }

@@ -71,6 +71,7 @@ type RecordField = {
   variants: List[VariantSchema] = []
   hasDefault: Bool
   defaultValue: Option[() => DefaultSchema]
+  defaultInput: Option[() => Value | DecodeError] = Option.None
   recordSchema: Option[() => Option[RecordSchema]] = Option.None
   validate: (Value) => Ok | DecodeError
 }
@@ -166,6 +167,7 @@ fn atPath(e: DecodeError, step: String): DecodeError {
 }
 
 instance decodeInt: Decode[Int] {
+  metadata DefaultInput = Input[Int](value => Value.Number { text: toString(value) })
   metadata FieldSchema = FieldSchema { kind: "number", optional: false }
   fn decode(json: Value): Int | DecodeError {
     match (json) {
@@ -179,6 +181,7 @@ instance decodeInt: Decode[Int] {
 }
 
 instance decodeFloat: Decode[Float] {
+  metadata DefaultInput = Input[Float](value => Value.Number { text: toString(value) })
   metadata FieldSchema = FieldSchema { kind: "number", optional: false }
   fn decode(json: Value): Float | DecodeError {
     match (json) {
@@ -192,6 +195,7 @@ instance decodeFloat: Decode[Float] {
 }
 
 instance decodeString: Decode[String] {
+  metadata DefaultInput = Input[String](value => Value.String { value: value })
   metadata FieldSchema = FieldSchema { kind: "string", optional: false }
   fn decode(json: Value): String | DecodeError {
     match (json) {
@@ -202,6 +206,7 @@ instance decodeString: Decode[String] {
 }
 
 instance decodeBool: Decode[Bool] {
+  metadata DefaultInput = Input[Bool](value => Value.Bool { value: value })
   metadata FieldSchema = FieldSchema { kind: "bool", optional: false }
   fn decode(json: Value): Bool | DecodeError {
     match (json) {
@@ -213,6 +218,7 @@ instance decodeBool: Decode[Bool] {
 
 // An Option is null (or a missing field) for None.
 instance decodeOption[T: Decode]: Decode[Option[T]] {
+  metadata DefaultInput = Input[Option[T]](value => optionDefaultInput(value))
   metadata Option[RecordSchema] = Schema[T]()
   metadata FieldSchema = FieldSchema { kind: FieldInfo[T]().kind, optional: true, variants: FieldInfo[T]().variants }
   fn decode(json: Value): Option[T] | DecodeError {
@@ -227,6 +233,7 @@ instance decodeOption[T: Decode]: Decode[Option[T]] {
 }
 
 instance decodeList[T: Decode]: Decode[List[T]] {
+  metadata DefaultInput = Input[List[T]](value => listDefaultInput(value))
   metadata FieldSchema = FieldSchema { kind: "list:" + FieldInfo[T]().kind, optional: false, variants: FieldInfo[T]().variants }
   fn decode(json: Value): List[T] | DecodeError {
     match (json) {
@@ -248,10 +255,11 @@ fn decodeItems[T: Decode](items: List[Value], index: Int, done: List[T]): List[T
 
 // A Map with String keys is a JSON object; its fields keep their order.
 instance decodeMap[V: Decode]: Decode[Map[String, V]] {
+  metadata DefaultInput = Input[Map[String, V]](value => mapDefaultInput(value))
   metadata FieldSchema = FieldSchema { kind: "map:" + FieldInfo[V]().kind, optional: false }
   fn decode(json: Value): Map[String, V] | DecodeError {
     match (json) {
-      Value.Object { fields: fields } => decodeFields(fields, {:})
+      Value.Object { fields } => decodeFields(fields, {:})
       other => decodeMismatch("an object", other)
     }
   }
@@ -272,6 +280,7 @@ fn fieldPut[V](m: Map[String, V], name: String, value: V): Map[String, V] unsafe
 }
 
 instance decodeValue: Decode[Value] {
+  metadata DefaultInput = Input[Value](value => value)
   metadata FieldSchema = FieldSchema { kind: "json", optional: false }
   fn decode(json: Value): Value | DecodeError { json }
 }
@@ -335,6 +344,7 @@ instance encodeRune: Encode[Rune] {
 }
 
 instance decodeRune: Decode[Rune] {
+  metadata DefaultInput = Input[Rune](value => Value.String { value: toString(value) })
   metadata FieldSchema = FieldSchema { kind: "string", optional: false }
   fn decode(json: Value): Rune | DecodeError {
     match (json) {
@@ -464,6 +474,9 @@ derive fn RecordInfo[T](): Option[RecordSchema] {
               variants: info.variants,
               hasDefault: field.hasDefault,
               defaultValue: provider,
+              defaultInput: comptime if (field.hasDefault) {
+                Option.Some(() => materializeDefault[field.RawType](field.default()))
+              } else { Option.None },
               recordSchema: Option.Some(() => Schema[field.RawType]()),
               validate: input => match (decode[field.RawType](input)) {
                 error: DecodeError => atPath(error, s".${FieldWireName[T](field)}")
@@ -740,6 +753,7 @@ derive fn ShapeFieldInfo[T](): FieldSchema {
 // Structural decoding and schema construction share the selected instance's
 // independent field dictionaries. Builders certify complete target values.
 derive instance decodeShape[T]: Decode[T] {
+  metadata DefaultInput = shapeInput[T]()
   metadata FieldSchema = ShapeFieldInfo[T]()
   metadata Option[RecordSchema] = RecordInfo[T]()
   fn decode(json: Value): T | DecodeError {
