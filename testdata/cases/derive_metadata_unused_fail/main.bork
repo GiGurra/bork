@@ -1,0 +1,42 @@
+import "bork/shape"
+
+class Kind[T] { fn kind(): String }
+
+// Compile-time-only bindings that nothing reads are unused too.
+derive instance kind[T]: Kind[T] {
+  fn kind(): String {
+    fs = shape.fields[T]()
+    vs = shape.fields[T]()
+    chosen = comptime if (vs.isEmpty()) { shape.fields[T]() } else { shape.fields[T]() }
+    comptime for (field in shape.fields[T]()) {
+      inner = field
+    }
+    "kind"
+  }
+}
+
+class Names[T] { fn names(v: T): List[String] }
+
+fn ident[A](a: A): A { a }
+
+// Reads in type positions count; a helper's unread binding reports.
+derive instance names[T]: Names[T] {
+  fn names(v: T): List[String] {
+    count[T](comptime for { field in shape.fields[T]() } yield {
+      a = field
+      b = field
+      x: b.Type = ident[b.Type](field.read(v))
+      _ = x
+      shape.typeName[a.RawType]()
+    })
+  }
+}
+
+derive fn count[T](labels: List[String]): List[String] {
+  unread = shape.fields[T]()
+  labels
+}
+
+type Row = { name: String, age: Int } derive (Kind, Names)
+
+fn main() { println(kind[Row]()) }

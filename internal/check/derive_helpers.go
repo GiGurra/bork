@@ -260,6 +260,9 @@ func (p *deriveExpansion) runtimeHelper(call *syntax.Call, helper *syntax.FuncDe
 	if !valid || p.instance == nil {
 		return &syntax.Block{Pos: call.Pos}
 	}
+	// The body expands once per specialization, so it reports its unread
+	// compile-time bindings once.
+	child.reportUnused = p.reportUnused
 	// Ordinary runtime arguments are retained; descriptor arguments specialize
 	// source code and never appear in the resulting function signature.
 	var runtimeArgs []syntax.Expr

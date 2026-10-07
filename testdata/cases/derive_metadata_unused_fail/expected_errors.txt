@@ -1,0 +1,5 @@
+main.bork:40:39: binding inner is never read; discard explicitly with _ (derive template at main.bork:12:7)
+main.bork:40:39: binding fs is never read; discard explicitly with _ (derive template at main.bork:8:5)
+main.bork:40:39: binding vs is never read; discard explicitly with _ (derive template at main.bork:9:5)
+main.bork:40:39: binding chosen is never read; discard explicitly with _ (derive template at main.bork:10:5)
+main.bork:40:39: binding unread is never read; discard explicitly with _ (derive template at main.bork:36:3)
