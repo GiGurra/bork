@@ -622,7 +622,7 @@ func substConstraints(cons []*Constraint, bound map[*TypeParam]Type) []*Constrai
 // PredicateDicts resolves dictionaries in the scope that declared a constraint.
 // Runtime validation may instantiate that constraint at a concrete field type.
 func (info *Info) PredicateDicts(from *Package, inst *Instance) bool {
-	c := &checker{info: info, pkg: from, diags: &diag.List{}, typeParams: map[string]*TypeParam{}}
+	c := &checker{deriveHelperState: &deriveHelperState{}, info: info, pkg: from, diags: &diag.List{}, typeParams: map[string]*TypeParam{}}
 	for _, typ := range inst.TypeArgs {
 		if tp, ok := typ.(*TypeParam); ok {
 			c.typeParams[tp.Name] = tp

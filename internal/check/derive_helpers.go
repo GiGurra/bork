@@ -9,6 +9,16 @@ import (
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
+// Helper identities and their specialization cache belong to the whole checked
+// program. Initializer checking saves and restores the checker by value, while
+// generated functions remain in Info, so this state must stay shared as well.
+type deriveHelperState struct {
+	deriveCalls               map[*syntax.Call]*Func
+	deriveHelperSerial        int
+	deriveSpecializations     map[string]*Func
+	deriveSpecializationCosts map[string]deriveSpecializationCost
+}
+
 func (c *checker) declareDeriveHelpers(files []*syntax.File) {
 	for _, file := range files {
 		c.inFile(file)

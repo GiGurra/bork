@@ -491,6 +491,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 func programObserved(files []*syntax.File, root string, diags *diag.List, goTypes GoTypes, observe func(string), bounds deriveBounds, discovery *deriveDiscovery) *Info {
 	c := &checker{
 		recordPredicateRefs: true,
+		deriveHelperState:   &deriveHelperState{},
 		deriveBounds:        bounds,
 		deriveDiscovery:     discovery,
 		files:               files,
@@ -881,18 +882,15 @@ func (c *checker) inFile(f *syntax.File) {
 }
 
 type checker struct {
-	files                     []*syntax.File
-	tupleDerives              []*ClassInstance
-	tupleBindingMode          bool
-	patternTest               bool
-	derives                   []*deriveRequest
-	deriveDefinitionBounds    []deriveDefinitionBound
-	deriveCalls               map[*syntax.Call]*Func
-	deriveHelperSerial        int
-	deriveSpecializations     map[string]*Func
-	deriveSpecializationCosts map[string]deriveSpecializationCost
-	deriveBounds              deriveBounds
-	deriveDiscovery           *deriveDiscovery
+	files                  []*syntax.File
+	tupleDerives           []*ClassInstance
+	tupleBindingMode       bool
+	patternTest            bool
+	derives                []*deriveRequest
+	deriveDefinitionBounds []deriveDefinitionBound
+	*deriveHelperState
+	deriveBounds    deriveBounds
+	deriveDiscovery *deriveDiscovery
 	// Only compilation retains source identities; read-only queries do not.
 	recordPredicateRefs bool
 	bindingFiles        map[string]*syntax.File
