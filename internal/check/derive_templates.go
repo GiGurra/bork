@@ -1020,6 +1020,9 @@ func (p *deriveExpansion) clone(value reflect.Value) reflect.Value {
 			typ, yes := p.env[written.Name].(Type)
 			var projected *Field
 			if owner, member, ok := strings.Cut(written.Name, "."); ok && (member == "Type" || member == "RawType") {
+				if target, known := p.env[owner].(Type); known && member == "RawType" {
+					typ, yes = target, true
+				}
 				if runtime, known := p.env[owner].(shapeRuntimeType); known && member == "Type" {
 					typ, yes = runtime.typ, true
 				}

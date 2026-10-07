@@ -221,6 +221,7 @@ The proposal adds AST forms and meaning, not a new keyword inventory.
 | variant.Type | Payload view type projection for annotations and helper arguments |
 | variant.name, variant.positional, variant.index | Declared tag, payload kind and ordinal |
 | field.Type | Type projection retaining independent facts for dictionary selection and proven inputs |
+| T.RawType | The target type without whole-type alias facts; no value proof or constrained dictionary preference |
 | field.RawType | The stored value type without the destination field's facts; no unchecked record representation |
 | field.validate(value) | Validate independent field obligations; return the typed value or shape.ValidationError |
 | field.check(value) | Check the same obligations without returning a field value; return Ok or shape.ValidationError |
@@ -300,6 +301,12 @@ class methods producing the target from inputs independent of that target.
 They never become an ArgFacts value promise: a raw result still needs check,
 validate, or completed construction. Consumers and ordinary generic functions
 receive no additional facts or constrained dictionary preference from RawType.
+For a derive target or helper parameter `T`, `T.RawType` preserves the same
+representation and stored-field obligations while dropping whole-type alias
+facts. Unlike field.RawType's producer selection hint, it carries no root
+obligations for dictionary selection, even for producing methods. A helper
+specialized with `T.RawType` cannot return an unchecked value as constrained
+`T`; the ordinary fact checks still apply.
 Successful validation supplies the independent facts on that value;
 it supplies no fact about an incomplete owner. Success types must be provably
 distinct from ValidationError, including through union members. For unresolved

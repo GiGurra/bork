@@ -132,6 +132,15 @@ on the descriptor and complete owner proof, since their arguments require that
 owner value. Descriptor values stay within
 template expansion and cannot escape into runtime results.
 
+`field.Type` retains independent field facts; `field.RawType` omits those
+destination facts when annotating inputs. For a target or derive-helper type
+parameter `T`, `T.RawType` names the target's base type without whole-type alias
+facts. It preserves the representation and stored-field obligations. It supplies
+neither a proof of the removed facts nor a preference for constrained
+dictionaries, including for producing methods. Use it to specialize a helper
+that consumes the base type, such as a metadata family callback. Returning that
+raw value as constrained `T` still requires proving the target's facts.
+
 `field.facts`, `variant.facts`, and `shape.facts[T]()` expose ordered obligation
 descriptors. A fact has display `text`, a nested traversal `path`, and an
 `independent` flag. The flag is true only for a stored-field obligation that
