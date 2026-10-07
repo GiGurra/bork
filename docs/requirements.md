@@ -3415,7 +3415,23 @@ bork type and field names, sealed variants such as `Shape.Circle { radius: 2.0 }
 and options as `Some(3)` or `None`, including nested records. Expansion remains
 lazy; generated temporaries are hidden and helper frames are marked subtle.
 Inspection does not execute custom Show methods. Clients without the sidecar map
-retain Delve's Go views. Debug Console expressions still use Go syntax.
+retain Delve's Go views.
+
+### Debugger expressions (implemented: bork-m7fjim)
+
+Debug Console, watch and hover requests use the bork parser, ordinary checker
+and Go expression lowering, with compiler-generated type/name metadata and raw
+locals from the selected Delve frame. The relay contains no language parser,
+operator table or naming rules. Supported expressions are available locals and
+parameters, scalar literals, parentheses, eager nested record fields (including
+concrete generics), and scalar operators. Unsupported expressions return readable
+errors without executing user code. Calls, methods, collection access, aggregate
+construction/comparison, deferred reads, interpolation, control flow, pipes, `?`
+and option/union payload projections are excluded. List access is `get(i)`, not
+Go indexing: returning an Option needs runtime helpers. Old maps without
+expression metadata keep their existing Go evaluation fallback. Acceptance uses
+real pinned Delve with renamed locals/parameters/fields, generic records, Console,
+watch and hover contexts, invalid operands and unsupported syntax.
 
 ### Lazy bindings and record fields (implemented: bork-9zpf2t)
 

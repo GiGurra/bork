@@ -11,12 +11,13 @@ import (
 
 // DebugMap describes compiler-owned names; adapters need no lowering rules.
 type DebugMap struct {
-	Source         string               `json:"source"`
-	Names          map[string]string    `json:"names"`
-	Version        int                  `json:"version"`
-	Types          map[string]DebugType `json:"types"`
-	Functions      map[string]string    `json:"functions"`
-	HiddenPrefixes []string             `json:"hiddenPrefixes"`
+	Expressions    map[string]check.DebugShape `json:"expressions,omitempty"`
+	Source         string                      `json:"source"`
+	Names          map[string]string           `json:"names"`
+	Version        int                         `json:"version"`
+	Types          map[string]DebugType        `json:"types"`
+	Functions      map[string]string           `json:"functions"`
+	HiddenPrefixes []string                    `json:"hiddenPrefixes"`
 }
 
 type DebugType struct {
@@ -132,6 +133,7 @@ func (g *gen) debugMap(source []byte) *DebugMap {
 			}
 		}
 	}
+	g.debugExpressions(m)
 	return m
 }
 

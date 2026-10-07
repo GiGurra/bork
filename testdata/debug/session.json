@@ -9,6 +9,12 @@
         "expandable": true
       },
       {
+        "name": "chan",
+        "type": "Int",
+        "value": "3",
+        "expandable": false
+      },
+      {
         "name": "chosen",
         "type": "Float",
         "value": "2.0",
@@ -23,7 +29,7 @@
       {
         "name": "nested",
         "type": "Outer",
-        "value": "Outer { inner: Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }, shape: Shape.Circle { radius: 2.0 }, optional: Some(3) }",
+        "value": "Outer { inner: Inner { label: \"main.Shape_Circle {radius: 9}\", range: 5 }, shape: Shape.Circle { radius: 2.0 }, optional: Some(3) }",
         "expandable": true
       },
       {
@@ -39,9 +45,15 @@
         "expandable": true
       },
       {
+        "name": "range",
+        "type": "Int",
+        "value": "3",
+        "expandable": false
+      },
+      {
         "name": "recordUnion",
         "type": "Inner",
-        "value": "Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }",
+        "value": "Inner { label: \"main.Shape_Circle {radius: 9}\", range: 5 }",
         "expandable": true
       },
       {
@@ -163,7 +175,7 @@
     "request": "evaluate nested",
     "value": {
       "type": "Outer",
-      "value": "Outer { inner: Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }, shape: Shape.Circle { radius: 2.0 }, optional: Some(3) }",
+      "value": "Outer { inner: Inner { label: \"main.Shape_Circle {radius: 9}\", range: 5 }, shape: Shape.Circle { radius: 2.0 }, optional: Some(3) }",
       "expandable": true
     }
   },
@@ -173,7 +185,7 @@
       {
         "name": "inner",
         "type": "Inner",
-        "value": "Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }",
+        "value": "Inner { label: \"main.Shape_Circle {radius: 9}\", range: 5 }",
         "expandable": true
       },
       {
@@ -194,15 +206,15 @@
     "request": "expand nested.inner",
     "variables": [
       {
-        "name": "count",
-        "type": "Int",
-        "value": "5",
-        "expandable": false
-      },
-      {
         "name": "label",
         "type": "String",
         "value": "\"main.Shape_Circle {radius: 9}\"",
+        "expandable": false
+      },
+      {
+        "name": "range",
+        "type": "Int",
+        "value": "5",
         "expandable": false
       }
     ]
@@ -233,7 +245,7 @@
     "request": "evaluate recordUnion",
     "value": {
       "type": "Inner",
-      "value": "Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }",
+      "value": "Inner { label: \"main.Shape_Circle {radius: 9}\", range: 5 }",
       "expandable": true
     }
   },
@@ -241,15 +253,15 @@
     "request": "expand recordUnion",
     "variables": [
       {
-        "name": "count",
-        "type": "Int",
-        "value": "5",
-        "expandable": false
-      },
-      {
         "name": "label",
         "type": "String",
         "value": "\"main.Shape_Circle {radius: 9}\"",
+        "expandable": false
+      },
+      {
+        "name": "range",
+        "type": "Int",
+        "value": "5",
         "expandable": false
       }
     ]

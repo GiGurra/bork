@@ -119,6 +119,14 @@ func (d *dapFixture) send(t *testing.T, command string, args any) int {
 }
 func (d *dapFixture) until(t *testing.T, event string, seq int) map[string]any {
 	t.Helper()
+	message := d.untilAny(t, event, seq)
+	if seq > 0 && message["success"] != true {
+		t.Fatalf("DAP failure: %v", message)
+	}
+	return message
+}
+func (d *dapFixture) untilAny(t *testing.T, event string, seq int) map[string]any {
+	t.Helper()
 	for {
 		n := 0
 		for {
@@ -148,9 +156,6 @@ func (d *dapFixture) until(t *testing.T, event string, seq int) map[string]any {
 			return message
 		}
 		if seq > 0 && message["request_seq"] == float64(seq) {
-			if message["success"] != true {
-				t.Fatalf("DAP failure: %s", data)
-			}
 			return message
 		}
 	}
@@ -288,6 +293,26 @@ func testDebugDAPSession(t *testing.T, types bool) {
 					session = append(session, debugSnapshot{Request: "expand nested." + child["name"].(string), Variables: debugVariables(expanded)})
 				}
 			}
+		}
+	}
+
+	for _, test := range []struct{ expression, want string }{
+		{"range + chan", "6"}, {"nested.inner.range + y * 2", "19"}, {"boxed.item + 0.5", "2.5"}, {"!(range > 4) && y == 7", "true"}, {"^range & 7", "4"},
+		{"(1 + 2) * 3", "9"}, {"1 / 2", "0"}, {"-range", "-3"}, {`"hé" + "llo"`, `"héllo"`},
+	} {
+		for _, context := range []string{"repl", "watch", "hover"} {
+			seq = d.send(t, "evaluate", map[string]any{"expression": test.expression, "frameId": frame["id"], "context": context})
+			response = d.until(t, "", seq)
+			if got := response["body"].(map[string]any)["result"]; got != test.want {
+				t.Fatalf("%s in %s: %v; want %s", test.expression, context, response, test.want)
+			}
+		}
+	}
+	for _, expression := range []string{"missing", "nested.inner.nope", "chan_", "nested.inner.range_", "chan + true", "println(y)", "shapes.get(0)", "shapes[0]", "some.value", "nested == nested", "y = 1", "1; println(y)"} {
+		seq = d.send(t, "evaluate", map[string]any{"expression": expression, "frameId": frame["id"], "context": "repl"})
+		response = d.untilAny(t, "", seq)
+		if response["success"] != false || response["message"] == "" {
+			t.Fatalf("accepted unsupported expression %s: %v", expression, response)
 		}
 	}
 	checkDebugGolden(t, session, types)
