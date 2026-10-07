@@ -157,26 +157,30 @@ fn decodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSch
 // EncodeCsv writes records in schema field order. None and Some("") both
 // write empty cells, which decode as None. Empty input gives empty text.
 fn EncodeCsv[T: codec.Encode + codec.Decode](values: List[T]): String | CsvError {
-  rows = encodeCsvRows[T](values, value => codec.encode[T](value), codecs.Render)?
+  rows = encodeCsvRowsWithSchema[T](codec.Schema[T](), values, value => codec.encode[T](value), codecs.Render, codec.Encoding[T]())?
   Csv(rows)
 }
 
 fn encodeCsvRows[T: codec.Decode](values: List[T], encodeRow: (T) => codec.Value, render: (codec.Value) => String): List[List[String]] | CsvError {
   encodeCsvRowsWithSchema[T](codec.Schema[T](), values, encodeRow, render)
 }
-fn encodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchema], values: List[T], encodeRow: (T) => codec.Value, render: (codec.Value) => String): List[List[String]] | CsvError unsafe go {
+fn encodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchema], values: List[T], encodeRow: (T) => codec.Value, render: (codec.Value) => String, recordEncoding: Option[codec.RecordEncoding] = Option.None): List[List[String]] | CsvError unsafe go {
   record, supported := _borkOptionGet(recordSchema)
   schema := record.fields
   if !supported { return CsvError{row: 1, column: "", message: "expected a derived record decoder"} }
   if len(schema) == 0 { return CsvError{row: 1, column: "", message: "expected a record with at least one field"} }
   if len(values) == 0 { return [][]string{} }
   headers := []string{}
+  seenHeaders := map[string]bool{}
   for _, field := range schema {
     key := field.wireName
     if key == "" { key = field.name }
+    if seenHeaders[key] { return CsvError{row: 1, column: key, message: "duplicate schema field name"} }
+    seenHeaders[key] = true
     headers = append(headers, key)
   }
   rows := [][]string{headers}
+  completion, canComplete := _borkOptionGet(recordEncoding)
   for index, value := range values {
     object, supported := encodeRow(value).(codec.Value_Object)
     if !supported { return CsvError{row: int64(index + 2), column: "", message: "expected an encoded record object"} }
@@ -192,7 +196,11 @@ fn encodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSch
       key := field.wireName
       if key == "" { key = field.name }
       json, found := fields[key]
-      if !found { return CsvError{row: int64(index + 2), column: key, message: "encoded field is missing; CSV requires every column (use codec.Omit.Never)"} }
+      if !found && canComplete {
+        json, found = _borkOptionGet(completion.omittedField(key))
+      }
+      if !found { return CsvError{row: int64(index + 2), column: key, message: "encoded field is missing; CSV requires every column (use codec.Omit.Never or publish codec.RecordEncoding)"} }
+      delete(fields, key)
       if _, absent := json.(codec.Value_Null); field.optional && absent {
         row = append(row, "")
       } else if field.kind == "string" {
@@ -203,7 +211,7 @@ fn encodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSch
         row = append(row, render(json))
       }
     }
-    if len(fields) != len(schema) { return CsvError{row: int64(index + 2), column: "", message: "encoded fields do not match the record schema"} }
+    if len(fields) != 0 { return CsvError{row: int64(index + 2), column: "", message: "encoded fields do not match the record schema"} }
     rows = append(rows, row)
   }
   return rows

@@ -1,0 +1,34 @@
+import "bork/codec"
+import "bork/encoding"
+use encodeOptional
+use decodeOptional
+
+type Row = { value: Option[String] codec { omit: codec.Omit.None } } derive (codec.Encode, codec.Decode)
+instance encodeOptional: codec.Encode[Option[String]] {
+  fn encode(value: Option[String]): codec.Value {
+    codec.Value.String { value: value.getOr("none") }
+  }
+}
+instance decodeOptional: codec.Decode[Option[String]] {
+  metadata codec.FieldSchema = codec.FieldSchema { kind: "string", optional: true }
+  fn decode(input: codec.Value): Option[String] | codec.DecodeError {
+    match (input) {
+      codec.Value.String { value: "none" } => Option.None
+      codec.Value.String { value } => Option.Some(value)
+      _ => codec.DecodeError { path: "", message: "expected string" }
+    }
+  }
+}
+fn Check() {
+  original = [Row { value: Option.None }, Row { value: Option.Some("present") }]
+  match (encoding.EncodeCsv(original)) {
+    text: String => {
+      assertEqual(text, "value\nnone\npresent\n")
+      match (encoding.DecodeCsv[Row](text)) {
+        rows: List[Row] => assertEqual(rows, original)
+        _ => assert(false)
+      }
+    }
+    _ => assert(false)
+  }
+}
