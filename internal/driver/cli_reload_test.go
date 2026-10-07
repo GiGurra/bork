@@ -81,7 +81,7 @@ fn main() {
 		`Source.Env { name: "BORK_RELOAD_PORT" }`,
 		`invalid-env=Error`, `must be Positive`,
 		`flag=Resolved { value: Options { port: 8084, tags: ["third"] }`,
-		`Source.Flag { name: "port" }`, `invalid-file=Error`, `invalid-record=Error`, `must be BelowLimit`,
+		`Source.Flag { name: "port" }`, `invalid-file=Error`, `invalid-record=Error`, `must satisfy port < 9000 (BelowLimit)`,
 		`old=Options { port: 8081, tags: ["first"] }`,
 		`old-source=Option.Some(Source.Config { path: "config.json" })`,
 		`help=Help { text: "Reload`, `malformed=Error`,
