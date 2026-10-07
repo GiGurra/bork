@@ -25,8 +25,10 @@ The final typed scalar is formatted directly for the editor, without passing it
 through a Delve arithmetic temporary. Thus signed zero, infinities and NaN survive
 nested arithmetic and comparisons. NaN payload bits are not an API guarantee.
 Compiler-folded constant expressions retain ordinary compilation semantics.
-Boolean short-circuit expressions involving staged float evaluation remain
-unsupported until conditional staging can preserve their read order.
+Boolean short-circuit expressions traverse the checked tree left to right. A
+completed `&&` or `||` left operand decides whether to visit the right subtree;
+skipped operands cause no debugger reads. Completed nodes retain their rounded
+values. Normal source/type checking still covers every branch.
 
 ## Faithfulness
 
@@ -51,6 +53,7 @@ zero division, infinity, NaN comparisons and malformed raw-bit responses.
 Pinned-Delve Console/watch/hover tests cover the 2^24 and 2^53 addition boundaries,
 nested operations, all four basic operators, widely separated exponents,
 subnormal ties and IEEE special results. Relay tests cover interleaved plans,
-backend failures and execution moving between reads. These tests guard the
+backend failures, execution moving between reads, nested short-circuit branches
+and exact operand-read sequences. These tests guard the
 protocol; reuse of the runtime's typed Go operations establishes the arithmetic
 semantics beyond the sampled values.

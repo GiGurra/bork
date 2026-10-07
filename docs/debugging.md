@@ -49,9 +49,11 @@ For example, if `large: Float32` is 16777216, `large + 1.0 == large` is true;
 `1.0 / negativeZero` returns `-Inf`. Results are presented directly, avoiding
 Delve's lossy arithmetic temporaries. See the [rounding argument](debugger-rounding.md).
 
-Floating arithmetic and comparisons involving boolean short-circuit expressions
-remain unsupported to preserve evaluation order. Float literals retain normal
-compiler rounding. No user functions execute.
+Boolean `&&` and `||` evaluate left to right and read only the selected branches,
+including when float arithmetic or comparisons require staged reads. For example,
+`ready || price / count > minimum` does not read the right side when `ready` is
+true. All branches still receive ordinary source and type checking. Float literals
+retain normal compiler rounding. No user functions execute.
 
 A standalone `xs.get(i)` reads an immutable list and returns `Some(value)` or
 `None`, including for negative and out-of-range indexes. The compiler checks the

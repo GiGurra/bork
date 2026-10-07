@@ -23,11 +23,8 @@ type debugScalar struct {
 	boolean bool
 	op      syntax.Kind
 	x, y    *debugScalar
-}
-
-type debugFloatRead struct {
-	expression string
-	result     *debugScalar
+	read    string
+	ready   bool
 }
 
 func debugFloatArithmetic(expr check.Expr) bool {
@@ -69,21 +66,20 @@ func (g *gen) debugFloatPlan(expr check.Expr) (*DebugEvaluation, error) {
 			default:
 				n.boolean = constant.BoolVal(e.Value)
 			}
+			n.ready = true
 			return n, nil
 		case *check.FloatBits:
 			n.number = math.Float64frombits(e.Bits)
 			if n.width == 32 {
 				n.number = float64(math.Float32frombits(uint32(e.Bits)))
 			}
+			n.ready = true
 			return n, nil
 		}
 		if debugFloatArithmetic(expr) {
 			var err error
 			switch e := expr.(type) {
 			case *check.Binary:
-				if e.Op == syntax.AndAnd || e.Op == syntax.OrOr {
-					return nil, fmt.Errorf("debug expression: staged floating-point arithmetic inside short-circuit expressions is unsupported")
-				}
 				n.op = e.Op
 				n.x, err = stage(e.X)
 				if err == nil {
@@ -107,7 +103,7 @@ func (g *gen) debugFloatPlan(expr check.Expr) (*DebugEvaluation, error) {
 		if n.width != 0 {
 			read = fmt.Sprintf("*(*uint%d)(uint64(&(%s)))", n.width, read)
 		}
-		plan.floats = append(plan.floats, debugFloatRead{expression: read, result: n})
+		n.read = read
 		return n, nil
 	}
 	var err error
@@ -115,15 +111,11 @@ func (g *gen) debugFloatPlan(expr check.Expr) (*DebugEvaluation, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(plan.floats) == 0 {
-		return nil, fmt.Errorf("debug expression: no scalar operands")
-	}
-	plan.Read = plan.floats[0].expression
-	return plan, nil
+	return plan, plan.nextScalar()
 }
 
 func (e *DebugEvaluation) advanceFloat(result string) error {
-	n := e.floats[0].result
+	n := e.pending
 	if n.width == 0 {
 		switch result {
 		case "true":
@@ -151,14 +143,20 @@ func (e *DebugEvaluation) advanceFloat(result string) error {
 			n.number = float64(math.Float32frombits(uint32(bits)))
 		}
 	}
-	e.floats = e.floats[1:]
-	if len(e.floats) != 0 {
-		e.Read = e.floats[0].expression
-		return nil
-	}
-	e.Read = ""
-	if err := e.scalar.compute(); err != nil {
+	n.ready = true
+	return e.nextScalar()
+}
+
+func (e *DebugEvaluation) nextScalar() error {
+	next, err := e.scalar.next()
+	if err != nil {
 		return err
+	}
+	e.pending = next
+	e.Read = ""
+	if next != nil {
+		e.Read = next.read
+		return nil
 	}
 	text := strconv.FormatBool(e.scalar.boolean)
 	if e.scalar.width != 0 {
@@ -171,13 +169,35 @@ func (e *DebugEvaluation) advanceFloat(result string) error {
 	return nil
 }
 
+// next selects only the next operand runtime would evaluate. Completed nodes
+// retain their rounded result, and short-circuit nodes never visit a skipped RHS.
+func (n *debugScalar) next() (*debugScalar, error) {
+	if n.ready {
+		return nil, nil
+	}
+	if n.read != "" {
+		return n, nil
+	}
+	if next, err := n.x.next(); next != nil || err != nil {
+		return next, err
+	}
+	if n.op == syntax.AndAnd && !n.x.boolean || n.op == syntax.OrOr && n.x.boolean {
+		n.boolean, n.ready = n.x.boolean, true
+		return nil, nil
+	}
+	if n.y != nil {
+		if next, err := n.y.next(); next != nil || err != nil {
+			return next, err
+		}
+	}
+	if err := n.compute(); err != nil {
+		return nil, err
+	}
+	n.ready = true
+	return nil, nil
+}
+
 func (n *debugScalar) compute() error {
-	if n.x == nil {
-		return nil
-	}
-	if err := n.x.compute(); err != nil {
-		return err
-	}
 	if n.y == nil {
 		switch n.op {
 		case syntax.Minus:
@@ -188,9 +208,6 @@ func (n *debugScalar) compute() error {
 			return fmt.Errorf("debug expression: unsupported scalar unary operator")
 		}
 		return nil
-	}
-	if err := n.y.compute(); err != nil {
-		return err
 	}
 	if n.width != 0 {
 		var err error
@@ -209,6 +226,8 @@ func (n *debugScalar) compute() error {
 			n.boolean = n.x.boolean == n.y.boolean
 		case syntax.NotEq:
 			n.boolean = n.x.boolean != n.y.boolean
+		case syntax.AndAnd, syntax.OrOr:
+			n.boolean = n.y.boolean
 		default:
 			return fmt.Errorf("debug expression: unsupported scalar boolean operator")
 		}

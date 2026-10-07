@@ -3420,7 +3420,7 @@ lazy; generated temporaries are hidden and helper frames are marked subtle.
 Inspection does not execute custom Show methods. Clients without the sidecar map
 retain Delve's Go views.
 
-### Debugger expressions (implemented: bork-m7fjim, bork-s00vvm, bork-easlx5, bork-95iqqx)
+### Debugger expressions (implemented: bork-m7fjim, bork-s00vvm, bork-easlx5, bork-95iqqx, bork-189dgj)
 
 Debug Console, watch and hover requests use the bork parser, ordinary checker
 and Go expression lowering, with compiler-generated type/name metadata and raw
@@ -3433,8 +3433,9 @@ operand bits and typed Go scalar operations matching runtime lowering. Both
 widths preserve nearest-even rounding after every operation, including signed
 zero, subnormal, infinity and NaN behavior. Compiler-produced typed scalar
 results bypass Delve's lossy temporaries; the relay transports and presents them.
-The argument is documented in docs/debugger-rounding.md. Short-circuit floating
-arithmetic/comparisons remain unsupported and fail clearly.
+The argument is documented in docs/debugger-rounding.md. Compiler-owned
+conditional staging preserves left-to-right && / || evaluation, issuing operand
+reads only for selected branches while checking all branches normally.
 Literal types and integer unary widths retain their checked semantics. Unsupported expressions return readable
 errors without executing user code. Standalone List.get(Int) uses compiler-owned
 bounds and temporary Option-variant reads, preserving Some/None for valid,
