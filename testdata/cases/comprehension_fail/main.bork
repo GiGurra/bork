@@ -1,0 +1,18 @@
+fn f(): Int | String { 1 }
+
+fn notIterable(): Seq[Int] { for { x in 5 } yield x }
+fn notBool(): Seq[Int] { for { x in [1]; if x } yield x }
+fn rebound(): Seq[Int] {
+  y = 1
+  for { x in [1]; y = x } yield y
+}
+fn shadowed(): Seq[Int] { for { x in [1]; x in [2] } yield x }
+fn twice(): Seq[Int] { for { x in [1]; y = x; y = 2 } yield y }
+fn leaves(): Seq[Int] { for { x in [1]; y = { if x > 0 { continue }; x } } yield y }
+fn returns(): Seq[Int] { for { x in [1] } yield { return } }
+fn tries(): Seq[Int] { for { x in [1]; y = f()? } yield x + y }
+fn yields(): Seq[Int] { for { x in [1]; y = { yield 3; x } } yield y }
+fn nothing() uses io { _ = for { x in [1] } yield println(x) }
+fn wrongType(): Seq[String] { for { x in [1] } yield x }
+
+fn main() {}

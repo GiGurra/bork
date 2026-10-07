@@ -3544,6 +3544,17 @@ returning `Option[SeqStep[T, S]]`, where each SeqStep carries a value and next
 immutable state; `None` ends it. Range retains the existing range convention
 and checks its increment for overflow rather than wrapping to an infinite loop.
 
+**Comprehensions.** `for { generator; clause... } yield expr` is a lazy
+`Seq[T]`. It desugars to `generate[T]` with a loop per generator line
+(`pattern in source`, using loop-header patterns), an `if` per filter line, and
+the binding lines in order, around a single `yield expr`. The first line must
+be a generator, which distinguishes it from `for { }`; the yield follows the
+closing brace on the same line. `T` is the yield expression's type, or the
+element type of an expected `Seq[U]`. Sources are evaluated on consumption,
+each consumption restarts, effects are the producer's, and early consumer exit
+stops nested sources. Clause names cannot shadow or rebind; clauses and the
+yield reject break, continue, return, `?` and nested yield.
+
 Yield is legal only in the lexical producer body (including its if/match,
 loop and scope blocks). It is rejected in nested lambdas, declared functions,
 callbacks, spawned tasks, and outside a producer. A nested generate introduces

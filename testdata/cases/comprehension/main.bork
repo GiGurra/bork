@@ -1,0 +1,70 @@
+type Line = { name: String, active: Bool, qty: Int }
+type Order = { id: Int, lines: List[Line] }
+
+pred positive(n: Int) { n > 0 }
+
+fn score(line: Line): Int { line.qty * 10 }
+fn half(n: Int where positive): Int { n / 2 }
+
+// The second generator depends on the first; the filter and the
+// binding see both.
+fn picks(orders: List[Order]): Seq[(Int, String, Int)] {
+  for {
+    order in orders
+    line in order.lines
+    if line.active
+    points = score(line)
+  } yield (order.id, line.name, points)
+}
+
+// Nothing runs until the sequence is consumed, and only as far as needed.
+fn counted(seen: Atom[Int]): Seq[Int] uses state {
+  for {
+    n in Seq.range(1, 1_000_000)
+    _ = update(seen, k => k + 1)
+    if n % 3 == 0
+  } yield n
+}
+
+fn main() {
+  orders = [
+    Order { id: 1, lines: [Line { name: "a", active: true, qty: 1 }, Line { name: "b", active: false, qty: 2 }] },
+    Order { id: 2, lines: [] },
+    Order { id: 3, lines: [Line { name: "c", active: true, qty: 3 }] },
+  ]
+  println(picks(orders).toList())
+
+  // A filter's facts hold in the lines after it and in the yield.
+  halves = for { n in [4, -2, 10]; if n > 0 } yield half(n)
+  println(halves.toList())
+
+  // Tuple patterns, as in loop headers.
+  stock = { "apple": 3, "pear": 0, "fig": 12 }
+  inStock = for {
+    (name, count) in stock.pairs()
+    if count > 0
+    (i, word) in ["one", "two"].indexed()
+    if i < count
+  } yield name + "/" + word
+  println(inStock.toList())
+
+  seen = atom(0)
+  threes = counted(seen)
+  println("before", current(seen))
+  println(threes.take(2).toList(), "after", current(seen))
+  // Each consumption starts again from the beginning.
+  println(threes.first(), "again", current(seen))
+
+  // The expected type gives the element type.
+  mixed: Seq[Int | String] = for { n in [1, 2] } yield n
+  println(mixed.toList())
+
+  // Each round's names are fresh, so closures capture that round's.
+  thunks = for { n in [1, 2, 3] } yield () => n * 100
+  println(thunks.map(f => f()).toList())
+
+  grid = for { row in range(0, 2) } yield for { col in range(0, 3) } yield (row, col)
+  for cells in grid {
+    println(cells.toList())
+  }
+}

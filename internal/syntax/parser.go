@@ -1225,6 +1225,10 @@ func (p *parser) forLoop() *For {
 	f := &For{Pos: p.next().Pos}
 	if p.at(LBrace) {
 		f.Body = p.block()
+		if p.at(KwYield) {
+			p.errorf(p.tok().Pos, "only a comprehension ends with yield, and its first line is a generator such as x in xs")
+			panic(bailout{})
+		}
 		return f
 	}
 	start := p.i
@@ -1997,6 +2001,9 @@ func (p *parser) primary() Expr {
 		p.next()
 		return &Yield{Pos: t.Pos, Value: p.expr()}
 	case KwFor:
+		if p.comprehensionAhead() {
+			return p.comprehension()
+		}
 		return p.forLoop()
 	case KwBreak, KwContinue:
 		p.next()
@@ -2042,6 +2049,8 @@ func (p *parser) primary() Expr {
 				x.Comptime = true
 			case *Match:
 				x.Comptime = true
+			case *Generate:
+				p.errorf(t.Pos, "a comprehension cannot be comptime; write a comptime list comprehension, [comptime for (x in xs) value]")
 			}
 			return x
 		}
@@ -2750,4 +2759,123 @@ func (p *parser) forHeader() *For {
 		loop.Name = "_"
 	}
 	return loop
+}
+
+// comprehensionAhead reports whether `for {` starts a comprehension:
+// its first line is a generator, a pattern followed by in. No statement
+// of a `for { }` loop body starts that way.
+func (p *parser) comprehensionAhead() bool {
+	if p.peekKind() != LBrace {
+		return false
+	}
+	save := p.i
+	defer func() { p.i = save }()
+	p.next() // for
+	p.next() // {
+	p.skipSemis()
+	return p.iterationPatternAhead()
+}
+
+// comprehension parses `for { clauses } yield value`, at for. It
+// becomes the generator it means: each generator clause a loop around
+// the clauses after it, each filter an if around them, each binding a
+// statement before them, and the yield innermost.
+func (p *parser) comprehension() *Generate {
+	pos := p.next().Pos
+	saved := p.noRecordLit
+	p.noRecordLit = false // within the braces, '{' is a literal again
+	p.expect(LBrace, "after for")
+	var clauses []any // *For, *If, or a binding Stmt
+	for {
+		p.skipSemis()
+		if p.at(RBrace) {
+			break
+		}
+		if p.at(EOF) {
+			p.errorf(pos, "comprehension is not closed (missing '}')")
+			panic(bailout{})
+		}
+		clauses = append(clauses, p.comprehensionClause())
+		if !p.at(Semi) && !p.at(RBrace) {
+			p.errorf(p.tok().Pos, "expected end of line or '}' after the comprehension line, found %s", p.tok().Kind)
+			panic(bailout{})
+		}
+	}
+	end := p.next().Pos
+	p.noRecordLit = saved
+	if !p.at(KwYield) {
+		if p.at(Semi) && p.peekKind() == KwYield {
+			p.errorf(p.toks[p.i+1].Pos, "a comprehension's yield goes on the line of its closing '}', as in } yield value")
+		} else {
+			p.errorf(p.tok().Pos, "a comprehension ends with } yield value; a for { } loop cannot start with a generator such as x in xs")
+		}
+		panic(bailout{})
+	}
+	y := p.next()
+	body := &Block{Pos: y.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: &Yield{Pos: y.Pos, Value: p.expr()}}}}
+	for i := len(clauses) - 1; i >= 0; i-- {
+		switch clause := clauses[i].(type) {
+		case *For:
+			clause.Body = body
+			body = &Block{Pos: clause.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: clause}}}
+		case *If:
+			clause.Then = body
+			body = &Block{Pos: clause.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: clause}}}
+		case Stmt:
+			body.Stmts = append([]Stmt{clause}, body.Stmts...)
+			body.Pos = stmtPos(clause)
+		}
+	}
+	return &Generate{Pos: pos, Body: body, Comprehension: true}
+}
+
+// comprehensionClause parses one line of a comprehension: a generator
+// `pattern in source`, a filter `if cond`, or a binding.
+func (p *parser) comprehensionClause() any {
+	switch {
+	case p.iterationPatternAhead():
+		pattern := p.iterationPattern()
+		f := &For{Pos: pattern.Position(), Pattern: pattern, NamePos: pattern.Position()}
+		switch pattern := pattern.(type) {
+		case *VariantPat:
+			f.Name = pattern.Path[0]
+		case *WildcardPat:
+			f.Name = "_"
+		}
+		f.Items = p.expr()
+		return f
+	case p.at(KwIf):
+		// As in an if head, a bare `Name {` is not a record literal.
+		x := &If{Pos: p.next().Pos}
+		p.noRecordLit = true
+		x.Cond = p.expr()
+		p.noRecordLit = false
+		if p.at(LBrace) || p.at(KwElse) {
+			p.errorf(p.tok().Pos, "a comprehension's filter is if cond alone, without a block or else")
+			panic(bailout{})
+		}
+		return x
+	}
+	pos := p.tok().Pos
+	stmt := p.statement()
+	switch s := stmt.(type) {
+	case *Binding:
+		if !s.Lazy && s.AsyncScope == nil {
+			return s
+		}
+	case *TupleBinding:
+		return s
+	}
+	p.errorf(pos, "a comprehension line is a generator x in xs, a filter if cond, or a binding name = value")
+	panic(bailout{})
+}
+
+func stmtPos(s Stmt) diag.Pos {
+	switch s := s.(type) {
+	case *Binding:
+		return s.Pos
+	case *TupleBinding:
+		return s.Pos
+	}
+	return diag.Pos{}
 }

@@ -1,0 +1,20 @@
+break before 0 0
+(10, 10)
+Ok
+break after 1 1
+take before 0 0
+[(10, 10)]
+Ok
+take after 1 1
+first before 0 0
+Option.Some((10, 10))
+Ok
+first after 1 1
+error before 0 0
+(10, 10)
+Stopped {}
+error after 1 1
+full before 0 0
+[(10, 10), (10, 12), (20, 20), (20, 22)]
+Ok
+full after 2 2

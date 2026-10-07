@@ -244,6 +244,10 @@
           "name": "keyword.control.bork"
         },
         {
+          "match": "(?<=[A-Za-z0-9_)]\\s)in\\b(?=\\s)",
+          "name": "keyword.control.bork"
+        },
+        {
           "match": "\\b(fn|pred|type|class|instance|instances|rule|metadata(?=\\s+type\\b))\\b",
           "name": "storage.type.bork"
         },

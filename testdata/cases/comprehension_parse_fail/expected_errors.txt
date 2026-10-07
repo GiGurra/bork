@@ -1,0 +1,6 @@
+main.bork:1:37: a comprehension ends with } yield value; a for { } loop cannot start with a generator such as x in xs
+main.bork:4:3: a comprehension's yield goes on the line of its closing '}', as in } yield value
+main.bork:6:32: only a comprehension ends with yield, and its first line is a generator such as x in xs
+main.bork:7:49: a comprehension's filter is if cond alone, without a block or else
+main.bork:8:39: a comprehension line is a generator x in xs, a filter if cond, or a binding name = value
+main.bork:9:37: a comprehension line is a generator x in xs, a filter if cond, or a binding name = value

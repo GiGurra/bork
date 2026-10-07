@@ -162,6 +162,46 @@ The first line of `main` computes only as many squares as it takes to find three
 
 Standard packages use sequences for input that should not be loaded all at once, such as the lines of a file or the rows of a query. Such a sequence does I/O as it is consumed, and its type says so: `Seq[String] uses io`. The function that consumes it needs that [effect](effects.md).
 
+### Comprehensions
+
+A comprehension writes a sequence as generator lines, filters and bindings, then the value to yield:
+
+```bork
+type Item = { name: String, active: Bool, qty: Int }
+type Order = { id: Int, items: List[Item] }
+
+fn activeItems(orders: List[Order]): Seq[(Int, String, Int)] {
+  for {
+    order in orders
+    item in order.items
+    if item.active
+    total = item.qty * 10
+  } yield (order.id, item.name, total)
+}
+
+fn main() {
+  orders = [
+    Order { id: 1, items: [Item { name: "pen", active: true, qty: 2 }, Item { name: "ink", active: false, qty: 1 }] },
+    Order { id: 2, items: [Item { name: "pad", active: true, qty: 3 }] },
+  ]
+  println(activeItems(orders).toList())
+  stock = { "apple": 3, "pear": 0 }
+  println((for { (name, count) in stock.pairs(); if count > 0 } yield name).toList())
+}
+```
+
+```text
+[(1, "pen", 20), (2, "pad", 30)]
+["apple"]
+```
+
+- `x in xs` goes through a `List` or `Seq`, and its name can be a [loop pattern](#loops) such as `(k, v)`. A later line can use earlier names, as `item in order.items` does.
+- `if cond` skips the values for which it is false. What it proves holds in the lines after it and in the yield.
+- `name = value` binds a name for the lines after it.
+- The first line is a generator, and `yield` goes on the line of the closing `}`.
+
+A comprehension is a `generate` block written another way. It is lazy, including its first source: nothing runs until the sequence is consumed, and each consumption starts again. It has the effects of what it runs. When its consumer stops early, it stops its sources, so a generator that holds a resource releases it then. The element type is the yield's type, or the one the context expects (`xs: Seq[Int | String] = for { ... } yield n`).
+
 ## Bytes
 
 `Bytes` is an immutable sequence of bytes, for binary data.

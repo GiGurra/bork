@@ -1,0 +1,15 @@
+main.bork:3:41: for requires a List or Seq, found Int
+main.bork:4:45: if-condition must be Bool, found Int
+main.bork:6:3: binding y is never read; discard explicitly with _
+main.bork:7:19: a comprehension's names are new, and y is already bound
+main.bork:9:33: binding x is never read; discard explicitly with _
+main.bork:9:43: x is already defined in an enclosing scope (bork does not allow shadowing)
+main.bork:10:40: binding y is never read; discard explicitly with _
+main.bork:10:47: a comprehension's names are new, and y is already bound
+main.bork:11:58: continue cannot be used in a comprehension; filter with an if line instead
+main.bork:12:32: binding x is never read; discard explicitly with _
+main.bork:12:51: return cannot be used in a comprehension
+main.bork:13:47: ? cannot be used in a comprehension; yield an explicit error value instead
+main.bork:14:47: a comprehension yields only its final value, after the closing '}'
+main.bork:15:51: a comprehension cannot yield Ok
+main.bork:16:48: comprehension yields String, but this value is Int

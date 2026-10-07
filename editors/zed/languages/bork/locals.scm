@@ -14,6 +14,8 @@
 (lambda_expression parameter: (identifier) @local.definition)
 (for_expression name: (identifier) @local.definition)
 (for_expression init: (loop_binding name: (identifier) @local.definition))
+(comprehension_expression) @local.scope
+(comprehension_generator name: (identifier) @local.definition)
 (scope_expression name: (identifier) @local.definition)
 (select_arm name: (identifier) @local.definition)
 (mock_parameters name: (identifier) @local.definition)
