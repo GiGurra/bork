@@ -133,3 +133,258 @@ fn test(x: Reply[Int]): Bool { x is Reply[Int].Found(Int, String) }
             (type
               (qualified_name
                 (identifier)))))))))
+
+==================
+Newlines separate leading-dot list and payload patterns
+==================
+fn f() {
+  match xs {
+    [.Some(n)
+     // Another pattern, not a selector.
+     .None] => n
+    .Pair(.Some(n)
+          .None) => n
+    [name
+     .Some(n)] => n
+    [1
+     .None] => 0
+  }
+  if xs is [.Some(n)
+            .None] { n }
+  for { [.Some(n)
+         .None] in rows } yield n
+  for { .Pair([name
+               .Some(n)]
+              .None) in rows } yield n
+}
+
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (match_expression
+        (qualified_name
+          (identifier))
+        (match_arm
+          (pattern
+            (pattern
+              (context_pattern
+                (identifier))
+              (pattern
+                (qualified_name
+                  (identifier))))
+            (comment)
+            (pattern
+              (context_pattern
+                (identifier))))
+          (qualified_name
+            (identifier)))
+        (match_arm
+          (pattern
+            (context_pattern
+              (identifier))
+            (pattern
+              (context_pattern
+                (identifier))
+              (pattern
+                (qualified_name
+                  (identifier))))
+            (pattern
+              (context_pattern
+                (identifier))))
+          (qualified_name
+            (identifier)))
+        (match_arm
+          (pattern
+            (pattern
+              (qualified_name
+                (identifier)))
+            (pattern
+              (context_pattern
+                (identifier))
+              (pattern
+                (qualified_name
+                  (identifier)))))
+          (qualified_name
+            (identifier)))
+        (match_arm
+          (pattern
+            (pattern
+              (number))
+            (pattern
+              (context_pattern
+                (identifier))))
+          (number)))
+      (if_expression
+        (is_expression
+          (qualified_name
+            (identifier))
+          (test_pattern
+            (test_pattern
+              (context_pattern
+                (identifier))
+              (test_pattern
+                (type
+                  (qualified_name
+                    (identifier)))))
+            (test_pattern
+              (context_pattern
+                (identifier)))))
+        (block
+          (qualified_name
+            (identifier))))
+      (comprehension_expression
+        (comprehension_generator
+          (pattern
+            (pattern
+              (context_pattern
+                (identifier))
+              (pattern
+                (qualified_name
+                  (identifier))))
+            (pattern
+              (context_pattern
+                (identifier))))
+          (qualified_name
+            (identifier)))
+        (qualified_name
+          (identifier)))
+      (comprehension_expression
+        (comprehension_generator
+          (pattern
+            (context_pattern
+              (identifier))
+            (pattern
+              (pattern
+                (qualified_name
+                  (identifier)))
+              (pattern
+                (context_pattern
+                  (identifier))
+                (pattern
+                  (qualified_name
+                    (identifier)))))
+            (pattern
+              (context_pattern
+                (identifier))))
+          (qualified_name
+            (identifier)))
+        (qualified_name
+          (identifier))))))
+
+==================
+Expression lists and constructor arguments keep leading-dot chains
+==================
+fn f() {
+  values = [" x "
+    .trim()]
+  call(" c " /* comment
+    ends */ .trim())
+  call(" d " /* comment
+    ends */)
+  call(" y "
+    .trim())
+  value = Pair.Some(" z "
+    .trim())
+  for {
+    [values
+      .map(v => v)]
+    break
+  }
+  match xs {
+    [n: Int where accepts(" x "
+      .trim())
+     .None] => n
+  }
+}
+
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (binding
+        (identifier)
+        (list_literal
+          (call_expression
+            (selector_expression
+              (string)
+              (identifier)))))
+      (call_expression
+        (qualified_name
+          (identifier))
+        (argument
+          (call_expression
+            (selector_expression
+              (string)
+              (comment)
+              (identifier)))))
+      (call_expression
+        (qualified_name
+          (identifier))
+        (argument
+          (string))
+        (comment))
+      (call_expression
+        (qualified_name
+          (identifier))
+        (argument
+          (call_expression
+            (selector_expression
+              (string)
+              (identifier)))))
+      (binding
+        (identifier)
+        (call_expression
+          (selector_expression
+            (qualified_name
+              (identifier))
+            (identifier))
+          (argument
+            (call_expression
+              (selector_expression
+                (string)
+                (identifier))))))
+      (for_expression
+        (block
+          (list_literal
+            (call_expression
+              (selector_expression
+                (qualified_name
+                  (identifier))
+                (identifier))
+              (argument
+                (lambda_expression
+                  (identifier)
+                  (qualified_name
+                    (identifier))))))
+          (bare_break)))
+      (match_expression
+        (qualified_name
+          (identifier))
+        (match_arm
+          (pattern
+            (pattern
+              (identifier)
+              (type
+                (qualified_name
+                  (identifier))
+                (where_clause
+                  (requirement
+                    (requirement
+                      (qualified_name
+                        (identifier)))
+                    (call_expression
+                      (selector_expression
+                        (string)
+                        (identifier)))))))
+            (pattern
+              (context_pattern
+                (identifier))))
+          (qualified_name
+            (identifier)))))))

@@ -51,7 +51,7 @@ func parse(path, src string, toks []Token, comments []Comment, diags *diag.List,
 
 func parseMode(path, src string, toks []Token, comments []Comment, diags *diag.List, compiler, script bool) *File {
 	f := &File{Path: path, Source: src, Comments: comments, Script: script}
-	p := &parser{legacyStaged: &f.LegacyStagedLists, iterationOperators: &f.IterationOperators, headParentheses: &f.HeadParentheses, patternTestOperators: &f.PatternTestOperators, toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, compiler: compiler, spans: &f.ExpressionSpans, spanSeen: map[Expr][]SourceSpan{}}
+	p := &parser{patternLineStarts: &f.PatternLineStarts, legacyStaged: &f.LegacyStagedLists, iterationOperators: &f.IterationOperators, headParentheses: &f.HeadParentheses, patternTestOperators: &f.PatternTestOperators, toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, compiler: compiler, spans: &f.ExpressionSpans, spanSeen: map[Expr][]SourceSpan{}}
 	var statements []Stmt
 	var firstStatement diag.Pos
 	// Imports come first.
@@ -255,6 +255,7 @@ type parser struct {
 	diags                       *diag.List
 	testingPattern              bool
 	patternTestOperators        *[]diag.Pos
+	patternLineStarts           *[]diag.Pos
 	headParentheses             *[]SourceSpan
 	iterationOperators          *[]diag.Pos
 	legacyStaged                *[]LegacyStagedList
@@ -377,6 +378,44 @@ func (p *parser) list(closing Kind, what string, item func()) {
 		}
 	}
 	p.next()
+}
+
+// patternList restores newlines suppressed by selector continuation, only at
+// this pattern list's top level. Nested patterns handle their own lists, while
+// expressions inside predicate arguments retain ordinary method chains.
+func (p *parser) patternList(closing Kind, what string, item func()) {
+	depth, last := 0, 0
+	var toks []Token
+scan:
+	for i := p.i; i < len(p.toks); i++ {
+		t := p.toks[i]
+		if depth == 0 && i > p.i && t.Kind == Dot {
+			prev := p.toks[i-1]
+			if t.Pos.Line > prev.End.Line && canEndStatement(prev.Kind) {
+				toks = append(toks, p.toks[last:i]...)
+				toks = append(toks, Token{Kind: Semi, Text: "\n", Pos: prev.End, End: prev.End})
+				last = i
+				if p.patternLineStarts != nil {
+					*p.patternLineStarts = append(*p.patternLineStarts, t.Pos)
+				}
+			}
+		}
+		switch t.Kind {
+		case LParen, LBrack, LBrace:
+			depth++
+		case RParen, RBrack, RBrace:
+			if depth == 0 {
+				break scan
+			}
+			depth--
+		case EOF:
+			break scan
+		}
+	}
+	if toks != nil {
+		p.toks = append(toks, p.toks[last:]...)
+	}
+	p.list(closing, what, item)
 }
 
 // legacyProviders recognizes only the removed declaration for migration. It
@@ -1884,7 +1923,7 @@ func (p *parser) pattern() Pattern {
 		defer func() { p.noRecordLit = saved }()
 		p.next()
 		lp := &ListPat{Pos: t.Pos}
-		p.list(RBrack, "a pattern", func() {
+		p.patternList(RBrack, "a pattern", func() {
 			if lp.HasRest {
 				p.errorf(p.tok().Pos, "the rest of the list (...) must come last")
 				panic(bailout{})
@@ -1962,7 +2001,7 @@ func (p *parser) pattern() Pattern {
 			defer func() { p.noRecordLit = saved }()
 			vp.Positional = true
 			vp.PayloadPos = p.next().Pos
-			p.list(RParen, "a payload pattern", func() {
+			p.patternList(RParen, "a payload pattern", func() {
 				if p.testingPattern {
 					vp.Elems = append(vp.Elems, p.testPattern())
 				} else {

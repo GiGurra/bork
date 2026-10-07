@@ -103,6 +103,33 @@ for example `(number: Int, text: String)`. A typed tuple arm can use
 `pair: (Int, String) => pair.0`. A function type can use extra
 parentheses to make its two arrows clear: `callback: ((Int) => Int) => callback(1)`.
 
+List and positional payload patterns can put each item on its own line, including
+items that start with a leading dot:
+
+```bork
+type Pair = sealed { Both(Option[Int], Option[Int]) }
+
+fn value(pair: Pair): Int {
+  match pair {
+    .Both(
+      .Some(n)
+      .None
+    ) => n
+    _ => 0
+  }
+}
+
+fn main() {
+  println(value(Pair.Both(Option.Some(3), Option.None)))
+}
+```
+
+The same rule applies to list patterns such as `[.Some(n), .None]`, to `is`
+tests, and to comprehension generator patterns. Keep qualified pattern names
+such as `Option.Some` on one line, or put the dot at the end of the previous
+line. In expressions, leading-dot methods still continue the previous value,
+including inside lists and constructor or call arguments.
+
 Patterns nest, so a field can be matched against another pattern:
 
 ```bork

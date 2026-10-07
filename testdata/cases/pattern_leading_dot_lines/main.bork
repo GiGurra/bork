@@ -1,0 +1,52 @@
+type Pair = sealed { Both(Option[Int], Option[Int]) }
+type Box = sealed { Values { values: List[Option[Int]] } }
+
+fn listValue(xs: List[Option[Int]]): Int {
+  match xs {
+    [
+      .Some(n)
+      // A second list pattern.
+      .None
+    ] => n
+    _ => 0
+  }
+}
+
+fn pairValue(pair: Pair): Int {
+  match pair {
+    .Both(
+      .Some(n)
+      .None
+    ) => n
+    _ => 0
+  }
+}
+
+fn tested(xs: List[Option[Int]]): Bool {
+  xs is [
+    .Some(Int)
+    .None
+  ]
+}
+
+fn main() {
+  xs = [Option.Some(3), Option.None]
+  println(listValue(xs))
+  println(pairValue(Pair.Both(Option.Some(4), Option.None)))
+  println(tested(xs))
+  picks = for {
+    [.Some(n)
+      .None] in [xs, [Option[Int].None]]
+  } yield n
+  println(picks.toList())
+  box = Box.Values { values: xs }
+  println(match box {
+    .Values { values: [.Some(n)
+      .None] } => n
+    _ => 0
+  })
+  println([" x "
+      .trim()])
+  println(" y "
+      .trim())
+}
