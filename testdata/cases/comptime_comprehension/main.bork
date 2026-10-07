@@ -38,11 +38,30 @@ derive instance pairs[T]: Pairs[T] {
   }
 }
 
-type Row = { name: String, age: Int, skip: Bool } derive (Labels, Pairs)
+class Table[T] { fn table(): String }
+
+// Layout metadata binds tuple patterns and reads outer names in inner generators.
+derive instance table[T]: Table[T] {
+  metadata shape.ForeignRecord = shape.ForeignRecord {
+    fields: comptime for {
+      (i, field) in shape.fields[T]().indexed()
+      if !field.computed
+    } yield shape.ForeignField {
+      slot: i,
+      name: field.name.capitalize(),
+      tags: comptime for { g in shape.fields[T](); if g.name != field.name } yield shape.Tag { name: g.name, value: field.name },
+      option: shape.ForeignOption.Reject
+    }
+  }
+  fn table(): String { shape.name[T]() }
+}
+
+type Row = { name: String, age: Int, skip: Bool } derive (Labels, Pairs, Table)
 type Shape = sealed { Circle { radius: Int }, Rect { w: Int, h: Int, hidden: Int }, Dot } derive (Paths)
 
 fn main() {
   println(labels(Row { name: "Ada", age: 37, skip: true }))
   println(paths[Shape]())
   println(pairs(Row { name: "Ada", age: 37, skip: true }))
+  println(shape.metadata[Row, Table, shape.ForeignRecord]())
 }

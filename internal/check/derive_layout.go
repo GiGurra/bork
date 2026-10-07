@@ -1,6 +1,7 @@
 package check
 
 import (
+	"maps"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -136,20 +137,29 @@ func (p *deriveExpansion) layoutLoop(loop *syntax.For) ([]any, bool) {
 		p.error(loop.Pos, "comptime for requires a compile-time shape sequence")
 		return nil, false
 	}
-	var items []any
-	saved, existed := p.env[loop.Name]
-	defer func() {
-		if existed {
-			p.env[loop.Name] = saved
+	pattern := loop.Pattern
+	if pattern == nil {
+		if loop.Name == "_" {
+			pattern = &syntax.WildcardPat{Pos: loop.NamePos}
 		} else {
-			delete(p.env, loop.Name)
+			pattern = &syntax.VariantPat{Pos: loop.NamePos, Path: []string{loop.Name}}
 		}
-	}()
+	}
+	if !p.stagedIterationNames(pattern, sequence.element, map[string]diag.Pos{}) {
+		return nil, false
+	}
+	var items []any
+	saved := p.env
+	p.env = maps.Clone(p.env)
+	if p.env == nil {
+		p.env = map[string]any{}
+	}
+	defer func() { p.env = saved }()
 	for _, item := range sequence.items {
 		if !p.tick(loop.Pos) {
 			return nil, false
 		}
-		p.env[loop.Name] = item
+		p.bindStagedIteration(pattern, item)
 		body := loop.Body.Tail
 		chosen := true
 		for chosen {
