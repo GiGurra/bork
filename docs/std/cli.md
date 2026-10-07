@@ -586,6 +586,48 @@ fn main() {
 }
 ```
 
+## Dumping effective options
+
+`Dump[T: codec.Encode](value, format: cli.ConfigFormat = .Json)` returns
+`String | cli.Error`. It encodes the complete effective value through the selected
+`codec.Encode` instance, using JSON by default or YAML with `.Yaml`. Derived
+encoders preserve canonical codec wire names, including naming policies and
+field overrides. Effective defaults, false, zero, empty strings, empty lists and
+Option values follow ordinary codec encoding; dumps do not filter by source.
+The encoder must produce an object. Invalid codec number values produce an error.
+Custom encoders and codec omission policies can intentionally omit fields, so
+round-trip behavior follows the chosen Encode/Decode instances.
+
+`DumpFile[T: codec.Encode](path, value) uses io` returns `Ok | cli.Error`.
+`.yaml` and `.yml` extensions select YAML case-insensitively; every other name
+selects JSON, just like config loading. Encoding completes before opening the
+file, so an encoding failure leaves an existing destination intact. Successful
+writes replace the file contents; parent directories must already exist. New
+files use owner-only permissions (0600 before the process umask); existing file
+permissions are retained. Write failures include the destination path.
+
+```bork
+import "bork/cli"
+import "bork/codec"
+use codec.Defaults
+
+type Options = { port: Int = 8080 } derive (codec.Decode, codec.Encode)
+
+fn main() {
+  match (cli.Parse[Options]("app", "Example", ["--port", "9000"])) {
+    options: Options => {
+      println(cli.Dump(options))
+      println(cli.Dump(options, .Yaml))
+      println(cli.DumpFile("resolved.yaml", options))
+    }
+    error: cli.Error => println(error)
+    help: cli.Help => println(help.text)
+  }
+}
+```
+
+With source-aware parsing, pass `resolved.value` to these same helpers.
+
 ## Configuration files
 
 `configFiles` accepts JSON and YAML files using canonical codec wire keys
