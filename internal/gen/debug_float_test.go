@@ -81,12 +81,7 @@ func TestDebugFloatStages(t *testing.T) {
 			})
 		}
 	}
-	metadata, locals := floatFixture(64)
-	for _, source := range []string{"b && f + 1.0 > f", "f + 1.0 > f || b"} {
-		if _, err := DebugExpressionPlan(source, metadata, diag.Pos{File: "main.bork", Line: 5}, locals); err == nil || !strings.Contains(err.Error(), "short-circuit") {
-			t.Fatalf("%s: %v", source, err)
-		}
-	}
+
 }
 
 func TestDebugFloatMalformedOperands(t *testing.T) {
@@ -131,6 +126,59 @@ func TestDebugFloatBooleanOperand(t *testing.T) {
 			}
 		} else if err == nil {
 			t.Fatalf("accepted boolean %q", response)
+		}
+	}
+}
+
+func TestDebugFloatLazyReads(t *testing.T) {
+	for _, width := range []int{32, 64} {
+		floatRead := fmt.Sprintf("*(*uint%d)(uint64(&(f)))", width)
+		bits := math.Float64bits(1)
+		if width == 32 {
+			bits = uint64(math.Float32bits(1))
+		}
+		for _, test := range []struct {
+			source           string
+			reads, responses []string
+			want             string
+		}{
+			{"false && f > 0.0", nil, nil, "false"},
+			{"true || f > 0.0", nil, nil, "true"},
+			{"b && f > 0.0", []string{"b"}, []string{"false"}, "false"},
+			{"b || f > 0.0", []string{"b"}, []string{"true"}, "true"},
+			{"b && f > 0.0", []string{"b", floatRead}, []string{"true", fmt.Sprint(bits)}, "true"},
+			{"b || f > 0.0", []string{"b", floatRead}, []string{"false", fmt.Sprint(bits)}, "true"},
+			{"f > 0.0 || (f / f > 0.0 && b)", []string{floatRead}, []string{fmt.Sprint(bits)}, "true"},
+			{"f < 0.0 && b || f >= 0.0", []string{floatRead, floatRead}, []string{fmt.Sprint(bits), fmt.Sprint(bits)}, "true"},
+			{"b && (true || f > 0.0)", []string{"b"}, []string{"true"}, "true"},
+			{"b || (false && f > 0.0)", []string{"b"}, []string{"false"}, "false"},
+			{"!(b && f > 0.0)", []string{"b"}, []string{"false"}, "true"},
+			{"(false && f > 0.0) == (true || f > 0.0)", nil, nil, "false"},
+		} {
+			t.Run(fmt.Sprintf("%d/%s/%v", width, test.source, test.responses), func(t *testing.T) {
+				metadata, locals := floatFixture(width)
+				plan, err := DebugExpressionPlan(test.source, metadata, diag.Pos{File: "main.bork", Line: 5}, locals)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for i, read := range test.reads {
+					if plan.Read != read {
+						t.Fatalf("read %d: %s, want %s", i, plan.Read, read)
+					}
+					if err := plan.Advance(test.responses[i]); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if plan.Read != "" || plan.Result == nil || plan.Result.Value != test.want {
+					t.Fatalf("result: %+v; want %s", plan, test.want)
+				}
+			})
+		}
+	}
+	metadata, locals := floatFixture(64)
+	for _, source := range []string{"false && missing > f", "true || println(f)", "false && f / 0.0 > f"} {
+		if _, err := DebugExpressionPlan(source, metadata, diag.Pos{File: "main.bork", Line: 5}, locals); err == nil {
+			t.Fatalf("skipped source escaped normal checking: %s", source)
 		}
 	}
 }

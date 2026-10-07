@@ -222,3 +222,71 @@ func TestDebugEvaluateFloatStages(t *testing.T) {
 		t.Fatal("float plans leaked requests or responses")
 	}
 }
+
+func TestDebugEvaluateLazyStages(t *testing.T) {
+	r := presentationFixture()
+	r.metadata.Expressions = map[string]check.DebugShape{"float64": {Name: "Float", Kind: "scalar"}, "bool": {Name: "Bool", Kind: "scalar"}}
+	r.frames = map[float64]diag.Pos{100: {File: "main.bork", Line: 5}}
+	r.metadata.Bindings = []gen.DebugBindings{{Start: diag.Pos{File: "main.bork", Line: 1}, End: diag.Pos{File: "main.bork", Line: 10}, Names: map[string]string{"f": "f", "b": "b"}}}
+	var upstream, downstream bytes.Buffer
+	r.upstream, r.downstream = &upstream, &downstream
+	handle := func(message map[string]any, request bool) {
+		t.Helper()
+		if skip, err := r.evaluate(message, request); !skip || err != nil {
+			t.Fatalf("evaluate: %v %v", skip, err)
+		}
+	}
+	start := func(seq float64, expression string) map[string]any {
+		t.Helper()
+		handle(map[string]any{"seq": seq, "type": "request", "command": "evaluate", "arguments": map[string]any{"expression": expression, "frameId": float64(100), "context": "watch"}}, true)
+		scopes := takeDebugMessage(t, &upstream)
+		handle(map[string]any{"type": "response", "command": "scopes", "request_seq": scopes["seq"], "success": true, "body": map[string]any{"scopes": []any{map[string]any{"name": "Locals", "variablesReference": float64(10)}}}}, false)
+		variables := takeDebugMessage(t, &upstream)
+		handle(map[string]any{"type": "response", "command": "variables", "request_seq": variables["seq"], "success": true, "body": map[string]any{"variables": []any{map[string]any{"name": "f", "type": "float64"}, map[string]any{"name": "b", "type": "bool"}}}}, false)
+		if upstream.Len() == 0 {
+			return takeDebugMessage(t, &downstream)
+		}
+		return takeDebugMessage(t, &upstream)
+	}
+	respond := func(query map[string]any, result string, success bool) {
+		t.Helper()
+		handle(map[string]any{"type": "response", "command": "evaluate", "request_seq": query["seq"], "success": success, "message": "unreadable operand", "body": map[string]any{"result": result}}, false)
+	}
+	first := start(51, "b && f > 0.0")
+	second := start(52, "b || f > 0.0")
+	respond(first, "true", true)
+	first = takeDebugMessage(t, &upstream)
+	if !strings.Contains(first["arguments"].(map[string]any)["expression"].(string), "uint64") {
+		t.Fatalf("selected branch: %v", first)
+	}
+	respond(second, "true", true)
+	completed := takeDebugMessage(t, &downstream)
+	if completed["request_seq"] != float64(52) || completed["body"].(map[string]any)["result"] != "true" || upstream.Len() != 0 {
+		t.Fatalf("skipped branch: %v", completed)
+	}
+	r.evaluationEpoch++
+	respond(first, "4607182418800017408", true)
+	failed := takeDebugMessage(t, &downstream)
+	if failed["request_seq"] != float64(51) || failed["success"] != false || !strings.Contains(failed["message"].(string), "execution moved") {
+		t.Fatalf("epoch: %v", failed)
+	}
+	third := start(53, "b && f > 0.0")
+	respond(third, "true", true)
+	third = takeDebugMessage(t, &upstream)
+	respond(third, "", false)
+	failed = takeDebugMessage(t, &downstream)
+	if failed["request_seq"] != float64(53) || failed["success"] != false {
+		t.Fatalf("selected backend failure: %v", failed)
+	}
+	r.omitTypes = true
+	completed = start(54, "true || f > 0.0")
+	if completed["request_seq"] != float64(54) || completed["body"].(map[string]any)["result"] != "true" {
+		t.Fatalf("no-read result: %v", completed)
+	}
+	if _, exists := completed["body"].(map[string]any)["type"]; exists {
+		t.Fatalf("unexpected type: %v", completed)
+	}
+	if upstream.Len() != 0 || downstream.Len() != 0 || len(r.evaluations) != 0 {
+		t.Fatal("lazy plans leaked requests or responses")
+	}
+}

@@ -31,7 +31,7 @@ type DebugEvaluation struct {
 	Read            string
 	ReadFailure     string
 	present, absent string
-	floats          []debugFloatRead
+	pending         *debugScalar
 	scalar          *debugScalar
 	Result          *DebugScalarResult
 }
@@ -39,7 +39,7 @@ type DebugEvaluation struct {
 // Advance checks an intermediate result and prepares the next compiler-owned
 // read. Delve never evaluates an out-of-bounds element expression.
 func (e *DebugEvaluation) Advance(result string) error {
-	if len(e.floats) != 0 {
+	if e.pending != nil {
 		return e.advanceFloat(result)
 	}
 	switch result {
@@ -60,7 +60,7 @@ func DebugExpressionTyped(source string, metadata *DebugMap, site diag.Pos, loca
 	if err != nil {
 		return "", "", err
 	}
-	if plan.Read != "" {
+	if plan.Read != "" || plan.Result != nil {
 		return "", "", fmt.Errorf("debug expression: this expression requires staged evaluation")
 	}
 	return plan.Expression, plan.Type, nil
