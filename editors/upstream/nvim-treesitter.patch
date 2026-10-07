@@ -21,7 +21,7 @@ index fca90f6..39dfeb3 100644
 +  bork = {
 +    install_info = {
 +      location = 'editors/tree-sitter-bork',
-+      revision = '28e2772a1bbe7a9480d76e5dd6cedbc9d238e51a',
++      revision = 'cc1fa04db9675f49ecfaf2e8fcf53df298df9f3e',
 +      url = 'https://github.com/GiGurra/bork',
 +    },
 +    tier = 3,
