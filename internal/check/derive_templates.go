@@ -930,6 +930,14 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 					break
 				}
 			}
+			// A query on a runtime binding stays a call, so the binding is read.
+			if call, isCall := x.(*syntax.Call); isCall {
+				if selector, ok := call.Fun.(*syntax.Selector); ok {
+					if id, identifier := selector.X.(*syntax.Ident); identifier && p.runtimeName(id) {
+						break
+					}
+				}
+			}
 			return p.literal(x.Position(), value)
 		}
 	}
@@ -1210,6 +1218,17 @@ func (c *checker) expandDeriveBodies() {
 		c.declareInstanceMetadata(instance, template.Decl.Metadata, metadataPlan)
 		c.pkg = saved
 	}
+}
+
+// runtimeName reports whether a name holds a compile-time-known value that
+// expansion also keeps as a runtime binding.
+func (p *deriveExpansion) runtimeName(id *syntax.Ident) bool {
+	value, known := p.env[id.Name]
+	if !known || metadataValue(value) {
+		return false
+	}
+	_, staged := value.(shapeIndex)
+	return !staged
 }
 
 func metadataValue(value any) bool {
