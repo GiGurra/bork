@@ -21,7 +21,7 @@ type Db = { port: Int where Positive = 5432 } derive (codec.Decode)
 type Options = {
  config: Option[String]
  name: String = "default"
- port: Int where Positive = 8080
+ port: Int where Positive = 8080 codec { aliases: ["legacyPort"] }
  verbose: Bool
  tags: List[String] = ["default"]
  maybe: Option[String]
@@ -29,15 +29,26 @@ type Options = {
  optional: Option[Db]
  whole: Db = Db {} cli { flatten: false }
 } derive (codec.Decode)
+type Ordered = { normal: Int = 1, second: String, first: String } derive (codec.Decode)
 fn main() {
+ match (cli.ParseResolved[Ordered]("ordered", "Indexed", ["one", "two"], [
+  cli.Flag { field: "first", position: .Some(0) },
+  cli.Flag { field: "second", position: .Some(1) }
+ ])) {
+  resolved: cli.Resolved[Ordered] => println(s"order=${resolved.sources.map(entry => entry.field).join(",")}")
+  error: cli.Error => println(error)
+  help: cli.Help => println(help.text)
+ }
  result = cli.ParseResolved[Options]("app", "Sources", process.Args(), [
   cli.Flag { field: "config", configFile: true },
   cli.Flag { field: "name", env: "BORK_SOURCE_NAME", positional: true },
-  cli.Flag { field: "port", env: "BORK_SOURCE_PORT", short: "p" }
- ], ["base.json", "override.yaml"])
+  cli.Flag { field: "port", env: "BORK_SOURCE_PORT", short: "p" },
+  cli.Flag { field: "verbose", deprecated: "use log level" }
+ ], ["base.json", "override.yaml"], settings: .{ envPrefix: "BORK_SOURCE" })
  match (result) {
   resolved: cli.Resolved[Options] => {
    println(resolved.value)
+   println(s"warnings=${resolved.warnings}")
    for (field in ["config", "name", "port", "verbose", "tags", "maybe", "db.port", "optional.port", "whole", "unknown"]) {
     println(s"${field}=${resolved.Source(field)}")
    }
@@ -64,6 +75,9 @@ fn main() {
 		{name: "selected", selected: `{"port":82}`, args: []string{"--config", "selected.json"}, want: []string{"port: 82", `port=Option.Some(Source.Config { path: "selected.json" })`, `config=Option.Some(Source.Flag { name: "config" })`}},
 		{name: "env", base: `{"port":80}`, env: []string{"BORK_SOURCE_PORT=83"}, want: []string{"port: 83", `port=Option.Some(Source.Env { name: "BORK_SOURCE_PORT" })`}},
 		{name: "flag", env: []string{"BORK_SOURCE_PORT=83"}, args: []string{"-p", "84", "--verbose=false", "cli"}, want: []string{"port: 84", `port=Option.Some(Source.Flag { name: "port" })`, `name=Option.Some(Source.Flag { name: "name" })`, `verbose=Option.Some(Source.Flag { name: "verbose" })`}},
+		{name: "env-alias", env: []string{"BORK_SOURCE_LEGACY_PORT=88"}, want: []string{`port=Option.Some(Source.Env { name: "BORK_SOURCE_LEGACY_PORT" })`}},
+		{name: "flag-alias", args: []string{"--legacy-port", "89"}, want: []string{`port=Option.Some(Source.Flag { name: "port" })`}},
+		{name: "warnings", args: []string{"--verbose"}, want: []string{"use log level", `verbose=Option.Some(Source.Flag { name: "verbose" })`}},
 		{name: "empty-env", env: []string{"BORK_SOURCE_PORT="}, want: []string{"port=Option.Some(Source.Default)"}},
 		{name: "invalid-overridden", base: `{"port":0}`, args: []string{"--port", "85"}, want: []string{"port: 85", `port=Option.Some(Source.Flag { name: "port" })`}},
 		{name: "nested-alias", base: `{"oldDb":{"port":86}}`, want: []string{`db.port=Option.Some(Source.Config { path: "base.json" })`, "port: 86"}},
@@ -89,13 +103,13 @@ fn main() {
 			}
 			cmd := exec.Command(exe, tt.args...)
 			cmd.Dir = dir
-			cmd.Env = append(os.Environ(), "BORK_SOURCE_PORT=", "BORK_SOURCE_NAME=")
+			cmd.Env = append(os.Environ(), "BORK_SOURCE_PORT=", "BORK_SOURCE_NAME=", "BORK_SOURCE_LEGACY_PORT=")
 			cmd.Env = append(cmd.Env, tt.env...)
 			out, err := cmd.CombinedOutput()
 			if err != nil {
 				t.Fatalf("run: %v\n%s", err, out)
 			}
-			for _, want := range tt.want {
+			for _, want := range append(tt.want, "order=normal,second,first") {
 				if !strings.Contains(string(out), want) {
 					t.Errorf("missing %q:\n%s", want, out)
 				}

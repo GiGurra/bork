@@ -111,6 +111,8 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
     if position, specified := spec.position.(Option_Some[int64]); specified { return int(position.E0) }
     return 0
   }
+  sourceOrder := map[string]int{}
+  for i, field := range schema { sourceOrder[field.field] = i }
   schema = append([]inputField{}, schema...)
   indexed := false
   for _, spec := range specs { if _, positioned := spec.position.(Option_Some[int64]); positioned { indexed = true } }
@@ -358,6 +360,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
         sort.Slice(extras, func(i, j int) bool { return extras[i].key < extras[j].key })
         jsonFields = rebuildNestedFields(jsonFields, schema, active, nullGroups, extras)
       }
+      sort.SliceStable(sources, func(i, j int) bool { return sourceOrder[sources[i].field] < sourceOrder[sources[j].field] })
       return inputCollection{fields: jsonFields, errors: failures, sources: sources}
   }
   command := boa.Cmd{
