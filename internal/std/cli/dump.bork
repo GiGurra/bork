@@ -1,0 +1,43 @@
+import "bork/codec"
+import "bork/json"
+import "bork/yaml"
+
+type ConfigFormat = sealed { Json, Yaml }
+
+// Dump writes a complete effective options value, including defaults, through
+// its selected Encode instance. The encoded value must be an object.
+fn Dump[T: codec.Encode](value: T, format: ConfigFormat = .Json): String | Error {
+  encoded = codec.encode(value)
+  match (encoded) {
+    codec.Value.Object { fields: _ } => match (format) {
+      .Json => match (json.Pretty(encoded)) {
+        text: String => text
+        error: json.JsonError => Error { errors: [codec.DecodeError { path: "", message: error.message }] }
+      }
+      .Yaml => match (yaml.Render(encoded)) {
+        text: String => text
+        error: yaml.Error => Error { errors: [codec.DecodeError { path: "", message: error.message }] }
+      }
+    }
+    _ => Error { errors: [codec.DecodeError { path: "", message: "CLI config dump requires an encoded object" }] }
+  }
+}
+
+// DumpFile chooses YAML for .yaml/.yml (case insensitive), JSON otherwise,
+// matching config loading. Encoding finishes before the destination is opened.
+fn DumpFile[T: codec.Encode](path: String, value: T) uses io: Ok | Error {
+  text = Dump(value, dumpFormat(path))?
+  writeConfig(path, text)
+}
+fn dumpFormat(path: String): ConfigFormat unsafe go {
+  import "path/filepath"
+  import "strings"
+  ext := strings.ToLower(filepath.Ext(path))
+  if ext == ".yaml" || ext == ".yml" { return ConfigFormat_Yaml{} }
+  return ConfigFormat_Json{}
+}
+fn writeConfig(path: String, text: String) uses io: Ok | Error unsafe go {
+  import "os"
+  if err := os.WriteFile(path, []byte(text), 0600); err != nil { return Error{errors: []codec.DecodeError{{path: path, message: err.Error()}}} }
+  return _borkOk()
+}
