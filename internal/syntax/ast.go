@@ -787,6 +787,10 @@ type CopyUpdate struct {
 
 // Match is `match (x) { pattern => value, ... }`.
 type Match struct {
+	// Filter is set for the match a comprehension's refutable generator
+	// becomes; its last arm, `_ => {}`, skips the values that do not
+	// match, and is never reported as unreachable.
+	Filter            bool
 	Comptime          bool
 	Pos               diag.Pos
 	Close             diag.Pos // the closing brace, before which new arms can be inserted

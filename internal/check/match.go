@@ -244,7 +244,9 @@ func (c *checker) match(m *syntax.Match, want Type) Type {
 		if p == nil {
 			continue
 		}
-		if !useful(valid, p) {
+		// A comprehension's skipping arm may well be unreachable.
+		skip := m.Filter && i == len(m.Arms)-1
+		if !skip && !useful(valid, p) {
 			c.errorf(m.Arms[i].Pattern.Position(), "unreachable match arm: every value it matches is handled by an earlier arm")
 		}
 		if !p.HasGuard() {

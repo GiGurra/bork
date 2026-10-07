@@ -283,7 +283,7 @@ func sourceNodePosition(node any) diag.Pos {
 	return diag.Pos{}
 }
 func (b *sourceIndexBuilder) declaration(file *syntax.File, pos diag.Pos, name, kind, container string) {
-	if name == "" || name == "_" || pos.File == "" {
+	if name == "" || strings.HasPrefix(name, "_") || pos.File == "" {
 		return
 	}
 	source := b.files[pos.File]

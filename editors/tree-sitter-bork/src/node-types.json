@@ -1458,6 +1458,10 @@
             "named": true
           },
           {
+            "type": "pattern",
+            "named": true
+          },
+          {
             "type": "tuple_pattern",
             "named": true
           }

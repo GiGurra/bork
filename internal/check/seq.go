@@ -436,10 +436,30 @@ func (c *checker) comprehension(e *syntax.Generate) *comprehension {
 		case *syntax.VariantPat:
 			if len(p.Path) == 1 && !p.Context && !p.Braces && c.typeNamed(p.Path[0]) == nil {
 				visit(p.Path[0], p.Pos)
+				return
+			}
+			for _, elem := range p.Elems {
+				names(elem, visit)
+			}
+			for _, field := range p.Fields {
+				if field.Pattern == nil {
+					visit(field.Field, field.Pos)
+				} else {
+					names(field.Pattern, visit)
+				}
 			}
 		case *syntax.TuplePat:
 			for _, elem := range p.Elems {
 				names(elem, visit)
+			}
+		case *syntax.TypePat:
+			visit(p.Name, p.Pos)
+		case *syntax.ListPat:
+			for _, elem := range p.Elems {
+				names(elem, visit)
+			}
+			if p.Rest != "" {
+				visit(p.Rest, p.RestPos)
 			}
 		}
 	}
@@ -470,6 +490,10 @@ func (c *checker) comprehension(e *syntax.Generate) *comprehension {
 					next = x.Body
 				case *syntax.If:
 					next = x.Then
+				case *syntax.Match:
+					// A refutable generator: its first arm holds the rest.
+					names(x.Arms[0].Pattern, func(name string, _ diag.Pos) { seen[name] = true })
+					next, _ = x.Arms[0].Body.(*syntax.Block)
 				case *syntax.Yield:
 					comp.yield = x
 				}

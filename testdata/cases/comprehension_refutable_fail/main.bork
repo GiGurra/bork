@@ -1,0 +1,11 @@
+type Bot = { id: Int }
+
+fn wrongVariant(): Seq[Int] { for { .Some(v) in [1, 2] } yield v }
+fn wrongType(): Seq[Bot] { for { b: Bot in [1, 2] } yield b }
+fn shadowed(): Seq[Int] {
+  v = 1
+  for { .Some(v) in [Option.Some(1)] } yield v
+}
+fn rebound(): Seq[Int] { for { .Some(v) in [Option.Some(1)]; v = 2 } yield v }
+
+fn main() {}

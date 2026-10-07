@@ -337,7 +337,7 @@ func (s *semanticIndex) name(pos diag.Pos, name string, token SemanticToken) {
 }
 
 func (s *semanticIndex) qualifiedName(pos diag.Pos, name string, token SemanticToken, prefixKind string) {
-	if pos.File != s.file.Path || name == "" || name == "_" || pos.Line < 1 || pos.Line > len(s.lines) {
+	if pos.File != s.file.Path || name == "" || strings.HasPrefix(name, "_") || pos.Line < 1 || pos.Line > len(s.lines) {
 		return
 	}
 	parts := strings.Split(name, ".")

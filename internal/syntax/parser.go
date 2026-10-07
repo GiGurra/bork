@@ -2,6 +2,7 @@ package syntax
 
 import (
 	"errors"
+	"fmt"
 	goparser "go/parser"
 	goscanner "go/scanner"
 	gotoken "go/token"
@@ -2732,13 +2733,37 @@ func (p *parser) iterationPattern() Pattern {
 	} else {
 		pattern = p.pattern()
 	}
+	p.iterationIn()
+	return pattern
+}
+
+// iterationIn consumes the in after an iteration pattern.
+func (p *parser) iterationIn() {
 	in := p.expect(TIdent, "in after the iteration pattern")
 	if in.Text != "in" {
 		p.errorf(in.Pos, "expected in after the iteration pattern")
 	} else if p.iterationOperators != nil {
 		*p.iterationOperators = append(*p.iterationOperators, in.Pos)
 	}
-	return pattern
+}
+
+// irrefutable reports whether a pattern matches every value it can be
+// given: a name, _, or a tuple of those.
+func irrefutable(pattern Pattern) bool {
+	switch pattern := pattern.(type) {
+	case *WildcardPat:
+		return true
+	case *VariantPat:
+		return len(pattern.Path) == 1 && !pattern.Context && !pattern.Braces && !pattern.Positional && pattern.Owner == nil
+	case *TuplePat:
+		for _, elem := range pattern.Elems {
+			if !irrefutable(elem) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // forHeader parses the parenthesized header of a derive list comprehension.
@@ -2773,7 +2798,46 @@ func (p *parser) comprehensionAhead() bool {
 	p.next() // for
 	p.next() // {
 	p.skipSemis()
-	return p.iterationPatternAhead()
+	return p.generatorAhead()
+}
+
+// generatorAhead reports whether a comprehension's generator line
+// starts here: a pattern followed by in. Besides the loop-header
+// patterns, a generator may have any match pattern (.Some(v) in xs),
+// so it looks for in at the line's top level, before anything a pattern
+// cannot contain.
+func (p *parser) generatorAhead() bool {
+	if p.iterationPatternAhead() {
+		return true
+	}
+	switch p.tok().Kind {
+	case TIdent, Underscore, Dot, LParen, LBrack, TInt, TFloat, TRune, TString, KwTrue, KwFalse, Minus:
+	default:
+		return false
+	}
+	depth := 0
+	for i := p.i; i < len(p.toks); i++ {
+		switch t := p.toks[i]; t.Kind {
+		case LParen, LBrack, LBrace:
+			depth++
+		case RParen, RBrack, RBrace:
+			if depth == 0 {
+				return false
+			}
+			depth--
+		case TIdent:
+			if depth == 0 && t.Text == "in" {
+				return i > p.i
+			}
+		case Semi:
+			if depth == 0 {
+				return false
+			}
+		case Assign, Arrow, KwFor, KwIf, KwElse, KwMatch, KwReturn, KwGenerate, KwYield, KwBreak, KwContinue, EOF:
+			return false
+		}
+	}
+	return false
 }
 
 // comprehension parses `for { clauses } yield value`, at for. It
@@ -2786,7 +2850,7 @@ func (p *parser) comprehension() *Generate {
 	defer func() { p.noRecordLit = saved }()
 	p.noRecordLit = false // within the braces, '{' is a literal again
 	p.expect(LBrace, "after for")
-	var clauses []any // *For, *If, or a binding Stmt
+	var clauses []any // *For, *If, *Match (a refutable generator's), or a binding Stmt
 	for {
 		p.skipSemis()
 		if p.at(RBrace) {
@@ -2822,6 +2886,13 @@ func (p *parser) comprehension() *Generate {
 		case *For:
 			clause.Body = body
 			body = &Block{Pos: clause.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: clause}}}
+		case *Match:
+			// for _elem in source { match _elem { pattern => { rest }, _ => {} } }
+			clause.Arms[0].Body = body
+			loop := clause.X.(*For)
+			clause.X = &Ident{Pos: loop.NamePos, Name: loop.Name}
+			loop.Body = &Block{Pos: clause.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: clause}}}
+			body = &Block{Pos: loop.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: loop}}}
 		case *If:
 			clause.Then = body
 			body = &Block{Pos: clause.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: clause}}}
@@ -2837,9 +2908,30 @@ func (p *parser) comprehension() *Generate {
 // `pattern in source`, a filter `if cond`, or a binding.
 func (p *parser) comprehensionClause() any {
 	switch {
-	case p.iterationPatternAhead():
-		pattern := p.iterationPattern()
-		f := &For{Pos: pattern.Position(), Pattern: pattern, NamePos: pattern.Position()}
+	case p.generatorAhead():
+		var pattern Pattern
+		var in diag.Pos
+		if p.iterationPatternAhead() {
+			pattern = p.iterationPattern()
+			in = p.toks[p.i-1].Pos
+		} else {
+			pattern = p.pattern()
+			in = p.tok().Pos
+			p.iterationIn()
+		}
+		pos := pattern.Position()
+		f := &For{Pos: pos, Pattern: pattern, NamePos: pos}
+		if !irrefutable(pattern) {
+			// The values that do not match are skipped: the loop binds
+			// each one to a name no source can write, and a match tests
+			// it. The name is placed at in, where no symbol of the
+			// pattern is, so references to it never resolve to one.
+			f.Pattern = nil
+			f.NamePos = in
+			f.Name = fmt.Sprintf("_elem_%d_%d", in.Line, in.Col)
+			f.Items = p.expr()
+			return &Match{Pos: pos, Filter: true, X: f, Arms: []*Arm{{Pattern: pattern}, {Pattern: &WildcardPat{Pos: pos}, Body: &Block{Pos: pos, End: pos}}}}
+		}
 		switch pattern := pattern.(type) {
 		case *VariantPat:
 			f.Name = pattern.Path[0]
