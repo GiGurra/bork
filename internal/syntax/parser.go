@@ -2849,12 +2849,9 @@ func (p *parser) comprehensionClause() any {
 		f.Items = p.expr()
 		return f
 	case p.at(KwIf):
-		// As in an if head, a bare `Name {` is not a record literal, so
-		// a block after the condition gets the message below.
-		x := &If{Pos: p.next().Pos}
-		p.noRecordLit = true
-		x.Cond = p.expr()
-		p.noRecordLit = false
+		// The condition is an if head: a bare `Name {` is not a record
+		// literal, so a block after it gets the message below.
+		x := &If{Pos: p.next().Pos, Cond: p.headExpr()}
 		if p.at(LBrace) || p.at(KwElse) {
 			p.errorf(p.tok().Pos, "a comprehension's filter is if cond alone, without a block or else")
 			panic(bailout{})
