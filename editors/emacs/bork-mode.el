@@ -20,7 +20,8 @@
     "and" "or" "trust" "rule" "generate" "yield" "for" "break" "continue"
     "import" "use" "class" "instance" "instances" "test" "private"
     "derive" "uses" "needs" "nothing" "ambient" "logged" "propagated" "lazy"
-    "async" "scope" "with" "in" "resource" "go" "comptime" "mock" "select"))
+    "async" "scope" "with" "in" "resource" "go" "comptime" "mock" "select"
+    "metadata"))
 (defvar bork-mode-syntax-table
   (let ((table (make-syntax-table)))
     (modify-syntax-entry ?/ ". 124b" table)

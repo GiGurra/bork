@@ -344,11 +344,30 @@ of Decode. Duplicate keys and mismatched metadata types are definition errors.
 Handwritten instances without metadata return None; an explicit metadata block
 can opt them in without a new required class method.
 
-The first implementation requires closed, resolved metadata key types, such as
-`RecordSchema` and `FieldSchema`. Generic targets and typed callbacks in their
-metadata values remain supported. Keys use checked Bork type identity, including
-callback effects and structural tuple equivalence; runtime Go reflection does
-not define identity. Parameter-dependent metadata keys are possible future work.
+Metadata keys are closed, resolved types such as `RecordSchema` and
+`FieldSchema`, or target-indexed families. Generic targets and typed callbacks in
+metadata values are supported. Closed keys use checked Bork type identity,
+including callback effects and structural tuple equivalence; runtime Go
+reflection does not define identity.
+
+A `metadata type K[T]` family (bork-ugmjgz) is one key whose instances are
+always applied to the dictionary's target. Its runtime identity is the family's
+declaration, so an instance for `Option[A]` declaring `K[Option[A]]` answers
+both a generic query `K[U]` and a concrete `K[Option[Int]]`. The static result
+`K[U]` is sound because the selected dictionary for U holds the entry for
+exactly U; the Go assertion compares two types derived from identical Bork
+types. Inferring a family from `K[X]` with X equal to the target would be
+unstable under substitution: `K[Option[String]]`, written as a closed key for a
+generic `Option[A]` instance, would look target-indexed at A = String, and
+`Option[RecordSchema]` is already a closed key. So the opt-in is per
+declaration. A constrained target (`Int where small`) selects its base type's
+instance, which never promises the facts. A family's parameter may therefore
+appear only as a whole callback parameter type: values may consume targets but
+never produce unchecked ones. Multi-parameter families, and keys that project
+the target (`List[A]` on `Option[A]`), are out of scope, because a position's
+identity becomes ambiguous after substitution. Lazy initializer dependencies,
+captures and duplicate checks work as for closed keys, with keys compared by
+family.
 Metadata initializers run lazily when their key is queried, rather than when the
 dictionary is constructed or one of its ordinary methods is called.
 

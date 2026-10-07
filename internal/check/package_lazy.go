@@ -658,7 +658,7 @@ func (dependencies packageDependencies) metadata(dictionary *Dict, key Type) {
 	}
 	bound := bindParams(dictionary.Inst.TypeParams, dictionary.TypeArgs)
 	for _, initializer := range dictionary.Inst.Metadata {
-		if identical(subst(initializer.Result, bound), key) {
+		if sameMetadataKey(subst(initializer.Result, bound), key) {
 			dependencies.instance(&Instance{Func: initializer, TypeArgs: dictionary.TypeArgs, Dicts: dictionary.Args})
 		}
 	}

@@ -208,6 +208,9 @@ func (c *checker) resolveDecl(e *typeEntry) Type {
 	e.resolving = false
 	e.resolved = true
 	c.info.Named[td.Name] = e.typ
+	if td.MetadataFamily {
+		c.checkMetadataFamily(td, e.typ)
+	}
 	switch t := e.typ.(type) {
 	case *Record:
 		t.insts.markResolved()

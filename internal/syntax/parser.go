@@ -130,6 +130,12 @@ func parseMode(path, src string, toks []Token, comments []Comment, diags *diag.L
 			if td := p.typeDecl(); td != nil {
 				f.Types = append(f.Types, td)
 			}
+		case p.at(TIdent) && p.tok().Text == MetadataFamilyKeyword && p.peekKind() == KwType:
+			keyword := p.next().Pos
+			if td := p.typeDecl(); td != nil {
+				td.MetadataFamily, td.MetadataPos = true, keyword
+				f.Types = append(f.Types, td)
+			}
 		case p.at(TIdent) && (p.tok().Text == "ambient" && p.peekKind() == TIdent || p.atAmbientMarker()):
 			if ad := p.ambientDecl(); ad != nil {
 				f.Ambients = append(f.Ambients, ad)
@@ -326,7 +332,7 @@ func (p *parser) expect(k Kind, what string) Token {
 // syncTopLevel skips ahead to the next declaration at the start of a line.
 func (p *parser) syncTopLevel() {
 	for !p.at(EOF) {
-		if (p.at(KwFn) || p.at(KwType) || p.at(TIdent) && (p.tok().Text == "derive" && p.peekKind() == TIdent || p.tok().Text == "providers" && p.peekKind() == TIdent || p.peekKind() == Assign || p.peekKind() == Colon || p.tok().Text == "lazy" && p.peekKind() == TIdent)) && (p.i == 0 || p.toks[p.i-1].Kind == Semi) {
+		if (p.at(KwFn) || p.at(KwType) || p.at(TIdent) && (p.tok().Text == "derive" && p.peekKind() == TIdent || p.tok().Text == MetadataFamilyKeyword && p.peekKind() == KwType || p.tok().Text == "providers" && p.peekKind() == TIdent || p.peekKind() == Assign || p.peekKind() == Colon || p.tok().Text == "lazy" && p.peekKind() == TIdent)) && (p.i == 0 || p.toks[p.i-1].Kind == Semi) {
 			return
 		}
 		p.next()

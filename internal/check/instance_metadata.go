@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
@@ -21,14 +22,13 @@ func (c *checker) declareInstanceMetadata(instance *ClassInstance, declarations 
 		if key == Invalid {
 			continue
 		}
-		if !closedMetadataKey(key) {
-			c.errorf(source.Pos, "metadata requires a closed resolved type key, found %s", key)
+		if !c.metadataKeyFits(key, instance.Type, source.Pos) {
 			continue
 		}
 		c.info.registerMetadataKey(key)
 		duplicate := false
 		for _, previous := range instance.Metadata {
-			if identical(previous.Result, key) {
+			if sameMetadataKey(previous.Result, key) {
 				c.errorf(source.Pos, "metadata for %s is declared twice in instance %s", key, instance.Name)
 				duplicate = true
 				break
@@ -73,8 +73,7 @@ func (c *checker) shapeMetadataCall(call *syntax.Call) (Type, bool) {
 	if target == Invalid || key == Invalid {
 		return Invalid, true
 	}
-	if !closedMetadataKey(key) {
-		c.errorf(call.TypeArgs[2].Pos, "metadata requires a closed resolved type key, found %s", key)
+	if !c.metadataKeyFits(key, target, call.TypeArgs[2].Pos) {
 		return Invalid, true
 	}
 	c.info.registerMetadataKey(key)
@@ -92,12 +91,119 @@ func (c *checker) shapeMetadataCall(call *syntax.Call) (Type, bool) {
 	c.info.shapeMetadataCalls[call] = dictionary
 	if c.fn != nil && dictionary.Inst != nil {
 		for _, initializer := range dictionary.Inst.Metadata {
-			if identical(subst(initializer.Result, bindParams(dictionary.Inst.TypeParams, dictionary.TypeArgs)), key) {
+			if sameMetadataKey(subst(initializer.Result, bindParams(dictionary.Inst.TypeParams, dictionary.TypeArgs)), key) {
 				c.fn.Calls = append(c.fn.Calls, initializer)
 			}
 		}
 	}
 	return instantiate(c.preludePkg.TypeNamed("Option"), []Type{key}), true
+}
+
+// metadataKeyFits reports whether key can identify metadata of target's
+// selected dictionary: a closed type, or a family applied to the target.
+func (c *checker) metadataKeyFits(key, target Type, pos diag.Pos) bool {
+	if family, argument, ok := metadataFamily(key); ok {
+		if argument == nil || !identical(argument, target) {
+			c.errorf(pos, "metadata family %s is indexed by the target: write %s[%s], found %s", family.Name, family.Name, target, key)
+			return false
+		}
+		return true
+	}
+	if !closedMetadataKey(key) {
+		c.errorf(pos, "metadata requires a closed resolved type key, found %s", key)
+		return false
+	}
+	return true
+}
+
+// metadataFamily finds the family a key applies. A `metadata type K[T]`
+// family is one key for every target: the selected dictionary for X holds
+// K[X], so a generic query K[U] and a concrete one find the same entry.
+func metadataFamily(key Type) (family *syntax.TypeDecl, argument Type, ok bool) {
+	switch key := key.(type) {
+	case *Record:
+		family = key.Decl
+	case *Sealed:
+		family = key.Decl
+	}
+	if family == nil || !family.MetadataFamily {
+		return nil, nil, false
+	}
+	if arguments := TypeArgs(key); len(arguments) == 1 {
+		argument = arguments[0]
+	}
+	return family, argument, true
+}
+
+// sameMetadataKey compares keys by family, or else by checked type identity.
+func sameMetadataKey(left, right Type) bool {
+	leftFamily, _, leftOk := metadataFamily(left)
+	rightFamily, _, rightOk := metadataFamily(right)
+	if leftOk || rightOk {
+		return leftFamily == rightFamily
+	}
+	return identical(left, right)
+}
+
+// checkMetadataFamily accepts a record or sealed family whose parameter is
+// only a whole callback parameter type. A constrained target (Int where
+// small) can select its base type's instance, so a family value may consume
+// target values but must not produce them.
+func (c *checker) checkMetadataFamily(td *syntax.TypeDecl, typ Type) {
+	params := typeParamsOf(typ)
+	if td.Kind != syntax.RecordType && td.Kind != syntax.SealedType || len(params) != 1 {
+		c.errorf(td.Pos, "metadata family %s must be a record or sealed type with one type parameter", td.Name)
+		return
+	}
+	var fields []*Field
+	switch typ := typ.(type) {
+	case *Record:
+		fields = typ.Fields
+	case *Sealed:
+		for _, variant := range typ.Variants {
+			fields = append(fields, variant.Fields...)
+		}
+	}
+	for _, field := range fields {
+		if !consumesOnly(field.Type, params[0]) {
+			c.errorf(field.Decl.Type.Pos, "metadata family %s may use %s only as a callback parameter type, found %s", td.Name, params[0].Name, field.Type)
+		}
+	}
+}
+
+func consumesOnly(typ Type, param *TypeParam) bool {
+	switch typ := typ.(type) {
+	case *FuncType:
+		for _, parameter := range typ.Params {
+			if parameter != Type(param) && mentionsParam(parameter, param) {
+				return false
+			}
+		}
+		return consumesOnly(typ.Result, param)
+	case *List:
+		return consumesOnly(typ.Elem, param)
+	case *Seq:
+		return consumesOnly(typ.Elem, param)
+	case *Map:
+		return !mentionsParam(typ.Key, param) && consumesOnly(typ.Value, param)
+	case *Union:
+		for _, member := range typ.Members {
+			if !consumesOnly(member, param) {
+				return false
+			}
+		}
+		return true
+	case *Record:
+		if typ.Tuple {
+			for _, field := range typ.Fields {
+				if !consumesOnly(field.Type, param) {
+					return false
+				}
+			}
+			return true
+		}
+	}
+	return !mentionsParam(typ, param)
 }
 
 func closedMetadataKey(typ Type) bool {
@@ -151,7 +257,7 @@ func closedMetadataKey(typ Type) bool {
 
 func (info *Info) registerMetadataKey(typ Type) {
 	for _, existing := range info.metadataKeyTypes {
-		if identical(existing, typ) {
+		if sameMetadataKey(existing, typ) {
 			return
 		}
 	}
@@ -159,11 +265,11 @@ func (info *Info) registerMetadataKey(typ Type) {
 }
 
 // MetadataKey uses checked semantic type identity, including callback effects
-// and structural tuple equivalence. Keys are deterministic within this program;
+// and structural tuple equivalence, and one key per metadata family. Keys are deterministic within this program;
 // runtime Go reflection and erased Go function types do not define identity.
 func (info *Info) MetadataKey(typ Type) string {
 	for i, existing := range info.metadataKeyTypes {
-		if identical(existing, typ) {
+		if sameMetadataKey(existing, typ) {
 			return fmt.Sprintf("metadata%d", i)
 		}
 	}

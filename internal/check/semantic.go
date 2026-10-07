@@ -94,6 +94,9 @@ func SemanticTokens(file *syntax.File, info *Info) []SemanticToken {
 				s.name(field.Pos, field.Name, SemanticToken{Kind: "property", Declaration: true, Readonly: true})
 			}
 		}
+		if declaration.MetadataFamily {
+			s.name(declaration.MetadataPos, syntax.MetadataFamilyKeyword, SemanticToken{Kind: "keyword"})
+		}
 		if declaration.GoName != nil {
 			s.goName(declaration.GoName, "type")
 		}

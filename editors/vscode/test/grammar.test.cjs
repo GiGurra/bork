@@ -134,6 +134,13 @@ test('effect signatures and function types', () => {
   has(ls, 2, '=>', 'keyword.operator.bork');
 });
 
+test('metadata is contextual before a family type declaration', () => {
+  const ls = tokenize('metadata type Show[T] = { show: (T) uses nothing => String }\nmetadata = 1');
+  has(ls, 0, 'metadata', 'storage.type.bork');
+  has(ls, 0, 'Show', 'entity.name.type.bork');
+  assert.ok(!scopes(ls, 1, 'metadata').includes('storage.type.bork'));
+});
+
 test('private record construction is highlighted as a contextual keyword', () => {
   const ls = tokenize('type Config = private { port: Int }');
   has(ls, 0, 'Config', 'entity.name.type.bork');
