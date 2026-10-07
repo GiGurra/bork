@@ -8,6 +8,8 @@ func TestFormatComprehensions(t *testing.T) {
 		{"xs = for {\n    (a,b)  in pairs\n    // keep\n    c=a+b\n  }   yield   c", "xs = for {\n    (a, b) in pairs\n    // keep\n    c = a + b\n  } yield c", ""},
 		{"xs = for { x in xs; if (x > 1) } yield x", "xs = for { x in xs; if (x > 1) } yield x", "xs = for { x in xs; if x > 1 } yield x"},
 		{"xs = for {\n    x in xs\n    if ((x > 1))\n  } yield x", "xs = for {\n    x in xs\n    if ((x > 1))\n  } yield x", "xs = for {\n    x in xs\n    if x > 1\n  } yield x"},
+		{"xs = for { x in xs; if (x > 1); y = x } yield y", "xs = for { x in xs; if (x > 1); y = x } yield y", "xs = for { x in xs; if x > 1; y = x } yield y"},
+		{"xs = for { p in ps; if ((p) == P { x: 1 }) } yield p", "xs = for { p in ps; if ((p) == P { x: 1 }) } yield p", "xs = for { p in ps; if ((p) == P { x: 1 }) } yield p"},
 		{"xs = for { p in ps; if (p == P { x: 1 }) } yield p", "xs = for { p in ps; if (p == P { x: 1 }) } yield p", "xs = for { p in ps; if (p == P { x: 1 }) } yield p"},
 	} {
 		t.Run(tc.input, func(t *testing.T) {
