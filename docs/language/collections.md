@@ -162,6 +162,8 @@ The first line of `main` computes only as many squares as it takes to find three
 
 Standard packages use sequences for input that should not be loaded all at once, such as the lines of a file or the rows of a query. Such a sequence does I/O as it is consumed, and its type says so: `Seq[String] uses io`. The function that consumes it needs that [effect](effects.md).
 
+The runnable [generators example](../../examples/generators/main.bork) shows partial consumption, a file opened inside a generator and closed on early stop, comprehensions, and loop destructuring. Run it with `bork run examples/generators`.
+
 ### Comprehensions
 
 A comprehension writes a sequence as generator lines, filters and bindings, then the value to yield:

@@ -1,0 +1,106 @@
+// Run with: bork run examples/generators
+import "bork/encoding"
+import "bork/fs"
+
+type Shelf = { name: String, scores: List[Option[Int]] }
+
+fn squares(): Seq[Int] {
+  generate[Int] {
+    for n in [1, 2, 3] { yield n * n }
+  }
+}
+
+fn numbers(): Seq[Int] uses io {
+  generate[Int] {
+    for n in Seq.range(1, 1_000_000) {
+      println("produced:", n)
+      yield n
+    }
+  }
+}
+
+// Bridge the scoped file to a streaming reader. The generator below owns
+// the file; this helper only reads it, stopping when its consumer stops.
+fn readLines(file: fs.File) uses io: Seq[String | IoError] uses io unsafe go {
+  import "os"
+  import "bufio"
+  raw := file.handle.(*os.File)
+  return _Seq[any]{run: func(yield func(any) bool) {
+    scanner := bufio.NewScanner(raw)
+    for scanner.Scan() {
+      if !yield(scanner.Text()) { return }
+    }
+    if err := scanner.Err(); err != nil {
+      yield(IoError{path: raw.Name(), message: err.Error()})
+    }
+  }}
+}
+
+fn fileLines(path: String): Seq[String | fs.Error] uses io {
+  generate[String | fs.Error] {
+    scope producer {
+      // Cleanup runs in reverse order: fs.Open's file closes first.
+      onClose(producer, () => println("file scope closed"))
+      match fs.Open(path, producer) {
+        file: fs.File => {
+          println("file opened")
+          for line in readLines(file) { yield line }
+        }
+        error: fs.Error => { yield error }
+      }
+    }
+  }
+}
+
+fn files() uses io: Ok | fs.Error {
+  scope app {
+    directory = fs.TempDir(app, pattern: "bork-generators-")?
+    path = fs.Join([fs.DirectoryPath(directory), "lines.txt"])
+    fs.Write(path, encoding.Utf8("first\nsecond\nthird\n"))?
+
+    lines = fileLines(path)
+    println("file sequence created")
+    for line in lines {
+      println("line:", line)
+      break
+    }
+    // The producer's scope has already closed, while app is still live.
+    println("consumer continued")
+  }
+  Ok
+}
+
+fn main() {
+  // Start with a finite, pure generator.
+  println("squares:", squares().toList())
+
+  values = numbers()
+  println("sequence created")
+  println("evens times ten:", values.filter(n => n % 2 == 0).map(n => n * 10).take(2).toList())
+
+  // Each traversal starts over; break stops the large source immediately.
+  for (i, n) in values.indexed() {
+    println("indexed:", i, n)
+    if i == 1 { break }
+  }
+
+  shelves = [
+    Shelf { name: "fiction", scores: [Option.Some(3), Option.None, Option.Some(5)] },
+    Shelf { name: "history", scores: [Option.Some(4)] },
+  ]
+  picks = for {
+    (i, shelf) in shelves.indexed();
+    .Some(score) in shelf.scores
+    if score >= 4
+    points = score * 10
+  } yield (i, shelf.name, points)
+  println("comprehension:", picks.toList())
+
+  stock = { "pen": 2, "pad": 3 }
+  for (name, count) in stock.pairs() { println("stock:", name, count) }
+
+  match files() {
+    _: Ok => {}
+    error: fs.Error => println("file error:", error)
+  }
+}
