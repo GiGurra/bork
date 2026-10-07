@@ -330,9 +330,11 @@ because it runs the predicate.
 
 Lifetimes are checked at the definition the same way: a resource used after
 its scope ends, a result or captured value that outlives its scope, a value an
-`unsafe go` function may keep past its scope, or an owned scope left open. A
-definition that gives an owned scope to a call depending on the target, or
-closes one inside a `comptime` branch or copy, leaves its lifetimes to the
+`unsafe go` function may keep past its scope, or an owned scope left open.
+As with facts, a violation inside a `comptime for` body is reported when every
+copy would commit it. A definition that gives a scope to a call depending on
+the target, or that closes or moves something inside a `comptime` branch or copy
+where it was not already closed or moved, leaves its lifetimes to the
 expansion.
 
 ## Foreign records
