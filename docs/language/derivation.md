@@ -328,6 +328,13 @@ the code after it when a branch returns, to the expansion. Proving a
 requirement of a constant, such as `need(0)`, also waits for an expansion,
 because it runs the predicate.
 
+Lifetimes are checked at the definition the same way: a resource used after
+its scope ends, a result or captured value that outlives its scope, a value an
+`unsafe go` function may keep past its scope, or an owned scope left open. A
+definition that gives an owned scope to a call depending on the target, or
+closes one inside a `comptime` branch or copy, leaves its lifetimes to the
+expansion.
+
 ## Foreign records
 
 A template that declares `metadata shape.ForeignRecord` gives its class a
