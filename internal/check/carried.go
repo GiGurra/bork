@@ -183,6 +183,10 @@ func (c *checker) rebindCarried(b *syntax.Binding, l *local, i int, t Type) {
 func (c *checker) misplacedRebinding(name string, pos diag.Pos, i int) bool {
 	for _, loop := range c.loops {
 		if loop.carry != nil && loop.carry.base > i {
+			if loop.comprehension {
+				c.errorf(pos, "a comprehension's names are new, and %s is already bound", name)
+				return true
+			}
 			placed := true
 			for j := loop.carry.base; j < len(c.scopes); j++ {
 				placed = placed && c.transparent(j)
