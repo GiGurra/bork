@@ -156,6 +156,11 @@ type deriveExpansion struct {
 	// deferredReads holds the reads made by a compile-time-only binding's
 	// initializer; they count once that binding is itself read.
 	deferredReads map[diag.Pos]map[diag.Pos]bool
+	// reportUnused reports compile-time-only bindings that nothing reads.
+	// Only an instance's method expansion sets it, so other expansions of
+	// the same template do not repeat the error.
+	reportUnused   bool
+	reportedUnused map[diag.Pos]bool
 }
 
 // comptimeRead records that compile-time code read the template binding at
@@ -766,6 +771,7 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 		defer func() { p.env = saved; p.names = savedNames; p.origins = savedOrigins }()
 		out := &syntax.Block{Pos: x.Pos, End: x.End}
 		emitted := map[*syntax.Binding]*syntax.Binding{}
+		var compileTime []*syntax.Binding
 		for _, stmt := range x.Stmts {
 			if binding, ok := stmt.(*syntax.Binding); ok && !binding.Lazy && binding.AsyncScope == nil {
 				delete(p.comptimeReads, binding.Pos)
@@ -799,6 +805,7 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 							p.error(binding.Pos, "%s is already defined in an enclosing scope", binding.Name)
 						}
 						p.names[binding.Name] = true
+						compileTime = append(compileTime, binding)
 						continue
 					}
 				}
@@ -833,6 +840,7 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 				p.c.info.comptimeReadBindings[runtime] = true
 			}
 		}
+		p.unusedCompileTime(compileTime)
 		return out
 	case *syntax.Is:
 		value := p.expr(x.X)
@@ -1258,7 +1266,7 @@ func (c *checker) expandDeriveBodies() {
 		c.pkg = template.Pkg
 		for _, method := range instance.Methods {
 			start := c.diags.Len()
-			plan := &deriveExpansion{c: c, template: template, instance: instance, typeFacts: map[string][]*Constraint{template.Decl.TypeParams[0].Name: instance.Constraints}, active: map[*syntax.FuncDecl]bool{}, scope: instance.Pkg, env: map[string]any{template.Decl.TypeParams[0].Name: instance.Type}, budget: &deriveBudget{remaining: 100000}, names: map[string]bool{}}
+			plan := &deriveExpansion{c: c, template: template, instance: instance, typeFacts: map[string][]*Constraint{template.Decl.TypeParams[0].Name: instance.Constraints}, active: map[*syntax.FuncDecl]bool{}, scope: instance.Pkg, env: map[string]any{template.Decl.TypeParams[0].Name: instance.Type}, budget: &deriveBudget{remaining: 100000}, names: map[string]bool{}, reportUnused: true}
 			for _, param := range method.Decl.Params {
 				plan.names[param.Name] = true
 			}
@@ -1268,6 +1276,24 @@ func (c *checker) expandDeriveBodies() {
 		metadataPlan := &deriveExpansion{c: c, template: template, instance: instance, typeFacts: map[string][]*Constraint{template.Decl.TypeParams[0].Name: instance.Constraints}, active: map[*syntax.FuncDecl]bool{}, scope: instance.Pkg, env: map[string]any{template.Decl.TypeParams[0].Name: instance.Type}, budget: &deriveBudget{remaining: 100000}, names: map[string]bool{}}
 		c.declareInstanceMetadata(instance, template.Decl.Metadata, metadataPlan)
 		c.pkg = saved
+	}
+}
+
+// unusedCompileTime reports compile-time-only bindings of a block that
+// nothing read, at runtime or at compile time.
+func (p *deriveExpansion) unusedCompileTime(bindings []*syntax.Binding) {
+	if !p.reportUnused {
+		return
+	}
+	for _, binding := range bindings {
+		if p.comptimeReads[binding.Pos] || strings.HasPrefix(binding.Name, "_") || p.reportedUnused[binding.Pos] {
+			continue
+		}
+		if p.reportedUnused == nil {
+			p.reportedUnused = map[diag.Pos]bool{}
+		}
+		p.reportedUnused[binding.Pos] = true
+		p.c.diags.AddCode(binding.Pos, "binding.unused", "binding %s is never read; discard explicitly with _", binding.Name)
 	}
 }
 

@@ -6,7 +6,8 @@ class Kind[T] { fn kind(): String }
 derive instance kind[T]: Kind[T] {
   fn kind(): String {
     names: List[String] = comptime for { field in shape.fields[T]() } yield field.name
-    // A read by a compile-time-only binding that nothing reads does not count.
+    // A read by a compile-time-only binding that nothing reads does not count;
+    // both are unused.
     sizes = [1, 2]
     fields = comptime if (sizes.isEmpty()) { shape.variants[T]() } else { shape.fields[T]() }
     "kind"
