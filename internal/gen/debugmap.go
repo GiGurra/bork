@@ -7,16 +7,29 @@ import (
 	"strings"
 
 	"github.com/GiGurra/bork/internal/check"
+	"github.com/GiGurra/bork/internal/diag"
 )
 
 // DebugMap describes compiler-owned names; adapters need no lowering rules.
 type DebugMap struct {
-	Source         string               `json:"source"`
-	Names          map[string]string    `json:"names"`
-	Version        int                  `json:"version"`
-	Types          map[string]DebugType `json:"types"`
-	Functions      map[string]string    `json:"functions"`
-	HiddenPrefixes []string             `json:"hiddenPrefixes"`
+	Bindings        []DebugBindings             `json:"bindings,omitempty"`
+	ExpressionNames map[string]string           `json:"expressionNames,omitempty"`
+	Expressions     map[string]check.DebugShape `json:"expressions,omitempty"`
+	Source          string                      `json:"source"`
+	Names           map[string]string           `json:"names"`
+	Version         int                         `json:"version"`
+	Types           map[string]DebugType        `json:"types"`
+	Functions       map[string]string           `json:"functions"`
+	HiddenPrefixes  []string                    `json:"hiddenPrefixes"`
+}
+
+// DebugBindings associates source variable identities with their containing
+// function. Ambiguous generated identities are rejected rather than guessed.
+type DebugBindings struct {
+	Start     diag.Pos          `json:"start"`
+	End       diag.Pos          `json:"end"`
+	Names     map[string]string `json:"names"`
+	Ambiguous bool              `json:"ambiguous,omitempty"`
 }
 
 type DebugType struct {
@@ -132,6 +145,7 @@ func (g *gen) debugMap(source []byte) *DebugMap {
 			}
 		}
 	}
+	g.debugExpressions(m)
 	return m
 }
 

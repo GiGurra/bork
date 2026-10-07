@@ -9,9 +9,27 @@
         "expandable": true
       },
       {
+        "name": "chan",
+        "type": "Int",
+        "value": "3",
+        "expandable": false
+      },
+      {
         "name": "chosen",
         "type": "Float",
         "value": "2.0",
+        "expandable": false
+      },
+      {
+        "name": "fraction",
+        "type": "Float",
+        "value": "1.1",
+        "expandable": false
+      },
+      {
+        "name": "fraction32",
+        "type": "Float32",
+        "value": "1.1",
         "expandable": false
       },
       {
@@ -23,7 +41,7 @@
       {
         "name": "nested",
         "type": "Outer",
-        "value": "Outer { inner: Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }, shape: Shape.Circle { radius: 2.0 }, optional: Some(3) }",
+        "value": "Outer { inner: Inner { label: \"main.Shape_Circle {radius: 9}\", range: 5 }, shape: Shape.Circle { radius: 2.0 }, optional: Some(3) }",
         "expandable": true
       },
       {
@@ -39,9 +57,15 @@
         "expandable": true
       },
       {
+        "name": "range",
+        "type": "Int",
+        "value": "3",
+        "expandable": false
+      },
+      {
         "name": "recordUnion",
         "type": "Inner",
-        "value": "Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }",
+        "value": "Inner { label: \"main.Shape_Circle {radius: 9}\", range: 5 }",
         "expandable": true
       },
       {
@@ -63,6 +87,12 @@
         "expandable": true
       },
       {
+        "name": "signed",
+        "type": "Int8",
+        "value": "-128",
+        "expandable": false
+      },
+      {
         "name": "some",
         "type": "Option[Int]",
         "value": "Some(3)",
@@ -73,6 +103,18 @@
         "type": "Option[Float]",
         "value": "Some(2.0)",
         "expandable": true
+      },
+      {
+        "name": "suffix",
+        "type": "Suffix",
+        "value": "Suffix { range_: 4 }",
+        "expandable": true
+      },
+      {
+        "name": "unsigned",
+        "type": "Uint8",
+        "value": "0 = 0x0",
+        "expandable": false
       },
       {
         "name": "x",
@@ -163,7 +205,7 @@
     "request": "evaluate nested",
     "value": {
       "type": "Outer",
-      "value": "Outer { inner: Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }, shape: Shape.Circle { radius: 2.0 }, optional: Some(3) }",
+      "value": "Outer { inner: Inner { label: \"main.Shape_Circle {radius: 9}\", range: 5 }, shape: Shape.Circle { radius: 2.0 }, optional: Some(3) }",
       "expandable": true
     }
   },
@@ -173,7 +215,7 @@
       {
         "name": "inner",
         "type": "Inner",
-        "value": "Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }",
+        "value": "Inner { label: \"main.Shape_Circle {radius: 9}\", range: 5 }",
         "expandable": true
       },
       {
@@ -194,15 +236,15 @@
     "request": "expand nested.inner",
     "variables": [
       {
-        "name": "count",
-        "type": "Int",
-        "value": "5",
-        "expandable": false
-      },
-      {
         "name": "label",
         "type": "String",
         "value": "\"main.Shape_Circle {radius: 9}\"",
+        "expandable": false
+      },
+      {
+        "name": "range",
+        "type": "Int",
+        "value": "5",
         "expandable": false
       }
     ]
@@ -233,7 +275,7 @@
     "request": "evaluate recordUnion",
     "value": {
       "type": "Inner",
-      "value": "Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }",
+      "value": "Inner { label: \"main.Shape_Circle {radius: 9}\", range: 5 }",
       "expandable": true
     }
   },
@@ -241,15 +283,15 @@
     "request": "expand recordUnion",
     "variables": [
       {
-        "name": "count",
-        "type": "Int",
-        "value": "5",
-        "expandable": false
-      },
-      {
         "name": "label",
         "type": "String",
         "value": "\"main.Shape_Circle {radius: 9}\"",
+        "expandable": false
+      },
+      {
+        "name": "range",
+        "type": "Int",
+        "value": "5",
         "expandable": false
       }
     ]

@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/gen"
 )
 
@@ -103,7 +104,7 @@ func debugDAPRelay(ctx context.Context, binary, address string, stdout, stderr i
 	}
 	defer func() { _ = delve.Close() }()
 	go func() { <-ctx.Done(); _ = client.Close(); _ = delve.Close() }()
-	relay := dapRelay{upstream: delve, pending: map[float64]float64{}, references: map[float64]gen.DebugType{}, internal: map[float64]map[string]any{}}
+	relay := dapRelay{upstream: delve, downstream: client, pending: map[float64]float64{}, references: map[float64]gen.DebugType{}, internal: map[float64]map[string]any{}}
 	done := make(chan error, 2)
 	go func() { done <- relay.copy(delve, client, true, stderr) }()
 	go func() { done <- relay.copy(client, delve, false, stderr) }()
@@ -118,14 +119,23 @@ func debugDAPRelay(ctx context.Context, binary, address string, stdout, stderr i
 }
 
 type dapRelay struct {
-	mu          sync.Mutex
-	metadata    *gen.DebugMap
-	writeMu     sync.Mutex
-	upstream    io.Writer
-	pending     map[float64]float64
-	references  map[float64]gen.DebugType
-	internal    map[float64]map[string]any
-	internalSeq float64
+	scopeFrames     map[float64]diag.Pos
+	referenceSites  map[float64]diag.Pos
+	evaluationTypes map[float64]string
+	frames          map[float64]diag.Pos
+	evaluationEpoch uint64
+	omitTypes       bool
+	clientWriteMu   sync.Mutex
+	downstream      io.Writer
+	evaluations     map[float64]*dapEvaluation
+	mu              sync.Mutex
+	metadata        *gen.DebugMap
+	writeMu         sync.Mutex
+	upstream        io.Writer
+	pending         map[float64]float64
+	references      map[float64]gen.DebugType
+	internal        map[float64]map[string]any
+	internalSeq     float64
 }
 
 func readDAP(reader *bufio.Reader) ([]byte, error) {
@@ -165,7 +175,16 @@ func (r *dapRelay) copy(dst io.Writer, src io.Reader, requests bool, stderr io.W
 			return err
 		}
 		r.mu.Lock()
+		changed := false
+		if requests && msg["command"] == "initialize" {
+			if args, ok := msg["arguments"].(map[string]any); ok {
+				r.omitTypes = args["supportsVariableType"] != true
+				args["supportsVariableType"] = true
+				changed = true
+			}
+		}
 		if requests && msg["command"] == "launch" {
+			r.evaluationEpoch++
 			r.metadata = nil
 			if args, ok := msg["arguments"].(map[string]any); ok {
 				program, _ := args["program"].(string)
@@ -185,6 +204,16 @@ func (r *dapRelay) copy(dst io.Writer, src io.Reader, requests bool, stderr io.W
 				}
 			}
 		}
+
+		if requests && msg["command"] == "scopes" {
+			args, _ := msg["arguments"].(map[string]any)
+			seq, _ := msg["seq"].(float64)
+			frame, _ := args["frameId"].(float64)
+			if r.scopeFrames == nil {
+				r.scopeFrames = map[float64]diag.Pos{}
+			}
+			r.scopeFrames[seq] = r.frames[frame]
+		}
 		if requests && msg["command"] == "variables" {
 			if args, ok := msg["arguments"].(map[string]any); ok {
 				seq, _ := msg["seq"].(float64)
@@ -193,10 +222,51 @@ func (r *dapRelay) copy(dst io.Writer, src io.Reader, requests bool, stderr io.W
 			}
 		}
 		if !requests && msg["type"] == "event" && (msg["event"] == "continued" || msg["event"] == "stopped") {
+			r.evaluationEpoch++
 			clear(r.references)
+			clear(r.frames)
+			clear(r.referenceSites)
+			clear(r.scopeFrames)
 		}
-		changed := false
+
+		if !requests && msg["type"] == "response" && msg["command"] == "stackTrace" && msg["success"] == true {
+			if r.frames == nil {
+				r.frames = map[float64]diag.Pos{}
+			}
+			body, _ := msg["body"].(map[string]any)
+			frames, _ := body["stackFrames"].([]any)
+			for _, item := range frames {
+				frame, _ := item.(map[string]any)
+				source, _ := frame["source"].(map[string]any)
+				path, _ := source["path"].(string)
+				id, _ := frame["id"].(float64)
+				line, _ := frame["line"].(float64)
+				r.frames[id] = diag.Pos{File: path, Line: int(line)}
+			}
+		}
+		skipEvaluation, evaluationErr := r.evaluate(msg, requests)
+		if skipEvaluation || evaluationErr != nil {
+			r.mu.Unlock()
+			if evaluationErr != nil {
+				return evaluationErr
+			}
+			continue
+		}
 		if !requests {
+			if msg["type"] == "response" && msg["command"] == "evaluate" {
+				seq, _ := msg["request_seq"].(float64)
+				if typ, ok := r.evaluationTypes[seq]; ok {
+					delete(r.evaluationTypes, seq)
+					if body, ok := msg["body"].(map[string]any); ok && msg["success"] == true {
+						body["type"] = typ
+						r.value(body, "result")
+						changed = true
+					}
+				}
+			}
+			if r.omitTypes && stripDebugTypes(msg) {
+				changed = true
+			}
 			skip, err := r.expand(msg)
 			if err != nil {
 				r.mu.Unlock()
@@ -206,7 +276,7 @@ func (r *dapRelay) copy(dst io.Writer, src io.Reader, requests bool, stderr io.W
 				r.mu.Unlock()
 				continue
 			}
-			changed = r.rewrite(msg)
+			changed = r.rewrite(msg) || changed
 			if msg["type"] == "response" && msg["command"] == "variables" {
 				seq, _ := msg["request_seq"].(float64)
 				delete(r.pending, seq)
@@ -221,10 +291,14 @@ func (r *dapRelay) copy(dst io.Writer, src io.Reader, requests bool, stderr io.W
 		}
 		if requests {
 			r.writeMu.Lock()
+		} else {
+			r.clientWriteMu.Lock()
 		}
 		_, err = fmt.Fprintf(dst, "Content-Length: %d\r\n\r\n%s", len(data), data)
 		if requests {
 			r.writeMu.Unlock()
+		} else {
+			r.clientWriteMu.Unlock()
 		}
 		if err != nil {
 			return err
@@ -253,11 +327,25 @@ func (r *dapRelay) rewrite(msg map[string]any) bool {
 				out = append(out, item)
 				continue
 			}
+
+			if r.metadata.Expressions != nil {
+				if original, ok := v["evaluateName"].(string); ok {
+					if source, supported := gen.DebugEvaluateName(original, r.metadata); supported {
+						v["evaluateName"] = source
+					} else {
+						delete(v, "evaluateName")
+					}
+				}
+			}
 			name, _ := v["name"].(string)
 			seq, _ := msg["request_seq"].(float64)
 			parent := r.references[r.pending[seq]]
 			if field, ok := parent.Fields[name]; ok {
 				v["name"] = field.Name
+			} else if r.metadata.Expressions != nil {
+				if label, ok := gen.DebugSourceName(name, r.metadata, r.referenceSites[r.pending[seq]]); ok {
+					v["name"] = label
+				}
 			} else if label, ok := r.metadata.Names[name]; ok {
 				v["name"] = label
 			}
@@ -308,7 +396,20 @@ func (r *dapRelay) rewrite(msg map[string]any) bool {
 				}
 			}
 		}
-	case "scopes": // References and standard scope names are already language neutral.
+	case "scopes":
+		seq, _ := msg["request_seq"].(float64)
+		site := r.scopeFrames[seq]
+		delete(r.scopeFrames, seq)
+		scopes, _ := body["scopes"].([]any)
+		if r.referenceSites == nil {
+			r.referenceSites = map[float64]diag.Pos{}
+		}
+		for _, item := range scopes {
+			scope, _ := item.(map[string]any)
+			if ref, ok := scope["variablesReference"].(float64); ok {
+				r.referenceSites[ref] = site
+			}
+		}
 	default:
 		return false
 	}

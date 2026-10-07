@@ -1,10 +1,19 @@
 type Payload = sealed { Pair(Int, Float) }
 type Shape = sealed { Circle { radius: Float }, Empty }
-type Inner = { label: String, count: Int }
+type Inner = { label: String, range: Int }
 type Outer = { inner: Inner, shape: Shape, optional: Option[Int] }
 type Box[T] = { item: T }
-fn main() {
-  x = 3
+type Suffix = { range_: Int }
+fn suffixFrame(range_: Int) uses io { println(range_) }
+fn main() { debugFrame(3); suffixFrame(4) }
+fn debugFrame(range: Int) uses io {
+  fraction = 1.1
+  fraction32: Float32 = 1.1
+  unsigned: Uint8 = 0
+  signed: Int8 = -128
+  suffix = Suffix { range_: 4 }
+  chan = range
+  x = chan
   y = x + 4
   shape: Shape = .Circle { radius: 2.0 }
   some: Option[Int] = .Some(3)
@@ -13,11 +22,11 @@ fn main() {
   boxed = Box[Float] { item: 2.0 }
   shapes = [shape]
   none: Option[Int] = .None
-  nested = Outer { inner: Inner { label: "main.Shape_Circle {radius: 9}", count: 5 }, shape: shape, optional: some }
+  nested = Outer { inner: Inner { label: "main.Shape_Circle {radius: 9}", range: 5 }, shape: shape, optional: some }
   recordUnion: Inner | Outer = nested.inner
   scalarUnion: Int | String = 8
   listUnion: List[Int] | Int = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   chosen = match (shape) { Shape.Circle { radius } => radius, Shape.Empty => 0.0 }
   println(y)
-  println(payload, x, shape, some, none, nested, recordUnion, scalarUnion, chosen, someFloat, boxed, shapes, listUnion)
+  println(payload, x, shape, some, none, nested, recordUnion, scalarUnion, chosen, someFloat, boxed, shapes, listUnion, fraction, fraction32, unsigned, signed, suffix)
 }
