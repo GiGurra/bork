@@ -16,7 +16,10 @@ class Labels[T] {
 
 derive instance labels[T]: Labels[T] {
   fn labels(x: T): List[String] {
-    [comptime for (field in shape.fields[T]()) comptime if (!field.computed) field.name]
+    comptime for {
+      field in shape.fields[T]()
+      if !field.computed
+    } yield field.name
   }
 }
 
@@ -30,9 +33,17 @@ fn main() {
 }
 ```
 
+`comptime for { ... } yield value` is a staged list: the
+[comprehension](collections.md#comprehensions) form, run while the instance is
+built. Each target's list holds one value per combination of its generator
+lines that passes the `if` lines: `variant in shape.variants[T]()` followed by
+`field in variant.fields` goes through every field of every variant. The lines
+are generators and filters only; compute other values in the yield.
+
 Staged block controls use the same optional head parentheses as runtime
-`if`, `for` and `match`. List-comprehension headers and their `comptime if`
-guards still require parentheses because no opening body brace ends them.
+`if`, `for` and `match`. The older list-comprehension form,
+`[comptime for (field in xs) comptime if (cond) value]`, keeps its parentheses
+because no opening body brace ends them.
 
 Inline `derive (...)` on a fact alias and standalone `derive Class for Alias`
 retain the alias's whole-value facts in the instance head. A derived decoder

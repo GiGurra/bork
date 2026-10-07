@@ -1,0 +1,24 @@
+import "bork/shape"
+
+class Labels[T] { fn labels(value: T): List[String] }
+
+derive instance labels[T]: Labels[T] {
+  fn labels(value: T): List[String] {
+    comptime for {
+      field in shape.fields[T]()
+      label = field.name
+    } yield label
+  }
+}
+
+class Somes[T] { fn somes(value: T): List[String] }
+
+derive instance somes[T]: Somes[T] {
+  fn somes(value: T): List[String] {
+    comptime for { .Some(field) in [Option.Some(1)] } yield "x"
+  }
+}
+
+fn outside(): List[Int] { comptime for { x in [1] } yield x }
+
+fn main() {}

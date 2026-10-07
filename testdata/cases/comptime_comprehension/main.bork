@@ -1,0 +1,67 @@
+import "bork/shape"
+
+class Labels[T] { fn labels(value: T): List[String] }
+
+derive instance labels[T]: Labels[T] {
+  fn labels(value: T): List[String] {
+    comptime for {
+      field in shape.fields[T]()
+      if !field.computed
+      if field.name != "skip"
+    } yield field.name + "=" + toString(field.read(value))
+  }
+}
+
+class Paths[T] { fn paths(): List[String] }
+
+derive instance paths[T]: Paths[T] {
+  fn paths(): List[String] {
+    comptime for {
+      variant in shape.variants[T]()
+      field in variant.fields
+      if field.name != "hidden"
+    } yield variant.name + "." + field.name
+  }
+}
+
+class Pairs[T] { fn pairs(value: T): List[String] }
+
+// Tuple patterns, and a filter between two generators.
+derive instance pairs[T]: Pairs[T] {
+  fn pairs(value: T): List[String] {
+    comptime for {
+      (i, a) in shape.fields[T]().indexed()
+      if !a.computed
+      (_, b) in shape.fields[T]().indexed()
+      if a.name != b.name
+    } yield toString(i) + ":" + a.name + "/" + b.name
+  }
+}
+
+class Table[T] { fn table(): String }
+
+// Layout metadata binds tuple patterns and reads outer names in inner generators.
+derive instance table[T]: Table[T] {
+  metadata shape.ForeignRecord = shape.ForeignRecord {
+    fields: comptime for {
+      (i, field) in shape.fields[T]().indexed()
+      if !field.computed
+    } yield shape.ForeignField {
+      slot: i,
+      name: field.name.capitalize(),
+      tags: comptime for { g in shape.fields[T](); if g.name != field.name } yield shape.Tag { name: g.name, value: field.name },
+      option: shape.ForeignOption.Reject
+    }
+  }
+  fn table(): String { shape.name[T]() }
+}
+
+type Row = { name: String, age: Int, skip: Bool } derive (Labels, Pairs, Table)
+type Shape = sealed { Circle { radius: Int }, Rect { w: Int, h: Int, hidden: Int }, Dot } derive (Paths)
+
+fn main() {
+  println(labels(Row { name: "Ada", age: 37, skip: true }))
+  println(paths[Shape]())
+  println(pairs(Row { name: "Ada", age: 37, skip: true }))
+  println(shape.metadata[Row, Table, shape.ForeignRecord]())
+}

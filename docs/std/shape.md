@@ -47,8 +47,8 @@ operations; descriptor lists are consumed by `comptime for`, `comptime if`, or
 `comptime match`. Their descriptors cannot escape into runtime values. Metadata lists support
 `indexed()` and tuple iteration bindings, for example
 `comptime for (index, field) in shape.fields[T]().indexed() { ... }`.
-List-comprehension headers retain their surrounding parentheses:
-`[comptime for ((index, field) in shape.fields[T]().indexed()) field.name]`.
+A staged comprehension takes the same patterns:
+`comptime for { (index, field) in shape.fields[T]().indexed() } yield field.name`.
 `metadata` also works in ordinary runtime code.
 
 | Signature or operation | Meaning |

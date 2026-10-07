@@ -142,7 +142,7 @@ LoopHeader = IterationPattern "in" Expr                  (* for (x in xs) *)
            | [ LoopInit { "," LoopInit } ] ";" [ Expr ] ";" [ LoopPost { "," LoopPost } ] .
 LoopInit   = Ident [ ":" Type ] "=" Expr .         (* in order: each sees the names before it *)
 LoopPost   = Ident "=" Expr .                      (* the next values of header names, computed together *)
-StagedControl = "comptime" ( If | For | Match ) . (* inside derive definitions only *)
+StagedControl = "comptime" ( If | For | Match ) . (* inside derive definitions only; comptime for { ... } yield v is a staged List, with generator and filter lines only *)
 LoopControl = "break" | "continue" .
 WithExpr   = "with" "(" { EOL } { WithBind Sep } [ WithBind ] ")" Block .  (* with (traceId: id, principal: p) { ... } *)
 WithBind   = ( Ident | QualIdent ) ":" Expr .

@@ -1,0 +1,3 @@
+main.bork:9:7: a comptime comprehension has generator and filter lines only; compute the value in the yield
+main.bork:18:20: a comptime comprehension's generator binds a name or a tuple of names
+main.bork:22:27: comptime comprehensions are available only inside derive templates and derive helpers

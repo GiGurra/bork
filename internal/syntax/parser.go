@@ -2039,6 +2039,12 @@ func (p *parser) primary() Expr {
 		// blocks retain their existing evaluation semantics.
 		if t.Text == "comptime" && (p.peekKind() == KwFor || p.peekKind() == KwIf || p.peekKind() == KwMatch) {
 			p.next()
+			if p.at(KwFor) && p.comprehensionAhead() {
+				if !p.inDerivation {
+					p.errorf(t.Pos, "comptime comprehensions are available only inside derive templates and derive helpers")
+				}
+				return p.stagedComprehension()
+			}
 			if !p.inDerivation {
 				p.errorf(t.Pos, "comptime controls are available only inside derive templates and derive helpers")
 			}
@@ -2050,8 +2056,6 @@ func (p *parser) primary() Expr {
 				x.Comptime = true
 			case *Match:
 				x.Comptime = true
-			case *Generate:
-				p.errorf(t.Pos, "a comprehension cannot be comptime; write a comptime list comprehension, [comptime for (x in xs) value]")
 			}
 			return x
 		}
@@ -2845,12 +2849,73 @@ func (p *parser) generatorAhead() bool {
 // the clauses after it, each filter an if around them, each binding a
 // statement before them, and the yield innermost.
 func (p *parser) comprehension() *Generate {
+	pos := p.tok().Pos
+	clauses, y, value := p.comprehensionParts()
+	// The blocks end with the yielded value, which their names reach.
+	end := p.toks[p.i-1].End
+	body := &Block{Pos: y, End: end, Stmts: []Stmt{&ExprStmt{X: &Yield{Pos: y, Value: value}}}}
+	for i := len(clauses) - 1; i >= 0; i-- {
+		switch clause := clauses[i].(type) {
+		case *For:
+			clause.Body = body
+			body = &Block{Pos: clause.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: clause}}}
+		case *Match:
+			// for _elem in source { match _elem { pattern => { rest }, _ => {} } }
+			clause.Arms[0].Body = body
+			loop := clause.X.(*For)
+			clause.X = &Ident{Pos: loop.NamePos, Name: loop.Name}
+			loop.Body = &Block{Pos: clause.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: clause}}}
+			body = &Block{Pos: loop.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: loop}}}
+		case *If:
+			clause.Then = body
+			body = &Block{Pos: clause.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: clause}}}
+		case Stmt:
+			body.Stmts = append([]Stmt{clause}, body.Stmts...)
+			body.Pos = stmtPos(clause)
+		}
+	}
+	return &Generate{Pos: pos, Body: body, Comprehension: true}
+}
+
+// stagedComprehension parses `comptime for { clauses } yield value`, at
+// for, in a derive template or helper. It becomes the staged list it
+// means, `[comptime for (x in xs) comptime if (p) value]`, with a loop
+// per generator nested in the one before it and a guard per filter:
+// each target's elements are the values of every combination that
+// passes the filters, in order.
+func (p *parser) stagedComprehension() *ListLit {
+	pos := p.tok().Pos
+	clauses, _, value := p.comprehensionParts()
+	for i := len(clauses) - 1; i >= 0; i-- {
+		body := &Block{Pos: value.Position(), Tail: value}
+		switch clause := clauses[i].(type) {
+		case *For:
+			clause.Comptime, clause.Comprehension = true, true
+			clause.Body = body
+			value = clause
+		case *If:
+			clause.Comptime = true
+			clause.Then = body
+			value = clause
+		case *Match:
+			p.errorf(clause.Pos, "a comptime comprehension's generator binds a name or a tuple of names")
+		case Stmt:
+			p.errorf(stmtPos(clause), "a comptime comprehension has generator and filter lines only; compute the value in the yield")
+		}
+	}
+	return &ListLit{Pos: pos, Elems: []Expr{value}}
+}
+
+// comprehensionParts parses `for { clauses } yield value`, at for: the
+// clauses (*For, *If, *Match for a refutable generator, or a binding
+// Stmt), the position of yield, and the yielded value.
+func (p *parser) comprehensionParts() ([]any, diag.Pos, Expr) {
 	pos := p.next().Pos
 	saved := p.noRecordLit
 	defer func() { p.noRecordLit = saved }()
 	p.noRecordLit = false // within the braces, '{' is a literal again
 	p.expect(LBrace, "after for")
-	var clauses []any // *For, *If, *Match (a refutable generator's), or a binding Stmt
+	var clauses []any
 	for {
 		p.skipSemis()
 		if p.at(RBrace) {
@@ -2876,32 +2941,8 @@ func (p *parser) comprehension() *Generate {
 		}
 		panic(bailout{})
 	}
-	y := p.next()
-	value := p.expr()
-	// The blocks end with the yielded value, which their names reach.
-	end := p.toks[p.i-1].End
-	body := &Block{Pos: y.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: &Yield{Pos: y.Pos, Value: value}}}}
-	for i := len(clauses) - 1; i >= 0; i-- {
-		switch clause := clauses[i].(type) {
-		case *For:
-			clause.Body = body
-			body = &Block{Pos: clause.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: clause}}}
-		case *Match:
-			// for _elem in source { match _elem { pattern => { rest }, _ => {} } }
-			clause.Arms[0].Body = body
-			loop := clause.X.(*For)
-			clause.X = &Ident{Pos: loop.NamePos, Name: loop.Name}
-			loop.Body = &Block{Pos: clause.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: clause}}}
-			body = &Block{Pos: loop.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: loop}}}
-		case *If:
-			clause.Then = body
-			body = &Block{Pos: clause.Pos, End: end, Stmts: []Stmt{&ExprStmt{X: clause}}}
-		case Stmt:
-			body.Stmts = append([]Stmt{clause}, body.Stmts...)
-			body.Pos = stmtPos(clause)
-		}
-	}
-	return &Generate{Pos: pos, Body: body, Comprehension: true}
+	y := p.next().Pos
+	return clauses, y, p.expr()
 }
 
 // comprehensionClause parses one line of a comprehension: a generator

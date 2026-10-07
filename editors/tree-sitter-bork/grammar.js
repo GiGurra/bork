@@ -230,7 +230,7 @@ module.exports = grammar({
     _head_loop_clauses: $ => seq(optional(bindings(field('init', alias($._head_loop_binding, $.loop_binding)))), ';', optional(field('condition', $._head_expression)), ';', optional(bindings(field('update', alias($._head_loop_binding, $.loop_binding))))),
     loop_binding: $ => seq(field('name', $._identifier), optional(seq(':', $.type)), '=', field('value', $._expression)),
     _head_loop_binding: $ => seq(field('name', $._identifier), optional(seq(':', $.type)), '=', field('value', $._head_expression)),
-    comptime_control_expression: $ => prec.dynamic(10, seq('comptime', choice($.for_expression, $.if_expression, $.match_expression))),
+    comptime_control_expression: $ => prec.dynamic(10, seq('comptime', choice($.for_expression, $.comprehension_expression, $.if_expression, $.match_expression))),
     comptime_expression: $ => prec.dynamic(10, seq('comptime', $.block)),
     mock_expression: $ => prec.dynamic(10, seq('mock', $.qualified_name, $.mock_parameters, $.block)),
     mock_parameters: $ => seq('(', optional(comma(seq(field('name', choice($._identifier, '_'))))), ')'),
