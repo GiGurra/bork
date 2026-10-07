@@ -942,8 +942,8 @@ fn main() {
 }
 ```
 
-Put defaults on the leaves, rather than on the parent record field. In this
-example, no flags yields the default database and `replica: Option.None`.
+In this example, no flags yields the leaf defaults for the database and
+`replica: Option.None`.
 Supplying any replica child activates that group; its missing required leaves
 must then be supplied, while its own defaults still apply. CLI Bool switches
 retain their inferred false default inside an active group.
@@ -956,8 +956,39 @@ remain Missing.
 
 To retain whole JSON input for a record field, select `use cli.FieldTagsEncode`
 where its options decoder is derived and annotate it with `cli { flatten: false }`.
-This also permits a declared parent default. A parent default on a flattened
-record is an error; partial overlays of parent defaults are not supported.
+A flattened record field can also declare a parent default. Supplied children
+overlay that value and preserve its other fields. Parent values take precedence
+over leaf declaration defaults and inferred Bool false; config files, environment
+values and CLI inputs then override the corresponding leaves in the usual order.
+
+```bork
+import "bork/cli"
+import "bork/codec"
+use codec.Defaults
+
+type Db = { host: String = "localhost", port: Int = 5432, enabled: Bool } derive (codec.Decode)
+type Options = { db: Db = Db { host: "production", port: 443, enabled: true } } derive (codec.Decode)
+
+fn main() {
+  // Keeps host "production" and enabled true, without requiring Encode.
+  println(cli.Parse[Options]("app", "Database", ["--db-port", "8443"]))
+}
+```
+
+An optional parent's Some default provides the same baseline; a None default
+stays absent until a child activates the group. Explicit config null clears the
+parent baseline. A higher-precedence child can reactivate the group, using the
+leaves' own defaults and requiredness for any remaining inputs. Parent facts run
+on the reconstructed value. Reusable command options keep independent overlays;
+partial completion still reports omitted leaves as Missing.
+
+Defaults reach the CLI through the selected decoder's optional
+[`codec.DefaultInput`](codec.md#decoder-metadata) metadata and each record field's
+lazy `defaultInput` provider. Standard and derived decoders supply this metadata
+without an Encode bound. A custom decoder inside a parent default must publish
+its own typed input conversion; missing or incompatible providers produce a
+field-path metadata error. Flattened parent input must be an object, or null for
+an optional record. Presentation text from DefaultSchema is never parsed as input.
 Custom selected decoders without record metadata retain their advertised input
 kind, such as literal strings or whole JSON input.
 Record groups cannot be positional arguments or configuration-file selectors;

@@ -1,0 +1,110 @@
+import "bork/shape"
+
+// DefaultInput advertises how a selected decoder accepts an existing typed value.
+// Only Input constructs this metadata; it does not require an Encode instance.
+type inputArgument = private {}
+type inputMarker = private {}
+type DefaultInput = private {
+  callback: (inputArgument | inputMarker) => Value | DecodeError
+  accepts: (inputArgument | inputMarker) => Bool
+}
+
+// Input stores a typed, pure conversion for the selected Decode instance.
+fn Input[T](convert: (T) => Value | DecodeError): DefaultInput unsafe go {
+  // Closed metadata keys require this private bridge until bork-ugmjgz.
+  // Its private argument types cannot be constructed by safe external callers.
+  callback := func(value any) any {
+    typed, ok := value.(T)
+    if !ok { return DecodeError{path:"", message:"internal error: default input provider type mismatch"} }
+    return convert(typed)
+  }
+  accepts := func(value any) bool { _, ok := value.(T); return ok }
+  return DefaultInput{callback:callback,accepts:accepts}
+}
+
+fn materializeDefault[T: Decode](value: T): Value | DecodeError {
+  match (shape.metadata[T, Decode, DefaultInput]()) {
+    Option.Some(provider) => invokeDefault(provider, value)
+    Option.None => DecodeError { path: "", message: "selected decoder must publish codec.DefaultInput using codec.Input for a flattened parent default" }
+  }
+}
+fn invokeDefault[T](provider: DefaultInput, value: T): Value | DecodeError unsafe go {
+  if !provider.accepts(value) { return DecodeError{path:"",message:"selected decoder DefaultInput must use codec.Input with its own decoded type"} }
+  return provider.callback(value)
+}
+
+fn optionDefaultInput[T: Decode](value: Option[T]): Value | DecodeError {
+  match (value) { Option.None => Value.Null, Option.Some(inner) => materializeDefault(inner) }
+}
+fn defaultAt(input: Value | DecodeError, path: String): Value | DecodeError {
+  match (input) { error: DecodeError => atPath(error, path), value: Value => value }
+}
+fn listDefaultInput[T: Decode](values: List[T]): Value | DecodeError {
+  items = defaultItems(values, 0)?
+  Value.Array { items: items }
+}
+fn defaultItems[T: Decode](values: List[T], index: Int): List[Value] | DecodeError {
+  match (values.head()) {
+    Option.None => { empty: List[Value] = []; empty }
+    Option.Some(value) => {
+      input = defaultAt(materializeDefault(value), s"[$index]")?
+      prepend(input, defaultItems(values.drop(1), index + 1)?)
+    }
+  }
+}
+fn mapDefaultInput[T: Decode](values: Map[String, T]): Value | DecodeError {
+  fields = defaultEntries(values.entries())?
+  Value.Object { fields: fields }
+}
+fn defaultEntries[T: Decode](entries: List[Entry[String, T]]): List[Field] | DecodeError {
+  match (entries.head()) {
+    Option.None => { empty: List[Field] = []; empty }
+    Option.Some(entry) => {
+      input = defaultAt(materializeDefault(entry.value), s".${entry.key}")?
+      prepend(Field { name: entry.key, value: input }, defaultEntries(entries.drop(1))?)
+    }
+  }
+}
+
+derive fn shapeDefaultInput[T](value: T): Value | DecodeError {
+  comptime match (shape.kind[T]()) {
+    shape.Record => {
+      comptime if (shape.positional[T]()) {
+        values: List[Value] = [comptime for (field in shape.fields[T]()) materializeDefault[field.RawType](field.read(value))?]
+        Value.Array { items: values }
+      } else {
+        fields: List[Field] = [comptime for (field in shape.fields[T]()) comptime if (!field.computed)
+          Field { name: FieldWireName[T](field), value: defaultAt(materializeDefault[field.RawType](field.read(value)), s".${FieldWireName[T](field)}")? }]
+        Value.Object { fields: fields }
+      }
+    }
+    shape.Sealed => {
+      comptime for (variant in shape.variants[T]()) {
+        match (variant.project(value)) {
+          Option.Some(payload) => {
+            _ = payload
+            comptime if (VariantFallback[T](variant)) {
+              comptime for (field in variant.fields) { return Value.String { value: field.read(payload) } }
+            } else {
+              comptime if (EnumShape[T]() && variant.fields.isEmpty()) {
+                return Value.String { value: VariantWireName[T](variant) }
+              } else {
+                comptime if (variant.positional) {
+                  values: List[Value] = [comptime for (field in variant.fields) materializeDefault[field.RawType](field.read(payload))?]
+                  return Value.Object { fields: [Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } }, Field { name: "values", value: Value.Array { items: values } }] }
+                } else {
+                  fields: List[Field] = [comptime for (field in variant.fields) comptime if (!field.computed)
+                    Field { name: FieldWireName[T](field), value: materializeDefault[field.RawType](field.read(payload))? }]
+                  return Value.Object { fields: prepend(Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } }, fields) }
+                }
+              }
+            }
+          }
+          Option.None => {}
+        }
+      }
+      shape.exhausted[T](value)
+    }
+    shape.Other => shape.fail("DefaultInput requires a record or sealed target")
+  }
+}

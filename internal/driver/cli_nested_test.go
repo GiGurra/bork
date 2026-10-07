@@ -174,7 +174,7 @@ fn main() {
 		{"child override", "config", []string{"--database-host", "cli"}, nil, []string{`"database":{"host":"cli","port":80}`}, nil},
 		{"nested record fact", "normal", []string{"--database-host", "blocked", "--database-port", "80"}, nil, []string{".database", "Healthy"}, nil},
 		{"leaf fact", "normal", []string{"--database-port", "0"}, nil, []string{".database.port", "Positive"}, nil},
-		{"parent default rejected before reads", "defaulted", []string{"--help"}, nil, []string{"parent default", "flatten: false"}, []string{"missing.json"}},
+		{"parent default help before reads", "defaulted", []string{"--help"}, nil, []string{"--db-host", "--db-port"}, []string{"missing.json", "parent default"}},
 		{"whole json opt out", "whole", []string{"--db", `{"host":"whole","port":80}`}, nil, []string{"whole", "80"}, nil},
 	}
 	for _, tt := range tests {

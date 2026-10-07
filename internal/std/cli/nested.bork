@@ -1,9 +1,25 @@
 import "bork/codec"
 use codec.Defaults
 
-type nestedGroup = { field: String, key: String, optional: Bool, path: List[String], aliases: List[List[String]] }
-type nestedLeaf = { field: String, path: List[String], aliases: List[List[String]] }
+type nestedGroup = { field: String, key: String, optional: Bool, path: List[String], aliases: List[List[String]], defaultValue: Option[codec.Value] = Option.None }
+type nestedLeaf = { field: String, path: List[String], aliases: List[List[String]], defaultValue: Option[codec.Value] = Option.None }
 type cliSchema = { record: Option[codec.RecordSchema], groups: List[nestedGroup], leaves: List[nestedLeaf] }
+
+// Preserve provider-only inputs while canonicalizing advertised aliases, so a
+// child overlay replaces its default rather than introducing a duplicate name.
+fn canonicalDefaultInput(input: codec.Value, record: codec.RecordSchema): codec.Value unsafe go {
+  object, ok := input.(codec.Value_Object)
+  if !ok { return input }
+  fields := append([]codec.Field{}, object.fields...)
+  for i, entry := range fields { for _, field := range record.fields {
+    key := field.wireName
+    if key == "" { key = field.name }
+    accepted := entry.name == key
+    for _, alias := range field.aliases { if entry.name == alias { accepted = true; break } }
+    if accepted { fields[i].name = key; break }
+  } }
+  return codec.Value_Object{fields:fields}
+}
 
 // Flatten only the selected decoder's advertised record inputs. Source paths
 // stay distinct from wire paths and each naming override affects one segment.
@@ -15,8 +31,8 @@ fn flattenRecordSchema(recordSchema: Option[codec.RecordSchema], name: String): 
   leaves := []nestedLeaf{}
   failures := []codec.DecodeError{}
   join := func(parent, child string) string { if parent == "" { return child }; return parent + "." + child }
-  var visit func(codec.RecordSchema, string, string, []string, []string, []string, [][]string, int)
-  visit = func(record codec.RecordSchema, source, key string, aliases, words, path []string, aliasPaths [][]string, depth int) {
+  var visit func(codec.RecordSchema, string, string, []string, []string, []string, [][]string, Option[codec.Value], int)
+  visit = func(record codec.RecordSchema, source, key string, aliases, words, path []string, aliasPaths [][]string, baseline Option[codec.Value], depth int) {
     if depth > 32 { failures = append(failures, codec.DecodeError{path: source, message: "nested CLI record exceeds 32 levels"}); return }
     for _, original := range record.fields {
       field := original
@@ -34,6 +50,10 @@ fn flattenRecordSchema(recordSchema: Option[codec.RecordSchema], name: String): 
       nextPath := append(append([]string{}, path...), localKey)
       nextAliases := [][]string{}
       for p, parent := range append([][]string{path}, aliasPaths...) { for c, child := range children { if p != 0 || c != 0 { nextAliases = append(nextAliases, append(append([]string{}, parent...), child)) } } }
+      var inherited Option[codec.Value] = Option_None[codec.Value]{}
+      if parent, present := _borkOptionGet(baseline); present {
+        if object, ok := parent.(codec.Value_Object); ok { for _, entry := range object.fields { if entry.name == localKey { inherited = Option_Some[codec.Value]{E0:entry.value}; break } } }
+      }
       options := fieldTagOptions(original)
       if failure, bad := options.(codec.DecodeError); bad { failures = append(failures, codec.DecodeError{path: field.name, message: "invalid cli tag group: " + failure.message}); continue }
       var nested Option[codec.RecordSchema] = Option_None[codec.RecordSchema]{}
@@ -41,9 +61,19 @@ fn flattenRecordSchema(recordSchema: Option[codec.RecordSchema], name: String): 
       child, nestedRecord := _borkOptionGet(nested)
       if nestedRecord && options.(FieldTags).flatten {
         if _, repeat := options.(FieldTags).collection.(Collection_Repeat); !repeat { failures = append(failures, codec.DecodeError{path: field.name, message: "collection mode applies to leaves, not a flattened record group"}); continue }
-        if field.hasDefault { failures = append(failures, codec.DecodeError{path: field.name, message: "flattened record cannot declare a parent default; put defaults on its leaves or use cli { flatten: false }"}); continue }
-        groups = append(groups, nestedGroup{field: field.name, key: field.wireName, optional: field.optional, path: nextPath, aliases: nextAliases})
-        if len(child.fields) != 0 { visit(child, field.name, field.wireName, field.aliases, field.words, nextPath, nextAliases, depth+1); continue }
+        if _, present := _borkOptionGet(inherited); !present && field.hasDefault {
+          if provider, found := _borkOptionGet(original.defaultInput); found {
+            input := provider()
+            if failure, bad := input.(codec.DecodeError); bad { failures = append(failures, codec.DecodeError{path:field.name+failure.path, message:failure.message}); continue }
+            inherited = Option_Some[codec.Value]{E0:input.(codec.Value)}
+          } else { failures = append(failures, codec.DecodeError{path:field.name, message:"flattened parent default requires codec.RecordField.defaultInput"}); continue }
+        }
+        if input, present := _borkOptionGet(inherited); present {
+          if _, object := input.(codec.Value_Object); !object { if _, null := input.(codec.Value_Null); !null || !field.optional { failures = append(failures, codec.DecodeError{path:field.name, message:"flattened parent default input must be an object or null for an optional record"}); continue } }
+          inherited = Option_Some[codec.Value]{E0:canonicalDefaultInput(input, child)}
+        }
+        groups = append(groups, nestedGroup{field: field.name, key: field.wireName, optional: field.optional, path: nextPath, aliases: nextAliases, defaultValue:inherited})
+        if len(child.fields) != 0 { visit(child, field.name, field.wireName, field.aliases, field.words, nextPath, nextAliases, inherited, depth+1); continue }
         if !field.optional {
           field.hasDefault = true
           field.defaultValue = Option_Some[func() codec.DefaultSchema]{E0: func() codec.DefaultSchema { return codec.DefaultSchema{display:"{}", configPath:Option_None[string]{}, choices:[]string{}} }}
@@ -57,10 +87,10 @@ fn flattenRecordSchema(recordSchema: Option[codec.RecordSchema], name: String): 
         return checked
       }
       result = append(result, field)
-      leaves = append(leaves, nestedLeaf{field: field.name, path: nextPath, aliases: nextAliases})
+      leaves = append(leaves, nestedLeaf{field: field.name, path: nextPath, aliases: nextAliases, defaultValue:inherited})
     }
   }
-  visit(record, "", "", nil, nil, nil, nil, 0)
+  visit(record, "", "", nil, nil, nil, nil, Option_None[codec.Value]{}, 0)
   if len(failures) != 0 { return Error{errors: failures} }
   return cliSchema{record: Option_Some[codec.RecordSchema]{E0:codec.RecordSchema{fields:result}}, groups:groups, leaves:leaves}
 }
@@ -110,11 +140,13 @@ fn flattenConfigFields(fields: List[codec.Field], schema: List[inputField]): Lis
   return result
 }
 
-fn rebuildNestedFields(fields: List[codec.Field], schema: List[inputField], active: List[String], nulls: List[String], extras: List[flatConfigEntry]): List[codec.Field] unsafe go {
+fn rebuildNestedFields(fields: List[codec.Field], schema: List[inputField], active: List[String], nulls: List[String], cleared: List[String], extras: List[flatConfigEntry]): List[codec.Field] unsafe go {
+  import "strings"
   result := []codec.Field{}
   var set func([]codec.Field, []string, codec.Value) []codec.Field
   set = func(fields []codec.Field, path []string, value codec.Value) []codec.Field {
     if len(path) == 0 { return fields }
+    fields = append([]codec.Field{}, fields...)
     index := len(fields)
     for i, field := range fields { if field.name == path[0] { index = i; break } }
     if index == len(fields) { fields = append(fields, codec.Field{name:path[0], value:codec.Value_Object{fields:[]codec.Field{}}}) }
@@ -125,7 +157,14 @@ fn rebuildNestedFields(fields: List[codec.Field], schema: List[inputField], acti
     fields[index].value = child
     return fields
   }
-  if len(schema) != 0 { for _, group := range schema[0].groups { for _, source := range active { if source == group.field { result = set(result, group.path, codec.Value_Object{fields:[]codec.Field{}}); break } } } }
+  if len(schema) != 0 { for _, group := range schema[0].groups { for _, source := range active { if source == group.field {
+    var value codec.Value = codec.Value_Object{fields:[]codec.Field{}}
+    blocked := false
+    for _, parent := range cleared { if group.field == parent || strings.HasPrefix(group.field, parent+".") { blocked = true; break } }
+    if baseline, present := _borkOptionGet(group.defaultValue); present && !blocked { if _, object := baseline.(codec.Value_Object); object { value = baseline } }
+    result = set(result, group.path, value)
+    break
+  } } } }
   if len(schema) != 0 { for _, group := range schema[0].groups { for _, source := range nulls { if source == group.field { result = set(result, group.path, codec.Value_Null{}); break } } } }
   for _, entry := range fields { for _, field := range schema { if entry.name == field.wireName || entry.name == field.field { result = set(result, field.path, entry.value); break }; for _, alias := range field.aliases { if entry.name == alias { result = set(result, field.path, entry.value); break } } } }
   for _, entry := range extras { result = set(result, entry.path, entry.value) }

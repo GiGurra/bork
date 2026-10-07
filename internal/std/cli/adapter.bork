@@ -14,6 +14,8 @@ type inputField = {
   optional: Bool
   variants: List[codec.VariantSchema] = []
   hasDefault: Bool
+  declaredDefault: Bool = false
+  parentDefault: Option[codec.Value] = Option.None
   defaultFalse: Bool
   defaultText: String
   configDefault: String
@@ -41,17 +43,20 @@ fn inputFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchem
   fields := []inputField{}
   for _, field := range schema {
     leafPath, aliasPaths := []string{}, [][]string{}
-    for _, leaf := range cliRecord.leaves { if leaf.field == field.name { leafPath, aliasPaths = leaf.path, leaf.aliases; break } }
+    var parentDefault Option[codec.Value] = Option_None[codec.Value]{}
+    for _, leaf := range cliRecord.leaves { if leaf.field == field.name { leafPath, aliasPaths, parentDefault = leaf.path, leaf.aliases, leaf.defaultValue; break } }
     text, path := "", ""
     if provider, found := _borkOptionGet(field.defaultValue); found {
       value := provider()
       text = value.display
       path, _ = _borkOptionGet(value.configPath)
     }
+    parentValue, hasParentDefault := _borkOptionGet(parentDefault)
+    if hasParentDefault { text = codecs.Render(parentValue) }
     // CLI switches default to false independently of the record decoder.
     defaultFalse := field.kind == "bool" && !field.optional && !field.hasDefault
-    if defaultFalse { text = "false" }
-    fields = append(fields, inputField{field: field.name, wireName: field.wireName, aliases: field.aliases, words: field.words, typeName: field.typeName, kind: field.kind, optional: field.optional, variants: field.variants, hasDefault: field.hasDefault || defaultFalse, defaultFalse: defaultFalse, defaultText: text, configDefault: path, groups: cliRecord.groups, path: leafPath, aliasPaths: aliasPaths, validate: func(value codec.Value) any {
+    if defaultFalse && !hasParentDefault { text = "false" }
+    fields = append(fields, inputField{field: field.name, wireName: field.wireName, aliases: field.aliases, words: field.words, typeName: field.typeName, kind: field.kind, optional: field.optional, variants: field.variants, hasDefault: field.hasDefault || defaultFalse || hasParentDefault, declaredDefault:field.hasDefault, parentDefault:parentDefault, defaultFalse: defaultFalse, defaultText: text, configDefault: path, groups: cliRecord.groups, path: leafPath, aliasPaths: aliasPaths, validate: func(value codec.Value) any {
       if err, bad := field.validate(value).(codec.DecodeError); bad { return err }
       return _Ok{}
     }})
@@ -248,7 +253,10 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
       active := []string{}
       nullGroups := []string{}
       if len(schema) != 0 { for _, group := range schema[0].groups {
-        enabled := !group.optional || configGroups[group.field]
+        defaultActive := false
+        if baseline, present := _borkOptionGet(group.defaultValue); present { _, null := baseline.(codec.Value_Null); defaultActive = !null }
+        for parent, object := range configGroups { if !object && (group.field == parent || strings.HasPrefix(group.field, parent+".")) { defaultActive = false } }
+        enabled := !group.optional || configGroups[group.field] || (!partial && defaultActive)
         parentEnabled := true
         for parent, enabled := range activeGroups { if strings.HasPrefix(group.field, parent+".") && !enabled { parentEnabled = false } }
         supplied := false
@@ -269,8 +277,10 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
         value := shadow.Elem().Field(i)
         var json codec.Value
         if value.IsNil() {
-          if configured, exists := config[field.field]; exists { json = configured; key = configNames[field.field] } else if field.defaultFalse && !partial { json = codec.Value_Bool{value: false} } else {
-            if partial || field.hasDefault { continue }
+          baseline, hasBaseline := _borkOptionGet(field.parentDefault)
+          for group, object := range configGroups { if !object && strings.HasPrefix(field.field, group+".") { hasBaseline = false } }
+          if configured, exists := config[field.field]; exists { json = configured; key = configNames[field.field] } else if hasBaseline && !partial { json = baseline } else if field.defaultFalse && !partial { json = codec.Value_Bool{value: false} } else {
+            if partial || field.declaredDefault { continue }
             if !field.optional { failures = append(failures, codec.DecodeError{path: "." + key, message: "is missing"}); continue }
             json = codec.Value_Null{}
           }
@@ -341,7 +351,9 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
         extras := []flatConfigEntry{}
         for _, entry := range configExtras { extras = append(extras, entry) }
         sort.Slice(extras, func(i, j int) bool { return extras[i].key < extras[j].key })
-        jsonFields = rebuildNestedFields(jsonFields, schema, active, nullGroups, extras)
+        cleared := []string{}
+        for group, object := range configGroups { if !object { cleared = append(cleared, group) } }
+        jsonFields = rebuildNestedFields(jsonFields, schema, active, nullGroups, cleared, extras)
       }
       return inputCollection{fields: jsonFields, errors: failures}
   }
