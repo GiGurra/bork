@@ -763,6 +763,7 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 					observe("lower")
 				}
 				c.lower(files)
+				c.purgeWitnessNodes()
 				c.packageDependencyGraph()
 				if observe != nil {
 					observe("contracts")
@@ -900,6 +901,9 @@ type checker struct {
 	*deriveHelperState
 	deriveBounds    deriveBounds
 	deriveDiscovery *deriveDiscovery
+	// witnessSyntax holds the syntax of definition witnesses (see
+	// derive_witness.go) until their side-table entries are purged.
+	witnessSyntax map[any]bool
 	// Only compilation retains source identities; read-only queries do not.
 	recordPredicateRefs bool
 	bindingFiles        map[string]*syntax.File

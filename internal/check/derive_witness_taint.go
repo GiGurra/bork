@@ -131,6 +131,12 @@ func (t *deriveWitnessTaint) markVars(root Expr) {
 					taintAll(carry.Head, carry.Latch, carry.After)
 				}
 			}
+			// A carried name is one value across its loop's iterations.
+			for _, carry := range node.Carries {
+				if t.vars[carry.Head] || t.vars[carry.Latch] || t.vars[carry.After] || t.vars[carry.Outer] || t.tainted(carry.Init) || t.tainted(carry.Post) {
+					taintAll(carry.Head, carry.Latch, carry.After)
+				}
+			}
 		case *Block:
 			for _, edge := range node.Carry {
 				if t.vars[edge.From] {
@@ -227,8 +233,8 @@ func (t *deriveWitnessTaint) obligation(ob obligation) bool {
 }
 
 // stagedExit reports whether x contains an early exit from a staged
-// selection, or code replaced by a hole that might have left early: an
-// expansion that keeps it may add the exit's facts to what follows.
+// selection, or a hole over code that might have left early: an expansion
+// that keeps it may add the exit's facts to what follows.
 func (t *deriveWitnessTaint) stagedExit(x any) bool {
 	found := false
 	var inStage func(any, bool)
@@ -247,9 +253,17 @@ func (t *deriveWitnessTaint) stagedExit(x any) bool {
 				return
 			}
 		case *Call:
-			if fn, ok := witnessCall(node); ok && fn.WitnessRepair {
-				found = true
-				return
+			// A repaired hole may have left early, and a copy absorbed
+			// into a hole may end in a Never call.
+			if fn, ok := witnessCall(node); ok && fn.Decl.Body == nil {
+				exits := fn.WitnessRepair
+				for _, arg := range node.Args {
+					exits = exits || arg.Type() == Never
+				}
+				if exits {
+					found = true
+					return
+				}
 			}
 		case *Lambda:
 			return // Its exits leave only the lambda.

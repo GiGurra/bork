@@ -3701,14 +3701,19 @@ func (f *factChecker) witnesses(fns []*Func) {
 		f.witnessFunction(fn, diags)
 	}
 	// An expansion repeats a definition's failure at its request; the
-	// definition's own diagnostic is the one to fix.
+	// definition's own diagnostic is the one to fix. An expansion names
+	// a specialized helper differently, so the callee is not compared.
+	requirement := func(message string) string {
+		_, rest, _ := strings.Cut(message, " ")
+		return rest
+	}
 	reported := map[string]bool{}
 	for _, d := range diags.Sorted() {
 		if d.Code == "facts.error" {
-			reported[d.Msg+" (derive template at "+d.Pos.String()+")"] = true
+			reported[requirement(d.Msg)+" (derive template at "+d.Pos.String()+")"] = true
 		}
 	}
-	diags.Rewrite(0, func(d *diag.Diagnostic) bool { return !reported[d.Msg] })
+	diags.Rewrite(0, func(d *diag.Diagnostic) bool { return d.Code != "facts.error" || !reported[requirement(d.Msg)] })
 }
 
 // A witness's Invalid types can reach code written for checked programs. A

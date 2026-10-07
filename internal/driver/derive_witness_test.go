@@ -1,8 +1,12 @@
 package driver
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/GiGurra/bork/internal/check"
 )
 
 const witnessFacts = `pred positive(n: Int) { n > 0 }
@@ -41,6 +45,11 @@ derive instance c[T]: C[T] { fn c(x: T, n: Int): Int { need(n) } }`, missing},
 		{"staged exit", `derive fn unused[T](n: Int): Int { comptime for (field in shape.fields[T]()) { if (n <= 0) { return 0 } }; need(n) }`, ""},
 		{"exhausted", `derive fn unused[T](x: T, n: Int): Int { if (n <= 0) { shape.exhausted[T](x) }; need(n) }`, ""},
 		{"dependent return", `derive fn unused[T](x: T, n: Int): Int { if (n <= 0) { return x.size() }; need(n) }`, ""},
+		{"staged never", `derive fn unused[T](n: Int): Int {
+ if (n <= 0) { comptime if (shape.kind[T]() == shape.Record) { panic("a") } else { panic("b") } }
+ need(n)
+}`, ""},
+		{"dependent match never", `derive fn unused[T](x: T, n: Int): Int { if (n <= 0) { match (x) { _: T => panic("bad") } }; need(n) }`, ""},
 		{"helper result", `derive fn one[T](): Int { comptime if (shape.kind[T]() == shape.Record) { 1 } else { 0 } }
 derive fn unused[T](): Int { need(one[T]()) }`, ""},
 		{"target value", `pred valid[A](x: A) { true }
@@ -99,6 +108,59 @@ type Q = { a: Int } derive (C)
 fn main() {}`))
 	if err == nil || strings.Count(err.Error(), "need requires") != 1 || strings.Contains(err.Error(), "derive template at") {
 		t.Fatalf("want one definition diagnostic, got %v", err)
+	}
+}
+
+// Expansions name specialized helpers differently; the definition's
+// diagnostic still replaces theirs.
+func TestDeriveWitnessHelperFactsReportedOnce(t *testing.T) {
+	t.Parallel()
+	_, _, err := Check(validatorFixture(t, witnessFacts+`derive fn g[T](m: Int where positive): Int { m }
+class C[T] { fn c(x: T, n: Int): Int }
+derive instance c[T]: C[T] { fn c(x: T, n: Int): Int { g[T](n) } }
+type R = { a: Int } derive (C)
+fn main() {}`))
+	if err == nil || strings.Count(err.Error(), "requires m to be positive") != 1 || strings.Contains(err.Error(), "derive template at") {
+		t.Fatalf("want one definition diagnostic, got %v", err)
+	}
+}
+
+// Interpolation validators run for expansions, not for unused definitions.
+func TestDeriveWitnessStartsNoValidator(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `import "bork/sql"
+derive fn q[T](name: String): String {
+  statement = sql.SQL"SELECT '$name'"
+  statement.Render(sql.Dialect.Sqlite)
+}
+fn main() {}`, "")
+}
+
+// Checking a witness leaves no editor data at the template's positions.
+func TestDeriveWitnessLeavesNoEditorData(t *testing.T) {
+	t.Parallel()
+	source := witnessFacts + `class C[T] { fn c(x: T, n: Int): Int }
+derive instance c[T]: C[T] { fn c(x: T, n: Int): Int { m = n + 1; work = (k: Int) => k; work(m) } }
+type R = { a: Int } derive (C)
+fn main() {}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	analysis, err := NewSession().Analyze(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hints, err := analysis.EditorInlays(path, check.EditorInlayOptions{Types: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, hint := range hints {
+		if strings.Count(hint.Label, ":") > strings.Count(hint.Label, "=>")+1 {
+			t.Fatalf("duplicated inlay hint: %+v", hints)
+		}
 	}
 }
 

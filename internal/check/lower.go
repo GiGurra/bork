@@ -944,11 +944,13 @@ func (l *lowerer) assertIs(source *syntax.Call, at expr, assertion *assertIsInfo
 func (l *lowerer) witnesses(fns []*Func) []*Func {
 	var out []*Func
 	for _, fn := range fns {
-		roots := len(l.roots)
+		roots, sites := len(l.roots), len(l.interpolationSites)
 		if l.witness(fn) {
 			out = append(out, fn)
 		}
-		l.roots = l.roots[:roots]
+		// Unused definitions start no validator: their interpolations
+		// belong to their expansions.
+		l.roots, l.interpolationSites = l.roots[:roots], l.interpolationSites[:sites]
 	}
 	return out
 }

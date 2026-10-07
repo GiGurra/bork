@@ -487,14 +487,17 @@ operations, `shape` queries, type parameters and projections, native comptime,
 and build or embed reads. A staged `if`, `match` or `for` body becomes one copy
 under an opaque condition. A runtime match of a dependent value becomes opaque
 branches. Code that still fails to check becomes a hole on the next of four
-attempts; a witness that still fails, would add an instance or expansion, or
-cannot be lowered is dropped. Shipped standard packages are skipped unless
+attempts; a witness that still fails, panics, would add an instance or
+expansion, or cannot be lowered is dropped. Afterwards, the side-table entries
+keyed by witness syntax are removed, so editor and lint queries by position
+see only the program, and witness interpolations start no validator. Shipped standard packages are skipped unless
 they are the root.
 
 The fact checker taints a witness's holes, staged values, values of Invalid
 type and everything computed from them. A failing obligation is reported only
 when its subject and arguments are untainted, no tainted condition dominates
-it, and no earlier staged copy or repaired hole could have exited early. Its
+it, and no earlier staged copy, repaired hole or absorbed `Never` copy could
+have exited early. Its
 predicate evaluations are discarded, so unused definitions never start the
 evaluator. Expansions that repeat a reported failure are dropped in favour of
 the definition's diagnostic. Staged copies are reported like their types are:

@@ -316,7 +316,9 @@ need requires n to be positive, but that is not proven for n (check it first wit
 
 Writing `n: Int where positive`, or checking `if (n > 0)` first, fixes it, as in
 ordinary code. Code inside a `comptime for` body or a `comptime` branch is
-checked as one copy. Anything that could differ between targets is left to the
+checked as one copy, like its types: a requirement that fails in every copy is
+reported even if no requested target selects that branch. Definitions in
+imported library packages are checked the same way. Anything that could differ between targets is left to the
 expansion: values computed from descriptors, field reads or the target, values
 chosen by a `comptime` branch, facts that follow a test of such a value, and
 facts after a `comptime` copy that may return. Proving a requirement of a

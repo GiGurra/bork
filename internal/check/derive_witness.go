@@ -22,7 +22,7 @@ import (
 type deriveWitnessBuilder struct {
 	c       *checker
 	pkg     *Package
-	shape   string          // the source package's alias of bork/shape, or ""
+	shape   map[string]bool // the source package's aliases of bork/shape
 	names   map[string]bool // target and helper type parameters
 	helpers map[*syntax.FuncDecl]*Func
 	// repairs are source positions whose expression becomes a hole, or
@@ -86,6 +86,7 @@ func (c *checker) checkDeriveWitnesses(files []*syntax.File) {
 		c.diags = &diag.List{}
 		b.enter(source)
 		source.fn = b.declare(source)
+		c.witnessNodes(reflect.ValueOf(source.fn))
 		if source.fn != nil && source.targets == nil {
 			b.helpers[source.decl] = source.fn
 		}
@@ -100,10 +101,10 @@ func (c *checker) checkDeriveWitnesses(files []*syntax.File) {
 			body := cloneSyntax(source.decl.Body)
 			b.pin(reflect.ValueOf(body))
 			source.fn.Decl.Body = b.block(body)
+			c.witnessNodes(reflect.ValueOf(source.fn.Decl.Body))
 			c.diags = &diag.List{}
 			snapshot := c.witnessSnapshot()
-			c.checkFunc(source.fn)
-			failed := false
+			failed := !c.checkWitness(source.fn)
 			for _, d := range c.diags.Sorted() {
 				// Bindings whose only reads became holes are not failures.
 				if d.Code != "binding.unused" && d.Severity != "warning" {
@@ -125,10 +126,10 @@ func (c *checker) checkDeriveWitnesses(files []*syntax.File) {
 func (b *deriveWitnessBuilder) enter(source *deriveWitnessSource) {
 	b.pkg = source.pkg
 	b.c.pkg = source.pkg
-	b.shape = ""
+	b.shape = map[string]bool{}
 	for alias, imported := range source.pkg.imports {
 		if imported.Path == "bork/shape" {
-			b.shape = alias
+			b.shape[alias] = true
 		}
 	}
 	b.names = map[string]bool{}
@@ -138,6 +139,95 @@ func (b *deriveWitnessBuilder) enter(source *deriveWitnessSource) {
 	for _, parameter := range source.decl.TypeParams {
 		b.names[parameter.Name] = true
 	}
+}
+
+// checkWitness reports whether fn checked without panicking. The checker
+// assumes checked programs; Invalid types can reach code that does not
+// expect them, and such a witness is dropped like one that fails to check.
+func (c *checker) checkWitness(fn *Func) (ok bool) {
+	scopes, function, params := c.scopes, c.fn, c.typeParams
+	defer func() {
+		if recover() != nil {
+			c.scopes, c.fn, c.typeParams, c.inPrelude = scopes, function, params, false
+			ok = false
+		}
+	}()
+	c.checkFunc(fn)
+	return true
+}
+
+// witnessNodes records the syntax a witness was made of. Checking it
+// records types, bindings and calls for that syntax at the template's own
+// source positions; purgeWitnessNodes removes them once witnesses are lowered,
+// so editor and lint queries by position see only the program.
+func (c *checker) witnessNodes(v reflect.Value) {
+	if c.witnessSyntax == nil {
+		c.witnessSyntax = map[any]bool{}
+	}
+	var walk func(reflect.Value)
+	walk = func(v reflect.Value) {
+		switch v.Kind() {
+		case reflect.Interface:
+			if !v.IsNil() {
+				walk(v.Elem())
+			}
+		case reflect.Pointer:
+			if v.IsNil() || !v.CanInterface() {
+				return
+			}
+			if _, isFunc := v.Interface().(*Func); isFunc {
+				walk(reflect.ValueOf(v.Interface().(*Func).Decl))
+				return
+			}
+			if c.witnessSyntax[v.Interface()] {
+				return
+			}
+			c.witnessSyntax[v.Interface()] = true
+			walk(v.Elem())
+		case reflect.Struct:
+			for _, index := range walkableSyntaxFields(v.Type()) {
+				walk(v.Field(index))
+			}
+		case reflect.Slice:
+			for i := 0; i < v.Len(); i++ {
+				walk(v.Index(i))
+			}
+		}
+	}
+	walk(v)
+}
+
+func (c *checker) purgeWitnessNodes() {
+	if len(c.witnessSyntax) == 0 {
+		return
+	}
+	info := reflect.ValueOf(c.info).Elem()
+	for i := 0; i < info.NumField(); i++ {
+		field := info.Field(i)
+		if field.Kind() != reflect.Map || field.IsNil() {
+			continue
+		}
+		switch field.Type().Key().Kind() {
+		case reflect.Pointer, reflect.Interface:
+		default:
+			continue
+		}
+		field = reflect.NewAt(field.Type(), field.Addr().UnsafePointer()).Elem()
+		for _, key := range field.MapKeys() {
+			if key.Kind() == reflect.Interface && key.IsNil() {
+				continue
+			}
+			if c.witnessSyntax[key.Interface()] {
+				field.SetMapIndex(key, reflect.Value{})
+			}
+		}
+	}
+	for call := range c.deriveCalls {
+		if c.witnessSyntax[call] {
+			delete(c.deriveCalls, call)
+		}
+	}
+	c.witnessSyntax = nil
 }
 
 // Witness checking must leave no trace in the emitted program. A witness that
@@ -274,7 +364,7 @@ func (b *deriveWitnessBuilder) staged(pos diag.Pos) syntax.Expr {
 
 func (b *deriveWitnessBuilder) shapeName(name string) bool {
 	alias, _, qualified := strings.Cut(name, ".")
-	return b.shape != "" && qualified && alias == b.shape
+	return qualified && b.shape[alias]
 }
 
 func (b *deriveWitnessBuilder) block(x *syntax.Block) *syntax.Block {
