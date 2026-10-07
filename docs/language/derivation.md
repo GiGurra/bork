@@ -267,9 +267,50 @@ fn main() { println(description[Int]()) }
 `shape.metadata[T, Class, MetadataType]()` selects the same instance as ordinary
 class calls in its scope and returns `None` when that instance has no metadata
 for the requested key. It can be called from ordinary runtime code as well as
-templates. Keys must be closed resolved types; targets may remain generic.
+templates. Keys are closed resolved types, or the metadata families below;
+targets may remain generic.
 Callback effects remain part of key identity. Duplicate keys and wrongly typed
 initializers are rejected, including keys declared through equivalent aliases.
+
+A key that depends on the target is declared as a metadata family with
+`metadata type`. A family is one key for every target, always applied to the
+target of the dictionary: an instance for `Option[A]` declares
+`Show[Option[A]]`, a template for `T` declares `Show[T]`, and a query for `T`
+reads `Show[T]`. A generic query and a concrete one therefore find the same
+provider.
+
+```bork
+import "bork/shape"
+metadata type Show[T] = { show: (T) uses nothing => String }
+class Label[T] { fn label(value: T): String }
+instance integerLabel: Label[Int] {
+  metadata Show[Int] = Show { show: value => "#" + toString(value) }
+  fn label(value: Int): String { toString(value) }
+}
+instance optionLabel[A: Label]: Label[Option[A]] {
+  metadata Show[Option[A]] = Show { show: value => match (value) { Option.Some(inner) => shown(inner), Option.None => "-" } }
+  fn label(value: Option[A]): String { "option" }
+}
+fn shown[T: Label](value: T): String {
+  match (shape.metadata[T, Label, Show[T]]()) {
+    Option.Some(provider) => provider.show(value)
+    Option.None => "?"
+  }
+}
+fn main() { println(shown(Option.Some(7))) }
+```
+
+```text
+#7
+```
+
+A family is a record or sealed type with one type parameter. The parameter may
+appear only as a whole callback parameter type, such as `(T) => String`. A
+constrained target like `Int where small` selects the `Int` instance, so a
+family value may consume target values but never produce them. For the same
+reason, a family's argument cannot carry facts: a concrete query for such a
+target names its base type, as in `Show[Int]`. Writing a family for a type
+other than the target is an error.
 
 The standard `codec.Encode` derivation is a source template in `bork/codec`. It omits computed fields, retains named-field
 object order, and uses the tagged `values` array for positional payloads.

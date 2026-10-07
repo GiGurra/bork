@@ -1,7 +1,7 @@
 if exists('b:current_syntax') | finish | endif
 syntax case match
 syntax keyword borkKeyword fn pred type sealed match if else return unsafe where and or trust rule generate yield for break continue
-syntax keyword borkContextual import use class instance instances test private derive uses needs nothing ambient logged propagated lazy async scope with in resource go comptime mock select
+syntax keyword borkContextual import use class instance instances test private derive uses needs nothing ambient logged propagated lazy async scope with in resource go comptime mock select metadata
 syntax keyword borkBoolean true false
 syntax match borkType '\<[A-Z][A-Za-z0-9_]*\>'
 syntax match borkNumber '\<\d[0-9A-Fa-f_xXbBoO]*\%(\.\d[0-9_]*\)\?\%([eE][+-]\=[0-9_]*\)\?\>'

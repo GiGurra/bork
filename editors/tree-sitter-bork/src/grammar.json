@@ -338,6 +338,15 @@
           },
           "named": true,
           "value": "identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "STRING",
+            "value": "metadata"
+          },
+          "named": true,
+          "value": "identifier"
         }
       ]
     },
@@ -510,6 +519,22 @@
     "type_declaration": {
       "type": "SEQ",
       "members": [
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "PREC_DYNAMIC",
+              "value": 20,
+              "content": {
+                "type": "STRING",
+                "value": "metadata"
+              }
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
         {
           "type": "STRING",
           "value": "type"

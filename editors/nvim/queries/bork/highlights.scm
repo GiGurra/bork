@@ -29,7 +29,7 @@
  "generate" "yield" "for" "break" "continue" "if" "else" "return" "match"
  "import" "use" "class" "instance" "instances" "test" "private"
  "derive" "uses" "needs" "ambient" "logged" "propagated" "lazy" "async"
- "scope" "with" "in" "resource" "go" "comptime" "mock" "select"] @keyword
+ "scope" "with" "in" "resource" "go" "comptime" "mock" "select" "metadata"] @keyword
 ["&" "^" "<<" ">>" "+" "-" "*" "/" "%" "!" "&&" "||" "==" "!=" "<" "<=" ">" ">=" "|>" "|" "=>" "=" "?"] @operator
 ["(" ")" "[" "]" "{" "}"] @punctuation.bracket
 ["," ";" ":" "."] @punctuation.delimiter

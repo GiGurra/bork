@@ -301,10 +301,12 @@ Option.Some(Description { text: "a whole number" })
 ```
 
 `metadata` selects the same instance as ordinary class calls in its scope. An
-absent key returns None. Keys must be closed resolved types; the target may
-remain generic. Callback effects are part of key identity. Duplicate keys and
-wrongly typed initializers are rejected, including equivalent aliases. An
-initializer runs when queried, not merely when its dictionary is constructed.
+absent key returns None. Keys must be closed resolved types, or a
+[metadata family](../language/derivation.md#instance-metadata) (`metadata type
+Show[T]`) applied to the target; the target may remain generic. Callback
+effects are part of key identity. Duplicate keys and wrongly typed initializers
+are rejected, including equivalent aliases. An initializer runs when queried,
+not merely when its dictionary is constructed.
 
 ## Foreign record layouts
 

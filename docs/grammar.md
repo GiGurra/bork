@@ -46,7 +46,7 @@ RuleDecl   = "rule" Ident "(" Params ")" "{" Premises "=>" Conclusions "}" .
 Premises   = Expr { "and" Expr } .  (* predicate calls on the variables, and conditions *)
 Conclusions = Call { "and" Call } .
 
-TypeDecl   = "type" Ident [ TypeParams ] "=" ( ( [ "private" ] Fields | Sealed | GoName Fields ) { TagGroup } [ Where ] | "resource" [ GoName ] | GoName | Type ) [ Derive ] .
+TypeDecl   = [ "metadata" ] "type" Ident [ TypeParams ] "=" ( ( [ "private" ] Fields | Sealed | GoName Fields ) { TagGroup } [ Where ] | "resource" [ GoName ] | GoName | Type ) [ Derive ] .
                                              (* type Pair[A, B] = { ... }; type File = resource: values made by unsafe go *)
 Derive     = "derive" "(" ( Ident | QualIdent ) { "," ( Ident | QualIdent ) } ")" .  (* derive (Decode, Encode, GoStruct): instances written by the compiler *)
 DeriveDecl = "derive" ( Ident | QualIdent ) "for" Type . (* package declaration; bare generic names request universal instances *)

@@ -97,7 +97,15 @@ type TypeDecl struct {
 	// `type User = { ... } derive (Decode, Encode)`.
 	Derive    []string
 	DerivePos diag.Pos
+	// MetadataFamily marks a target-indexed metadata key family:
+	// `metadata type DefaultInput[T] = { ... }`, with the keyword's position.
+	MetadataFamily bool
+	MetadataPos    diag.Pos
 }
+
+// MetadataFamilyKeyword introduces a metadata key family declaration. It is
+// contextual, not a reserved word.
+const MetadataFamilyKeyword = "metadata"
 
 // DeriveDecl requests one instance independently of a type declaration.
 type DeriveDecl struct {

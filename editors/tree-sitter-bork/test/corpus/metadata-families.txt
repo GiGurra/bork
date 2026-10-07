@@ -1,0 +1,28 @@
+==================
+Metadata key family and a binding named metadata
+==================
+metadata type Show[T] = { show: (T) uses nothing => String }
+metadata = 1
+---
+
+(source_file
+  (type_declaration
+    (identifier)
+    (type_parameters
+      (identifier))
+    (record_type
+      (field_declaration
+        (identifier)
+        (type
+          (function_type
+            (type
+              (qualified_name
+                (identifier)))
+            (uses_clause
+              (identifier))
+            (type
+              (qualified_name
+                (identifier))))))))
+  (binding
+    (identifier)
+    (number)))
