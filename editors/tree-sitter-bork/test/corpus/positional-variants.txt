@@ -289,6 +289,12 @@ fn f() {
     .trim())
   value = Pair.Some(" z "
     .trim())
+  if values
+    .isEmpty() { false }
+  match value
+    .trim() { _ => true }
+  for item in values
+    .map(v => v) { call(item) }
   for {
     [values
       .map(v => v)]
@@ -349,6 +355,42 @@ fn f() {
             (call_expression
               (selector_expression
                 (string)
+                (identifier))))))
+      (if_expression
+        (call_expression
+          (selector_expression
+            (qualified_name
+              (identifier))
+            (identifier)))
+        (block
+          (boolean)))
+      (match_expression
+        (call_expression
+          (selector_expression
+            (qualified_name
+              (identifier))
+            (identifier)))
+        (match_arm
+          (pattern)
+          (boolean)))
+      (for_expression
+        (identifier)
+        (call_expression
+          (selector_expression
+            (qualified_name
+              (identifier))
+            (identifier))
+          (argument
+            (lambda_expression
+              (identifier)
+              (qualified_name
+                (identifier)))))
+        (block
+          (call_expression
+            (qualified_name
+              (identifier))
+            (argument
+              (qualified_name
                 (identifier))))))
       (for_expression
         (block
