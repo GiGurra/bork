@@ -31,6 +31,7 @@ fn main() {
 		dirs     []string
 		want     string
 		defaults bool
+		noHome   bool
 	}{
 		{name: "missing", want: "None"},
 		{name: "json-first", files: []string{"cwd/app.yml", "cwd/app.yaml", "cwd/app.json"}, want: "cwd/app.json"},
@@ -40,6 +41,7 @@ fn main() {
 		{name: "user-config", files: []string{"home/.config/app/config.yaml", "system/config.json"}, want: "home/.config/app/config.yaml"},
 		{name: "system-config", files: []string{"system/config.yml"}, want: "system/config.yml"},
 		{name: "skip-directory", dirs: []string{"cwd/app.json"}, files: []string{"cwd/app.yaml"}, want: "cwd/app.yaml"},
+		{name: "default-cwd-no-home", defaults: true, noHome: true, files: []string{"cwd/app.json"}, want: "app.json"},
 		{name: "default-cwd", defaults: true, files: []string{"cwd/app.json", "home/.config/app/config.json"}, want: "app.json"},
 		{name: "default-home", defaults: true, files: []string{"home/.config/app/config.yaml"}, want: "home/.config/app/config.yaml"},
 	}
@@ -72,6 +74,9 @@ fn main() {
 			cmd := exec.Command(exe, args...)
 			cmd.Dir = filepath.Join(dir, "cwd")
 			cmd.Env = append(os.Environ(), "HOME="+filepath.Join(dir, "home"))
+			if tt.noHome {
+				cmd.Env = append(cmd.Env, "HOME=")
+			}
 			out, err := cmd.CombinedOutput()
 			if err != nil {
 				t.Fatalf("run: %v\n%s", err, out)

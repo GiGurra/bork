@@ -10,12 +10,14 @@ fn FindConfig(appName: String, searchPaths: List[String] = []) uses io: Option[S
     return failure(appName, "config app name must be a nonempty file name")
   }
   paths := append([]string{}, searchPaths...)
-  if len(paths) == 0 {
-    home, err := os.UserHomeDir()
-    if err != nil { return failure(appName, err.Error()) }
-    paths = []string{".", filepath.Join(home, ".config", appName), filepath.Join("/etc", appName)}
-  }
+  defaults := len(paths) == 0
+  if defaults { paths = []string{".", "", filepath.Join("/etc", appName)} }
   for i, dir := range paths {
+    if defaults && i == 1 {
+      home, err := os.UserHomeDir()
+      if err != nil { return failure(appName, err.Error()) }
+      dir = filepath.Join(home, ".config", appName)
+    }
     base := "config"
     if i == 0 { base = appName }
     for _, ext := range []string{".json", ".yaml", ".yml"} {
