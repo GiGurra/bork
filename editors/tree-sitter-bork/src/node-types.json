@@ -2112,10 +2112,6 @@
           "named": true
         },
         {
-          "type": "select_expression",
-          "named": true
-        },
-        {
           "type": "selector_expression",
           "named": true
         },
@@ -3758,10 +3754,6 @@
         },
         {
           "type": "scope_expression",
-          "named": true
-        },
-        {
-          "type": "select_expression",
           "named": true
         },
         {

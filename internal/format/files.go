@@ -17,6 +17,11 @@ import (
 // list means the current directory. In check mode no files are written. The
 // returned paths identify files that differ from the canonical format.
 func Files(paths []string, check bool) ([]string, error) {
+	return FilesWithOptions(paths, check, Options{})
+}
+
+// FilesWithOptions formats files with explicit cleanup options.
+func FilesWithOptions(paths []string, check bool, options Options) ([]string, error) {
 	if len(paths) == 0 {
 		paths = []string{"."}
 	}
@@ -86,7 +91,7 @@ func Files(paths []string, check bool) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		formatted, err := Source(path, src)
+		formatted, err := SourceWithOptions(path, src, options)
 		if err != nil {
 			if !explicitFiles[abs] {
 				failures = append(failures, err)

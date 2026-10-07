@@ -33,6 +33,16 @@
     (search-forward "codec")
     (should (eq (get-text-property (- (point) 5) 'face) 'font-lock-preprocessor-face))))
 
+(ert-deftest bork-bare-control-head-highlighting ()
+  (with-temp-buffer
+    (insert "if ready {}\nmatch value { _ => 0 }\nfor x in xs {}\nfor ready {}\n")
+    (bork-mode)
+    (font-lock-ensure)
+    (goto-char (point-min))
+    (while (re-search-forward "\\_<\\(ready\\|value\\|xs\\)\\_>" nil t)
+      (should-not (eq (get-text-property (match-beginning 1) 'face)
+                      'font-lock-preprocessor-face)))))
+
 (ert-deftest bork-shebang ()
   (with-temp-buffer
     (insert "#!/usr/bin/env -S bork script\nprintln(1)\n")

@@ -1,0 +1,184 @@
+==================
+Optional heads, grouped operands and record ambiguity
+==================
+fn main() {
+ if ready {} else if (other) {} else {}
+ if (ready) && check(User { name: "n" }) {}
+ if value is Int {}
+ if value is (User { name: "n" }) {}
+ match value { _ => 1 }
+ match (User { name: "n" }) { _ => 1 }
+ for x in xs {}
+ for (x in xs) {}
+ for ready {}
+ for (ready) && other {}
+ for i = 0; i < 3; i = i + 1 {}
+ for ; ready; {}
+ for {}
+}
+derive fn helper[T]() {
+ comptime for f in fields() { comptime if f.public { comptime match f.name { _ => Ok } } }
+ [comptime for (f in fields()) comptime if (f.public) f.name]
+}
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (if_expression
+        (qualified_name
+          (identifier))
+        (block)
+        (if_expression
+          (parenthesized_expression
+            (qualified_name
+              (identifier)))
+          (block)
+          (block)))
+      (if_expression
+        (binary_expression
+          (parenthesized_expression
+            (qualified_name
+              (identifier)))
+          (call_expression
+            (qualified_name
+              (identifier))
+            (argument
+              (record_expression
+                (qualified_name
+                  (identifier))
+                (record_literal
+                  (identifier)
+                  (string))))))
+        (block))
+      (if_expression
+        (is_expression
+          (qualified_name
+            (identifier))
+          (test_pattern
+            (type
+              (qualified_name
+                (identifier)))))
+        (block))
+      (if_expression
+        (is_expression
+          (qualified_name
+            (identifier))
+          (test_pattern
+            (test_parenthesized_pattern
+              (test_pattern
+                (type
+                  (qualified_name
+                    (identifier)))
+                (test_field_pattern
+                  (identifier)
+                  (test_pattern
+                    (string)))))))
+        (block))
+      (match_expression
+        (qualified_name
+          (identifier))
+        (match_arm
+          (pattern)
+          (number)))
+      (match_expression
+        (parenthesized_expression
+          (record_expression
+            (qualified_name
+              (identifier))
+            (record_literal
+              (identifier)
+              (string))))
+        (match_arm
+          (pattern)
+          (number)))
+      (for_expression
+        (identifier)
+        (qualified_name
+          (identifier))
+        (block))
+      (for_expression
+        (identifier)
+        (qualified_name
+          (identifier))
+        (block))
+      (for_expression
+        (qualified_name
+          (identifier))
+        (block))
+      (for_expression
+        (binary_expression
+          (parenthesized_expression
+            (qualified_name
+              (identifier)))
+          (qualified_name
+            (identifier)))
+        (block))
+      (for_expression
+        (loop_binding
+          (identifier)
+          (number))
+        (binary_expression
+          (qualified_name
+            (identifier))
+          (number))
+        (loop_binding
+          (identifier)
+          (binary_expression
+            (qualified_name
+              (identifier))
+            (number)))
+        (block))
+      (for_expression
+        (qualified_name
+          (identifier))
+        (block))
+      (for_expression
+        (block))))
+  (derive_helper_declaration
+    (function_declaration
+      (identifier)
+      (type_parameters
+        (identifier))
+      (parameters)
+      (block
+        (comptime_control_expression
+          (for_expression
+            (identifier)
+            (call_expression
+              (qualified_name
+                (identifier)))
+            (block
+              (comptime_control_expression
+                (if_expression
+                  (selector_expression
+                    (qualified_name
+                      (identifier))
+                    (identifier))
+                  (block
+                    (comptime_control_expression
+                      (match_expression
+                        (selector_expression
+                          (qualified_name
+                            (identifier))
+                          (identifier))
+                        (match_arm
+                          (pattern)
+                          (qualified_name
+                            (identifier)))))))))))
+        (list_literal
+          (list_comprehension
+            (identifier)
+            (call_expression
+              (qualified_name
+                (identifier)))
+            (selector_expression
+              (qualified_name
+                (identifier))
+              (identifier))
+            (selector_expression
+              (qualified_name
+                (identifier))
+              (identifier))))))))

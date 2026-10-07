@@ -174,8 +174,9 @@ scope app with taskTimeout(100) {
               (qualified_name
                 (identifier))))))
       (match_expression
-        (qualified_name
-          (identifier))
+        (parenthesized_expression
+          (qualified_name
+            (identifier)))
         (match_arm
           (pattern
             (pattern
@@ -417,7 +418,8 @@ fn main() {
         (list_literal))
       (binding
         (match_expression
-          (number)
+          (parenthesized_expression
+            (number))
           (match_arm
             (pattern
               (type
@@ -539,10 +541,11 @@ fn main() {
       (for_expression
         (block))
       (for_expression
-        (binary_expression
-          (qualified_name
-            (identifier))
-          (number))
+        (parenthesized_expression
+          (binary_expression
+            (qualified_name
+              (identifier))
+            (number)))
         (block
           (binding
             (identifier)

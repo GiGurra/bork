@@ -27,6 +27,12 @@ endfor
 call append('$', 'type Row = { value: Int codec { name: "v" } }')
 let group_column = stridx(getline(11), 'codec') + 1
 call assert_equal('borkTagGroup', synIDattr(synID(11, group_column, 1), 'name'))
+call append('$', ['if ready {}', 'match value { _ => 0 }', 'for x in xs {}', 'for ready {}'])
+for line in range(12, 15)
+  let head_column = strridx(getline(line), ' {')
+  call assert_notequal('borkTagGroup', synIDattr(synID(line, head_column, 1), 'name'))
+  call assert_equal('borkKeyword', synIDattr(synID(line, 1, 1), 'name'))
+endfor
 for file in split(glob('examples/**/*.bork') . "\n" . glob('testdata/cases/**/*.bork'), "\n")
   execute 'edit! ' . fnameescape(file)
   call assert_equal('bork', &filetype, file)

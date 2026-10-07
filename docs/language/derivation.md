@@ -30,6 +30,10 @@ fn main() {
 }
 ```
 
+Staged block controls use the same optional head parentheses as runtime
+`if`, `for` and `match`. List-comprehension headers and their `comptime if`
+guards still require parentheses because no opening body brace ends them.
+
 Inline `derive (...)` on a fact alias and standalone `derive Class for Alias`
 retain the alias's whole-value facts in the instance head. A derived decoder
 checks those facts before returning a value of the alias.
@@ -55,7 +59,7 @@ class Lines[T] { fn lines(value: T): String }
 
 derive instance lines[T]: Lines[T] {
   fn lines(value: T): String {
-    comptime if (shape.kind[T]() == shape.Record) {
+    comptime if shape.kind[T]() == shape.Record {
       parts: List[String] = [comptime for (field in shape.fields[T]()) comptime if (!field.computed)
         field.name + "=" + toString(field.read(value))]
       parts.join("\n")
@@ -90,7 +94,7 @@ class Lines[T] { fn lines(value: T): String }
 
 derive instance lines[T]: Lines[T] {
   fn lines(value: T): String {
-    comptime if (shape.kind[T]() == shape.Record) {
+    comptime if shape.kind[T]() == shape.Record {
       parts: List[String] = [comptime for (field in shape.fields[T]()) comptime if (!field.computed)
         field.name + "=" + toString(field.read(value))]
       parts.join("\n")
@@ -297,7 +301,7 @@ instance integerLabel: Label[Int] {
   fn label(value: Int): String { toString(value) }
 }
 instance optionLabel[A: Label]: Label[Option[A]] {
-  metadata Show[Option[A]] = Show { show: value => match (value) { Option.Some(inner) => shown(inner), Option.None => "-" } }
+  metadata Show[Option[A]] = Show { show: value => match value { Option.Some(inner) => shown(inner), Option.None => "-" } }
   fn label(value: Option[A]): String { "option" }
 }
 fn shown[T: Label](value: T): String {

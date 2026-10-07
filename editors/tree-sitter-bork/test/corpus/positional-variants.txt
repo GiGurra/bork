@@ -55,8 +55,9 @@ fn test(x: Reply[Int]): Bool { x is Reply[Int].Found(Int, String) }
         (identifier)))
     (block
       (match_expression
-        (qualified_name
-          (identifier))
+        (parenthesized_expression
+          (qualified_name
+            (identifier)))
         (match_arm
           (pattern
             (context_pattern

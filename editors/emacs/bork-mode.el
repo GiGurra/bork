@@ -30,9 +30,22 @@
     (modify-syntax-entry ?' "\"" table)
     (modify-syntax-entry ?_ "w" table)
     table))
+(defun bork--match-tag-group (limit)
+  "Find a metadata tag group before LIMIT, excluding bare control heads."
+  (catch 'found
+    (while (re-search-forward "[[:alnum:]_})]\\([ \t]+\\)\\([a-z][[:alnum:]_]*\\)[ \t]*{" limit t)
+      (unless (save-excursion
+                (goto-char (match-beginning 2))
+                (skip-chars-backward " \t")
+                (let ((end (point)))
+                  (skip-syntax-backward "w_")
+                  (member (buffer-substring-no-properties (point) end)
+                          '("if" "match" "for" "in"))))
+        (throw 'found t)))))
+
 (defconst bork-font-lock-keywords
   `(("\\_<\\(is\\)\\_>[[:space:]]+[^[:space:](:=]" 1 font-lock-keyword-face)
-    ("[[:alnum:]_})]\\([ \t]+\\)\\([a-z][[:alnum:]_]*\\)[ \t]*{" 2 font-lock-preprocessor-face)
+    (bork--match-tag-group 2 font-lock-preprocessor-face)
     (,(regexp-opt bork-keywords 'symbols) . font-lock-keyword-face)
     (,(regexp-opt '("true" "false") 'symbols) . font-lock-constant-face)
     ("\\_<[A-Z][[:alnum:]_]*\\_>" . font-lock-type-face)

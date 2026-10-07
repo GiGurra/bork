@@ -139,9 +139,10 @@ require a proof without extra compile-time evaluation.
 ```sh
 bork fmt .            # format every .bork file under the directory, in place
 bork fmt --check .    # list the files that would change, and exit 1 if there are any
+bork fmt --simplify . # also remove redundant if/match/for head parentheses
 ```
 
-`fmt` prints the paths it changed. It indents with two spaces and normalizes spacing and blank lines. It keeps your line breaks and comments. Hidden directories, `vendor`, and symbolic links are skipped.
+`fmt` prints the paths it changed. It indents with two spaces and normalizes spacing and blank lines. It keeps your line breaks, comments and control-head parentheses. `--simplify` opts into removing redundant `if`, `match` and `for` head parentheses, including staged `comptime` controls; it retains tuple/record grouping and parentheses needed across line breaks. Comptime list-comprehension headers and guards keep their parentheses. Combine `--simplify --check` to check the cleanup without writing. Hidden directories, `vendor`, and symbolic links are skipped.
 
 ## Doc
 

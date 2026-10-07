@@ -5,7 +5,7 @@ syntax keyword borkContextual import use class instance instances test private d
 syntax keyword borkBoolean true false
 syntax match borkType '\<[A-Z][A-Za-z0-9_]*\>'
 syntax match borkNumber '\<\d[0-9A-Fa-f_xXbBoO]*\%(\.\d[0-9_]*\)\?\%([eE][+-]\=[0-9_]*\)\?\>'
-syntax match borkTagGroup '\%([[:alnum:]_})]\s\+\)\@<=[a-z][A-Za-z0-9_]*\ze[ \t]*{'
+syntax match borkTagGroup '\%(\<\%(if\|match\|for\|in\)\s\+\)\@<!\%([[:alnum:]_})]\s\+\)\@<=[a-z][A-Za-z0-9_]*\ze[ \t]*{'
 syntax match borkTupleIndex '\.\zs[0-9]\+'
 syntax match borkOperator '|>\|=>\|[+*/%!?=<>|&^-]'
 syntax region borkString start=+"+ skip=+\\.+ end=+"+ contains=borkEscape
