@@ -1,0 +1,9 @@
+fn main() {
+  for (x, x) in [(1, 2)] { println(x) }
+  for (a, b) in [1] { println(a, b) }
+  for (a, b, c) in [(1, 2)] { println(a, b, c) }
+  for (1, _) in [(1, 2)] {}
+  for (unused, _) in [(1, 2)] {}
+}
+fn shadow() { x = 0; for (x, _) in [(1, 2)] { println(x) }; println(x) }
+fn outside() { for (x, _) in [(1, 2)] { println(x) }; println(x) }

@@ -61,7 +61,7 @@ const offset = (row, column) => lines.slice(0, Number(row)).reduce((total, line)
 const body = fixtureText.slice(offset(injection[1], injection[2]), offset(injection[3], injection[4]));
 assert.equal(body, fixtureText.match(/unsafe go \{([\s\S]*?)\n\}/)[1] + '\n', 'Go injection must include the full balanced body');
 const locals = captures('locals.scm');
-for (const name of ['result', 'self', 'app', 'value', 'item', 'message', 'first', 'rest', 'name', 'step']) {
+for (const name of ['result', 'self', 'app', 'value', 'item', 'message', 'first', 'rest', 'name', 'step', 'loopIndex', 'loopValue']) {
   assert.ok(locals.split('\n').some(line => line.includes(' - local.definition,') && line.includes('text: `' + name + '`')), `Missing lexical definition for ${name}`);
 }
 assert.ok(!locals.split('\n').some(line => line.includes(' - local.definition,') && line.includes('text: `caseName`')), 'Qualified variant names must not define locals');

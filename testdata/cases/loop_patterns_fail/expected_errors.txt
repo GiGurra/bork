@@ -1,0 +1,13 @@
+main.bork:2:11: tuple binding repeats name x
+main.bork:2:36: undefined: x
+main.bork:3:7: tuple binding requires a tuple value, found Int
+main.bork:3:31: undefined: a
+main.bork:3:34: undefined: b
+main.bork:4:7: cannot match a 3-element tuple pattern against (Int, Int)
+main.bork:4:39: undefined: a
+main.bork:4:42: undefined: b
+main.bork:4:45: undefined: c
+main.bork:5:8: tuple binding requires names, wildcards or nested tuple patterns
+main.bork:6:8: binding unused is never read; discard explicitly with _
+main.bork:8:27: x is already defined in an enclosing scope (bork does not allow shadowing)
+main.bork:9:63: undefined: x

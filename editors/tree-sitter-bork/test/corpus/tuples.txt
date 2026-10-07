@@ -183,3 +183,128 @@ fn main() {
               (identifier))
             (argument
               (number))))))))
+
+==================
+Loop tuple bindings
+==================
+fn main() {
+  for (key, value) in entries { println(key, value) }
+  for (((index, (key, value)), _) in nested) { println(index, key, value) }
+  for _ in entries {}
+  comptime for (index, field) in shape.fields[T]().indexed() {}
+  labels = [comptime for ((index, field) in shape.fields[T]().indexed()) field.name]
+}
+
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (for_expression
+        (tuple_pattern
+          (pattern
+            (qualified_name
+              (identifier)))
+          (pattern
+            (qualified_name
+              (identifier))))
+        (qualified_name
+          (identifier))
+        (block
+          (call_expression
+            (qualified_name
+              (identifier))
+            (argument
+              (qualified_name
+                (identifier)))
+            (argument
+              (qualified_name
+                (identifier))))))
+      (for_expression
+        (tuple_pattern
+          (pattern
+            (tuple_pattern
+              (pattern
+                (qualified_name
+                  (identifier)))
+              (pattern
+                (tuple_pattern
+                  (pattern
+                    (qualified_name
+                      (identifier)))
+                  (pattern
+                    (qualified_name
+                      (identifier)))))))
+          (pattern))
+        (qualified_name
+          (identifier))
+        (block
+          (call_expression
+            (qualified_name
+              (identifier))
+            (argument
+              (qualified_name
+                (identifier)))
+            (argument
+              (qualified_name
+                (identifier)))
+            (argument
+              (qualified_name
+                (identifier))))))
+      (for_expression
+        (qualified_name
+          (identifier))
+        (block))
+      (comptime_control_expression
+        (for_expression
+          (tuple_pattern
+            (pattern
+              (qualified_name
+                (identifier)))
+            (pattern
+              (qualified_name
+                (identifier))))
+          (call_expression
+            (selector_expression
+              (call_expression
+                (generic_expression
+                  (selector_expression
+                    (qualified_name
+                      (identifier))
+                    (identifier))
+                  (type_arguments
+                    (type
+                      (qualified_name
+                        (identifier))))))
+              (identifier)))
+          (block)))
+      (binding
+        (identifier)
+        (list_literal
+          (list_comprehension
+            (tuple_pattern
+              (pattern
+                (qualified_name
+                  (identifier)))
+              (pattern
+                (qualified_name
+                  (identifier))))
+            (call_expression
+              (selector_expression
+                (call_expression
+                  (generic_expression
+                    (selector_expression
+                      (qualified_name
+                        (identifier))
+                      (identifier))
+                    (type_arguments
+                      (type
+                        (qualified_name
+                          (identifier))))))
+                (identifier)))
+            (selector_expression
+              (qualified_name
+                (identifier))
+              (identifier))))))))

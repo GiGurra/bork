@@ -56,8 +56,13 @@ func SourceWithOptions(path string, src []byte, options Options) ([]byte, error)
 		return nil, fmt.Errorf("%s", d.Error())
 	}
 	patternTests := map[diag.Pos]bool{}
-	for _, pos := range syntax.ParseScript(path, src, &diag.List{}).PatternTestOperators {
+	parsed := syntax.ParseScript(path, src, &diag.List{})
+	for _, pos := range parsed.PatternTestOperators {
 		patternTests[pos] = true
+	}
+	loopIns := map[diag.Pos]bool{}
+	for _, pos := range parsed.IterationOperators {
+		loopIns[pos] = true
 	}
 	lines := []int{0}
 	for i, b := range src {
@@ -89,7 +94,7 @@ func SourceWithOptions(path string, src []byte, options Options) ([]byte, error)
 		}
 		start := offset(t.Pos)
 		u := t.Kind == syntax.Not || (t.Kind == syntax.Minus || t.Kind == syntax.Caret) && !endsExpr(prev)
-		loopIn := t.Kind == syntax.TIdent && t.Text == "in" && len(items) >= 2 && (items[len(items)-1].kind == syntax.TIdent || items[len(items)-1].kind == syntax.Underscore) && (items[len(items)-2].kind == syntax.KwFor || len(items) >= 3 && items[len(items)-2].kind == syntax.LParen && items[len(items)-3].kind == syntax.KwFor)
+		loopIn := loopIns[t.Pos]
 		w := t.Kind == syntax.TIdent && t.Text == "with" && prev != syntax.Dot && prev != syntax.KwFn && prev != syntax.RParen
 		afterPatternTest := len(items) > 0 && items[len(items)-1].patternTest
 		chain := t.Kind == syntax.Dot && endsExpr(prev) && !afterPatternTest || prev == syntax.Dot && len(items) > 0 && !items[len(items)-1].contextDot

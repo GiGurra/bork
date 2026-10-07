@@ -6340,12 +6340,8 @@
             "value": "("
           },
           {
-            "type": "FIELD",
-            "name": "name",
-            "content": {
-              "type": "SYMBOL",
-              "name": "_identifier"
-            }
+            "type": "SYMBOL",
+            "name": "_iteration_binding"
           },
           {
             "type": "STRING",
@@ -9601,6 +9597,45 @@
         }
       ]
     },
+    "_iteration_binding": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "_identifier"
+              },
+              {
+                "type": "STRING",
+                "value": "_"
+              }
+            ]
+          }
+        },
+        {
+          "type": "FIELD",
+          "name": "pattern",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "tuple_pattern"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "parenthesized_pattern"
+              }
+            ]
+          }
+        }
+      ]
+    },
     "_for_header": {
       "type": "CHOICE",
       "members": [
@@ -9608,21 +9643,8 @@
           "type": "SEQ",
           "members": [
             {
-              "type": "FIELD",
-              "name": "name",
-              "content": {
-                "type": "CHOICE",
-                "members": [
-                  {
-                    "type": "SYMBOL",
-                    "name": "_identifier"
-                  },
-                  {
-                    "type": "STRING",
-                    "value": "_"
-                  }
-                ]
-              }
+              "type": "SYMBOL",
+              "name": "_iteration_binding"
             },
             {
               "type": "STRING",
@@ -9655,21 +9677,8 @@
           "type": "SEQ",
           "members": [
             {
-              "type": "FIELD",
-              "name": "name",
-              "content": {
-                "type": "CHOICE",
-                "members": [
-                  {
-                    "type": "SYMBOL",
-                    "name": "_identifier"
-                  },
-                  {
-                    "type": "STRING",
-                    "value": "_"
-                  }
-                ]
-              }
+              "type": "SYMBOL",
+              "name": "_iteration_binding"
             },
             {
               "type": "STRING",

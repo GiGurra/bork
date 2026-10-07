@@ -355,7 +355,20 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				if declared != nil {
 					actual = declared
 				}
+				sequence, iteration := metadata.sequenceType(node.Value), metadata.iterationType(node.Value)
 				bind(node.Name, actual, node)
+				if sequence != nil {
+					if metadata.sequences == nil {
+						metadata.sequences = map[*local]*deriveIterationType{}
+					}
+					metadata.sequences[c.lookup(node.Name)] = sequence
+				}
+				if iteration != nil {
+					if metadata.iterations == nil {
+						metadata.iterations = map[*local]*deriveIterationType{}
+					}
+					metadata.iterations[c.lookup(node.Name)] = iteration
+				}
 				symbolic.locals[c.lookup(node.Name)] = symbolicActual
 				if value, known := effects.value(node.Value, &symbolic); node.Type == nil && known {
 					effects.values[c.lookup(node.Name)] = value
@@ -394,9 +407,13 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				}
 				walk(reflect.ValueOf(node.Cond), Bool, deriveNativeTerm(Bool, nil))
 				walk(reflect.ValueOf(node.Items), nil, nil)
-				bind(node.Name, nil, node)
+				if node.Pattern != nil {
+					bindPattern(node.Pattern)
+				} else {
+					bind(node.Name, nil, node)
+				}
 				if kind := metadata.kind(node.Items); kind >= deriveFields {
-					metadata.locals[c.lookup(node.Name)] = kind - deriveFields + deriveField
+					metadata.bindIteration(node, &symbolic)
 					if !node.Comptime {
 						c.errorf(node.Pos, "shape metadata cannot be iterated by a runtime for; add comptime")
 						c.diags.Suggest(node.Pos, "type.error", node.Pos, diag.Fix{Message: "add comptime", Edits: []diag.TextEdit{{Start: node.Pos, End: node.Pos, Replacement: "comptime "}}})

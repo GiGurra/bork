@@ -40,7 +40,7 @@ The list methods:
 | --- | --- |
 | Size | `length`, `isEmpty` |
 | Reading | `get`, `head`, `last`, `first`, `find`, `includes` |
-| Transforming | `map`, `flatMap`, `filter`, `fold`, `reverse`, `distinct` |
+| Transforming | `map`, `flatMap`, `filter`, `fold`, `reverse`, `distinct`, `indexed` |
 | Asking | `any`, `all`, `count` |
 | Slicing and joining | `take`, `drop`, `concat`, `append`, `join` (on a list of strings) |
 | Ordering | `sorted`, `sortBy`, `sortWith` |
@@ -63,7 +63,19 @@ fn main() {
 }
 ```
 
-`for (x in xs)` goes through a `List` or a `Seq`. For condition loops,
+`for x in xs` goes through a `List` or a `Seq`. A header can bind a tuple
+with names, `_`, and nested tuple patterns. Each name is fresh for that round;
+a tuple pattern must match the element’s tuple shape. Indexes are explicit:
+
+```bork
+fn main() {
+  for (index, text) in ["one", "two"].indexed() { println(index, text) }
+  for (key, value) in { "apple": 3, "pear": 0 }.pairs() { println(key, value) }
+}
+```
+
+`List[T].indexed()` gives `List[(Int, T)]`, starting at zero.
+For condition loops,
 counting loops, early exits, and accumulating values across rounds, see
 [control flow](basics.md#control-flow) and [loop carrying](basics.md#loop-carrying).
 
@@ -98,7 +110,10 @@ true
 - Two maps are equal when they hold the same entries.
 - Comparable [tuples](types.md#tuples) can be keys, such as `(x, y)` for a grid position.
 
-The map methods: `get`, `getOr`, `has`, `put`, `remove`, `size`, `isEmpty`, `keys`, `values`, `entries`, `merge`, `mapValues`, `filter`, `forEach`, `sorted`, `sortedBy`, `inOrder`, and `unordered`.
+The map methods: `get`, `getOr`, `has`, `put`, `remove`, `size`, `isEmpty`, `keys`, `values`, `entries`, `pairs`, `merge`, `mapValues`, `filter`, `forEach`, `sorted`, `sortedBy`, `inOrder`, and `unordered`.
+
+`Map[K, V].pairs()` gives `List[(K, V)]` in the map’s traversal order,
+including insertion order and the order selected by `sorted` or `sortedBy`.
 
 Lists and maps work together. `groupBy` makes a map from a list, and `entries()` and `toMap()` convert in both directions:
 
@@ -135,9 +150,13 @@ fn main() {
 ```
 
 - `generate[T] { ... }` writes a sequence as a block that calls `yield` for each value.
-- `map`, `filter`, `flatMap`, `take`, and `drop` build a new sequence and do no work yet.
+- `map`, `filter`, `flatMap`, `take`, `drop`, and `indexed` build a new sequence and do no work yet.
 - `for`, `forEach`, `fold`, `first`, and `toList` consume the sequence.
 - `xs.toSeq()` makes a sequence from a list, and `Seq.range(start, end)` one of integers.
+
+`Seq[T].indexed()` gives a lazy `Seq[(Int, T)]` with the source’s effects.
+The index starts at zero on each traversal. It visits each source element once
+and stops as soon as its consumer stops.
 
 The first line of `main` computes only as many squares as it takes to find three even ones. A sequence can be consumed more than once, and each time it starts from the beginning.
 

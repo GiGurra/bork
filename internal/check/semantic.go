@@ -251,6 +251,10 @@ func SemanticTokens(file *syntax.File, info *Info) []SemanticToken {
 		s.pattern(pattern)
 		s.patternNames(binding.Pattern, pattern)
 	}
+	for loop, pattern := range info.loopPats {
+		s.pattern(pattern)
+		s.patternNames(loop.Pattern, pattern)
+	}
 	for arm, pattern := range info.armPats {
 		s.pattern(pattern)
 		s.patternNames(arm.Pattern, pattern)

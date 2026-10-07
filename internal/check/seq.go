@@ -71,7 +71,9 @@ func (c *checker) forExpr(e *syntax.For) Type {
 	outer, names := c.carriable(e)
 	c.nextTransparent = true
 	c.pushScope()
-	if e.Name != "_" {
+	if e.Name == "" && e.Pattern != nil {
+		c.info.loopPats[e] = c.bindingPattern(e.Pattern, elem, false)
+	} else if e.Name != "_" {
 		c.bind(e.Name, e.NamePos, elem, e)
 	}
 	loop := c.carry(e, outer, names)
@@ -259,7 +261,7 @@ func (c *checker) seqMethod(e *syntax.Call, sel *syntax.Selector, receiver Type)
 		return nil, false
 	}
 	op := sel.Name
-	arity := map[string]int{"map": 1, "filter": 1, "flatMap": 1, "take": 1, "drop": 1, "forEach": 1, "fold": 2, "toList": 0, "first": 0}
+	arity := map[string]int{"map": 1, "filter": 1, "flatMap": 1, "take": 1, "drop": 1, "forEach": 1, "fold": 2, "toList": 0, "first": 0, "indexed": 0}
 	n, ok := arity[op]
 	if !ok {
 		return nil, false
@@ -300,6 +302,8 @@ func (c *checker) seqMethod(e *syntax.Call, sel *syntax.Selector, receiver Type)
 		return ft
 	}
 	switch op {
+	case "indexed":
+		result = &Seq{Elem: tupleType([]Type{Int, seq.Elem}), Effects: seq.Effects}
 	case "take", "drop":
 		if t := c.exprWant(e.Args[0], Int); !assignable(t, Int) {
 			c.errorf(e.Args[0].Position(), "Seq.%s count must be Int", op)

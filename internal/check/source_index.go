@@ -88,6 +88,9 @@ func BuildSourceIndex(files []*syntax.File, info *Info) *SymbolIndex {
 	for _, pat := range info.tuplePats {
 		bindings(pat)
 	}
+	for _, pat := range info.loopPats {
+		bindings(pat)
+	}
 	for pos, def := range info.sourceDefinitions {
 		b.referenceNamed(pos, info.sourceNames[pos], def)
 	}
@@ -204,6 +207,9 @@ func BuildSourceIndex(files []*syntax.File, info *Info) *SymbolIndex {
 	}
 	for binding, pat := range info.tuplePats {
 		b.pattern(binding.Pattern, pat)
+	}
+	for loop, pat := range info.loopPats {
+		b.pattern(loop.Pattern, pat)
 	}
 	for source, pattern := range info.patternTests {
 		b.pattern(source.Pattern, pattern)

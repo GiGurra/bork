@@ -55,6 +55,11 @@ fn (xs: List[T]) last[T](): Option[T] unsafe go {
   }
   return Option_Some[T]{E0: xs[len(xs)-1]}
 }
+// Lists zero-based indexes paired with their elements, preserving order.
+fn (xs: List[T]) indexed[T](): List[(Int, T)] {
+  xs.toSeq().indexed().toList()
+}
+
 // Applies f to each element, preserving input order.
 fn (xs: List[A]) map[A, B](f: (A) => B): List[B] unsafe go {
   out := make([]B, len(xs))

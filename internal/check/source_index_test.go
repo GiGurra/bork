@@ -165,3 +165,48 @@ func TestContextPatternIdentitiesAndVisibility(t *testing.T) {
 		}
 	}
 }
+
+func TestLoopTupleBindingIdentities(t *testing.T) {
+	d := &diag.List{}
+	files := prelude.Parse(d)
+	file := syntax.Parse("loops.bork", []byte(`fn main() {
+  for (index, (number, _)) in [(2, "two")].indexed() { println(index, number) }
+  for (index, (number, _)) in [(3, "three")].indexed() { println(index, number) }
+}
+`), d)
+	file.Package = "loops"
+	files = append(files, file)
+	info := Program(files, file.Package, d, nil)
+	if d.Len() != 0 {
+		t.Fatal(d.Error())
+	}
+	index := BuildSourceIndex(files, info)
+	definitions := map[diag.Pos]bool{}
+	for _, symbol := range index.Symbols() {
+		if symbol.Definition.File != file.Path || symbol.Name != "index" && symbol.Name != "number" {
+			continue
+		}
+		definitions[symbol.Definition] = true
+		refs := index.References(symbol.Definition)
+		if len(refs) != 2 {
+			t.Fatalf("%s: references = %+v", symbol.Name, refs)
+		}
+		for _, ref := range refs {
+			if ref.Start.Line != symbol.Definition.Line {
+				t.Fatalf("binding escaped its loop: %+v", ref)
+			}
+		}
+		found := false
+		for _, token := range SemanticTokens(file, info) {
+			if token.Start == symbol.Definition && token.Kind == "variable" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("no semantic declaration for %+v", symbol)
+		}
+	}
+	if len(definitions) != 4 {
+		t.Fatalf("got %d distinct loop bindings, want 4", len(definitions))
+	}
+}

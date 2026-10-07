@@ -173,7 +173,7 @@ module.exports = grammar({
     record_expression: $ => prec.dynamic(1, seq(choice($._expression, '.'), optional($.type_arguments), $.record_literal)),
     record_literal: $ => seq('{', items(seq(field('name', $._identifier), ':', $._expression), $), '}'),
     list_literal: $ => seq('[', choice(items($._expression, $), $.list_comprehension), ']'),
-    list_comprehension: $ => prec.dynamic(20, seq('comptime', 'for', '(', field('name', $._identifier), 'in', $._expression, ')', optional(seq('comptime', 'if', '(', $._expression, ')')), $._expression)),
+    list_comprehension: $ => prec.dynamic(20, seq('comptime', 'for', '(', $._iteration_binding, 'in', $._expression, ')', optional(seq('comptime', 'if', '(', $._expression, ')')), $._expression)),
     map_literal: $ => seq('{', choice(':', items(seq($._expression, ':', $._expression), $, true, $._newline)), '}'),
     unary_expression: $ => prec(11, seq(choice('-', '!', '^'), $._expression)),
     binary_expression: $ => choice(...[['|>',1], ['||',2], ['&&',3], ['==',4], ['!=',4], ['<',4], ['<=',4], ['>',4], ['>=',4], ['+',5], ['-',5], ['|',5], ['^',5], ['&',6], ['<<',6], ['>>',6], ['*',6], ['/',6], ['%',6]].map(([op,p]) => prec.left(p, seq(field('left',$._expression), field('operator',op), field('right',$._expression))))),
@@ -203,13 +203,14 @@ module.exports = grammar({
     for_expression: $ => seq('for', optional(choice(
       seq('(', $._for_header, ')'), $._bare_for_header,
     )), $.block),
+    _iteration_binding: $ => choice(field('name', choice($._identifier, '_')), field('pattern', choice($.tuple_pattern, $.parenthesized_pattern))),
     _for_header: $ => choice(
-      seq(field('name', choice($._identifier, '_')), 'in', $._expression),
+      seq($._iteration_binding, 'in', $._expression),
       field('condition', $._expression),
       $._loop_clauses,
     ),
     _bare_for_header: $ => choice(
-      seq(field('name', choice($._identifier, '_')), 'in', $._head_expression),
+      seq($._iteration_binding, 'in', $._head_expression),
       field('condition', $._head_expression),
       $._head_loop_clauses,
     ),

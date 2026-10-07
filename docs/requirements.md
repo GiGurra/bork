@@ -3524,8 +3524,15 @@ outside its generate boundary. Initially, `?` in this Ok-returning
 body is rejected by the ordinary return-type rules; producers of fallible
 items yield error alternatives explicitly, then return when terminal.
 
-Add `for (name in values) { ... }` for List and Seq, binding a fresh immutable
-name on each iteration. It returns Ok, and its body follows ordinary
+`for pattern in values { ... }` traverses List and Seq, binding fresh immutable
+names on each iteration. Patterns accept names, wildcards, and nested tuples,
+with exact tuple arity and no refutable tests or enclosing-name shadowing.
+Each projected element retains its facts and scope ownership. Indexes are
+explicit: `List[T].indexed()` returns `List[(Int, T)]`, and `Seq[T].indexed()`
+returns a lazy `Seq[(Int, T)]` with the source’s latent effects, traversal order,
+and stop behavior. Indexes begin at zero for every traversal.
+`Map[K, V].pairs()` returns `List[(K, V)]` in the map’s traversal order.
+The loop returns Ok, and its body follows ordinary
 statement/unused-value rules. `break` stops the nearest loop, and `continue`
 skips to its next item. A return from an ordinary consuming loop returns from
 the surrounding function; a return from a loop inside generate ends the

@@ -44,7 +44,11 @@ and templates, see [derivation](../language/derivation.md).
 
 Most operations below exist only during derive expansion. They are pure staged
 operations; descriptor lists are consumed by `comptime for`, `comptime if`, or
-`comptime match`. Their descriptors cannot escape into runtime values.
+`comptime match`. Their descriptors cannot escape into runtime values. Metadata lists support
+`indexed()` and tuple iteration bindings, for example
+`comptime for (index, field) in shape.fields[T]().indexed() { ... }`.
+List-comprehension headers retain their surrounding parentheses:
+`[comptime for ((index, field) in shape.fields[T]().indexed()) field.name]`.
 `metadata` also works in ordinary runtime code.
 
 | Signature or operation | Meaning |

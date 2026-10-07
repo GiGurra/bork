@@ -1,0 +1,2 @@
+main.bork:5:48: function escaped cannot return this value: it belongs to scope s, which ends on line 7
+main.bork:11:61: function escapedIndexed cannot return this value: it belongs to scope s, which ends on line 13

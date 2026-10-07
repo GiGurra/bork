@@ -1,0 +1,15 @@
+import "bork/shape"
+class Labels[T] { fn labels(value: T): List[String] }
+derive instance labels[T]: Labels[T] {
+  fn labels(value: T): List[String] {
+    fields = shape.fields[T]().indexed()
+    comptime for pair in fields {
+      _ = toString(pair.0) + pair.1.name
+    }
+    comptime for (_, _) in shape.fields[T]().indexed() {}
+    [comptime for ((outer, (index, field)) in shape.fields[T]().indexed().indexed())
+      toString(outer) + ":" + toString(index) + ":" + field.name]
+  }
+}
+type Row = { name: String, age: Int } derive (Labels)
+fn main() { println(labels(Row { name: "Ada", age: 37 })) }

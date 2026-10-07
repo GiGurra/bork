@@ -1572,6 +1572,20 @@
           }
         ]
       },
+      "pattern": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "parenthesized_pattern",
+            "named": true
+          },
+          {
+            "type": "tuple_pattern",
+            "named": true
+          }
+        ]
+      },
       "update": {
         "multiple": true,
         "required": false,
@@ -2887,10 +2901,28 @@
     "fields": {
       "name": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
+            "type": "_",
+            "named": false
+          },
+          {
             "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "pattern": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "parenthesized_pattern",
+            "named": true
+          },
+          {
+            "type": "tuple_pattern",
             "named": true
           }
         ]

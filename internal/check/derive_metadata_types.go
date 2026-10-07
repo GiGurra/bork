@@ -25,9 +25,11 @@ const (
 )
 
 type deriveMetadataTypes struct {
-	c         *checker
-	locals    map[*local]deriveDescriptor
-	typeNames map[string]bool
+	c          *checker
+	locals     map[*local]deriveDescriptor
+	typeNames  map[string]bool
+	iterations map[*local]*deriveIterationType
+	sequences  map[*local]*deriveIterationType
 }
 
 func (m *deriveMetadataTypes) annotation(typ *syntax.TypeExpr) deriveDescriptor {
@@ -73,10 +75,16 @@ func (m *deriveMetadataTypes) annotation(typ *syntax.TypeExpr) deriveDescriptor 
 }
 
 func (m *deriveMetadataTypes) kind(expr syntax.Expr) deriveDescriptor {
+	if typ := m.iterationType(expr); typ != nil {
+		return typ.kind
+	}
 	switch expr := expr.(type) {
 	case *syntax.Ident:
 		return m.locals[m.c.lookup(expr.Name)]
 	case *syntax.Call:
+		if selector, ok := expr.Fun.(*syntax.Selector); ok && selector.Name == "indexed" {
+			return m.kind(selector.X)
+		}
 		id, ok := expr.Fun.(*syntax.Ident)
 		if !ok {
 			return 0
@@ -114,6 +122,9 @@ func (m *deriveMetadataTypes) kind(expr syntax.Expr) deriveDescriptor {
 }
 
 func (m *deriveMetadataTypes) scalar(expr syntax.Expr) Type {
+	if typ := m.iterationType(expr); typ != nil && typ.index {
+		return Int
+	}
 	if id, ok := expr.(*syntax.Ident); ok {
 		alias, member, qualified := strings.Cut(id.Name, ".")
 		pkg := m.c.pkg.imports[alias]
@@ -374,7 +385,7 @@ func (m *deriveMetadataTypes) checkMember(selector *syntax.Selector) {
 	case derivePackageTag:
 		valid = selector.Name == "package" || selector.Name == "Type" || selector.Name == "value"
 	case deriveFields, deriveVariants, deriveFacts, derivePackageTags:
-		valid = selector.Name == "length" || selector.Name == "isEmpty"
+		valid = selector.Name == "length" || selector.Name == "isEmpty" || selector.Name == "indexed"
 	default:
 		return
 	}
@@ -396,6 +407,12 @@ func (m *deriveMetadataTypes) checkCall(call *syntax.Call) {
 		return
 	}
 	if kind >= deriveFields {
+		if selector.Name == "indexed" {
+			if len(call.Args) != 0 || len(call.TypeArgs) != 0 {
+				m.c.errorf(call.Pos, "metadata sequence indexed takes no arguments or type arguments")
+			}
+			return
+		}
 		if selector.Name != "length" && selector.Name != "isEmpty" {
 			return
 		}
