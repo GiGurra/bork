@@ -475,6 +475,9 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 }
 
 type gen struct {
+	debugExpression  bool
+	debugConversions map[*ast.CallExpr]bool
+
 	shapeScope     *check.ClassInstance
 	debugSource    string
 	debugFiles     map[string]bool
@@ -1094,7 +1097,23 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		case constant.Bool:
 			return nil, ast.NewIdent(strconv.FormatBool(constant.BoolVal(e.Value)))
 		}
-		return nil, constLit(e.Value, t)
+		literal := constLit(e.Value, t)
+		if g.debugExpression && check.IsFloat(t) {
+			// Delve does not round decimal literals on conversion. Spell the already
+			// compiler-rounded literal exactly so comparisons retain runtime meaning.
+			ast.Inspect(literal, func(node ast.Node) bool {
+				if lit, ok := node.(*ast.BasicLit); ok && lit.Kind == token.FLOAT {
+					bits := 64
+					if t == check.Float32 {
+						bits = 32
+					}
+					value, _ := strconv.ParseFloat(lit.Value, bits)
+					lit.Value = strconv.FormatFloat(value, 'x', -1, bits)
+				}
+				return true
+			})
+		}
+		return nil, literal
 	case *check.Interp:
 		return g.interp(e)
 	case *check.FuncRef:
@@ -1159,7 +1178,18 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		case syntax.Caret:
 			op = token.XOR
 		}
-		return stmts, &ast.UnaryExpr{Op: op, X: paren(x)}
+		var result ast.Expr = &ast.UnaryExpr{Op: op, X: paren(x)}
+		if g.debugExpression && check.IsInteger(e.Type()) {
+			// Delve's unary evaluator does not narrow to the operand width. Its binary
+			// evaluator does: adding typed zero restores the compiler's integer result.
+			zero := &ast.CallExpr{Fun: g.goType(e.Type()), Args: []ast.Expr{&ast.BasicLit{Kind: token.INT, Value: "0"}}}
+			if g.debugConversions == nil {
+				g.debugConversions = map[*ast.CallExpr]bool{}
+			}
+			g.debugConversions[zero] = true
+			result = &ast.BinaryExpr{X: paren(result), Op: token.ADD, Y: zero}
+		}
+		return stmts, result
 	case *check.Binary:
 		return g.binary(e)
 	case *check.Call, *check.CallBuiltin, *check.CallValue:

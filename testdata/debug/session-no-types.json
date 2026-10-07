@@ -21,6 +21,18 @@
         "expandable": false
       },
       {
+        "name": "fraction",
+        "type": "",
+        "value": "1.1",
+        "expandable": false
+      },
+      {
+        "name": "fraction32",
+        "type": "",
+        "value": "1.1",
+        "expandable": false
+      },
+      {
         "name": "listUnion",
         "type": "",
         "value": "[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...+16 more]",
@@ -75,6 +87,12 @@
         "expandable": true
       },
       {
+        "name": "signed",
+        "type": "",
+        "value": "-128",
+        "expandable": false
+      },
+      {
         "name": "some",
         "type": "",
         "value": "Some(3)",
@@ -85,6 +103,18 @@
         "type": "",
         "value": "Some(2.0)",
         "expandable": true
+      },
+      {
+        "name": "suffix",
+        "type": "",
+        "value": "Suffix { range_: 4 }",
+        "expandable": true
+      },
+      {
+        "name": "unsigned",
+        "type": "",
+        "value": "0 = 0x0",
+        "expandable": false
       },
       {
         "name": "x",

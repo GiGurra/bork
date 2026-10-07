@@ -6,10 +6,12 @@ import (
 	"io"
 
 	"github.com/GiGurra/bork/internal/check"
+	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/gen"
 )
 
 type dapEvaluation struct {
+	site    diag.Pos
 	epoch   uint64
 	request map[string]any
 	locals  []check.DebugLocal
@@ -27,7 +29,7 @@ func (r *dapRelay) evaluate(msg map[string]any, requests bool) (bool, error) {
 		if !ok {
 			return true, r.evaluateError(msg, "debug expression: select a paused stack frame first")
 		}
-		evaluation := &dapEvaluation{request: msg, epoch: r.evaluationEpoch}
+		evaluation := &dapEvaluation{request: msg, epoch: r.evaluationEpoch, site: r.frames[frame]}
 		return true, r.evaluateRequest(evaluation, "scopes", map[string]any{"frameId": frame})
 	}
 	if msg["type"] != "response" {
@@ -80,11 +82,18 @@ func (r *dapRelay) evaluate(msg map[string]any, requests bool) (bool, error) {
 	}
 	args, _ := evaluation.request["arguments"].(map[string]any)
 	source, _ := args["expression"].(string)
-	translated, err := gen.DebugExpression(source, r.metadata, evaluation.locals)
+	translated, resultType, err := gen.DebugExpressionTyped(source, r.metadata, evaluation.site, evaluation.locals)
 	if err != nil {
 		return true, r.evaluateError(evaluation.request, err.Error())
 	}
 	args["expression"] = translated
+	if resultType != "" {
+		if r.evaluationTypes == nil {
+			r.evaluationTypes = map[float64]string{}
+		}
+		seq, _ := evaluation.request["seq"].(float64)
+		r.evaluationTypes[seq] = resultType
+	}
 	return true, r.writeDebugMessage(r.upstream, evaluation.request, true)
 }
 

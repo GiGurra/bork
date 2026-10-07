@@ -34,13 +34,18 @@ subset of bork expressions in the selected stack frame:
   names such as `range` and `chan` that Go reserves).
 - Integer, float, boolean, string and rune literals, and parentheses.
 - Eager record fields, including nested fields and concrete generic records.
-- Scalar arithmetic, comparison, boolean and bitwise operators, checked with
+- Integer arithmetic, scalar comparison, boolean and integer bitwise operators, checked with
   bork's normal operand types and literal ranges.
 
-For example, `user.address.zip`, `count + 1`, `price * 1.5`, and
+For example, `user.address.zip`, `count + 1`, `price > minimum`, and
 `!(count > 4) && enabled` work without generated Go names. The compiler parses,
 checks and lowers expressions using type information from the build's debug map
 and locals from the selected frame. Evaluation does not execute user functions.
+
+Floating-point arithmetic is rejected because Delve does not preserve runtime
+rounding, even with explicit Float/Float32 conversions. Float literals,
+inspection and comparisons of noncomputed operands remain available. Literal
+comparisons use exact representations of the compiler-rounded values.
 
 Calls and methods, aggregate literals and comparisons, interpolated strings,
 blocks, `if`/`match`, pipes, assignments, `?`, deferred bindings/fields, and
@@ -54,7 +59,8 @@ rather than choosing a value with the wrong source identity.
 Rebuild to include expression metadata. Old debug maps without that metadata,
 and sessions without a compatible map, retain Delve's Go expression behavior.
 The map describes the built executable; editing source does not update a paused
-session. Other DAP clients should supply `frameId` on evaluation requests.
+session. Other DAP clients should request a stack trace and supply its selected `frameId`
+on evaluation requests, so the compiler can resolve source binding identities.
 
 ## Current limits
 

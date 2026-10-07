@@ -3424,7 +3424,10 @@ and Go expression lowering, with compiler-generated type/name metadata and raw
 locals from the selected Delve frame. The relay contains no language parser,
 operator table or naming rules. Supported expressions are available locals and
 parameters, scalar literals, parentheses, eager nested record fields (including
-concrete generics), and scalar operators. Unsupported expressions return readable
+concrete generics), integer arithmetic and scalar comparisons/boolean/bitwise
+operators. Floating-point arithmetic is rejected because Delve does not preserve
+runtime rounding; float inspection/literals and noncomputed comparisons remain.
+Literal types and integer unary widths retain their checked semantics. Unsupported expressions return readable
 errors without executing user code. Calls, methods, collection access, aggregate
 construction/comparison, deferred reads, interpolation, control flow, pipes, `?`
 and option/union payload projections are excluded. List access is `get(i)`, not

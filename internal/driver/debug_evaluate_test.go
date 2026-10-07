@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/GiGurra/bork/internal/check"
+	"github.com/GiGurra/bork/internal/diag"
+	"github.com/GiGurra/bork/internal/gen"
 )
 
 func takeDebugMessage(t *testing.T, buffer *bytes.Buffer) map[string]any {
@@ -27,6 +29,8 @@ func TestDebugEvaluateRelay(t *testing.T) {
 	r := presentationFixture()
 	r.metadata.Expressions = map[string]check.DebugShape{"int64": {Name: "Int", Kind: "scalar"}}
 	r.metadata.Names["range_"] = "range"
+	r.frames = map[float64]diag.Pos{100: {File: "main.bork", Line: 5}}
+	r.metadata.Bindings = []gen.DebugBindings{{Start: diag.Pos{File: "main.bork", Line: 1}, End: diag.Pos{File: "main.bork", Line: 10}, Names: map[string]string{"range_": "range"}}}
 	var upstream, downstream bytes.Buffer
 	r.upstream, r.downstream = &upstream, &downstream
 	handle := func(message map[string]any, request bool) {

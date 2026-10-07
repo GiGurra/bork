@@ -21,6 +21,18 @@
         "expandable": false
       },
       {
+        "name": "fraction",
+        "type": "Float",
+        "value": "1.1",
+        "expandable": false
+      },
+      {
+        "name": "fraction32",
+        "type": "Float32",
+        "value": "1.1",
+        "expandable": false
+      },
+      {
         "name": "listUnion",
         "type": "List[Int]",
         "value": "[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...+16 more]",
@@ -75,6 +87,12 @@
         "expandable": true
       },
       {
+        "name": "signed",
+        "type": "Int8",
+        "value": "-128",
+        "expandable": false
+      },
+      {
         "name": "some",
         "type": "Option[Int]",
         "value": "Some(3)",
@@ -85,6 +103,18 @@
         "type": "Option[Float]",
         "value": "Some(2.0)",
         "expandable": true
+      },
+      {
+        "name": "suffix",
+        "type": "Suffix",
+        "value": "Suffix { range_: 4 }",
+        "expandable": true
+      },
+      {
+        "name": "unsigned",
+        "type": "Uint8",
+        "value": "0 = 0x0",
+        "expandable": false
       },
       {
         "name": "x",

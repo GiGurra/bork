@@ -122,7 +122,16 @@ func DebugExpression(source string, shapes map[string]DebugShape, locals []Debug
 	// permit ==. Keep the supported operator subset scalar and deterministic.
 	for node := range info.types {
 		switch e := node.(type) {
+		case *syntax.Unary:
+			if t := info.types[e]; t == Float || t == Float32 {
+				if _, literal := e.X.(*syntax.FloatLit); !literal {
+					return nil, nil, fmt.Errorf("debug expression: floating-point arithmetic is unsupported because Delve does not preserve runtime rounding; inspect values or compare operands directly")
+				}
+			}
 		case *syntax.Binary:
+			if t := info.types[e]; t == Float || t == Float32 {
+				return nil, nil, fmt.Errorf("debug expression: floating-point arithmetic is unsupported because Delve does not preserve runtime rounding; inspect values or compare operands directly")
+			}
 			if info.constantOf(e) != nil {
 				continue
 			}

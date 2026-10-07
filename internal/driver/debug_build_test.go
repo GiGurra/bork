@@ -179,6 +179,7 @@ func testDebugDAPSession(t *testing.T, types bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	suffixBreakpoint := strings.Count(string(source[:bytes.Index(source, []byte("fn suffixFrame"))]), "\n") + 1
 	breakpoint := strings.Count(string(source[:bytes.Index(source, []byte("println(y)"))]), "\n") + 1
 	if err := os.WriteFile(path, source, 0600); err != nil {
 		t.Fatal(err)
@@ -226,7 +227,7 @@ func testDebugDAPSession(t *testing.T, types bool) {
 	d.until(t, "", seq)
 	d.send(t, "launch", map[string]any{"mode": "exec", "program": exe, "cwd": root})
 	d.until(t, "initialized", 0)
-	seq = d.send(t, "setBreakpoints", map[string]any{"source": map[string]any{"path": path}, "breakpoints": []any{map[string]any{"line": breakpoint}}})
+	seq = d.send(t, "setBreakpoints", map[string]any{"source": map[string]any{"path": path}, "breakpoints": []any{map[string]any{"line": breakpoint}, map[string]any{"line": suffixBreakpoint}}})
 	response := d.until(t, "", seq)
 	body := response["body"].(map[string]any)
 	bp := body["breakpoints"].([]any)[0].(map[string]any)
@@ -297,8 +298,8 @@ func testDebugDAPSession(t *testing.T, types bool) {
 	}
 
 	for _, test := range []struct{ expression, want string }{
-		{"range + chan", "6"}, {"nested.inner.range + y * 2", "19"}, {"boxed.item + 0.5", "2.5"}, {"!(range > 4) && y == 7", "true"}, {"^range & 7", "4"},
-		{"(1 + 2) * 3", "9"}, {"1 / 2", "0"}, {"-range", "-3"}, {`"hé" + "llo"`, `"héllo"`},
+		{"fraction32 == 1.1", "true"}, {"fraction32 > 1.1", "false"}, {"fraction == 1.1", "true"}, {"fraction > 1.1", "false"}, {"suffix.range_", "4"}, {"^unsigned == 255", "true"}, {"-signed == signed", "true"}, {"range + chan", "6"}, {"nested.inner.range + y * 2", "19"}, {"boxed.item > 1.5", "true"}, {"!(range > 4) && y == 7", "true"}, {"^range & 7", "4"},
+		{"(1 + 2) * 3", "9"}, {"1 / 2", "0"}, {"1.0", "1.0"}, {"'å'", "229"}, {"-range", "-3"}, {`"hé" + "llo"`, `"héllo"`},
 	} {
 		for _, context := range []string{"repl", "watch", "hover"} {
 			seq = d.send(t, "evaluate", map[string]any{"expression": test.expression, "frameId": frame["id"], "context": context})
@@ -306,9 +307,15 @@ func testDebugDAPSession(t *testing.T, types bool) {
 			if got := response["body"].(map[string]any)["result"]; got != test.want {
 				t.Fatalf("%s in %s: %v; want %s", test.expression, context, response, test.want)
 			}
+			if types {
+				wantType := map[string]string{"1.0": "Float", "'å'": "Rune", "(1 + 2) * 3": "Int"}[test.expression]
+				if wantType != "" && response["body"].(map[string]any)["type"] != wantType {
+					t.Fatalf("literal result type for %s: %v", test.expression, response)
+				}
+			}
 		}
 	}
-	for _, expression := range []string{"missing", "nested.inner.nope", "chan_", "nested.inner.range_", "chan + true", "println(y)", "shapes.get(0)", "shapes[0]", "some.value", "nested == nested", "y = 1", "1; println(y)"} {
+	for _, expression := range []string{"boxed.item + 0.5", "boxed.item * 1.0", "fraction + 1.0 == fraction", "suffix.range", "range_", "missing", "nested.inner.nope", "chan_", "nested.inner.range_", "chan + true", "println(y)", "shapes.get(0)", "shapes[0]", "some.value", "nested == nested", "y = 1", "1; println(y)"} {
 		seq = d.send(t, "evaluate", map[string]any{"expression": expression, "frameId": frame["id"], "context": "repl"})
 		response = d.untilAny(t, "", seq)
 		if response["success"] != false || response["message"] == "" {
@@ -324,6 +331,22 @@ func testDebugDAPSession(t *testing.T, types bool) {
 	frame = response["body"].(map[string]any)["stackFrames"].([]any)[0].(map[string]any)
 	if frame["line"] != float64(breakpoint+1) {
 		t.Fatalf("step landed on: %v", frame)
+	}
+
+	seq = d.send(t, "continue", map[string]any{"threadId": thread})
+	d.until(t, "", seq)
+	d.until(t, "stopped", 0)
+	seq = d.send(t, "stackTrace", map[string]any{"threadId": thread})
+	response = d.until(t, "", seq)
+	suffixFrame := response["body"].(map[string]any)["stackFrames"].([]any)[0].(map[string]any)
+	seq = d.send(t, "evaluate", map[string]any{"expression": "range_", "frameId": suffixFrame["id"], "context": "watch"})
+	response = d.until(t, "", seq)
+	if response["body"].(map[string]any)["result"] != "4" {
+		t.Fatalf("source suffix name: %v", response)
+	}
+	seq = d.send(t, "evaluate", map[string]any{"expression": "range", "frameId": suffixFrame["id"], "context": "watch"})
+	if response = d.untilAny(t, "", seq); response["success"] != false {
+		t.Fatalf("reserved alias exposed nonexistent source name: %v", response)
 	}
 	seq = d.send(t, "disconnect", map[string]any{"terminateDebuggee": true})
 	d.until(t, "", seq)
