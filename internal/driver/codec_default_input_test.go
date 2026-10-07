@@ -10,16 +10,11 @@ func TestCodecDefaultInput(t *testing.T) {
 	t.Parallel()
 	source := `import "bork/codec"
 import "bork/json"
-import "bork/shape"
 use codec.Defaults
 type Mode = sealed { Quiet, Loud, Other(String) codec {fallback:true} } derive(codec.Decode)
 type Payload = sealed { Empty, Pair(Int, String), Named { text:String } } derive(codec.Decode)
 type Data = { widths:(Int8,Uint64,Float32) = (2,3,1.5), rune:Rune='x', tags:List[Mode]=[.Loud,.Other("custom")], entries:Map[String,Option[Payload]]={"a":.Some(.Pair(2,"two")),"b":.Some(.Named{text:"named"}),"c":.Some(.Empty),"d":.None}, raw:codec.Value=.Bool{value:true}, lazy computed:Int=tags.length() } derive(codec.Decode)
 type Options = { data:Data = .{} } derive(codec.Decode)
-fn badBridge(provider:codec.DefaultInput):codec.Value|codec.DecodeError unsafe go {
- // Deliberately violate the private bridge contract; safe callers cannot do this.
- return provider.callback("wrong type")
-}
 fn main(){
  match(codec.Schema[Options]()){
   Option.Some(schema)=>schema.fields.forEach(field=>{
@@ -33,8 +28,6 @@ fn main(){
   })
   Option.None=>println("missing schema")
  }
- println(badBridge(codec.Input[Int](value=>codec.Value.Number{text:toString(value)})))
- println(badBridge(shape.metadata[Data,codec.Decode,codec.DefaultInput]().getOr(codec.Input[Int](value=>codec.Value.Null))))
 }`
 	exe, err := buildFixtureOutput(t, validatorFixture(t, source))
 	if err != nil {
@@ -44,59 +37,59 @@ fn main(){
 	if err != nil {
 		t.Fatalf("run: %v\n%s", err, out)
 	}
-	for _, want := range []string{`"widths":[2,3,1.5]`, `"rune":"x"`, `"tags":["LOUD","custom"]`, `"a":{"type":"Pair","values":[2,"two"]}`, `"b":{"type":"Named","text":"named"}`, `"c":{"type":"Empty"}`, `"d":null`, `"raw":true`, `internal error: default input provider type mismatch`} {
+	for _, want := range []string{`"widths":[2,3,1.5]`, `"rune":"x"`, `"tags":["LOUD","custom"]`, `"a":{"type":"Pair","values":[2,"two"]}`, `"b":{"type":"Named","text":"named"}`, `"c":{"type":"Empty"}`, `"d":null`, `"raw":true`} {
 		if !strings.Contains(string(out), want) {
 			t.Fatalf("output %q lacks %q", out, want)
 		}
-	}
-	if strings.Count(string(out), "internal error: default input provider type mismatch") != 2 {
-		t.Fatalf("both constructors must reject a bad runtime input: %s", out)
 	}
 	if strings.Contains(string(out), `"computed"`) {
 		t.Fatalf("computed field materialized: %s", out)
 	}
 }
 
-func TestCodecDefaultInputBridgeIsPrivate(t *testing.T) {
+func TestCodecDefaultInputTypedProvider(t *testing.T) {
 	t.Parallel()
 	checkPreludeSource(t, `import "bork/codec"
 use codec.Defaults
-fn main() { _ = codec.shapeInput[Int]() }`, "package bork/codec has no shapeInput")
+type Token = {text:String}
+instance token:codec.Decode[Token] {
+ metadata codec.DefaultInput[Token] = codec.Input[String](value=>codec.Value.String{value:value})
+ fn decode(input:codec.Value):Token|codec.DecodeError {Token{text:"value"}}
+}
+fn main(){}`, "body produces codec.DefaultInput[String]")
 	checkPreludeSource(t, `import "bork/codec"
 use codec.Defaults
-fn main() {
- provider = codec.Input[Int](value => codec.Value.Number {text:toString(value)})
- _ = provider.callback(codec.Value.Null)
-}`, "argument 1")
-	checkPreludeSource(t, `import "bork/codec"
-use codec.Defaults
-fn main() {
- provider = codec.Input[Int](value => codec.Value.Number {text:toString(value)})
- _ = codec.Input(provider.callback)
-}`, "no instance of Decode")
-	checkPreludeSource(t, `import "bork/codec"
-fn main() {
- _ = codec.DefaultInput {callback: value => codec.Value.Null, matches: value => true, supported:true}
-}`, "package bork/codec controls its construction")
+fn main(){provider=codec.Input[Int](value=>codec.Value.Null);_ = provider.convert("wrong")}`, "argument 1")
 }
 
-func TestCodecDefaultInputRejectsNestedErasedUnions(t *testing.T) {
+func TestCodecDefaultInputUnionTargets(t *testing.T) {
 	t.Parallel()
 	source := `import "bork/codec"
+import "bork/json"
+import "bork/shape"
 use codec.Defaults
-instance one:codec.Decode[Int|String]{fn decode(input:codec.Value):Int|String|codec.DecodeError{1}}
-instance two:codec.Decode[Bool|Float]{fn decode(input:codec.Value):Bool|Float|codec.DecodeError{true}}
-type Box[T]={value:T}
-instance box[T:codec.Decode]:codec.Decode[Box[T]]{
- metadata codec.DefaultInput=codec.Input[Box[Int|String]](box=>match(box.value){i:Int=>codec.Value.Number{text:toString(i)},s:String=>codec.Value.String{value:s}})
- fn decode(input:codec.Value):Box[T]|codec.DecodeError{match(codec.decode[T](input)){error:codec.DecodeError=>error,value:T=>Box{value:value}}}
+instance union:codec.Decode[Int|String] {
+ metadata codec.DefaultInput[Int|String] = codec.Input[Int|String](value=>match(value){i:Int=>codec.Value.Number{text:toString(i)},s:String=>codec.Value.String{value:s}})
+ fn decode(input:codec.Value):Int|String|codec.DecodeError {
+  match(input){codec.Value.Number{}=>codec.decode[Int](input),codec.Value.String{value}=>value,_=>codec.DecodeError{path:"",message:"expected number or string"}}
+ }
 }
-type Db={box:Box[Bool|Float]}derive(codec.Decode)
-type Options={db:Db=.{box:.{value:true}}}derive(codec.Decode)
-fn main(){match(codec.Schema[Options]()){
- Option.Some(schema)=>schema.fields.forEach(field=>match(field.defaultInput){Option.Some(provider)=>println(provider()),Option.None=>println("none")})
- Option.None=>println("no schema")
-}}`
+type Box[T] = {value:T} derive(codec.Decode)
+type Data = {number:Int|String=7, text:Box[Int|String]=.{value:"seven"}} derive(codec.Decode)
+type Options = {data:Data=.{}} derive(codec.Decode)
+fn main(){
+ match(codec.Schema[Options]()){
+  Option.Some(schema)=>schema.fields.forEach(field=>match(field.defaultInput){
+   Option.Some(provider)=>match(provider()){value:codec.Value=>{println(json.Render(value));println(codec.decode[Data](value))},error:codec.DecodeError=>println(error)}
+   Option.None=>println("missing provider")
+  })
+  Option.None=>println("missing schema")
+ }
+ match(shape.metadata[Int|String,codec.Decode,codec.DefaultInput[Int|String]]()){
+  Option.Some(provider)=>println(provider.convert("direct"))
+  Option.None=>println("missing union provider")
+ }
+}`
 	exe, err := buildFixtureOutput(t, validatorFixture(t, source))
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +98,9 @@ fn main(){match(codec.Schema[Options]()){
 	if err != nil {
 		t.Fatalf("run: %v\n%s", err, out)
 	}
-	if !strings.Contains(string(out), `path: ".box"`) || !strings.Contains(string(out), "union DefaultInput providers require generic metadata keys") {
-		t.Fatalf("output: %s", out)
+	for _, want := range []string{`{"number":7,"text":{"value":"seven"}}`, `number: 7`, `value: "seven"`, `value: "direct"`} {
+		if !strings.Contains(string(out), want) {
+			t.Fatalf("output %q lacks %q", out, want)
+		}
 	}
 }

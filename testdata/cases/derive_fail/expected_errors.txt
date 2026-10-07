@@ -1,6 +1,6 @@
 main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:567:78)
 main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:577:67)
-main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/default_input.bork:119:100)
+main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/default_input.bork:59:100)
 main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:467:70)
 main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:491:68)
 main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:492:62)
