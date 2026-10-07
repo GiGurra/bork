@@ -1,0 +1,584 @@
+==================
+Leading repeated trailing separators in records
+==================
+type R = { ;; a: Int;; b: String;; }
+---
+
+(source_file
+  (type_declaration
+    (identifier)
+    (record_type
+      (field_declaration
+        (identifier)
+        (type
+          (qualified_name
+            (identifier))))
+      (field_declaration
+        (identifier)
+        (type
+          (qualified_name
+            (identifier)))))))
+
+==================
+Leading repeated trailing separators in sealed types
+==================
+type S = sealed { ;; A;; B;; }
+---
+
+(source_file
+  (type_declaration
+    (identifier)
+    (variant
+      (identifier))
+    (variant
+      (identifier))))
+
+==================
+Leading repeated trailing separators in blocks
+==================
+fn f() { ;; a = 1;; a;; }
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (binding
+        (identifier)
+        (number))
+      (qualified_name
+        (identifier)))))
+
+==================
+Empty bodies containing semicolons
+==================
+type R = { ;; }
+type S = sealed { ;; }
+fn f() { ;; }
+---
+
+(source_file
+  (type_declaration
+    (identifier)
+    (record_type))
+  (type_declaration
+    (identifier))
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block)))
+
+==================
+Mixed commas newlines and semicolons in lists
+==================
+type R = { a: Int,;;
+ b: String;
+ c: Bool,; }
+type S = sealed { A,;;
+ B; C,; }
+---
+
+(source_file
+  (type_declaration
+    (identifier)
+    (record_type
+      (field_declaration
+        (identifier)
+        (type
+          (qualified_name
+            (identifier))))
+      (field_declaration
+        (identifier)
+        (type
+          (qualified_name
+            (identifier))))
+      (field_declaration
+        (identifier)
+        (type
+          (qualified_name
+            (identifier))))))
+  (type_declaration
+    (identifier)
+    (variant
+      (identifier))
+    (variant
+      (identifier))
+    (variant
+      (identifier))))
+
+==================
+Newline and comment separated statements
+==================
+fn f() {
+ a = 1 // next
+ b = 2; /* inline */ c = 3;;
+ a + b + c
+}
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (binding
+        (identifier)
+        (number))
+      (comment)
+      (binding
+        (identifier)
+        (number))
+      (comment)
+      (binding
+        (identifier)
+        (number))
+      (binary_expression
+        (binary_expression
+          (qualified_name
+            (identifier))
+          (qualified_name
+            (identifier)))
+        (qualified_name
+          (identifier))))))
+
+==================
+Tag entry separators
+==================
+type R = { a: Int codec { ;; name: "a",;; flag: true;; } }
+---
+
+(source_file
+  (type_declaration
+    (identifier)
+    (record_type
+      (field_declaration
+        (identifier)
+        (type
+          (qualified_name
+            (identifier)))
+        (tag_group
+          (identifier)
+          (tag_entry
+            (identifier)
+            (string))
+          (tag_entry
+            (identifier)
+            (boolean)))))))
+
+==================
+Instance bundle separators
+==================
+instances Names { ;; first,;; pkg.second;; pkg.*
+ last,; }
+---
+
+(source_file
+  (instances_declaration
+    (identifier)
+    (qualified_name
+      (identifier))
+    (qualified_name
+      (identifier)
+      (identifier))
+    (qualified_name
+      (identifier))
+    (qualified_name
+      (identifier))))
+
+==================
+Record and list literal separators
+==================
+fn f() { r = R { ;; a: 1,;; b: 2;; }; [;; r,;; r;;] }
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (binding
+        (identifier)
+        (record_expression
+          (qualified_name
+            (identifier))
+          (record_literal
+            (identifier)
+            (number)
+            (identifier)
+            (number))))
+      (list_literal
+        (qualified_name
+          (identifier))
+        (qualified_name
+          (identifier))))))
+
+==================
+Match and select arm separators
+==================
+fn f(x: S) { match (x) { ;; S.A => 1,;; S.B => 2;; }; select { ;; a.receive(s) => 1,;; _ => 2;; } }
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters
+      (parameter
+        (identifier)
+        (type
+          (qualified_name
+            (identifier)))))
+    (block
+      (match_expression
+        (qualified_name
+          (identifier))
+        (match_arm
+          (pattern
+            (qualified_name
+              (identifier)
+              (identifier)))
+          (number))
+        (match_arm
+          (pattern
+            (qualified_name
+              (identifier)
+              (identifier)))
+          (number)))
+      (select_expression
+        (select_arm
+          (call_expression
+            (selector_expression
+              (qualified_name
+                (identifier))
+              (identifier))
+            (argument
+              (qualified_name
+                (identifier))))
+          (number))
+        (select_arm
+          (number))))))
+
+==================
+Variant field and payload pattern separators
+==================
+fn f(x: S) { match (x) { S.A { ;; a,;; b: v;; } => v; S.B(;; a,;; b;;) => a } }
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters
+      (parameter
+        (identifier)
+        (type
+          (qualified_name
+            (identifier)))))
+    (block
+      (match_expression
+        (qualified_name
+          (identifier))
+        (match_arm
+          (pattern
+            (qualified_name
+              (identifier)
+              (identifier))
+            (field_pattern
+              (identifier))
+            (field_pattern
+              (identifier)
+              (pattern
+                (qualified_name
+                  (identifier)))))
+          (qualified_name
+            (identifier)))
+        (match_arm
+          (pattern
+            (qualified_name
+              (identifier)
+              (identifier))
+            (pattern
+              (qualified_name
+                (identifier)))
+            (pattern
+              (qualified_name
+                (identifier))))
+          (qualified_name
+            (identifier)))))))
+
+==================
+List pattern separators
+==================
+fn f(x: List[Int]) { match (x) { [;; a,;; ...rest;;] => a } }
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters
+      (parameter
+        (identifier)
+        (type
+          (qualified_name
+            (identifier))
+          (type_arguments
+            (type
+              (qualified_name
+                (identifier)))))))
+    (block
+      (match_expression
+        (qualified_name
+          (identifier))
+        (match_arm
+          (pattern
+            (pattern
+              (qualified_name
+                (identifier)))
+            (identifier))
+          (qualified_name
+            (identifier)))))))
+
+==================
+Test pattern separators
+==================
+fn f(x: S) { x is S.A { ;; a,;; b: v;; }; x is S.B(;; a,;; b;;); x is [;; a,;; ...rest;;] }
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters
+      (parameter
+        (identifier)
+        (type
+          (qualified_name
+            (identifier)))))
+    (block
+      (is_expression
+        (qualified_name
+          (identifier))
+        (test_pattern
+          (type
+            (qualified_name
+              (identifier)
+              (identifier)))
+          (test_field_pattern
+            (identifier))
+          (test_field_pattern
+            (identifier)
+            (test_pattern
+              (type
+                (qualified_name
+                  (identifier)))))))
+      (is_expression
+        (qualified_name
+          (identifier))
+        (test_pattern
+          (type
+            (qualified_name
+              (identifier)
+              (identifier)))
+          (test_pattern
+            (type
+              (qualified_name
+                (identifier))))
+          (test_pattern
+            (type
+              (qualified_name
+                (identifier))))))
+      (is_expression
+        (qualified_name
+          (identifier))
+        (test_pattern
+          (test_pattern
+            (type
+              (qualified_name
+                (identifier))))
+          (identifier))))))
+
+==================
+With binding separators
+==================
+fn f() { with (;; traceId: "id",;; principal: p;;) { ;; 1;; } }
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (with_expression
+        (qualified_name
+          (identifier))
+        (string)
+        (qualified_name
+          (identifier))
+        (qualified_name
+          (identifier))
+        (block
+          (number))))))
+
+==================
+Missing record field separator
+:error
+==================
+type R = { a: Int b: String }
+---
+
+(source_file)
+
+==================
+Missing sealed variant separator
+:error
+==================
+type S = sealed { A B }
+---
+
+(source_file)
+
+==================
+Comma between block statements
+:error
+==================
+fn f() { a = 1, a }
+---
+
+(source_file)
+
+==================
+Missing block statement separator
+:error
+==================
+fn f() { a = 1 a }
+---
+
+(source_file)
+
+==================
+Repeated commas in a list
+:error
+==================
+type R = { a: Int,, b: String }
+---
+
+(source_file)
+
+==================
+Leading comma in a list
+:error
+==================
+type S = sealed { , A }
+---
+
+(source_file)
+
+==================
+Comma after a semicolon
+:error
+==================
+type S = sealed { A;, B }
+---
+
+(source_file)
+
+==================
+Multiline map literals and map separators
+==================
+fn f() { m = {
+ "key": [1]
+ }; n = { "a": 1,;; "b": 2;; }; e = {:}; {} }
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (binding
+        (identifier)
+        (map_literal
+          (string)
+          (list_literal
+            (number))))
+      (binding
+        (identifier)
+        (map_literal
+          (string)
+          (number)
+          (string)
+          (number)))
+      (binding
+        (identifier)
+        (map_literal))
+      (block))))
+
+==================
+Missing tag entry separator
+:error
+==================
+type R = { a: Int codec { name: "a" flag: true } }
+---
+
+(source_file)
+
+==================
+Missing instance bundle separator
+:error
+==================
+instances Names { first second }
+---
+
+(source_file)
+
+==================
+Missing record literal separator
+:error
+==================
+fn f() { R { a: 1 b: 2 } }
+---
+
+(source_file)
+
+==================
+Missing list literal separator
+:error
+==================
+fn f() { [1 2] }
+---
+
+(source_file)
+
+==================
+Missing match arm separator
+:error
+==================
+fn f(x: S) { match (x) { S.A => 1 S.B => 2 } }
+---
+
+(source_file)
+
+==================
+Missing with binding separator
+:error
+==================
+fn f() { with (traceId: "id" principal: p) { 1 } }
+---
+
+(source_file)
+
+==================
+Leading semicolon before a map entry
+:error
+==================
+fn f() { { ;; "a": 1 } }
+---
+
+(source_file)
+
+==================
+Missing map entry separator
+:error
+==================
+fn f() { { "a": 1 "b": 2 } }
+---
+
+(source_file)

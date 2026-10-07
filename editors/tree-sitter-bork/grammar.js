@@ -1,7 +1,18 @@
 /// <reference types="tree-sitter-cli/dsl" />
 const comma = rule => seq(rule, repeat(seq(',', rule)), optional(','));
 const tuple = rule => seq('(', rule, ',', optional(comma(rule)), ')');
-const items = (rule, $) => repeat(seq(rule, optional(choice(',', ';', $._newline))));
+const semis = $ => choice(';', $._newline);
+// Match parser.list(): semicolons may repeat, but each comma follows an item.
+const items = (rule, $, required = false, leading = semis($)) => {
+  const terminated = seq(rule, choice(seq(',', repeat(semis($))), repeat1(semis($))));
+  return seq(repeat(leading), required
+    ? choice(seq(repeat1(terminated), optional(rule)), rule)
+    : seq(repeat(terminated), optional(rule)));
+};
+// Blocks require a semicolon or newline between statements, never a comma.
+const statements = (rule, $) => seq(repeat(semis($)), repeat(seq(
+  rule, repeat1(semis($)),
+)), optional(rule));
 module.exports = grammar({
   name: 'bork',
   extras: $ => [/\s/, $.comment],
@@ -64,6 +75,7 @@ module.exports = grammar({
     [$.type_declaration],
     [$.use_declaration],
     [$.block, $.record_literal],
+    [$.block, $.map_literal],
     [$.type, $._expression],
   ],
   rules: {
@@ -117,7 +129,7 @@ module.exports = grammar({
     _statement: $ => choice($.bare_return, $.bare_break, $.bare_continue, $.binding, $.trust_statement, $._expression),
     binding: $ => seq(optional(choice('lazy', seq('async', '(', $._expression, ')'))), field('name', choice($._identifier, alias('lazy', $.identifier), '_', $.tuple_pattern)), optional(seq(':', $.type)), '=', $._expression),
     trust_statement: $ => seq('trust', $._expression),
-    block: $ => seq('{', items($._statement, $), '}'),
+    block: $ => seq('{', statements($._statement, $), '}'),
     _expression: $ => choice($.generic_expression, $.qualified_name, $.number, $.string, $.rune, $.boolean, $.interpolated_string, $.block, $.record_expression, $.list_literal, $.map_literal, $.parenthesized_expression, $.tuple_literal, $.call_expression, $.selector_expression, $.try_expression, $.unary_expression, $.binary_expression, $.is_expression, $.lambda_expression, $.if_expression, $.match_expression, $.select_expression, $.return_expression, $.scope_expression, $.with_expression, $.generate_expression, $.yield_expression, $.for_expression, $.comptime_expression, $.comptime_control_expression, $.mock_expression, 'break', 'continue', $.go_body),
     number: _ => token(choice(/0[xX][\da-fA-F_]+/, /0[bB][01_]+/, /0[oO][0-7_]+/, /\d[\d_]*(\.\d[\d_]*)?([eE][+-]?[\d_]+)?/)),
     string: $ => seq('"', repeat(choice($.escape_sequence, token.immediate(prec(1, /[^"\\]+/)))), token.immediate('"')),
@@ -140,7 +152,7 @@ module.exports = grammar({
     record_literal: $ => seq('{', items(seq(field('name', $._identifier), ':', $._expression), $), '}'),
     list_literal: $ => seq('[', choice(items($._expression, $), $.list_comprehension), ']'),
     list_comprehension: $ => prec.dynamic(20, seq('comptime', 'for', '(', field('name', $._identifier), 'in', $._expression, ')', optional(seq('comptime', 'if', '(', $._expression, ')')), $._expression)),
-    map_literal: $ => seq('{', choice(':', repeat1(seq($._expression, ':', $._expression, optional(',')))), '}'),
+    map_literal: $ => seq('{', choice(':', items(seq($._expression, ':', $._expression), $, true, $._newline)), '}'),
     unary_expression: $ => prec(11, seq(choice('-', '!', '^'), $._expression)),
     binary_expression: $ => choice(...[['|>',1], ['||',2], ['&&',3], ['==',4], ['!=',4], ['<',4], ['<=',4], ['>',4], ['>=',4], ['+',5], ['-',5], ['|',5], ['^',5], ['&',6], ['<<',6], ['>>',6], ['*',6], ['/',6], ['%',6]].map(([op,p]) => prec.left(p, seq(field('left',$._expression), field('operator',op), field('right',$._expression))))),
     is_expression: $ => prec.left(4, seq(field("value", $._expression), "is", field("pattern", $.test_pattern))),

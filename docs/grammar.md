@@ -18,6 +18,7 @@
 - **String literals:** double-quoted, with Go's escape sequences (`\n`, `\t`, `\"`, `\\`, ...).
 - **`unsafe go { ... }`:** after `unsafe go`, everything up to the matching `}` is raw Go, not bork tokens (braces inside Go strings, runes, and comments do not count).
 - **Statement endings:** a newline ends a statement when the line's last token is an identifier, a literal, `true`/`false`, `return`, `break`, `continue`, `_`, `)`, `]`, `}`, or `?`, as in Go. A `;` can also separate statements on one line. Newlines inside parentheses are ignored, so argument and parameter lists can span lines. A line starting with `|>` or a selector (`.method`) continues the previous expression across blank lines and comments. An explicit semicolon ends the statement. Method-chain continuation lines format one level deeper; trailing-dot continuation remains valid.
+- **List and block separators:** record fields, sealed variants, tag entries, record/list literals, patterns, match/select arms, instance bundles, and `with` bindings require a comma, semicolon, or newline between items. Leading, repeated, and trailing semicolons are accepted, including in empty lists and blocks. A comma must follow an item and may precede semicolons; leading or repeated commas and a comma after a semicolon are invalid. Blocks require semicolons or newlines between statements.
 
 ## Syntax
 
@@ -51,13 +52,13 @@ Derive     = "derive" "(" ( Ident | QualIdent ) { "," ( Ident | QualIdent ) } ")
 DeriveDecl = "derive" ( Ident | QualIdent ) "for" Type . (* package declaration; bare generic names request universal instances *)
 DeriveTemplate = "derive" InstanceDecl . (* one unconstrained target parameter, declared by the class owner *)
 DeriveHelper = "derive" FuncDecl . (* expansion-only Bork helper *)
-Fields     = "{" [ Field { Sep Field } [ Sep ] ] "}" .
+Fields     = "{" { EOL } { Field Sep } [ Field ] "}" .
 Field      = [ "lazy" ] Ident ":" Type [ "=" Expr ] { TagGroup } . (* eager defaults are closed values; pure lazy defaults may depend on siblings; preceding // lines are field docs *)
 TagGroup   = Ident "{" [ TagEntry { Sep TagEntry } [ Sep ] ] "}" . (* starts on the same line as the token it follows; go values remain String only *)
 TagEntry   = Ident ":" Expr .
-Sealed     = "sealed" "{" [ Variant { Sep Variant } [ Sep ] ] "}" .
+Sealed     = "sealed" "{" { EOL } { Variant Sep } [ Variant ] "}" .
 Variant    = Ident [ Fields | "(" Type { "," Type } [ "," ] ")" ] { TagGroup } [ Where ] .
-Sep        = "," | newline .                 (* commas or one item per line *)
+Sep        = ( "," | EOL ) { EOL } .        (* commas, semicolons, or newlines; only one comma per separator *)
 
 FuncDecl   = "fn" [ Receiver ] Ident [ TypeParams ] "(" [ Params ] ")" [ FunctionWhere ] [ Uses ] [ Needs ] [ ":" Type ] ( Block | GoBody )
            | "fn" Ident "=" Ident "." "new" .
@@ -92,7 +93,7 @@ TypeAtom   = Ident [ "[" Type { "," Type } "]" ] [ Uses ] | "(" Type ")" | Tuple
 TupleType  = "(" Type "," [ Type { "," Type } [ "," ] ] ")" .
 FuncType   = "(" [ Type { "," Type } ] ")" [ Uses ] "=>" Type .  (* (Int, String) => Bool, (String) uses io => Ok; TypeAtom Uses applies only to Seq *)
 
-Block      = "{" { Stmt EOL } [ Expr ] "}" .
+Block      = "{" { EOL } { Stmt EOL { EOL } } [ Stmt ] "}" .  (* the final expression is the block value; commas do not separate statements *)
 Stmt       = Binding | Trust | Mock | Expr .
 Mock       = [ Ident "=" ] "mock" ( Ident | QualIdent ) [ "." Ident ] "(" [ ( Ident | "_" ) { "," ( Ident | "_" ) } ] ")" Block .
                                              (* in tests: mock payments.Charge(card, amount) { ... }, calls = mock Store.save(s, x) { ... } *)
