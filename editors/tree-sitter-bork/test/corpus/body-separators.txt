@@ -481,6 +481,66 @@ type S = sealed { A;, B }
 (source_file)
 
 ==================
+Multiline comments separate statements and list items
+==================
+fn f() { a /*
+*/ b; [1 /*
+*/ 2]; R { a: 1 /*
+*/ b: 2 } }
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (qualified_name
+        (identifier))
+      (comment)
+      (qualified_name
+        (identifier))
+      (list_literal
+        (number)
+        (comment)
+        (number))
+      (record_expression
+        (qualified_name
+          (identifier))
+        (record_literal
+          (identifier)
+          (number)
+          (comment)
+          (identifier)
+          (number))))))
+
+==================
+Multiline comments preserve expression continuation
+==================
+fn f() { a /*
+*/ .method(); a /*
+*/ |> f() }
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (call_expression
+        (selector_expression
+          (qualified_name
+            (identifier))
+          (comment)
+          (identifier)))
+      (binary_expression
+        (qualified_name
+          (identifier))
+        (comment)
+        (call_expression
+          (qualified_name
+            (identifier)))))))
+
+==================
 Multiline map literals and map separators
 ==================
 fn f() { m = {
