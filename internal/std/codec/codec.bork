@@ -753,7 +753,7 @@ derive fn ShapeFieldInfo[T](): FieldSchema {
 // Structural decoding and schema construction share the selected instance's
 // independent field dictionaries. Builders certify complete target values.
 derive instance decodeShape[T]: Decode[T] {
-  metadata DefaultInput = Input[T](value => shapeDefaultInput[T](value))
+  metadata DefaultInput = shapeInput[T]()
   metadata FieldSchema = ShapeFieldInfo[T]()
   metadata Option[RecordSchema] = RecordInfo[T]()
   fn decode(json: Value): T | DecodeError {

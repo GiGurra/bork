@@ -4,7 +4,7 @@ main.bork:22:16: where clauses on the parameters of instance methods are not sup
 main.bork:22:29: positive applies to Int, not String
 main.bork:27:49: more than one instance of Decode for Int is in scope: main.decodePositive and main.decodeSmall; use only one of them (derive template at bork/codec/codec.bork:556:78)
 main.bork:27:49: more than one instance of Decode for Int is in scope: main.decodePositive and main.decodeSmall; use only one of them (derive template at bork/codec/codec.bork:566:67)
-main.bork:27:49: more than one instance of Decode for Int is in scope: main.decodePositive and main.decodeSmall; use only one of them (derive template at bork/codec/default_input.bork:86:100)
+main.bork:27:49: more than one instance of Decode for Int is in scope: main.decodePositive and main.decodeSmall; use only one of them (derive template at bork/codec/default_input.bork:119:100)
 main.bork:27:49: more than one instance of Decode for Int is in scope: main.decodePositive and main.decodeSmall; use only one of them (derive template at bork/codec/codec.bork:456:70)
 main.bork:27:49: more than one instance of Decode for Int is in scope: main.decodePositive and main.decodeSmall; use only one of them (derive template at bork/codec/codec.bork:481:62)
 main.bork:27:49: match arms have different types: DecodeError and Ok (derive template at bork/codec/codec.bork:483:41)

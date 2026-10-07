@@ -1,7 +1,7 @@
 import "bork/shape"
 
 // DefaultInput advertises how a selected decoder accepts an existing typed value.
-// Only Input constructs this metadata; it does not require an Encode instance.
+// Input is the public constructor; derived Decode publishes its own provider.
 type inputArgument = private {}
 type inputMarker = private {}
 type DefaultInput = private {
@@ -27,6 +27,39 @@ fn Input[T: Decode](convert: (T) => Value | DecodeError): DefaultInput unsafe go
   supported := !strings.Contains(target.String(), "interface {}")
   matches := func(value any) bool { actual, ok := value.(reflect.Type); return ok && actual == target }
   return DefaultInput{callback:callback,matches:matches,supported:supported}
+}
+
+// A constrained alias cannot be passed to the higher-order public Input
+// constructor. Derivation assembles the same closed bridge privately; its
+// argument can only arrive after invokeDefault has checked type identity.
+derive fn shapeInput[T](): DefaultInput {
+  DefaultInput {
+    callback: argument => if (inputArgumentFits[T](argument)) {
+      shapeDefaultInput[T](inputArgumentValue[T](argument))
+    } else {
+      DecodeError { path: "", message: "internal error: default input provider type mismatch" }
+    },
+    matches: inputTypeMatches[T](),
+    supported: inputTypeSupported[T]()
+  }
+}
+fn inputArgumentFits[T](argument: inputArgument | inputMarker): Bool unsafe go {
+  _, ok := argument.(T)
+  return ok
+}
+fn inputArgumentValue[T](argument: inputArgument | inputMarker): T unsafe go {
+  // shapeInput checks the runtime type first; safe callers cannot make argument.
+  return argument.(T)
+}
+fn inputTypeMatches[T](): (inputArgument | inputMarker) uses nothing => Bool unsafe go {
+  import "reflect"
+  target := reflect.TypeFor[T]()
+  return func(value any) bool { actual, ok := value.(reflect.Type); return ok && actual == target }
+}
+fn inputTypeSupported[T](): Bool unsafe go {
+  import "reflect"
+  import "strings"
+  return !strings.Contains(reflect.TypeFor[T]().String(), "interface {}")
 }
 
 fn materializeDefault[T: Decode](value: T): Value | DecodeError {

@@ -11,6 +11,7 @@ func TestCLIParentDefaultSelectedDecoder(t *testing.T) {
 	source := `import "bork/cli"
 import "bork/codec"
 import "bork/json"
+import "bork/shape"
 use codec.Defaults
 type Token={text:String}
 instance tokenDecode:codec.Decode[Token]{
@@ -74,6 +75,13 @@ instance wrongProvider:codec.Decode[WrongProvider]{
  fn decode(input:codec.Value):WrongProvider|codec.DecodeError{WrongProvider{}}
 }
 type WithWrongProvider={db:WrongProvider=.{}}derive(codec.Decode)
+type WrongDerivedProvider={value:String="leaf"}
+instance wrongDerivedProvider:codec.Decode[WrongDerivedProvider]{
+ metadata Option[codec.RecordSchema]=codec.Schema[RawText]()
+ metadata codec.DefaultInput=shape.metadata[RawText,codec.Decode,codec.DefaultInput]().getOr(codec.Input[String](value=>codec.Value.String{value:value}))
+ fn decode(input:codec.Value):WrongDerivedProvider|codec.DecodeError{WrongDerivedProvider{}}
+}
+type WithWrongDerivedProvider={db:WrongDerivedProvider=.{}}derive(codec.Decode)
 instance unionDecode:codec.Decode[Int|String]{
  metadata codec.DefaultInput=codec.Input[Int|String](value=>codec.Value.Null)
  fn decode(input:codec.Value):Int|String|codec.DecodeError{1}
@@ -93,6 +101,7 @@ fn main(){
  println(cli.Parse[WithBad]("app","Bad",["--help"]))
  println(cli.Parse[WithNoProvider]("app","Missing",["--help"]))
  println(cli.Parse[WithWrongProvider]("app","Wrong",["--help"]))
+ println(cli.Parse[WithWrongDerivedProvider]("app","Wrong",["--help"]))
  println(cli.Parse[WithUnion]("app","Union",["--help"]))
 }`
 	exe, err := buildFixtureOutput(t, validatorFixture(t, source))
@@ -107,6 +116,9 @@ fn main(){
 		if !strings.Contains(string(out), want) {
 			t.Fatalf("output %q lacks %q", out, want)
 		}
+	}
+	if strings.Count(string(out), "selected decoder DefaultInput must use codec.Input with its own decoded type") != 2 {
+		t.Fatalf("both constructors must reject a mismatched provider: %s", out)
 	}
 	for _, absent := range []string{"missing.json", "selected record decoder needs marker", "internal error"} {
 		if strings.Contains(string(out), absent) {

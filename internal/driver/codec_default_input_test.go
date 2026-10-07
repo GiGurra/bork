@@ -10,6 +10,7 @@ func TestCodecDefaultInput(t *testing.T) {
 	t.Parallel()
 	source := `import "bork/codec"
 import "bork/json"
+import "bork/shape"
 use codec.Defaults
 type Mode = sealed { Quiet, Loud, Other(String) codec {fallback:true} } derive(codec.Decode)
 type Payload = sealed { Empty, Pair(Int, String), Named { text:String } } derive(codec.Decode)
@@ -33,6 +34,7 @@ fn main(){
   Option.None=>println("missing schema")
  }
  println(badBridge(codec.Input[Int](value=>codec.Value.Number{text:toString(value)})))
+ println(badBridge(shape.metadata[Data,codec.Decode,codec.DefaultInput]().getOr(codec.Input[Int](value=>codec.Value.Null))))
 }`
 	exe, err := buildFixtureOutput(t, validatorFixture(t, source))
 	if err != nil {
@@ -47,6 +49,9 @@ fn main(){
 			t.Fatalf("output %q lacks %q", out, want)
 		}
 	}
+	if strings.Count(string(out), "internal error: default input provider type mismatch") != 2 {
+		t.Fatalf("both constructors must reject a bad runtime input: %s", out)
+	}
 	if strings.Contains(string(out), `"computed"`) {
 		t.Fatalf("computed field materialized: %s", out)
 	}
@@ -54,6 +59,9 @@ fn main(){
 
 func TestCodecDefaultInputBridgeIsPrivate(t *testing.T) {
 	t.Parallel()
+	checkPreludeSource(t, `import "bork/codec"
+use codec.Defaults
+fn main() { _ = codec.shapeInput[Int]() }`, "package bork/codec has no shapeInput")
 	checkPreludeSource(t, `import "bork/codec"
 use codec.Defaults
 fn main() {
