@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/constant"
 	"go/token"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -427,6 +428,9 @@ type Info struct {
 	// unused holds bindings whose value is never read: *syntax.Binding,
 	// or the pattern node that bound the name.
 	unused map[any]bool
+	// comptimeReadBindings holds expanded derive template bindings that
+	// compile-time code read; they are not reported as unused.
+	comptimeReadBindings map[*syntax.Binding]bool
 	// rebindings records the previous declaration replaced by a sequential binding.
 	rebindings map[any]any
 	// Carried rebinding (see carried.go): the names each loop carries,
@@ -1285,10 +1289,17 @@ func (c *checker) pushScope() {
 }
 
 func (c *checker) popScope() {
-	for _, l := range c.scopes[len(c.scopes)-1] {
+	// Report in name order: derive templates anchor these diagnostics at
+	// one instance position, where map order would show.
+	var unused []string
+	for name, l := range c.scopes[len(c.scopes)-1] {
 		if l.node != nil && !l.used {
-			c.unusedLocal(l)
+			unused = append(unused, name)
 		}
+	}
+	slices.Sort(unused)
+	for _, name := range unused {
+		c.unusedLocal(c.scopes[len(c.scopes)-1][name])
 	}
 	c.scopes = c.scopes[:len(c.scopes)-1]
 	for len(c.inForce) > 0 && c.inForce[len(c.inForce)-1].depth > len(c.scopes) {

@@ -39,7 +39,7 @@ func (c *checker) unusedLocal(l *local) {
 		return
 	}
 	c.info.unused[l.node] = true
-	if l.typ == Invalid {
+	if binding, ok := l.node.(*syntax.Binding); l.typ == Invalid || ok && c.info.comptimeReadBindings[binding] {
 		return
 	}
 	var name string
