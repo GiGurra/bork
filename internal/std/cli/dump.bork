@@ -9,17 +9,28 @@ type ConfigFormat = sealed { Json, Yaml }
 fn Dump[T: codec.Encode](value: T, format: ConfigFormat = .Json): String | Error {
   encoded = codec.encode(value)
   match (encoded) {
-    codec.Value.Object { fields: _ } => match (format) {
-      .Json => match (json.Pretty(encoded)) {
-        text: String => text
-        error: json.JsonError => Error { errors: [codec.DecodeError { path: "", message: error.message }] }
-      }
-      .Yaml => match (yaml.Render(encoded)) {
-        text: String => text
-        error: yaml.Error => Error { errors: [codec.DecodeError { path: "", message: error.message }] }
-      }
-    }
+    codec.Value.Object { fields: _ } => renderConfig(encoded, format)
     _ => Error { errors: [codec.DecodeError { path: "", message: "CLI config dump requires an encoded object" }] }
+  }
+}
+
+// Both renderer indentation predicates accept 2. Keep that fixed native value
+// here so importing CLI does not evaluate external predicates during Go-free
+// type checking. The renderers still validate the encoded values at runtime.
+fn renderConfig(value: codec.Value, format: ConfigFormat): String | Error unsafe go {
+  if _, yamlFormat := format.(ConfigFormat_Yaml); yamlFormat { return renderYamlConfig(value, 2) }
+  return renderJsonConfig(value, 2)
+}
+fn renderJsonConfig(value: codec.Value, spaces: json.Indent): String | Error {
+  match (json.Pretty(value, spaces)) {
+    text: String => text
+    error: json.JsonError => Error { errors: [codec.DecodeError { path: "", message: error.message }] }
+  }
+}
+fn renderYamlConfig(value: codec.Value, spaces: yaml.Indent): String | Error {
+  match (yaml.Render(value, spaces)) {
+    text: String => text
+    error: yaml.Error => Error { errors: [codec.DecodeError { path: "", message: error.message }] }
   }
 }
 
