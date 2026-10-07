@@ -13,9 +13,11 @@ checkout of the named upstream revision with `git apply --check` followed by
 
 The grammar uses a pinned revision and subdirectory of the bork repository.
 Keep the grammar revision in both patches, `../helix/languages.toml`, and
-`../zed/extension.toml` in sync when upgrading it. CI compares the fetched grammar source with the
-shared grammar, so new syntax requires updating these pins to a commit
-containing the grammar change. Query additions are copied
+`../zed/extension.toml` in sync when upgrading it. Pins must name a full commit
+SHA from main history. Grammar PRs retain the previous pin; after squash merge,
+open a follow-up repin PR as described in the [editor workflow](../README.md#updating-the-tree-sitter-grammar-pins).
+CI verifies fetched sources against the pinned revision and warns on main when
+a repin is due. Query additions are copied
 from the generated editor snapshots; `../tests/check-upstream.py` checks their
 contents. These drafts do not introduce another maintained grammar.
 
