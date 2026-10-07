@@ -179,7 +179,15 @@ func typeName(s string, pkg *check.Package) *ast.Ident {
 	if pkg != nil && pkg.GoPrefix != "" {
 		return ast.NewIdent(pkg.GoPrefix + s)
 	}
-	return name(s)
+	generated := name(s).Name
+	if goReserved[s] && pkg != nil {
+		// The usual escape may already be a legal source declaration. Skip those
+		// names rather than merging distinct declarations into one Go identity.
+		for pkg.TypeNamed(generated) != nil || pkg.ClassNamed(generated) != nil || pkg.Funcs[generated] != nil {
+			generated += "_"
+		}
+	}
+	return ast.NewIdent(generated)
 }
 
 // variantName keeps simple variant names readable, but encodes ambiguous
