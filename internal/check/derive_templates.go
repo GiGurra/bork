@@ -1129,8 +1129,14 @@ func (p *deriveExpansion) clone(value reflect.Value) reflect.Value {
 		out.Elem().Set(p.clone(value.Elem()))
 		if written, ok := out.Interface().(*syntax.TypeExpr); ok {
 			typ, yes := p.env[written.Name].(Type)
+			if origin, known := p.origins[written.Name]; known && yes {
+				p.comptimeRead(origin)
+			}
 			var projected *Field
 			if owner, member, ok := strings.Cut(written.Name, "."); ok && (member == "Type" || member == "RawType") {
+				if origin, known := p.origins[owner]; known {
+					p.comptimeRead(origin)
+				}
 				if target, known := p.env[owner].(Type); known && member == "RawType" {
 					typ, yes = target, true
 				}
