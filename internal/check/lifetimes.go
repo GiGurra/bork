@@ -2,6 +2,9 @@ package check
 
 import (
 	"fmt"
+	"maps"
+	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -55,6 +58,129 @@ func Lifetimes(files []*syntax.File, info *Info, diags *diag.List) {
 	for _, fn := range info.Tests {
 		l.function(fn)
 	}
+	witnessLifetimes(info, diags, acquires, passes)
+}
+
+// witnessLifetimes checks definition witnesses (see derive_witness.go). A
+// hole keeps no lifetime of its arguments, so a witness reports fewer escapes
+// than its expansions. It could also miss a move, attach or close that an
+// expansion performs: a witness that gives a scope to a hole or helper
+// witness, changes ownership under an opaque condition, or has a repaired
+// hole reports nothing. Its other failures are every expansion's, so the
+// expansions' repetitions of them are dropped.
+func witnessLifetimes(info *Info, diags *diag.List, acquires map[*Func]int, passes map[*Func]bool) {
+	if len(info.DefinitionWitnesses) == 0 {
+		return
+	}
+	reported := map[string]bool{}
+	var witnesses diag.List
+	for _, fn := range info.DefinitionWitnesses {
+		scratch := &diag.List{}
+		l := newLifeChecker(info, scratch)
+		l.acquires, l.passes, l.record, l.witness = acquires, passes, false, true
+		if l.checkWitness(fn) && !l.uncertain {
+			scratch.Rewrite(0, func(d *diag.Diagnostic) bool {
+				reported[witnessLifetimeKey(d)] = true
+				return true
+			})
+			witnesses.Append(scratch)
+		}
+	}
+	if len(reported) == 0 {
+		return
+	}
+	// Expansions keep the template's positions: drop their repetitions of
+	// what the definition reports.
+	diags.Rewrite(0, func(d *diag.Diagnostic) bool {
+		return d.Code != "lifetime.error" || !reported[witnessLifetimeKey(d)]
+	})
+	diags.Append(&witnesses)
+}
+
+// An expanded helper is named _derive_helper_N in what it reports, and its
+// witness by the helper's name.
+var witnessFunctionName = regexp.MustCompile(`^function \S+ `)
+
+func witnessLifetimeKey(d *diag.Diagnostic) string {
+	return d.Pos.String() + "\x00" + witnessFunctionName.ReplaceAllString(d.Msg, "function ")
+}
+
+func (l *lifeChecker) checkWitness(fn *Func) (ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	l.function(fn)
+	return true
+}
+
+// witnessHoleUse marks a witness uncertain when a hole may close or pass on
+// an owned scope: a repaired hole, or one given an owned scope.
+func (l *lifeChecker) witnessHoleUse(x *Call) {
+	fn, ok := witnessCall(x)
+	if !ok {
+		return
+	}
+	if fn.WitnessRepair {
+		l.uncertain = true
+	}
+	// Moves, attaches and closes need a scope operand: one given to a hole
+	// or a helper's witness may change ownership in some expansions.
+	for _, arg := range x.Args {
+		walkWitnessTree(reflect.ValueOf(arg), func(node any) {
+			if v, ok := node.(*Var); ok && mentionsScope(v.Type) {
+				l.uncertain = true
+			}
+			if e, ok := node.(Expr); ok && mentionsScope(e.Type()) {
+				l.uncertain = true
+			}
+		})
+	}
+}
+
+// mentionsScope reports whether t holds or takes a Scope or an OwnedScope.
+func mentionsScope(t Type) bool {
+	return mentionsScopeSeen(t, map[Type]bool{})
+}
+
+func mentionsScopeSeen(t Type, seen map[Type]bool) bool {
+	if t == Scope || t == OwnedScope {
+		return true
+	}
+	if t == nil || seen[t] {
+		return false
+	}
+	seen[t] = true
+	var parts []Type
+	switch t := t.(type) {
+	case *Seq:
+		parts = []Type{t.Elem}
+	case *List:
+		parts = []Type{t.Elem}
+	case *Map:
+		parts = []Type{t.Key, t.Value}
+	case *FuncType:
+		parts = append(append(parts, t.Params...), t.Result)
+	case *Union:
+		parts = t.Members
+	case *Record:
+		for _, f := range t.Fields {
+			parts = append(parts, f.Type)
+		}
+	case *Sealed:
+		for _, v := range t.Variants {
+			for _, f := range v.Fields {
+				parts = append(parts, f.Type)
+			}
+		}
+	}
+	for _, part := range parts {
+		if mentionsScopeSeen(part, seen) {
+			return true
+		}
+	}
+	return false
 }
 
 func newLifeChecker(info *Info, diags *diag.List) *lifeChecker {
@@ -184,6 +310,10 @@ type lifeChecker struct {
 	// blocks being checked (see noteVar).
 	record  bool
 	defined []*Var
+	// witness is set while checking a definition witness, and uncertain
+	// once its result may depend on what a hole does with ownership (see
+	// witnessLifetimes).
+	witness, uncertain bool
 }
 
 func (l *lifeChecker) errorf(pos diag.Pos, format string, args ...any) {
@@ -230,7 +360,9 @@ func (l *lifeChecker) function(fn *Func) {
 			if _, ok := l.inTarget[p]; ok {
 				life = l.inTarget[p]
 			}
-			l.info.VarLifetimes[p] = l.lifeText(life)
+			if !l.witness {
+				l.info.VarLifetimes[p] = l.lifeText(life)
+			}
 		}
 	}
 	l.result(fn.Body, l.value(fn.Body, "return"), l.what())
@@ -520,7 +652,9 @@ func (l *lifeChecker) expr(x Expr) lifetime {
 		return nil
 	}
 	if len(life) > 0 {
-		l.info.Lifetimes[x] = l.lifeText(life)
+		if !l.witness {
+			l.info.Lifetimes[x] = l.lifeText(life)
+		}
 	}
 	return life
 }
@@ -587,6 +721,16 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		// released, which is reported where it is used.
 		return life
 	case *If:
+		if _, opaque := witnessCall(x.Cond); opaque && l.witness {
+			// A branch an expansion may drop or always take: ownership it
+			// changes differs between expansions.
+			gone, moved := maps.Clone(l.gone), maps.Clone(l.moved)
+			defer func() {
+				if !maps.Equal(l.gone, gone) || !maps.Equal(l.moved, moved) {
+					l.uncertain = true
+				}
+			}()
+		}
 		l.use(x.Cond, l.expr(x.Cond))
 		b := l.fork()
 		life := l.expr(x.Then)
@@ -670,6 +814,9 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		l.funcRef(x)
 		return l.captureLife(x.Captures)
 	case *Call:
+		if l.witness {
+			l.witnessHoleUse(x)
+		}
 		life := l.callLife(x)
 		if x.Type() == OwnedScope {
 			l.errorf(x.Pos(), "this owned scope is dropped: bind it (b = ...) and close it with closeScope(b), or pass it on")
@@ -837,7 +984,9 @@ func (l *lifeChecker) stmt(s Stmt) {
 				life = life.union(owner)
 			}
 			l.deferredCaptures[s.Var] = life
-			l.info.VarLifetimes[s.Var] = l.lifeText(life)
+			if !l.witness {
+				l.info.VarLifetimes[s.Var] = l.lifeText(life)
+			}
 			if l.carriesLife(s.Var.Type) {
 				l.env[s.Var] = payload
 			}
@@ -853,7 +1002,9 @@ func (l *lifeChecker) stmt(s Stmt) {
 			if _, ok := s.Value.(*VarRef); ok {
 				return // rebinding is the error
 			}
-			l.info.VarLifetimes[s.Var] = l.lifeText(l.env[s.Var])
+			if !l.witness {
+				l.info.VarLifetimes[s.Var] = l.lifeText(l.env[s.Var])
+			}
 			l.frame[s.Var] = l.cur
 			l.bind(s.Var)
 			l.safeChild[s.Var] = safeOpen(s.Value)
@@ -867,7 +1018,9 @@ func (l *lifeChecker) stmt(s Stmt) {
 		l.origins[s.Var] = l.originOf(s.Value)
 		l.noteVar(s.Var)
 		if len(l.env[s.Var]) > 0 {
-			l.info.VarLifetimes[s.Var] = l.lifeText(l.env[s.Var])
+			if !l.witness {
+				l.info.VarLifetimes[s.Var] = l.lifeText(l.env[s.Var])
+			}
 		}
 	case *ExprStmt:
 		life := l.expr(s.X)
@@ -918,7 +1071,9 @@ func (l *lifeChecker) lambda(x *Lambda) lifetime {
 		if life, ok := l.lambdaParams[p]; ok {
 			l.env[p] = life
 			if len(life) > 0 && l.carriesLife(p.Type) {
-				l.info.VarLifetimes[p] = l.lifeText(life)
+				if !l.witness {
+					l.info.VarLifetimes[p] = l.lifeText(life)
+				}
 			}
 		}
 	}

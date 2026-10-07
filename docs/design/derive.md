@@ -507,6 +507,17 @@ repeat a reported failure are dropped in favour of the definition's
 diagnostic. Staged copies are reported like their types are: an obligation
 that fails for every copy fails for every target that has one.
 
+Lifetimes (bork-mrm6zv) run on the same witnesses. A hole keeps none of its
+arguments' lifetimes, so a witness reports at most the escapes its expansions
+report. A hole could also move, attach or close what an expansion's code
+would, and a staged copy changes ownership only in some expansions. So a
+witness reports nothing if it gives a scope (Scope or OwnedScope) to a hole or
+helper witness, changes the closed or moved state under an opaque condition, or
+has a repaired hole. Violations local to a copy are reported, as for facts.
+Expansions keep the template's positions, so repetitions of a witness's
+diagnostics are dropped from the expansions, comparing messages without the
+function name (an expanded helper is named `_derive_helper_N`).
+
 Planned PRs (split further if review size warrants):
 
 1. **Design:** this proposal; lead approves before implementation.

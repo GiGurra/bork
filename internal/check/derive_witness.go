@@ -18,8 +18,8 @@ import (
 // once. Witnesses are checked only after the program checks, with their own
 // diagnostics discarded. Code that fails to check becomes a hole on the next
 // attempt; a witness that still fails, or cannot be lowered, is dropped. The
-// fact checker then reports only failures that no target can avoid (see
-// derive_witness_taint.go).
+// fact and lifetime checkers then report only failures that no target can
+// avoid (see derive_witness_taint.go and witnessLifetimes).
 type deriveWitnessBuilder struct {
 	c       *checker
 	pkg     *Package

@@ -209,3 +209,112 @@ func TestDeriveWitnessCoverage(t *testing.T) {
 		}
 	}
 }
+
+// Unused definitions report the lifetime violations every expansion would
+// report, and nothing that depends on what a dependent call does with
+// ownership or on which staged copies a target selects.
+func TestDeriveWitnessLifetimes(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ name, source, want string }{
+		{"released use", `derive fn u[T](path: String) uses io: String | fs.Error {
+  file = scope s { fs.Open(path, s)? }
+  fs.ReadAllText(file)
+}`, "file may be released: it belongs to scope s"},
+		{"escaping result", `derive fn u[T](path: String) uses io: fs.File | fs.Error { scope s { fs.Open(path, s) } }`, "function u cannot return this value: it belongs to scope s"},
+		{"released capture", `derive fn u[T](path: String) uses io: String | fs.Error {
+  read = scope s { file = fs.Open(path, s)?; () => fs.Path(file) }
+  read()
+}`, "read may be released: it belongs to scope s"},
+		{"unsafe go scope", `fn keep(s: Scope, f: fs.File) unsafe go { }
+derive fn u[T](app: Scope, path: String) uses io: Ok | fs.Error {
+  scope inner { file = fs.Open(path, inner)?; keep(app, file) }
+}`, "but keep may keep it until app closes"},
+		{"staged copy", `derive fn u[T](path: String) uses io: Ok | fs.Error {
+  comptime for (field in shape.fields[T]()) { file = scope s { fs.Open(path, s)? }; _ = fs.ReadAllText(file)? }
+}`, "file may be released"},
+		{"open owner", `derive fn u[T](app: Scope) { owner = openScope(app) }`, "owned scope owner is still open"},
+
+		{"kept in scope", `derive fn u[T](path: String) uses io: String | fs.Error { scope s { file = fs.Open(path, s)?; fs.ReadAllText(file) } }`, ""},
+		{"staged close", `derive fn u[T](app: Scope) uses state {
+  owner = openScope(app)
+  comptime if (shape.kind[T]() == shape.Record) { closeScope(owner) } else { closeScope(owner) }
+}`, ""},
+		{"owner to helper", `derive fn closer[T](o: OwnedScope) uses state { closeScope(o) }
+derive fn u[T](app: Scope) uses state { owner = openScope(app); closer[T](owner) }`, ""},
+		{"dependent call", `derive fn u[T](x: T, path: String) uses io: String | fs.Error {
+  scope s { file = fs.Open(path, s)?; comptime for (field in shape.fields[T]()) { _ = toString(field.read(x)) + fs.Path(file) }; fs.ReadAllText(file) }
+}`, ""},
+		{"recursive type", `type Node = { value: Int, children: List[Node] }
+derive fn h[T](n: Node): Int { 0 }
+derive fn u[T](n: Node): Int { h[T](n) }`, ""},
+		{"helper acquires", `derive fn opener[T](s: Scope, path: String) uses io: fs.File | fs.Error { fs.Open(path, s) }
+derive fn u[T](app: Scope, path: String) uses io: fs.File | fs.Error { scope s { f = opener[T](s, path)?; move(f, app) } }`, ""},
+		{"staged attach", `derive fn u[T](app: Scope, path: String) uses io: fs.File | fs.Error {
+  scope s { f = fs.Open(path, s)?; comptime if (shape.kind[T]() == shape.Record) { attach(f, app) } else { attach(f, app) }; f }
+}`, ""},
+		{"close again in copy", `derive fn u[T](app: Scope) uses state {
+  owner = openScope(app); closeScope(owner)
+  comptime for (field in shape.fields[T]()) { closeScope(owner); _ = 1 }
+}`, "owned scope owner was already closed"},
+		{"move again in copy", `derive fn u[T](app: Scope, other: Scope, path: String) uses io: fs.File | fs.Error {
+  scope s { f = fs.Open(path, s)?; g = move(f, app); comptime for (field in shape.fields[T]()) { _ = move(f, other); _ = 1 }; g }
+}`, "f was moved to scope app"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			source := test.source + "\nfn main() {}"
+			if strings.Contains(test.source, "fs.") {
+				source = "import \"bork/fs\"\n" + source
+			}
+			if strings.Contains(test.source, "shape.") {
+				source = "import \"bork/shape\"\n" + source
+			}
+			_, _, err := Check(validatorFixture(t, source))
+			if test.want == "" && err != nil || test.want != "" && (err == nil || !strings.Contains(err.Error(), test.want)) {
+				t.Fatalf("want %q, got %v", test.want, err)
+			}
+		})
+	}
+}
+
+// Expanded helpers report under generated names; the definition reports once.
+func TestDeriveWitnessHelperLifetimesReportedOnce(t *testing.T) {
+	t.Parallel()
+	_, _, err := Check(validatorFixture(t, `import "bork/fs"
+derive fn u[T](path: String) uses io: fs.File | fs.Error { scope s { fs.Open(path, s) } }
+class C[T] { fn c(x: T, path: String) uses io: fs.File | fs.Error }
+derive instance c[T]: C[T] { fn c(x: T, path: String) uses io: fs.File | fs.Error { u[T](path) } }
+type R = { a: Int } derive (C)
+type Q = { b: Int } derive (C)
+fn main() {}`))
+	if err == nil || strings.Count(err.Error(), "cannot return this value") != 1 || !strings.Contains(err.Error(), "function u cannot") {
+		t.Fatalf("want one definition diagnostic, got %v", err)
+	}
+}
+
+// Without shape operations a helper is an ordinary function, so the ordinary
+// checker is the oracle for its lifetimes.
+func TestDeriveWitnessLifetimesMatchOrdinaryFunctions(t *testing.T) {
+	t.Parallel()
+	bodies := []string{
+		`(path: String) uses io: String | fs.Error { file = scope s { fs.Open(path, s)? }; fs.ReadAllText(file) }`,
+		`(path: String) uses io: String | fs.Error { scope s { file = fs.Open(path, s)?; fs.ReadAllText(file) } }`,
+		`(path: String) uses io: fs.File | fs.Error { scope s { fs.Open(path, s) } }`,
+		`(app: Scope, path: String) uses io: fs.File | fs.Error { scope s { file = fs.Open(path, s)?; move(file, app) } }`,
+		`(app: Scope, path: String) uses io: fs.File | fs.Error { scope s { file = fs.Open(path, s)?; attach(file, app) } }`,
+		`(app: Scope) uses state { owner = openScope(app); closeScope(owner) }`,
+		`(app: Scope) uses state { owner = openScope(app); closeScope(owner); closeScope(owner) }`,
+	}
+	for _, body := range bodies {
+		imports := ""
+		if strings.Contains(body, "fs.") {
+			imports = "import \"bork/fs\"\n"
+		}
+		_, _, ordinary := Check(validatorFixture(t, imports+"fn unused"+body+"\nfn main() {}"))
+		_, _, derived := Check(validatorFixture(t, imports+"derive fn unused[T]"+body+"\nfn main() {}"))
+		if (ordinary == nil) != (derived == nil) {
+			t.Fatalf("%s: ordinary %v, derive %v", body, ordinary, derived)
+		}
+	}
+}
