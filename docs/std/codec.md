@@ -114,7 +114,7 @@ Fields and variants can declare exact decode-only `aliases`. For example, `codec
 
 A field's `omit` policy controls object encoding: `codec.Omit.Never` (the default) always writes the field; `None` skips `Option.None`; `Default` skips a value equal to its declared default; `NoneOrDefault` applies both. Decoding still uses the field's ordinary optional/default rules.
 
-Derivation checks omission can round-trip. `None` requires an `Option` with no default or a `None` default; a `Some` default would change an omitted `None`. `Default` requires an eager default and equality on the field type. `NoneOrDefault` must satisfy both requirements. Computed, lazy, and positional fields cannot select omission. CSV encoding requires all schema columns; a row whose encoder omitted a field is rejected. Use `Omit.Never` for fields written to CSV.
+Derivation checks omission can round-trip. `None` requires an `Option` with no default or a `None` default; a `Some` default would change an omitted `None`. `Default` requires an eager default and equality on the field type. `NoneOrDefault` must satisfy both requirements. Computed, lazy, and positional fields cannot select omission. CSV encoding keeps all schema columns, completing omitted fields through the selected Encode instance’s `RecordEncoding` metadata. Structural derivation publishes this automatically; see below.
 
 `codec.VariantTags` provides `fallback: Bool = false`. Mark one positional String alternative to preserve unknown enum names:
 
@@ -292,3 +292,11 @@ A consumer can decode `value` as its concrete tag record through its own Decode
 instance. Codec's own naming group already has dedicated schema members and is
 excluded here; `go` tags are also excluded. Untagged fields and handwritten
 schemas that omit `tags` have an empty list.
+
+## Completing omitted record fields
+
+`codec.Encoding[T: codec.Encode]()` returns `Option[codec.RecordEncoding]` from the selected Encode instance. `RecordEncoding` has `omittedField: (String) => Option[codec.Value]`. The input is a canonical wire name; `Some(value)` supplies that omitted field's encoding and `None` means it cannot be completed. This metadata is separate from Decode's `RecordSchema`, so Decode-only schemas never need an Encode instance.
+
+Derived named-record encoders publish this metadata automatically. The callback recognizes only fields with an explicit omission policy. When CSV encounters a missing column, the callback encodes its typed None or reevaluates its closed, pure declared default through the same selected field Encode instance used for ordinary object encoding. Metadata lookup does not evaluate or encode defaults, and completion does not touch unrelated fields. Positional and sealed encoders do not publish record completion metadata.
+
+A hand-written Encode that omits fields must explicitly publish `metadata codec.RecordEncoding = codec.RecordEncoding { omittedField: name => ... }` to support CSV. Return the wire value your selected Decode expects for that missing field. CSV uses the normal row encoder's output for present fields; it only calls the completion callback for missing columns, and still rejects duplicate or extra encoded fields. Without this metadata, missing columns remain errors even when the Decode schema marks them optional or defaulted. A custom encoder never silently falls back to structural encoding.
