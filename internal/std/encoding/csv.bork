@@ -164,7 +164,7 @@ fn EncodeCsv[T: codec.Encode + codec.Decode](values: List[T]): String | CsvError
 fn encodeCsvRows[T: codec.Decode](values: List[T], encodeRow: (T) => codec.Value, render: (codec.Value) => String): List[List[String]] | CsvError {
   encodeCsvRowsWithSchema[T](codec.Schema[T](), values, encodeRow, render)
 }
-fn encodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchema], values: List[T], encodeRow: (T) => codec.Value, render: (codec.Value) => String, recordEncoding: Option[codec.RecordEncoding] = Option.None): List[List[String]] | CsvError unsafe go {
+fn encodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchema], values: List[T], encodeRow: (T) => codec.Value, render: (codec.Value) => String, recordEncoding: Option[codec.RecordEncoding[T]] = Option.None): List[List[String]] | CsvError unsafe go {
   record, supported := _borkOptionGet(recordSchema)
   schema := record.fields
   if !supported { return CsvError{row: 1, column: "", message: "expected a derived record decoder"} }
@@ -197,7 +197,7 @@ fn encodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSch
       if key == "" { key = field.name }
       json, found := fields[key]
       if !found && canComplete {
-        json, found = _borkOptionGet(completion.omittedField(key))
+        json, found = _borkOptionGet(completion.omittedField(value, key))
       }
       if !found { return CsvError{row: int64(index + 2), column: key, message: "encoded field is missing; CSV requires every column (use codec.Omit.Never or publish codec.RecordEncoding)"} }
       delete(fields, key)
