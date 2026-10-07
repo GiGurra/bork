@@ -1,0 +1,32 @@
+type Wrapper = sealed { Batch { values: List[Option[Int]] }, Empty }
+
+fn main() {
+  rows = [[Option.Some(1), Option.None], [Option.Some(2)]]
+  values = for {
+    row in rows
+      .map(value => value)
+    // A leading-dot pattern starts a new generator.
+    .Some(n) in row
+      .filter(value => true)
+    text = s"$n"
+      .trim()
+  } yield text
+    .toUpper()
+  println(values.toList())
+  batches = [Wrapper.Batch { values: [Option.Some(3)] }, Wrapper.Empty]
+  println((for {
+    batch in [batches]
+    .Batch { values: [.Some(n)] } in batch
+    } yield n).toList())
+  println((for {
+    row in [[Option.Some(Option.Some(4))]]
+    .Some(.Some(n)) in row
+    } yield n).toList())
+  for value in [Option.Some(5), Option.None] {
+    println(match value {
+      .None => "none"
+      .Some(n) => s"$n"
+        .trim()
+    })
+  }
+}
