@@ -476,6 +476,37 @@ site. Runtime DecodeError keeps its existing paths. Generated references carry
 both origin and expansion positions for describe, navigation and debug mapping;
 rename follows resolved source identities rather than generated spellings.
 
+### Definition witnesses (bork-a7vsad)
+
+Facts and lifetimes are checked on the typed tree, so unused definitions get
+them through a partial typed lowering. Each derive helper and template method
+gets a witness: a clone checked as an ordinary function after the program
+checks, never emitted and never in `Info.FuncOf`. Target-dependent parts become
+holes, Invalid-typed calls that still evaluate their arguments: descriptor
+operations, `shape` queries, type parameters and projections, native comptime,
+and build or embed reads. A staged `if`, `match` or `for` body becomes one copy
+under an opaque condition. A runtime match of a dependent value becomes opaque
+branches. Code that still fails to check becomes a hole on the next of four
+attempts. A witness that still fails, panics, cannot be lowered, or would add
+an instance, expansion or independent type to the program is dropped; types
+instantiated with Invalid arguments are removed instead. Shipped standard
+packages are skipped unless they are the root.
+
+After lowering, the side-table entries keyed by witness syntax are removed and
+the position-keyed navigation tables are restored, so editor and lint queries
+see only the program. Witness interpolations start no validator.
+
+The fact checker taints a witness's holes, staged values, values of Invalid
+type and everything computed from them. A failing obligation is reported only
+when its subject and arguments are untainted, no condition involving a tainted
+value dominates it, and no earlier staged copy, repaired hole or absorbed
+`Never` copy could have exited early. (A guard that returns on a tainted
+condition therefore silences everything after it.) Its predicate evaluations are
+discarded, so unused definitions never start the evaluator. Expansions that
+repeat a reported failure are dropped in favour of the definition's
+diagnostic. Staged copies are reported like their types are: an obligation
+that fails for every copy fails for every target that has one.
+
 Planned PRs (split further if review size warrants):
 
 1. **Design:** this proposal; lead approves before implementation.

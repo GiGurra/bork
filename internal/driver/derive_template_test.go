@@ -2504,6 +2504,13 @@ fn main() {}`
 				t.Fatal(err)
 			}
 			_, _, err := Check(dir)
+			// A failure independent of the target is the definition's own.
+			if expression == "required(n)" {
+				if err == nil || !strings.Contains(err.Error(), path+":3:") || strings.Contains(err.Error(), "derive template at") {
+					t.Fatalf("expected fact failure at the definition, got %v", err)
+				}
+				return
+			}
 			if err == nil || !strings.Contains(err.Error(), path+":4:") || !strings.Contains(err.Error(), "derive template at "+path+":3:") {
 				t.Fatalf("expected fact failure at the derive request with template provenance, got %v", err)
 			}
@@ -2526,6 +2533,12 @@ fn main() {}`
 				t.Fatal(err)
 			}
 			_, _, err := Check(dir)
+			if expression == "required(n)" {
+				if err == nil || !strings.Contains(err.Error(), path+":2:") || strings.Contains(err.Error(), "derive template at") {
+					t.Fatalf("expected helper requirement failure at the definition, got %v", err)
+				}
+				return
+			}
 			if err == nil || !strings.Contains(err.Error(), path+":4:") || !strings.Contains(err.Error(), "derive template at "+path+":2:") {
 				t.Fatalf("expected helper requirement failure at request with helper provenance, got %v", err)
 			}

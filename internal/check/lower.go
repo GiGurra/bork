@@ -33,6 +33,9 @@ type lowerer struct {
 	invariants map[*Var][]*Constraint
 	// roots are the typed trees lowered, for the passes over all of them.
 	roots []Expr
+	// inWitness is set while lowering a definition witness, whose
+	// dependent expressions have the type Invalid.
+	inWitness bool
 }
 
 // nameRebinding keeps immutable identities distinct in generated Go.
@@ -138,6 +141,7 @@ func (c *checker) lower(files []*syntax.File) {
 	for _, r := range c.info.Rules {
 		l.rule(r)
 	}
+	c.info.DefinitionWitnesses = l.witnesses(c.info.DefinitionWitnesses)
 	l.interpolationBatches()
 	c.checkCarried(l.roots)
 }
@@ -521,7 +525,15 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		at.token = x.Pos
 		return &CallValue{expr: at, Fun: l.expr(x.Fun), Args: l.exprs(x.Args), Provider: l.info.assemblyValueCalls[x]}
 	case *syntax.Lambda:
-		ft := at.typ.(*FuncType)
+		ft, typed := at.typ.(*FuncType)
+		if !typed && l.inWitness {
+			// A definition witness has lambdas in dependent positions.
+			ft = &FuncType{Result: Invalid}
+			for range x.Params {
+				ft.Params = append(ft.Params, Invalid)
+			}
+			at.typ = ft
+		}
 		out := &Lambda{expr: at}
 		for i, p := range x.Params {
 			v := &Var{Name: p.Name, Pos: p.Pos, Type: ft.Params[i], Kind: VarLambdaParam, Index: i}
@@ -531,7 +543,16 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		out.Body = l.expr(x.Body)
 		return out
 	case *syntax.TupleLit:
-		rec := at.typ.(*Record)
+		rec, typed := at.typ.(*Record)
+		if !typed && l.inWitness {
+			// A definition witness builds tuples of dependent type: their
+			// elements are still evaluated.
+			out := &Block{expr: at}
+			for _, elem := range x.Elems {
+				out.Stmts = append(out.Stmts, &ExprStmt{X: l.expr(elem)})
+			}
+			return out
+		}
 		out := &RecordLit{expr: at, Record: rec}
 		for i, elem := range x.Elems {
 			field := rec.Fields[i]
@@ -618,6 +639,17 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 			out.Record, fields = t, t.Fields
 		case *Variant:
 			out.Variant, fields = t, t.Fields
+		default:
+			if !l.inWitness {
+				break
+			}
+			// A definition witness builds records of dependent type: their
+			// field values are still evaluated.
+			block := &Block{expr: at}
+			for _, init := range x.Fields {
+				block.Stmts = append(block.Stmts, &ExprStmt{X: l.expr(init.Value)})
+			}
+			return block
 		}
 		inits := l.info.recordInits[x]
 		if inits == nil {
@@ -928,3 +960,32 @@ func (l *lowerer) assertIs(source *syntax.Call, at expr, assertion *assertIsInfo
 // loop lowers `for { }`, `for (cond) { }`, and `for (init; cond; post)
 // { }`. A header name is one variable for every iteration, without the
 // initial value's identity: later iterations have other values.
+
+// witnesses lowers definition witnesses (see derive_witness.go) apart from the
+// program: their trees are no roots of it. Lowering assumes checked types,
+// and a witness's dependent types are Invalid; one it cannot lower is dropped.
+func (l *lowerer) witnesses(fns []*Func) []*Func {
+	var out []*Func
+	for _, fn := range fns {
+		roots, sites := len(l.roots), len(l.interpolationSites)
+		if l.witness(fn) {
+			out = append(out, fn)
+		}
+		// Unused definitions start no validator: their interpolations
+		// belong to their expansions.
+		l.roots, l.interpolationSites = l.roots[:roots], l.interpolationSites[:sites]
+	}
+	return out
+}
+
+func (l *lowerer) witness(fn *Func) (ok bool) {
+	l.inWitness = true
+	defer func() {
+		l.inWitness = false
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	l.function(fn)
+	return true
+}
