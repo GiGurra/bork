@@ -1,0 +1,37 @@
+import "bork/shape"
+
+class Counts[T] { fn counts(): (Int, Bool, Int, Int, String) }
+
+class Labels[T] { fn labels(): (String, String) }
+
+type Info = { label: String }
+
+// Runtime bindings with compile-time-known list values stay readable.
+derive instance counts[T]: Counts[T] {
+  fn counts(): (Int, Bool, Int, Int, String) {
+    names: List[String] = comptime for { field in shape.fields[T]() } yield field.name
+    // The older bracket form, kept on purpose.
+    old: List[String] = [comptime for (field in shape.fields[T]()) field.name]
+    plain = [1, 2, 3]
+    kind = comptime if (names.isEmpty()) { "empty" } else { "fields" }
+    (names.length(), names.isEmpty(), old.length(), plain.length(), kind)
+  }
+}
+
+// Chains and projections on runtime bindings read them too.
+derive instance labels[T]: Labels[T] {
+  fn labels(): (String, String) {
+    s = shape.name[T]()
+    info = Info { label: s }
+    (s.toLower().toUpper(), info.label.toLower())
+  }
+}
+
+type Row = { name: String, age: Int } derive (Counts, Labels)
+type Empty = {} derive (Counts)
+
+fn main() {
+  println(counts[Row]())
+  println(counts[Empty]())
+  println(labels[Row]())
+}

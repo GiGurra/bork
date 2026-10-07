@@ -930,6 +930,11 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 					break
 				}
 			}
+			// A projection or query on a runtime binding stays runtime code,
+			// so the binding is read.
+			if root := receiverRoot(x); root != nil && p.runtimeName(root) {
+				break
+			}
 			return p.literal(x.Position(), value)
 		}
 	}
@@ -1209,6 +1214,38 @@ func (c *checker) expandDeriveBodies() {
 		metadataPlan := &deriveExpansion{c: c, template: template, instance: instance, typeFacts: map[string][]*Constraint{template.Decl.TypeParams[0].Name: instance.Constraints}, active: map[*syntax.FuncDecl]bool{}, scope: instance.Pkg, env: map[string]any{template.Decl.TypeParams[0].Name: instance.Type}, budget: &deriveBudget{remaining: 100000}, names: map[string]bool{}}
 		c.declareInstanceMetadata(instance, template.Decl.Metadata, metadataPlan)
 		c.pkg = saved
+	}
+}
+
+// runtimeName reports whether a name holds a compile-time-known value that
+// expansion also keeps as a runtime binding.
+func (p *deriveExpansion) runtimeName(id *syntax.Ident) bool {
+	value, known := p.env[id.Name]
+	if !known || metadataValue(value) {
+		return false
+	}
+	_, staged := value.(shapeIndex)
+	return !staged
+}
+
+// receiverRoot gives the identifier at the root of a selector or method
+// call chain, such as s in s.toLower().length().
+func receiverRoot(x syntax.Expr) *syntax.Ident {
+	for {
+		switch e := x.(type) {
+		case *syntax.Selector:
+			x = e.X
+		case *syntax.Call:
+			selector, ok := e.Fun.(*syntax.Selector)
+			if !ok {
+				return nil
+			}
+			x = selector.X
+		case *syntax.Ident:
+			return e
+		default:
+			return nil
+		}
 	}
 }
 
