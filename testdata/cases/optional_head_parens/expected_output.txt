@@ -1,0 +1,11 @@
+3
+grouped operand
+three
+7
+1
+2
+2
+1
+1
+2
+parentheses still work

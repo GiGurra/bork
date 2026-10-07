@@ -4,6 +4,8 @@ import "github.com/GiGurra/bork/internal/diag"
 
 // File is one parsed .bork source file.
 type File struct {
+	// HeadParentheses holds removable control-head pairs (End is the closing paren).
+	HeadParentheses []SourceSpan
 	// PatternTestOperators includes contextual is positions, including unfinished edits.
 	PatternTestOperators []diag.Pos
 	// ExpressionSpans retains parser ranges, including grouping, for compiler

@@ -14,7 +14,7 @@ type Shape = sealed {
 }
 
 fn describe(shape: Shape): String {
-  match (shape) {
+  match shape {
     .Circle { radius: 0 } => "a point"
     .Circle { radius } => s"a circle of radius $radius"
     .Rect { width, height: h } => s"a $width by $h rectangle"
@@ -40,7 +40,7 @@ parentheses, keeping the declared order and exact number of values:
 ```bork
 type Reply[T] = sealed { Found(T, String), Missing }
 fn text(reply: Reply[Int]): String {
-  match (reply) {
+  match reply {
     .Found(number, label) => s"$label: $number"
     .Missing => "missing"
   }
@@ -49,7 +49,7 @@ fn main() {
   println(text(Reply.Found(3, "count")))
   println(text(Reply[Int].Missing))
   value = Option[Int].Some(4)
-  println(match (value) { Option[Int].Some(n) => n, Option[Int].None => 0 })
+  println(match value { Option[Int].Some(n) => n, Option[Int].None => 0 })
 }
 ```
 
@@ -90,7 +90,7 @@ that the arms cover every possibility:
 
 ```bork
 fn describe(pair: (Bool, Int)): String {
-  match (pair) {
+  match pair {
     (true, n) => s"enabled: $n"
     (false, _) => "disabled"
   }
@@ -109,7 +109,7 @@ Patterns nest, so a field can be matched against another pattern:
 type Token = { text: String, quoted: Bool }
 
 fn first(tokens: List[Token]): String {
-  match (tokens) {
+  match tokens {
     [] => "nothing"
     [Token { text, quoted: true }, ...] => s"the quoted word $text"
     [Token { text }, ...rest] => s"$text, then ${rest.length()} more"
@@ -165,7 +165,7 @@ A `match` has to cover every possible value. This one forgets a variant:
 type Light = sealed { Red, Amber, Green }
 
 fn go(light: Light): Bool {
-  match (light) {
+  match light {
     Light.Red => false
     Light.Green => true
   }
@@ -190,19 +190,19 @@ type NotFound = { id: Int }
 type Insufficient = { missing: Int }
 
 fn find(id: Int): Account | NotFound {
-  if (id == 1) { Account { id: 1, balance: 100 } } else { NotFound { id: id } }
+  if id == 1 { Account { id: 1, balance: 100 } } else { NotFound { id: id } }
 }
 
 fn withdraw(id: Int, amount: Int): Account | NotFound | Insufficient {
   account = find(id)?
-  if (account.balance < amount) {
+  if account.balance < amount {
     return Insufficient { missing: amount - account.balance }
   }
   account.copy(balance: account.balance - amount)
 }
 
 fn main() {
-  message = match (withdraw(1, 250)) {
+  message = match withdraw(1, 250) {
     a: Account => s"new balance: ${a.balance}"
     NotFound { id } => s"no account $id"
     Insufficient { missing } => s"short by $missing"
@@ -244,11 +244,11 @@ type Timeout = { ms: Int }
 type Refused = { host: String }
 
 fn fetch(ok: Bool): String | Timeout | Refused {
-  if (ok) { "body" } else { Timeout { ms: 500 } }
+  if ok { "body" } else { Timeout { ms: 500 } }
 }
 
 fn main() {
-  text = match (fetch(false)) {
+  text = match fetch(false) {
     body: String => body
     e: Timeout | Refused => s"failed: $e"
   }
@@ -268,7 +268,7 @@ fn half(n: Int where positive): Int {
 }
 
 fn main() {
-  result = match (7) {
+  result = match 7 {
     n: Int where positive => half(n)
     _ => 0
   }
@@ -284,7 +284,7 @@ An arm with a condition might not be taken, so the `match` still needs an arm wi
 
 ```bork
 fn percent(part: Int, whole: Int): Int {
-  if (whole == 0) {
+  if whole == 0 {
     panic("percent: whole is zero")
   }
   part * 100 / whole

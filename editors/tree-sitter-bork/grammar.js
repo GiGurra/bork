@@ -1,5 +1,6 @@
 /// <reference types="tree-sitter-cli/dsl" />
 const comma = rule => seq(rule, repeat(seq(',', rule)), optional(','));
+const bindings = rule => seq(rule, repeat(seq(',', rule)));
 const tuple = rule => seq('(', rule, ',', optional(comma(rule)), ')');
 const semis = $ => choice(';', $._newline);
 // Match parser.list(): semicolons may repeat, but each comma follows an item.
@@ -19,6 +20,10 @@ module.exports = grammar({
   word: $ => $.identifier,
   externals: $ => [$.go_content, $._newline, $._error_sentinel, $.bare_return, $.bare_break, $.bare_continue, $._tag_group_start, $._comment_content],
   conflicts: $ => [
+    [$.parenthesized_expression, $.list_comprehension],
+    [$.list_comprehension, $._for_header],
+    [$.parenthesized_expression, $._for_header],
+    [$._head_expression, $.for_expression],
     [$.type, $.specialized_variant_pattern],
     [$._expression, $.specialized_variant_pattern],
     [$._expression, $.pattern, $.specialized_variant_pattern],
@@ -131,6 +136,23 @@ module.exports = grammar({
     trust_statement: $ => seq('trust', $._expression),
     block: $ => seq('{', statements($._statement, $), '}'),
     _expression: $ => choice($.generic_expression, $.qualified_name, $.number, $.string, $.rune, $.boolean, $.interpolated_string, $.block, $.record_expression, $.list_literal, $.map_literal, $.parenthesized_expression, $.tuple_literal, $.call_expression, $.selector_expression, $.try_expression, $.unary_expression, $.binary_expression, $.is_expression, $.lambda_expression, $.if_expression, $.match_expression, $.select_expression, $.return_expression, $.scope_expression, $.with_expression, $.generate_expression, $.yield_expression, $.for_expression, $.comptime_expression, $.comptime_control_expression, $.mock_expression, 'break', 'continue', $.go_body),
+    // A bare Name { in a head begins the body. Delimited operands restore
+    // ordinary expression parsing, including record literals.
+    _head_expression: $ => choice($.qualified_name, $.number, $.string, $.rune, $.boolean, $.interpolated_string, $.block, $.list_literal, $.map_literal, $.parenthesized_expression, $.tuple_literal, alias($._head_context_record, $.record_expression),
+      alias($._head_generic, $.generic_expression), alias($._head_call, $.call_expression), alias($._head_selector, $.selector_expression), alias($._head_try, $.try_expression), alias($._head_unary, $.unary_expression), alias($._head_binary, $.binary_expression), alias($._head_is, $.is_expression), alias($._head_lambda, $.lambda_expression),
+      $.if_expression, $.match_expression, $.scope_expression, $.with_expression, $.generate_expression, $.for_expression, $.comptime_expression, $.comptime_control_expression, $.mock_expression, $.go_body, alias($._head_return, $.return_expression), alias($._head_yield, $.yield_expression), 'break', 'continue'),
+    _head_context_record: $ => seq('.', $.record_literal),
+    _head_return: $ => prec.right(seq('return', optional($._head_expression))),
+    _head_yield: $ => prec.right(seq('yield', $._head_expression)),
+    _head_generic: $ => prec.left(14, seq($._head_expression, $.type_arguments)),
+    _head_call: $ => prec.left(14, seq(field('function', $._head_expression), optional($.type_arguments), '(', optional(comma($.argument)), ')')),
+    _head_selector: $ => prec.left(15, seq(optional($._head_expression), '.', field('field', choice($._identifier, $.tuple_index)), optional($.type_arguments))),
+    _head_try: $ => prec.left(13, seq($._head_expression, '?')),
+    _head_unary: $ => prec(11, seq(choice('-', '!', '^'), $._head_expression)),
+    _head_binary: $ => choice(...[['|>',1], ['||',2], ['&&',3], ['==',4], ['!=',4], ['<',4], ['<=',4], ['>',4], ['>=',4], ['+',5], ['-',5], ['|',5], ['^',5], ['&',6], ['<<',6], ['>>',6], ['*',6], ['/',6], ['%',6]].map(([op,p]) => prec.left(p, seq(field('left',$._head_expression), field('operator',op), field('right',$._head_expression))))),
+    _head_is: $ => prec.left(4, seq(field('value', $._head_expression), 'is', field('pattern', alias($._head_test_pattern, $.test_pattern)))),
+    _head_test_pattern: $ => prec.dynamic(2, prec.right(2, choice($.test_tuple_pattern, $.test_parenthesized_pattern, '_', $.number, seq('-', $.number), $.string, $.rune, $.boolean, seq(field('name', choice($._identifier, '_')), ':', $.type), seq(choice($.type, $.specialized_variant_pattern, $.context_pattern), optional(seq('(', items($.test_pattern, $), ')'))), seq('[', items(choice($.test_pattern, seq('...', optional(field('name', $._identifier)))), $), ']')))),
+    _head_lambda: $ => prec.right(1, seq(choice(field('parameter', $._identifier), seq('(', optional(comma($.lambda_parameter)), ')')), '=>', $._head_expression)),
     number: _ => token(choice(/0[xX][\da-fA-F_]+/, /0[bB][01_]+/, /0[oO][0-7_]+/, /\d[\d_]*(\.\d[\d_]*)?([eE][+-]?[\d_]+)?/)),
     string: $ => seq('"', repeat(choice($.escape_sequence, token.immediate(prec(1, /[^"\\]+/)))), token.immediate('"')),
     escape_sequence: _ => token.immediate(seq('\\', /./)),
@@ -158,8 +180,8 @@ module.exports = grammar({
     is_expression: $ => prec.left(4, seq(field("value", $._expression), "is", field("pattern", $.test_pattern))),
     lambda_expression: $ => prec.right(1, seq(choice(field('parameter', $._identifier), seq('(', optional(comma($.lambda_parameter)), ')')), '=>', $._expression)),
     lambda_parameter: $ => seq($._identifier, optional(seq(':', $.type))),
-    if_expression: $ => seq('if', '(', $._expression, ')', $.block, optional(seq('else', choice($.if_expression, $.block)))),
-    match_expression: $ => seq('match', '(', $._expression, ')', '{', items($.match_arm, $), '}'),
+    if_expression: $ => seq('if', $._head_expression, $.block, optional(seq('else', choice($.if_expression, $.block)))),
+    match_expression: $ => seq('match', $._head_expression, '{', items($.match_arm, $), '}'),
     match_arm: $ => seq($.pattern, '=>', $._expression),
     pattern: $ => prec.right(choice($.tuple_pattern, $.parenthesized_pattern, '_', $.number, seq('-', $.number), $.string, $.rune, $.boolean, seq(field('name', choice($._identifier, '_')), ':', alias($._pattern_type, $.type)), seq(choice($.qualified_name, $.specialized_variant_pattern, $.context_pattern), optional(choice(seq('{', items($.field_pattern, $), '}'), seq('(', items($.pattern, $), ')')))), seq('[', items(choice($.pattern, seq('...', optional(field('name', $._identifier)))), $), ']'))),
     _pattern_type: $ => prec.dynamic(1, seq(choice($.qualified_name, seq('(', $.type, ')'), $.tuple_type, alias($._pattern_function_type, $.function_type)), optional($.type_arguments), optional($.uses_clause), optional($.where_clause), repeat(seq('|', alias($._pattern_type, $.type))))),
@@ -178,12 +200,23 @@ module.exports = grammar({
     with_expression: $ => prec.dynamic(10, seq('with', '(', items(seq($.qualified_name, ':', $._expression), $), ')', $.block)),
     generate_expression: $ => seq('generate', $.type_arguments, $.block),
     yield_expression: $ => prec.right(seq('yield', $._expression)),
-    for_expression: $ => seq('for', optional(seq('(', choice(
+    for_expression: $ => seq('for', optional(choice(
+      seq('(', $._for_header, ')'), $._bare_for_header,
+    )), $.block),
+    _for_header: $ => choice(
       seq(field('name', choice($._identifier, '_')), 'in', $._expression),
       field('condition', $._expression),
-      seq(optional(seq(field('init', $.loop_binding), repeat(seq(',', field('init', $.loop_binding))))), ';', optional(field('condition', $._expression)), ';', optional(seq(field('update', $.loop_binding), repeat(seq(',', field('update', $.loop_binding)))))),
-    ), ')')), $.block),
+      $._loop_clauses,
+    ),
+    _bare_for_header: $ => choice(
+      seq(field('name', choice($._identifier, '_')), 'in', $._head_expression),
+      field('condition', $._head_expression),
+      $._head_loop_clauses,
+    ),
+    _loop_clauses: $ => seq(optional(bindings(field('init', $.loop_binding))), ';', optional(field('condition', $._expression)), ';', optional(bindings(field('update', $.loop_binding)))),
+    _head_loop_clauses: $ => seq(optional(bindings(field('init', alias($._head_loop_binding, $.loop_binding)))), ';', optional(field('condition', $._head_expression)), ';', optional(bindings(field('update', alias($._head_loop_binding, $.loop_binding))))),
     loop_binding: $ => seq(field('name', $._identifier), optional(seq(':', $.type)), '=', field('value', $._expression)),
+    _head_loop_binding: $ => seq(field('name', $._identifier), optional(seq(':', $.type)), '=', field('value', $._head_expression)),
     comptime_control_expression: $ => prec.dynamic(10, seq('comptime', choice($.for_expression, $.if_expression, $.match_expression))),
     comptime_expression: $ => prec.dynamic(10, seq('comptime', $.block)),
     mock_expression: $ => prec.dynamic(10, seq('mock', $.qualified_name, $.mock_parameters, $.block)),

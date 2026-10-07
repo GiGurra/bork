@@ -50,7 +50,7 @@ func parse(path, src string, toks []Token, comments []Comment, diags *diag.List,
 
 func parseMode(path, src string, toks []Token, comments []Comment, diags *diag.List, compiler, script bool) *File {
 	f := &File{Path: path, Source: src, Comments: comments, Script: script}
-	p := &parser{patternTestOperators: &f.PatternTestOperators, toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, compiler: compiler, spans: &f.ExpressionSpans, spanSeen: map[Expr][]SourceSpan{}}
+	p := &parser{headParentheses: &f.HeadParentheses, patternTestOperators: &f.PatternTestOperators, toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, compiler: compiler, spans: &f.ExpressionSpans, spanSeen: map[Expr][]SourceSpan{}}
 	var statements []Stmt
 	var firstStatement diag.Pos
 	// Imports come first.
@@ -254,13 +254,14 @@ type parser struct {
 	diags                       *diag.List
 	testingPattern              bool
 	patternTestOperators        *[]diag.Pos
+	headParentheses             *[]SourceSpan
 	// noLambda is set while parsing rule premises, where `x =>` ends
 	// the premises instead of starting a lambda.
 	noLambda bool
 	// imports holds the names of the file's imported packages.
 	imports map[string]bool
-	// noRecordLit is set while parsing a scope's policy, where a '{'
-	// after a name starts the scope's block.
+	// noRecordLit is set in control heads and scope policies, where a
+	// brace after a name starts the body rather than a record literal.
 	noRecordLit bool
 }
 
@@ -1140,25 +1141,108 @@ func (p *parser) typeAtom() *TypeExpr {
 	return te
 }
 
-// forLoop parses the forms of for: `for { }`, `for (x in xs) { }`,
-// `for (cond) { }`, and `for (init; cond; post) { }`.
+// headExpr parses an expression terminated by the control's opening brace.
+func (p *parser) headExpr() Expr {
+	saved := p.noRecordLit
+	p.noRecordLit = true
+	defer func() { p.noRecordLit = saved }()
+	start := p.i
+	x := p.expr()
+	p.rememberHeadParentheses(start, p.i, false)
+	return x
+}
+
+// wrappedHead reports whether an opening parenthesis encloses the entire head.
+// A grouped first operand, as in `for (i) < n {}`, is not a header wrapper.
+func (p *parser) wrappedHead() bool {
+	if !p.at(LParen) {
+		return false
+	}
+	depth := 0
+	for i := p.i; i < len(p.toks); i++ {
+		switch p.toks[i].Kind {
+		case LParen:
+			depth++
+		case RParen:
+			depth--
+			if depth == 0 {
+				return i+1 < len(p.toks) && p.toks[i+1].Kind == LBrace
+			}
+		}
+	}
+	return false
+}
+
+// rememberHeadParentheses records safely removable head grouping for fmt's
+// opt-in cleanup. Top-level braces need grouping to avoid record ambiguity;
+// top-level commas need grouping to remain tuples. Nested grouping is retained
+// when necessary, so `((User {}))` can become `(User {})`.
+func (p *parser) rememberHeadParentheses(start, end int, loop bool) {
+	if p.headParentheses == nil {
+		return
+	}
+	for start < end && p.toks[start].Kind == LParen && p.toks[end-1].Kind == RParen {
+		depth, safe, whole := 0, true, true
+		for i := start + 1; i < end-1; i++ {
+			switch p.toks[i].Kind {
+			case LBrace:
+				if depth == 0 {
+					safe = false
+				}
+				depth++
+			case LParen, LBrack:
+				depth++
+			case RParen, RBrack, RBrace:
+				depth--
+				if depth < 0 {
+					whole = false
+				}
+			case Comma:
+				if depth == 0 && !loop {
+					safe = false
+				}
+			case Semi:
+				if depth == 0 && p.toks[i].Text == "\n" {
+					safe = false
+				}
+			}
+		}
+		if !whole {
+			return
+		}
+		if safe {
+			*p.headParentheses = append(*p.headParentheses, SourceSpan{p.toks[start].Pos, p.toks[end-1].Pos})
+		}
+		start++
+		end--
+		loop = false
+	}
+}
+
+// forLoop parses infinite, iteration, condition and three-clause loops.
 func (p *parser) forLoop() *For {
 	f := &For{Pos: p.next().Pos}
 	if p.at(LBrace) {
 		f.Body = p.block()
 		return f
 	}
-	p.expect(LParen, "after for (or '{' for a loop without a condition)")
-	if (p.at(TIdent) || p.at(Underscore)) && p.peekKind() == TIdent && p.toks[min(p.i+1, len(p.toks)-1)].Text == "in" {
+	start := p.i
+	wrapped := p.wrappedHead()
+	saved := p.noRecordLit
+	p.noRecordLit = !wrapped
+	defer func() { p.noRecordLit = saved }()
+	end := LBrace
+	if wrapped {
+		p.next()
+		end = RParen
+		p.skipNewlines()
+	}
+	if (p.at(TIdent) || p.at(Underscore)) && p.peekKind() == TIdent && p.toks[p.i+1].Text == "in" {
 		n := p.next()
-		p.next() // in
+		p.next()
 		f.Name, f.NamePos = n.Text, n.Pos
 		f.Items = p.expr()
-		p.expect(RParen, "after the iteration source")
-		f.Body = p.block()
-		return f
-	}
-	if p.at(Semi) || p.at(TIdent) && (p.peekKind() == Assign || p.peekKind() == Colon) {
+	} else if p.at(Semi) || p.at(TIdent) && (p.peekKind() == Assign || p.peekKind() == Colon) {
 		f.Clauses = true
 		f.Init = p.loopBindings(true)
 		p.expect(Semi, "after the loop's header bindings")
@@ -1166,19 +1250,22 @@ func (p *parser) forLoop() *For {
 			f.Cond = p.expr()
 		}
 		p.expect(Semi, "after the loop's condition")
-		if !p.at(RParen) {
+		if !p.at(end) {
 			f.Post = p.loopBindings(false)
 		}
-		p.expect(RParen, "after the loop's post clause")
-		f.Body = p.block()
-		return f
+	} else {
+		f.Cond = p.expr()
+		if p.at(Semi) {
+			p.errorf(p.tok().Pos, "a loop's header bindings are name = value, as in for i = 0; i < n; i = i + 1")
+			panic(bailout{})
+		}
 	}
-	f.Cond = p.expr()
-	if p.at(Semi) {
-		p.errorf(p.tok().Pos, "a loop's header bindings are name = value, as in for (i = 0; i < n; i = i + 1)")
-		panic(bailout{})
+	if wrapped {
+		p.skipNewlines()
+		p.expect(RParen, "after the loop head")
 	}
-	p.expect(RParen, "after the loop's condition")
+	p.rememberHeadParentheses(start, p.i, f.Clauses || f.Items != nil)
+	p.noRecordLit = saved
 	f.Body = p.block()
 	return f
 }
@@ -1214,6 +1301,9 @@ func (p *parser) loopBindings(init bool) []*Binding {
 }
 
 func (p *parser) block() *Block {
+	saved := p.noRecordLit
+	p.noRecordLit = false
+	defer func() { p.noRecordLit = saved }()
 	b := &Block{Pos: p.expect(LBrace, "to start a block").Pos}
 	for {
 		p.skipSemis()
@@ -1607,6 +1697,9 @@ func isTypePath(x Expr) bool {
 }
 
 func (p *parser) recordLit(typ Expr) Expr {
+	saved := p.noRecordLit
+	p.noRecordLit = false
+	defer func() { p.noRecordLit = saved }()
 	lit := &RecordLit{Type: typ}
 	p.expect(LBrace, "")
 	p.list(RBrace, "a field", func() {
@@ -1619,6 +1712,9 @@ func (p *parser) recordLit(typ Expr) Expr {
 }
 
 func (p *parser) copyExpr(x Expr, pos diag.Pos) Expr {
+	saved := p.noRecordLit
+	p.noRecordLit = false
+	defer func() { p.noRecordLit = saved }()
 	c := &Copy{Pos: pos, X: x}
 	p.expect(LParen, "")
 	p.list(RParen, "a field update", func() {
@@ -1650,11 +1746,10 @@ func (p *parser) copyExpr(x Expr, pos diag.Pos) Expr {
 
 func (p *parser) matchExpr() Expr {
 	m := &Match{Pos: p.next().Pos}
-	p.expect(LParen, "after 'match' (write 'match (value) { ... }')")
-	p.skipNewlines()
-	m.X = p.expr()
-	p.skipNewlines()
-	p.expect(RParen, "to close the matched value")
+	m.X = p.headExpr()
+	saved := p.noRecordLit
+	p.noRecordLit = false
+	defer func() { p.noRecordLit = saved }()
 	p.expect(LBrace, "to start the match arms")
 	p.list(RBrace, "a match arm", func() {
 		pat := p.pattern()
@@ -1730,6 +1825,9 @@ func (p *parser) pattern() Pattern {
 	t := p.tok()
 	switch t.Kind {
 	case LParen:
+		saved := p.noRecordLit
+		p.noRecordLit = false
+		defer func() { p.noRecordLit = saved }()
 		p.next()
 		p.skipNewlines()
 		var first Pattern
@@ -1769,6 +1867,9 @@ func (p *parser) pattern() Pattern {
 	case TInt, TFloat, TRune, TString, KwTrue, KwFalse, Minus:
 		return &LitPat{Pos: t.Pos, Value: p.unary()}
 	case LBrack:
+		saved := p.noRecordLit
+		p.noRecordLit = false
+		defer func() { p.noRecordLit = saved }()
 		p.next()
 		lp := &ListPat{Pos: t.Pos}
 		p.list(RBrack, "a pattern", func() {
@@ -1821,7 +1922,7 @@ func (p *parser) pattern() Pattern {
 			vp.NamePos = name.Pos
 			vp.Path = append(vp.Path, name.Text)
 		}
-		if p.at(LBrace) {
+		if p.at(LBrace) && !p.noRecordLit {
 			vp.PayloadPos = p.next().Pos
 			vp.Braces = true
 			p.list(RBrace, "a field pattern", func() {
@@ -1844,6 +1945,9 @@ func (p *parser) pattern() Pattern {
 				p.errorf(p.tok().Pos, "a variant pattern cannot mix named fields and positional payloads")
 				panic(bailout{})
 			}
+			saved := p.noRecordLit
+			p.noRecordLit = false
+			defer func() { p.noRecordLit = saved }()
 			vp.Positional = true
 			vp.PayloadPos = p.next().Pos
 			p.list(RParen, "a payload pattern", func() {
@@ -1977,6 +2081,9 @@ func (p *parser) primary() Expr {
 		}
 		return name
 	case LBrack:
+		saved := p.noRecordLit
+		p.noRecordLit = false
+		defer func() { p.noRecordLit = saved }()
 		p.next()
 		lit := &ListLit{Pos: t.Pos}
 		p.skipNewlines()
@@ -2014,6 +2121,9 @@ func (p *parser) primary() Expr {
 		})
 		return lit
 	case LParen:
+		saved := p.noRecordLit
+		p.noRecordLit = false
+		defer func() { p.noRecordLit = saved }()
 		if !p.noLambda && p.lambdaAhead() {
 			return p.lambda()
 		}
@@ -2177,11 +2287,7 @@ func (p *parser) lambda() Expr {
 
 func (p *parser) ifExpr() Expr {
 	e := &If{Pos: p.next().Pos}
-	p.expect(LParen, "after 'if' (conditions are written as 'if (cond)')")
-	p.skipNewlines()
-	e.Cond = p.expr()
-	p.skipNewlines()
-	p.expect(RParen, "to close the condition")
+	e.Cond = p.headExpr()
 	e.Then = p.block()
 	if p.at(Semi) && p.tok().Text == "\n" && p.peekKind() == KwElse {
 		p.errorf(p.toks[p.i+1].Pos, "'else' must be on the same line as the closing '}' of the if-block")
@@ -2357,7 +2463,7 @@ func matchingBrace(s string, from int) int {
 // subExpr parses the expression inside ${...}, starting at pos.
 func (p *parser) subExpr(src string, pos diag.Pos) (x Expr) {
 	toks, _ := lexAt(pos.File, []byte(src), pos.Line, pos.Col, p.diags, p.compiler)
-	sub := &parser{toks: toks, diags: p.diags, imports: p.imports, compiler: p.compiler, spans: p.spans, spanSeen: p.spanSeen, inDerivation: p.inDerivation}
+	sub := &parser{headParentheses: p.headParentheses, toks: toks, diags: p.diags, imports: p.imports, compiler: p.compiler, spans: p.spans, spanSeen: p.spanSeen, inDerivation: p.inDerivation}
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(bailout); !ok {

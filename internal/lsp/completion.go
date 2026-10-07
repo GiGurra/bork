@@ -143,7 +143,7 @@ func (s *server) completion(pkg *packageState, file, src string, p position) []a
 	if s.snippets {
 		for _, snippet := range []struct{ label, text string }{
 			{"fn", "fn ${1:name}(${2}): ${3:Ok} {\n  ${0}\n}"},
-			{"match", "match (${1:value}) {\n  ${2:_} => ${0}\n}"},
+			{"match", "match ${1:value} {\n  ${2:_} => ${0}\n}"},
 			{"select", "select {\n  ${1:value} = ${2:channel}.receive(${3:s}) => ${0}\n}"},
 			{"type", "type ${1:Name} = { ${0} }"},
 			{"test", "test \"${1:description}\" {\n  ${0}\n}"},

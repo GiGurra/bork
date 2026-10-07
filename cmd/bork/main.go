@@ -51,8 +51,9 @@ type checkParams struct {
 }
 
 type fmtParams struct {
-	Paths []string `positional:"true" optional:"true" descr:".bork files or directories (default: .); directories are visited recursively"`
-	Check bool     `optional:"true" descr:"report files needing formatting without writing them"`
+	Simplify bool     `optional:"true" descr:"remove redundant parentheses around if, match and for heads"`
+	Paths    []string `positional:"true" optional:"true" descr:".bork files or directories (default: .); directories are visited recursively"`
+	Check    bool     `optional:"true" descr:"report files needing formatting without writing them"`
 }
 
 type installParams struct {
@@ -369,7 +370,7 @@ func main() {
 				Use:   "fmt",
 				Short: "format bork source files in place",
 				RunFunc: func(p *fmtParams, _ *cobra.Command, _ []string) {
-					changed, err := borkformat.Files(p.Paths, p.Check)
+					changed, err := borkformat.FilesWithOptions(p.Paths, p.Check, borkformat.Options{Simplify: p.Simplify})
 					for _, path := range changed {
 						fmt.Println(path)
 					}

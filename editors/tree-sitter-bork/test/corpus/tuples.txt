@@ -91,10 +91,11 @@ fn main() {
           (identifier))
         (argument
           (match_expression
-            (tuple_literal
-              (boolean)
-              (qualified_name
-                (identifier)))
+            (parenthesized_expression
+              (tuple_literal
+                (boolean)
+                (qualified_name
+                  (identifier))))
             (match_arm
               (pattern
                 (tuple_pattern
@@ -131,8 +132,9 @@ fn main() {
     (parameters)
     (block
       (match_expression
-        (qualified_name
-          (identifier))
+        (parenthesized_expression
+          (qualified_name
+            (identifier)))
         (match_arm
           (pattern
             (identifier)

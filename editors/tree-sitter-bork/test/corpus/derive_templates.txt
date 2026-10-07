@@ -69,7 +69,8 @@ derive instance labels[T]: Labels[T] {
         (block
           (comptime_control_expression
             (if_expression
-              (boolean)
+              (parenthesized_expression
+                (boolean))
               (block
                 (list_literal
                   (list_comprehension
@@ -140,16 +141,17 @@ derive instance c[T]: C[T] {
         (block
           (comptime_control_expression
             (match_expression
-              (call_expression
-                (generic_expression
-                  (selector_expression
-                    (qualified_name
-                      (identifier))
-                    (identifier))
-                  (type_arguments
-                    (type
+              (parenthesized_expression
+                (call_expression
+                  (generic_expression
+                    (selector_expression
                       (qualified_name
-                        (identifier))))))
+                        (identifier))
+                      (identifier))
+                    (type_arguments
+                      (type
+                        (qualified_name
+                          (identifier)))))))
               (match_arm
                 (pattern
                   (context_pattern

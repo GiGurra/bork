@@ -230,8 +230,9 @@ fn f(x: S) { match (x) { ;; S.A => 1,;; S.B => 2;; }; select { ;; a.receive(s) =
             (identifier)))))
     (block
       (match_expression
-        (qualified_name
-          (identifier))
+        (parenthesized_expression
+          (qualified_name
+            (identifier)))
         (match_arm
           (pattern
             (qualified_name
@@ -275,8 +276,9 @@ fn f(x: S) { match (x) { S.A { ;; a,;; b: v;; } => v; S.B(;; a,;; b;;) => a } }
             (identifier)))))
     (block
       (match_expression
-        (qualified_name
-          (identifier))
+        (parenthesized_expression
+          (qualified_name
+            (identifier)))
         (match_arm
           (pattern
             (qualified_name
@@ -326,8 +328,9 @@ fn f(x: List[Int]) { match (x) { [;; a,;; ...rest;;] => a } }
                 (identifier)))))))
     (block
       (match_expression
-        (qualified_name
-          (identifier))
+        (parenthesized_expression
+          (qualified_name
+            (identifier)))
         (match_arm
           (pattern
             (pattern

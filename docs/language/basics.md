@@ -42,7 +42,7 @@ with a prelude function’s name reports the local declaration.
 ```bork fails
 fn main() {
   count = 1
-  if (count > 0) {
+  if count > 0 {
     count = 2
     println(count)
   }
@@ -99,10 +99,10 @@ Package values can refer to values declared later or in another file in the same
 
 ```bork
 fn describe(n: Int): String {
-  sign = if (n < 0) { "negative" } else { "not negative" }
+  sign = if n < 0 { "negative" } else { "not negative" }
   size = {
-    magnitude = if (n < 0) { -n } else { n }
-    if (magnitude > 100) { "large" } else { "small" }
+    magnitude = if n < 0 { -n } else { n }
+    if magnitude > 100 { "large" } else { "small" }
   }
   s"$sign and $size"
 }
@@ -133,12 +133,18 @@ An expression that gives exactly `Ok`, which has no value, needs no `_`. A union
 ## Control flow
 
 Use `if` to choose between expressions or run a statement conditionally.
+Parentheses around `if`, `match` and `for` heads are optional; the bare form
+is idiomatic. Parentheses remain useful for grouping. A bare name followed by
+`{` in a head starts the body, so wrap a record literal explicitly:
+`match (Row { value: 1 }) { ... }`. Calls such as `if check(Row { value: 1 }) { ... }`
+already delimit their arguments. Normal formatting preserves your choice;
+`bork fmt --simplify` removes redundant head parentheses.
 Use `match` to choose by a value's type or shape and handle every possibility:
 
 ```bork
 fn label(n: Int): String {
-  if (n < 0) { return "negative" }
-  match (n) {
+  if n < 0 { return "negative" }
+  match n {
     0 => "zero"
     _ => "positive"
   }
@@ -161,20 +167,20 @@ next round. A loop has no result value.
 ```bork
 fn main() {
   // Visit each list element. Seq works here too.
-  for (n in [1, 2, 3]) {
+  for n in [1, 2, 3] {
     println(n)
   }
 
   // Check the condition before each round.
   remaining = 3
-  for (remaining > 0) {
+  for remaining > 0 {
     println(remaining)
     remaining = remaining - 1
   }
 
   // Initialize once, check the condition, then run the post clause.
-  for (i = 0; i < 4; i = i + 1) {
-    if (i == 1) { continue }
+  for i = 0; i < 4; i = i + 1 {
+    if i == 1 { continue }
     println(i)
   }
 
@@ -185,8 +191,8 @@ fn main() {
   }
 
   // A counting header can also omit its condition.
-  for (i = 1;; i = i * 2) {
-    if (i > 8) { break }
+  for i = 1;; i = i * 2 {
+    if i > 8 { break }
     println(i)
   }
 }
@@ -198,7 +204,7 @@ header bindings can advance together:
 
 ```bork
 fn main() {
-  for (a = 1, b = 2; a < 10; a = b, b = a + b) {
+  for a = 1, b = 2; a < 10; a = b, b = a + b {
     println(a, b)
   }
 }
@@ -225,11 +231,11 @@ fn main() {
   count = 0
   total = 0
   best = 0
-  for (x in [3, -1, 4, -5, 9]) {
-    if (x < 0) { continue }
+  for x in [3, -1, 4, -5, 9] {
+    if x < 0 { continue }
     count = count + 1
     total = total + x
-    if (x > best) { best = x }
+    if x > best { best = x }
   }
   println(s"$count values, total $total, best $best")
 }
@@ -254,7 +260,7 @@ rebinding can change types:
 ```bork fails
 fn main() {
   total = 0
-  for (n in [1, 2, 3]) {
+  for n in [1, 2, 3] {
     total = s"$total + $n"
   }
   println(total)
@@ -271,11 +277,11 @@ A call is a *tail call* when its result is the function's result, with nothing l
 
 ```bork
 fn gcd(a: Int, b: Int) uses tailrec: Int {
-  if (b == 0) { a } else { gcd(b, a % b) }
+  if b == 0 { a } else { gcd(b, a % b) }
 }
 
 fn countdown(n: Int) uses io {
-  if (n > 0) {
+  if n > 0 {
     countdown(n - 1)
   }
 }
@@ -329,7 +335,7 @@ fn main() {
   n = 300
   f = toFloat(n) / 7.0
   println(f)
-  match (toUint8(n)) {
+  match toUint8(n) {
     b: Uint8 => println("fits:", b)
     e: OutOfRange => println(s"${e.value} does not fit in ${e.target}")
   }

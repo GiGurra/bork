@@ -38,6 +38,18 @@ type delimiter struct {
 // comment endings become LF. Lexically invalid input is rejected; incomplete
 // or ill-typed programs, including reserved compiler identifiers, can still be formatted.
 func Source(path string, src []byte) ([]byte, error) {
+	return SourceWithOptions(path, src, Options{})
+}
+
+// Options selects explicit source cleanups in addition to whitespace formatting.
+type Options struct{ Simplify bool }
+
+// SourceWithOptions formats source and optionally removes redundant head parentheses.
+func SourceWithOptions(path string, src []byte, options Options) ([]byte, error) {
+	if options.Simplify {
+		src = simplifyHeads(path, src)
+	}
+
 	d := &diag.List{}
 	tokens, comments := syntax.LexCompiler(path, src, d)
 	if d.Len() != 0 {
@@ -77,7 +89,7 @@ func Source(path string, src []byte) ([]byte, error) {
 		}
 		start := offset(t.Pos)
 		u := t.Kind == syntax.Not || (t.Kind == syntax.Minus || t.Kind == syntax.Caret) && !endsExpr(prev)
-		loopIn := t.Kind == syntax.TIdent && t.Text == "in" && len(items) >= 3 && (items[len(items)-1].kind == syntax.TIdent || items[len(items)-1].kind == syntax.Underscore) && items[len(items)-2].kind == syntax.LParen && items[len(items)-3].kind == syntax.KwFor
+		loopIn := t.Kind == syntax.TIdent && t.Text == "in" && len(items) >= 2 && (items[len(items)-1].kind == syntax.TIdent || items[len(items)-1].kind == syntax.Underscore) && (items[len(items)-2].kind == syntax.KwFor || len(items) >= 3 && items[len(items)-2].kind == syntax.LParen && items[len(items)-3].kind == syntax.KwFor)
 		w := t.Kind == syntax.TIdent && t.Text == "with" && prev != syntax.Dot && prev != syntax.KwFn && prev != syntax.RParen
 		afterPatternTest := len(items) > 0 && items[len(items)-1].patternTest
 		chain := t.Kind == syntax.Dot && endsExpr(prev) && !afterPatternTest || prev == syntax.Dot && len(items) > 0 && !items[len(items)-1].contextDot
@@ -215,6 +227,9 @@ func space(a, b item) bool {
 	if a.comment || b.comment {
 		return true
 	}
+	if a.kind == syntax.KwFor && b.kind == syntax.Semi {
+		return true
+	}
 	if a.kind == syntax.Semi {
 		// Empty loop clauses: for (;;), for (; cond;).
 		return b.kind != syntax.Semi && b.kind != syntax.RParen
@@ -252,4 +267,43 @@ func space(a, b item) bool {
 		return !a.unary
 	}
 	return true
+}
+
+// simplifyHeads uses parser-owned ranges so comprehension headers and ordinary
+// grouping are untouched. Invalid/incomplete input still gets whitespace formatting.
+func simplifyHeads(path string, src []byte) []byte {
+	d := &diag.List{}
+	file := syntax.ParseScript(path, src, d)
+	if d.Len() != 0 || len(file.HeadParentheses) == 0 {
+		return src
+	}
+	lines := []int{0}
+	for i, b := range src {
+		if b == '\n' {
+			lines = append(lines, i+1)
+		}
+	}
+	remove := map[int]bool{}
+	for _, span := range file.HeadParentheses {
+		remove[lines[span.Start.Line-1]+span.Start.Col-1] = true
+		remove[lines[span.End.Line-1]+span.End.Col-1] = true
+	}
+	var out []byte
+	for i, b := range src {
+		if remove[i] {
+			if b == '(' && len(out) > 0 && !strings.ContainsRune(" \t\r\n", rune(out[len(out)-1])) {
+				out = append(out, ' ')
+			}
+		} else {
+			out = append(out, b)
+		}
+	}
+	// Removing delimiters may expose a line comment or a token boundary. Keep
+	// the original spelling whenever the cleaned program no longer parses.
+	d = &diag.List{}
+	syntax.ParseScript(path, out, d)
+	if d.Len() != 0 {
+		return src
+	}
+	return out
 }

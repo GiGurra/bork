@@ -413,3 +413,32 @@ func TestDocCommand(t *testing.T) {
 		t.Fatalf("failed docs wrote partial stdout: %s / %s", &stdout, &stderr)
 	}
 }
+
+func TestFmtSimplify(t *testing.T) {
+	exe := cliExecutable(t, false)
+	path := filepath.Join(t.TempDir(), "main.bork")
+	source := []byte("fn main() { if (true) {} }\n")
+	if err := os.WriteFile(path, source, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(exe, "fmt", "--simplify", "--check", path)
+	if output, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(output), path) {
+		t.Fatalf("check: %s, %v", output, err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(got, source) {
+		t.Fatalf("check wrote source: %s, %v", got, err)
+	}
+	cmd = exec.Command(exe, "fmt", "--simplify", path)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("simplify: %s, %v", output, err)
+	}
+	got, err = os.ReadFile(path)
+	if err != nil || string(got) != "fn main() { if true {} }\n" {
+		t.Fatalf("got %s, %v", got, err)
+	}
+	cmd = exec.Command(exe, "fmt", "--simplify", "--check", path)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("idempotence: %s, %v", output, err)
+	}
+}

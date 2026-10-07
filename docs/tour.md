@@ -48,7 +48,7 @@ fn double(n: Int): Int {
 }
 
 fn size(n: Int): String {
-  if (n > 100) { "big" } else { "small" }
+  if n > 100 { "big" } else { "small" }
 }
 
 fn main() {
@@ -93,8 +93,8 @@ type Expense = { label: String, cents: Int }
 type BadLine = { line: String, reason: String }
 
 fn parseExpense(line: String): Expense | BadLine {
-  match (line.fields()) {
-    [label, amount] => match (parseInt(amount)) {
+  match line.fields() {
+    [label, amount] => match parseInt(amount) {
       n: Int => Expense { label: label, cents: n }
       e: ParseError => BadLine { line: line, reason: e.message }
     }
@@ -130,7 +130,7 @@ type Expense = { label: String, cents: Int where positive }
 type BadLine = { line: String, reason: String }
 
 fn checked(label: String, n: Int): Expense | BadLine {
-  if (positive(n)) {
+  if positive(n) {
     Expense { label: label, cents: n }
   } else {
     BadLine { line: label, reason: "the amount must be positive" }
@@ -175,7 +175,7 @@ fn readLines(path: String) uses io: List[String] | fs.Error {
 }
 
 fn main() {
-  match (readLines("expenses.txt")) {
+  match readLines("expenses.txt") {
     lines: List[String] => println(s"${lines.length()} lines")
     e: fs.Error => eprintln(fs.ErrorInfo(e).message)
   }
@@ -204,9 +204,9 @@ type Expense = { label: String, cents: Int where positive }
 type BadLine = { line: String, reason: String }
 
 fn parseExpense(line: String): Expense | BadLine {
-  match (line.fields()) {
-    [label, amount] => match (parseInt(amount)) {
-      n: Int => if (positive(n)) {
+  match line.fields() {
+    [label, amount] => match parseInt(amount) {
+      n: Int => if positive(n) {
         Expense { label: label, cents: n }
       } else {
         BadLine { line: line, reason: "the amount must be positive" }
@@ -229,11 +229,11 @@ fn readLines(path: String) uses io: List[String] | fs.Error {
 
 fn report(path: String) uses io: Ok | fs.Error {
   results = readLines(path)?.map(parseExpense)
-  expenses = results.flatMap(r => match (r) {
+  expenses = results.flatMap(r => match r {
     e: Expense => [e]
     _: BadLine => []
   })
-  results.forEach(r => match (r) {
+  results.forEach(r => match r {
     e: Expense => println(s"${e.label}: ${e.cents}")
     b: BadLine => eprintln(s"skipped \"${b.line}\": ${b.reason}")
   })
@@ -241,8 +241,8 @@ fn report(path: String) uses io: Ok | fs.Error {
 }
 
 fn main() {
-  match (process.Args()) {
-    [path] => match (report(path)) {
+  match process.Args() {
+    [path] => match report(path) {
       e: fs.Error => eprintln(s"cannot read $path: ${fs.ErrorInfo(e).message}")
       _ => {}
     }

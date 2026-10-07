@@ -256,3 +256,13 @@ test('package tag group qualifiers and expression values', () => {
   has(ls, 1, 'true', 'constant.language.boolean.bork');
   assert.ok(!scopes(ls, 2, 'true').includes('entity.name.namespace.bork'));
 });
+
+test('bare control heads do not become metadata tag groups', () => {
+  const ls = tokenize('if ready {}\nmatch value { _ => 0 }\nfor x in xs {}\nfor ready {}');
+  for (const [row, head] of [[0, 'ready'], [1, 'value'], [2, 'xs'], [3, 'ready']]) {
+    assert.ok(!scopes(ls, row, head).includes('entity.name.namespace.bork'));
+  }
+  for (const [row, keyword] of [[0, 'if'], [1, 'match'], [2, 'for'], [3, 'for']]) {
+    has(ls, row, keyword, 'keyword.control.bork');
+  }
+});
