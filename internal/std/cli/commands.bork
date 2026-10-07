@@ -178,7 +178,7 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
             }
             apply, supplied := _borkOptionGet(command.rootApply)
             if !supplied { result = Error{errors: []codec.DecodeError{{path: cmd.CommandPath(), message: "root-bound command has no typed handler"}}}; return nil }
-            result = apply(parsedInput{value: parentValue.(codec.Value), path: name}, parsedInput{value: value.(codec.Value), warnings: warnings(), path: cmd.CommandPath()}, s)
+            result = apply(parsedInput{value: parentValue.(codec.Value), warnings: warnings(), path: name, sources: rootInput.prepared.sources()}, parsedInput{value: value.(codec.Value), warnings: warnings(), path: cmd.CommandPath(), sources: prepared.sources()}, s)
             diagnostics.Reset(); return nil
           }
           if failure, bad := value.(Error); bad {
@@ -188,7 +188,7 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
           }
           apply, supplied := _borkOptionGet(command.apply)
           if !supplied { result = Error{errors: []codec.DecodeError{{path: cmd.CommandPath(), message: "native command has no typed handler"}}}; return nil }
-          result = apply(parsedInput{value: value.(codec.Value), warnings: warnings(), path: cmd.CommandPath()}, s)
+          result = apply(parsedInput{value: value.(codec.Value), warnings: warnings(), path: cmd.CommandPath(), sources: prepared.sources()}, s)
           diagnostics.Reset()
           return nil
         }
@@ -265,7 +265,7 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
         for i := range failure.errors { failure.errors[i].path = ".root"+failure.errors[i].path }
         for _, warning := range warnings() { failure.errors = append(failure.errors, codec.DecodeError{path: cmd.CommandPath(), message: warning}) }
         result = failure
-      } else { result = rootInput.apply(parsedInput{value: value.(codec.Value), warnings: warnings(), path: name}, s) }
+      } else { result = rootInput.apply(parsedInput{value: value.(codec.Value), warnings: warnings(), path: name, sources: rootInput.prepared.sources()}, s) }
       diagnostics.Reset(); return nil
     }
   }
