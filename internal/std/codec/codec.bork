@@ -112,43 +112,53 @@ class Encode[T] {
 
 // RecordEncoding completes omitted object fields for consumers that require
 // every column. Only a missing canonical wire name invokes the callback.
-type RecordEncoding = { omittedField: (String) => Option[Value] }
+metadata type RecordEncoding[T] = { omittedField: (T, String) uses nothing => Option[Value] }
+
+// Derived Encode publishes the family for every shape. This private marker
+// preserves Encoding's None result for positional and sealed targets; custom
+// encoders need only publish the family, without a marker.
+type recordEncodingSupport = { supported: Bool }
 
 // Encoding follows the selected Encode instance; custom encoders opt in by
 // publishing RecordEncoding metadata explicitly.
-fn Encoding[T: Encode](): Option[RecordEncoding] {
-  match (shape.metadata[T, Encode, RecordEncoding]()) {
-    Option.Some(info) => Option.Some(info)
-    Option.None => shape.metadata[T, Encode, Option[RecordEncoding]]().getOr(Option.None)
+fn Encoding[T: Encode](): Option[RecordEncoding[T]] {
+  match (shape.metadata[T, Encode, recordEncodingSupport]()) {
+    Option.Some(info) => if (info.supported) { shape.metadata[T, Encode, RecordEncoding[T]]() } else { Option.None }
+    Option.None => shape.metadata[T, Encode, RecordEncoding[T]]()
   }
 }
 
-// RecordEncodingInfo does not evaluate defaults during metadata lookup.
-derive fn RecordEncodingInfo[T](): Option[RecordEncoding] {
+derive fn RecordEncodingSupported[T](): Bool {
+  comptime match (shape.kind[T]()) {
+    shape.Record => !shape.positional[T]()
+    _ => false
+  }
+}
+
+// RecordEncodingInfo reads only the requested field when its callback runs.
+derive fn RecordEncodingInfo[T](): RecordEncoding[T] {
   comptime match (shape.kind[T]()) {
     shape.Record => {
-      comptime if (shape.positional[T]()) { Option.None } else {
-        Option.Some(RecordEncoding { omittedField: name => EncodeOmittedField[T](name) })
+      comptime if (shape.positional[T]()) {
+        RecordEncoding { omittedField: (value, name) => Option.None }
+      } else {
+        RecordEncoding { omittedField: (value, name) => EncodeOmittedField[T](value, name) }
       }
     }
-    _ => Option.None
+    _ => RecordEncoding { omittedField: (value, name) => Option.None }
   }
 }
 
-// Omission proves the input is None or equal to its pure declared default.
+// Complete an omitted field from the actual typed row.
 // Encode just that field, with the same selected dictionary as object encoding.
-derive fn EncodeOmittedField[T](name: String): Option[Value] {
+derive fn EncodeOmittedField[T](value: T.RawType, name: String): Option[Value] {
+  _ = value
   _ = name
   comptime for (field in shape.fields[T]()) {
     comptime if (!field.computed) {
       comptime if (FieldOmit[T](field) != Omit.Never) {
         if (name == FieldWireName[T](field)) {
-          comptime if (field.hasDefault) {
-            return Option.Some(encode[field.Type](field.default()))
-          } else {
-            absent: field.Type = Option.None
-            return Option.Some(encode[field.Type](absent))
-          }
+          return Option.Some(encode[field.Type](field.read(value)))
         }
       }
     }
@@ -370,7 +380,8 @@ instances Defaults { decodeInt8, encodeInt8, decodeInt16, encodeInt16, decodeInt
 // Structural encoding is an ordinary source derivation. Positional payloads
 // preserve slot order; named payloads preserve declaration-order object fields.
 derive instance encodeShape[T]: Encode[T] {
-  metadata Option[RecordEncoding] = RecordEncodingInfo[T]()
+  metadata recordEncodingSupport = recordEncodingSupport { supported: RecordEncodingSupported[T]() }
+  metadata RecordEncoding[T] = RecordEncodingInfo[T.RawType]()
   fn encode(x: T): Value {
     comptime match (shape.kind[T]()) {
       shape.Record => {

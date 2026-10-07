@@ -1,5 +1,6 @@
 import "bork/codec"
 import "bork/encoding"
+import "bork/shape"
 import "example/csvomit/optional"
 use codec.Defaults
 use customEncode
@@ -39,9 +40,9 @@ instance tokenDecode: codec.Decode[Token] {
 
 type Custom = { text: String }
 instance customEncode: codec.Encode[Custom] {
-  metadata codec.RecordEncoding = codec.RecordEncoding { omittedField: name => {
+  metadata codec.RecordEncoding[Custom] = codec.RecordEncoding { omittedField: (row, name) => {
     assertEqual(name, "wire")
-    Option.Some(codec.Value.String { value: "custom-default" })
+    Option.Some(codec.Value.String { value: row.text })
   } }
   fn encode(value: Custom): codec.Value {
     if (value.text == "extra") {
@@ -50,7 +51,7 @@ instance customEncode: codec.Encode[Custom] {
     if (value.text == "duplicate") {
       return codec.Value.Object { fields: [codec.Field { name: "wire", value: codec.Value.Null }, codec.Field { name: "wire", value: codec.Value.Null }] }
     }
-    if (value.text == "custom-default") { codec.Value.Object { fields: [] } } else { codec.Value.Object { fields: [codec.Field { name: "wire", value: codec.Value.String { value: value.text } }] } }
+    if (value.text.startsWith("custom-")) { codec.Value.Object { fields: [] } } else { codec.Value.Object { fields: [codec.Field { name: "wire", value: codec.Value.String { value: value.text } }] } }
   }
 }
 instance customDecode: codec.Decode[Custom] {
@@ -101,7 +102,7 @@ test "omitted None honors a custom Option codec" {
   optional.Check()
 }
 test "custom Encode completion follows custom Decode schema" {
-  assertEqual(round([Custom { text: "custom-default" }, Custom { text: "present" }]), "wire\ncustom-default\npresent\n")
+  assertEqual(round([Custom { text: "custom-default" }, Custom { text: "custom-actual" }, Custom { text: "present" }]), "wire\ncustom-default\ncustom-actual\npresent\n")
 }
 test "custom Encode without completion still rejects omissions" {
   match (encoding.EncodeCsv([Missing { value: Option.None }])) {
@@ -119,11 +120,20 @@ test "completion does not hide extra or duplicate encoded fields" {
     _ => assert(false)
   }
 }
+test "derived completion encodes the actual row field" {
+  match (codec.Encoding[Row]()) {
+    Option.Some(info) => match (info.omittedField(Row { optionalValue: Option.None, count: 9, unrelated: Token { text: "unused" } }, "count")) {
+      Option.Some(codec.Value.Number { text }) => assertEqual(text, "9")
+      _ => assert(false)
+    }
+    Option.None => assert(false)
+  }
+}
 test "derived completion refuses fields without omission and unknown wire names" {
   match (codec.Encoding[Row]()) {
     Option.Some(info) => {
-      match (info.omittedField("unrelated")) { Option.None => {}, _ => assert(false) }
-      match (info.omittedField("optionalValue")) { Option.None => {}, _ => assert(false) }
+      match (info.omittedField(Row { optionalValue: Option.None, unrelated: Token { text: "9" } }, "unrelated")) { Option.None => {}, _ => assert(false) }
+      match (info.omittedField(Row { optionalValue: Option.None, unrelated: Token { text: "9" } }, "optionalValue")) { Option.None => {}, _ => assert(false) }
     }
     Option.None => assert(false)
   }
@@ -131,7 +141,7 @@ test "derived completion refuses fields without omission and unknown wire names"
 }
 type DuplicateSchema = { value: String }
 instance duplicateEncode: codec.Encode[DuplicateSchema] {
-  metadata codec.RecordEncoding = codec.RecordEncoding { omittedField: name => Option.Some(codec.Value.String { value: "default" }) }
+  metadata codec.RecordEncoding[DuplicateSchema] = codec.RecordEncoding { omittedField: (row, name) => Option.Some(codec.Value.String { value: row.value }) }
   fn encode(value: DuplicateSchema): codec.Value { codec.Value.Object { fields: [] } }
 }
 instance duplicateDecode: codec.Decode[DuplicateSchema] {
@@ -153,5 +163,17 @@ type Sealed = sealed { One, Two { value: Int } } derive (codec.Encode)
 test "positional and sealed encoders do not publish record completion" {
   match (codec.Encoding[Positional]()) { Option.None => {}, _ => assert(false) }
   match (codec.Encoding[Sealed]()) { Option.None => {}, _ => assert(false) }
+}
+type AliasRow = { count: Int = 3 codec { omit: codec.Omit.Default } } derive (codec.Decode)
+pred Valid(row: AliasRow) { row.count > 0 }
+type ValidAliasRow = AliasRow where Valid derive (codec.Encode, codec.Decode)
+test "constrained alias completion consumes the base row" {
+  match (shape.metadata[ValidAliasRow, codec.Encode, codec.RecordEncoding[AliasRow]]()) {
+    Option.Some(info) => match (info.omittedField(AliasRow { count: 9 }, "count")) {
+      Option.Some(codec.Value.Number { text }) => assertEqual(text, "9")
+      _ => assert(false)
+    }
+    Option.None => assert(false)
+  }
 }
 fn main() {}
