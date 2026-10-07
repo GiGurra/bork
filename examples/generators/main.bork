@@ -73,7 +73,7 @@ fn main() {
     Shelf { name: "history", scores: [Option.Some(4)] },
   ]
   picks = for {
-    (i, shelf) in shelves.indexed();
+    (i, shelf) in shelves.indexed()
     .Some(score) in shelf.scores
     if score >= 4
     points = score * 10

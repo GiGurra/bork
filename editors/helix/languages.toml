@@ -16,4 +16,4 @@ indent = { tab-width = 2, unit = "  " }
 
 [[grammar]]
 name = "bork"
-source = { git = "https://github.com/GiGurra/bork", rev = "33e96203056863d6f41c446ca098ece8b25aac38", subpath = "editors/tree-sitter-bork" }
+source = { git = "https://github.com/GiGurra/bork", rev = "9cdcb5b0e0266c0be941051b7cd8b7f550fb1db2", subpath = "editors/tree-sitter-bork" }
