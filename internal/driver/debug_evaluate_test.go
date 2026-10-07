@@ -157,3 +157,70 @@ func TestDebugEvaluateBounds(t *testing.T) {
 		})
 	}
 }
+
+func TestDebugEvaluateFloatStages(t *testing.T) {
+	r := presentationFixture()
+	r.metadata.Expressions = map[string]check.DebugShape{"float64": {Name: "Float", Kind: "scalar"}}
+	r.frames = map[float64]diag.Pos{100: {File: "main.bork", Line: 5}}
+	r.metadata.Bindings = []gen.DebugBindings{{Start: diag.Pos{File: "main.bork", Line: 1}, End: diag.Pos{File: "main.bork", Line: 10}, Names: map[string]string{"f": "f"}}}
+	var upstream, downstream bytes.Buffer
+	r.upstream, r.downstream = &upstream, &downstream
+	handle := func(message map[string]any, request bool) {
+		t.Helper()
+		if skip, err := r.evaluate(message, request); !skip || err != nil {
+			t.Fatalf("evaluate: %v %v", skip, err)
+		}
+	}
+	start := func(seq float64, expression string) map[string]any {
+		t.Helper()
+		handle(map[string]any{"seq": seq, "type": "request", "command": "evaluate", "arguments": map[string]any{"expression": expression, "frameId": float64(100), "context": "watch"}}, true)
+		scopes := takeDebugMessage(t, &upstream)
+		handle(map[string]any{"type": "response", "command": "scopes", "request_seq": scopes["seq"], "success": true, "body": map[string]any{"scopes": []any{map[string]any{"name": "Locals", "variablesReference": float64(10)}}}}, false)
+		variables := takeDebugMessage(t, &upstream)
+		handle(map[string]any{"type": "response", "command": "variables", "request_seq": variables["seq"], "success": true, "body": map[string]any{"variables": []any{map[string]any{"name": "f", "type": "float64"}}}}, false)
+		return takeDebugMessage(t, &upstream)
+	}
+	respond := func(query map[string]any, result string, success bool) {
+		t.Helper()
+		handle(map[string]any{"type": "response", "command": "evaluate", "request_seq": query["seq"], "success": success, "message": "not stopped", "body": map[string]any{"result": result}}, false)
+	}
+	// Complete the second plan while the first still waits for its operand.
+	first := start(41, "f + 1.0 == f")
+	second := start(42, "f * 2.0")
+	respond(second, "4611686018427387904 = 0x4000000000000000", true)
+	second = takeDebugMessage(t, &upstream)
+	if second["seq"].(float64) >= 0 {
+		t.Fatal("intermediate query escaped its internal sequence")
+	}
+	respond(second, "4", true)
+	completed := takeDebugMessage(t, &upstream)
+	if completed["seq"] != float64(42) || completed["arguments"].(map[string]any)["expression"] != "(float64(0x1p+02))" || r.evaluationTypes[42] != "float64" {
+		t.Fatalf("second result: %v", completed)
+	}
+	for _, result := range []string{"4611686018427387904", "3", "4611686018427387904"} {
+		respond(first, result, true)
+		first = takeDebugMessage(t, &upstream)
+	}
+	if first["seq"] != float64(41) || !strings.Contains(first["arguments"].(map[string]any)["expression"].(string), "==") || r.evaluationTypes[41] != "bool" {
+		t.Fatalf("first result: %v", first)
+	}
+	for _, failure := range []string{"moved", "invalid", "delve"} {
+		query := start(43, "f / 1.0")
+		respond(query, "4611686018427387904", true)
+		query = takeDebugMessage(t, &upstream)
+		if failure == "moved" {
+			r.evaluationEpoch++
+		}
+		respond(query, "invalid", failure != "delve")
+		response := takeDebugMessage(t, &downstream)
+		if response["request_seq"] != float64(43) || response["success"] != false {
+			t.Fatalf("failure %s: %v", failure, response)
+		}
+		if failure == "moved" && !strings.Contains(response["message"].(string), "execution moved") {
+			t.Fatalf("epoch failure: %v", response)
+		}
+	}
+	if upstream.Len() != 0 || downstream.Len() != 0 || len(r.evaluations) != 0 {
+		t.Fatal("float plans leaked requests or responses")
+	}
+}

@@ -3,6 +3,18 @@
     "request": "scope Locals",
     "variables": [
       {
+        "name": "boundary",
+        "type": "Float",
+        "value": "9007199254740992.0",
+        "expandable": false
+      },
+      {
+        "name": "boundary32",
+        "type": "Float32",
+        "value": "16777216.0",
+        "expandable": false
+      },
+      {
         "name": "boxed",
         "type": "Box[Float]",
         "value": "Box[Float] { item: 2.0 }",
@@ -51,10 +63,34 @@
         "expandable": false
       },
       {
+        "name": "huge",
+        "type": "Float",
+        "value": "179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0",
+        "expandable": false
+      },
+      {
+        "name": "huge32",
+        "type": "Float32",
+        "value": "340282350000000000000000000000000000000.0",
+        "expandable": false
+      },
+      {
+        "name": "infinity",
+        "type": "Float",
+        "value": "+Inf",
+        "expandable": false
+      },
+      {
         "name": "listUnion",
         "type": "List[Int]",
         "value": "[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...+16 more]",
         "expandable": true
+      },
+      {
+        "name": "negativeZero",
+        "type": "Float",
+        "value": "0.0",
+        "expandable": false
       },
       {
         "name": "nested",
@@ -66,6 +102,12 @@
         "name": "none",
         "type": "Option[Int]",
         "value": "None",
+        "expandable": false
+      },
+      {
+        "name": "notANumber",
+        "type": "Float",
+        "value": "NaN",
         "expandable": false
       },
       {
@@ -133,6 +175,18 @@
         "type": "Suffix",
         "value": "Suffix { range_: 4 }",
         "expandable": true
+      },
+      {
+        "name": "tiny",
+        "type": "Float",
+        "value": "0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005",
+        "expandable": false
+      },
+      {
+        "name": "tiny32",
+        "type": "Float32",
+        "value": "0.000000000000000000000000000000000000000000001",
+        "expandable": false
       },
       {
         "name": "unsigned",
