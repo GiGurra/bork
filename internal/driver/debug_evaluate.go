@@ -98,6 +98,13 @@ func (r *dapRelay) evaluate(msg map[string]any, requests bool) (bool, error) {
 	if evaluation.plan.Read != "" {
 		return true, r.evaluateRequest(evaluation, "evaluate", map[string]any{"frameId": args["frameId"], "expression": evaluation.plan.Read, "context": args["context"]})
 	}
+	if evaluation.plan.Result != nil {
+		body := map[string]any{"result": evaluation.plan.Result.Value, "variablesReference": 0}
+		if !r.omitTypes {
+			body["type"] = r.prettyType(evaluation.plan.Type)
+		}
+		return true, r.writeDebugMessage(r.downstream, map[string]any{"seq": float64(0), "type": "response", "request_seq": evaluation.request["seq"], "command": "evaluate", "success": true, "body": body}, false)
+	}
 	args["expression"] = evaluation.plan.Expression
 	resultType := evaluation.plan.Type
 	if resultType != "" {

@@ -32,7 +32,8 @@ type DebugEvaluation struct {
 	ReadFailure     string
 	present, absent string
 	floats          []debugFloatRead
-	output          ast.Expr
+	scalar          *debugScalar
+	Result          *DebugScalarResult
 }
 
 // Advance checks an intermediate result and prepares the next compiler-owned

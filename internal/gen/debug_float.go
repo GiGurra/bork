@@ -3,8 +3,7 @@ package gen
 import (
 	"bytes"
 	"fmt"
-	"go/ast"
-	"go/parser"
+	"go/constant"
 	"go/printer"
 	"go/token"
 	"math"
@@ -15,139 +14,238 @@ import (
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
+// DebugScalarResult is a compiler-produced value with no target storage or children.
+type DebugScalarResult struct{ Value string }
+
+type debugScalar struct {
+	width   int
+	number  float64
+	boolean bool
+	op      syntax.Kind
+	x, y    *debugScalar
+}
+
 type debugFloatRead struct {
-	expression ast.Expr
-	result     *ast.ParenExpr
-	width      int
-	operand    bool
+	expression string
+	result     *debugScalar
 }
 
 func debugFloatArithmetic(expr check.Expr) bool {
 	switch e := expr.(type) {
 	case *check.Binary:
-		return check.IsFloat(e.Type()) || debugFloatArithmetic(e.X) || debugFloatArithmetic(e.Y)
+		return debugFloatOperand(e.X) || debugFloatOperand(e.Y) || debugFloatArithmetic(e.X) || debugFloatArithmetic(e.Y)
 	case *check.Unary:
 		return check.IsFloat(e.Type()) || debugFloatArithmetic(e.X)
 	}
 	return false
 }
 
-func debugText(expr ast.Expr) (string, error) {
-	var out bytes.Buffer
-	err := printer.Fprint(&out, token.NewFileSet(), expr)
-	return out.String(), err
+func debugFloatOperand(expr check.Expr) bool {
+	_, literal := expr.(*check.Const)
+	return check.IsFloat(expr.Type()) && !literal
 }
 
-// debugFloatPlan reuses ordinary lowering, then replaces each computed float
-// with a staged, rounded value before lowering its parent. Exact hexadecimal
-// inputs and one-operation reads are essential: a cast inside a larger Delve
-// expression does not round. See docs/debugger-rounding.md for the argument.
 func (g *gen) debugFloatPlan(expr check.Expr) (*DebugEvaluation, error) {
 	plan := &DebugEvaluation{Type: basicGoNames[expr.Type()]}
-	g.debugValues = map[check.Expr]ast.Expr{}
-	var stage func(check.Expr) (ast.Expr, error)
-	stage = func(expr check.Expr) (ast.Expr, error) {
-		if cached := g.debugValues[expr]; cached != nil {
-			return cached, nil
+	var stage func(check.Expr) (*debugScalar, error)
+	stage = func(expr check.Expr) (*debugScalar, error) {
+		n := &debugScalar{}
+		if check.IsFloat(expr.Type()) {
+			n.width = 64
+			if expr.Type() == check.Float32 {
+				n.width = 32
+			}
+		} else if expr.Type() != check.Bool {
+			return nil, fmt.Errorf("debug expression: unsupported scalar result")
 		}
-		operand := false
 		switch e := expr.(type) {
-		case *check.Binary:
-			if e.Op == syntax.AndAnd || e.Op == syntax.OrOr {
-				return nil, fmt.Errorf("debug expression: staged floating-point arithmetic inside short-circuit expressions is unsupported")
+		case *check.Const:
+			switch n.width {
+			case 32:
+				f, _ := constant.Float32Val(e.Value)
+				n.number = float64(f)
+			case 64:
+				n.number, _ = constant.Float64Val(e.Value)
+			default:
+				n.boolean = constant.BoolVal(e.Value)
 			}
-			if _, err := stage(e.X); err != nil {
-				return nil, err
+			return n, nil
+		case *check.FloatBits:
+			n.number = math.Float64frombits(e.Bits)
+			if n.width == 32 {
+				n.number = float64(math.Float32frombits(uint32(e.Bits)))
 			}
-			if _, err := stage(e.Y); err != nil {
-				return nil, err
+			return n, nil
+		}
+		if debugFloatArithmetic(expr) {
+			var err error
+			switch e := expr.(type) {
+			case *check.Binary:
+				if e.Op == syntax.AndAnd || e.Op == syntax.OrOr {
+					return nil, fmt.Errorf("debug expression: staged floating-point arithmetic inside short-circuit expressions is unsupported")
+				}
+				n.op = e.Op
+				n.x, err = stage(e.X)
+				if err == nil {
+					n.y, err = stage(e.Y)
+				}
+			case *check.Unary:
+				n.op = e.Op
+				n.x, err = stage(e.X)
 			}
-		case *check.Unary:
-			if _, err := stage(e.X); err != nil {
-				return nil, err
-			}
-		case *check.VarRef, *check.Select:
-			operand = true
+			return n, err
 		}
 		statements, out := g.value(expr)
 		if len(statements) != 0 || out == nil || !g.debugReadSafe(out) {
 			return nil, fmt.Errorf("debug expression: this expression requires execution")
 		}
-		_, literal := expr.(*check.Const)
-		if check.IsFloat(expr.Type()) && !literal {
-			width := 64
-			if expr.Type() == check.Float32 {
-				width = 32
-			}
-			read := out
-			if operand {
-				// Read the actual IEEE bits. Delve's scalar previews already erase -0.
-				text, err := debugText(out)
-				if err != nil {
-					return nil, err
-				}
-				read, err = parser.ParseExpr(fmt.Sprintf("*(*uint%d)(uint64(&(%s)))", width, text))
-				if err != nil {
-					return nil, err
-				}
-			}
-			result := &ast.ParenExpr{X: ast.NewIdent("_debug_pending")}
-			plan.floats = append(plan.floats, debugFloatRead{expression: read, result: result, width: width, operand: operand})
-			out = result
+		var text bytes.Buffer
+		if err := printer.Fprint(&text, token.NewFileSet(), out); err != nil {
+			return nil, err
 		}
-		g.debugValues[expr] = out
-		return out, nil
+		read := text.String()
+		if n.width != 0 {
+			read = fmt.Sprintf("*(*uint%d)(uint64(&(%s)))", n.width, read)
+		}
+		plan.floats = append(plan.floats, debugFloatRead{expression: read, result: n})
+		return n, nil
 	}
-	out, err := stage(expr)
+	var err error
+	plan.scalar, err = stage(expr)
 	if err != nil {
 		return nil, err
 	}
-	plan.output = out
-	plan.Read, err = debugText(plan.floats[0].expression)
-	return plan, err
+	if len(plan.floats) == 0 {
+		return nil, fmt.Errorf("debug expression: no scalar operands")
+	}
+	plan.Read = plan.floats[0].expression
+	return plan, nil
 }
 
 func (e *DebugEvaluation) advanceFloat(result string) error {
-	read := e.floats[0]
-	var value float64
-	var err error
-	if read.operand {
-		var bits uint64
+	n := e.floats[0].result
+	if n.width == 0 {
+		switch result {
+		case "true":
+			n.boolean = true
+		case "false":
+			n.boolean = false
+		default:
+			return fmt.Errorf("debug expression: invalid boolean response from debugger")
+		}
+	} else {
 		decimal, hexadecimal, decorated := strings.Cut(result, " = ")
-		bits, err = strconv.ParseUint(decimal, 10, read.width)
+		bits, err := strconv.ParseUint(decimal, 10, n.width)
 		if decorated && err == nil {
 			var hex uint64
-			hex, err = strconv.ParseUint(strings.TrimPrefix(hexadecimal, "0x"), 16, read.width)
+			hex, err = strconv.ParseUint(strings.TrimPrefix(hexadecimal, "0x"), 16, n.width)
 			if hex != bits {
 				err = fmt.Errorf("inconsistent operand bits")
 			}
 		}
-		if read.width == 32 {
-			value = float64(math.Float32frombits(uint32(bits)))
-		} else {
-			value = math.Float64frombits(bits)
+		if err != nil {
+			return fmt.Errorf("debug expression: invalid floating-point response from debugger")
 		}
-	} else {
-		value, err = strconv.ParseFloat(result, read.width)
+		n.number = math.Float64frombits(bits)
+		if n.width == 32 {
+			n.number = float64(math.Float32frombits(uint32(bits)))
+		}
 	}
-	if err != nil {
-		return fmt.Errorf("debug expression: invalid floating-point response from debugger")
-	}
-	if math.IsNaN(value) || math.IsInf(value, 0) || value == 0 && (math.Signbit(value) || !read.operand) {
-		return fmt.Errorf("debug expression: floating-point arithmetic with non-finite values, signed zero or a computed zero is unsupported; inspect the values directly")
-	}
-	text := strconv.FormatFloat(value, 'x', -1, read.width)
-	literal, err := parser.ParseExpr(fmt.Sprintf("float%d(%s)", read.width, text))
-	if err != nil {
-		return err
-	}
-	read.result.X = literal
 	e.floats = e.floats[1:]
 	if len(e.floats) != 0 {
-		e.Read, err = debugText(e.floats[0].expression)
-	} else {
-		e.Read = ""
-		e.Expression, err = debugText(e.output)
+		e.Read = e.floats[0].expression
+		return nil
 	}
-	return err
+	e.Read = ""
+	if err := e.scalar.compute(); err != nil {
+		return err
+	}
+	text := strconv.FormatBool(e.scalar.boolean)
+	if e.scalar.width != 0 {
+		text = strconv.FormatFloat(e.scalar.number, 'g', -1, e.scalar.width)
+		if !strings.ContainsAny(text, ".eE") && !math.IsNaN(e.scalar.number) && !math.IsInf(e.scalar.number, 0) {
+			text += ".0"
+		}
+	}
+	e.Result = &DebugScalarResult{Value: text}
+	return nil
+}
+
+func (n *debugScalar) compute() error {
+	if n.x == nil {
+		return nil
+	}
+	if err := n.x.compute(); err != nil {
+		return err
+	}
+	if n.y == nil {
+		switch n.op {
+		case syntax.Minus:
+			n.number = -n.x.number
+		case syntax.Not:
+			n.boolean = !n.x.boolean
+		default:
+			return fmt.Errorf("debug expression: unsupported scalar unary operator")
+		}
+		return nil
+	}
+	if err := n.y.compute(); err != nil {
+		return err
+	}
+	if n.width != 0 {
+		var err error
+		if n.width == 32 {
+			var f float32
+			f, err = debugFloatOp(n.op, float32(n.x.number), float32(n.y.number))
+			n.number = float64(f)
+		} else {
+			n.number, err = debugFloatOp(n.op, n.x.number, n.y.number)
+		}
+		return err
+	}
+	if n.x.width == 0 {
+		switch n.op {
+		case syntax.Eq:
+			n.boolean = n.x.boolean == n.y.boolean
+		case syntax.NotEq:
+			n.boolean = n.x.boolean != n.y.boolean
+		default:
+			return fmt.Errorf("debug expression: unsupported scalar boolean operator")
+		}
+		return nil
+	}
+	x, y := n.x.number, n.y.number
+	switch n.op {
+	case syntax.Eq:
+		n.boolean = x == y
+	case syntax.NotEq:
+		n.boolean = x != y
+	case syntax.Lt:
+		n.boolean = x < y
+	case syntax.LtEq:
+		n.boolean = x <= y
+	case syntax.Gt:
+		n.boolean = x > y
+	case syntax.GtEq:
+		n.boolean = x >= y
+	default:
+		return fmt.Errorf("debug expression: unsupported scalar comparison")
+	}
+	return nil
+}
+
+// Typed Go operators are the same operations emitted by ordinary lowering.
+// Assigning each result to T forces the checked width before its parent runs.
+func debugFloatOp[T ~float32 | ~float64](op syntax.Kind, x, y T) (T, error) {
+	switch op {
+	case syntax.Plus:
+		return T(x + y), nil
+	case syntax.Minus:
+		return T(x - y), nil
+	case syntax.Star:
+		return T(x * y), nil
+	case syntax.Slash:
+		return T(x / y), nil
+	}
+	return 0, fmt.Errorf("debug expression: unsupported scalar arithmetic")
 }
