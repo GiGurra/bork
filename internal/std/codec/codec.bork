@@ -386,18 +386,16 @@ derive instance encodeShape[T]: Encode[T] {
     comptime match (shape.kind[T]()) {
       shape.Record => {
         comptime if (shape.positional[T]()) {
-          values: List[Value] = [comptime for (field in shape.fields[T]())
-            encode[field.Type](field.read(x))]
+          values: List[Value] = comptime for { field in shape.fields[T]() } yield encode[field.Type](field.read(x))
           Value.Array { items: values }
         } else {
           CheckWireNames[T]()
-          fieldChunks: List[List[Field]] = [comptime for (field in shape.fields[T]())
-            comptime if (!field.computed) {
-              if (ShouldOmit[T](field, field.read(x))) {
-                empty: List[Field] = []
-                empty
-              } else { [Field { name: FieldWireName[T](field), value: encode[field.Type](field.read(x)) }] }
-          }]
+          fieldChunks: List[List[Field]] = comptime for { field in shape.fields[T](); if !field.computed } yield {
+            if (ShouldOmit[T](field, field.read(x))) {
+              empty: List[Field] = []
+              empty
+            } else { [Field { name: FieldWireName[T](field), value: encode[field.Type](field.read(x)) }] }
+          }
           Value.Object { fields: fieldChunks.flatMap(chunk => chunk) }
         }
       }
@@ -423,20 +421,18 @@ derive instance encodeShape[T]: Encode[T] {
                   return Value.String { value: VariantWireName[T](variant) }
                 } else {
                   comptime if (variant.positional) {
-                    values: List[Value] = [comptime for (field in variant.fields)
-                      encode[field.Type](field.read(payload))]
+                    values: List[Value] = comptime for { field in variant.fields } yield encode[field.Type](field.read(payload))
                     return Value.Object { fields: [
                       Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } },
                       Field { name: "values", value: Value.Array { items: values } }
                     ] }
                   } else {
-                    fieldChunks: List[List[Field]] = [comptime for (field in variant.fields)
-                      comptime if (!field.computed) {
-                        if (ShouldOmit[T](field, field.read(payload))) {
-                          empty: List[Field] = []
-                          empty
-                        } else { [Field { name: FieldWireName[T](field), value: encode[field.Type](field.read(payload)) }] }
-                    }]
+                    fieldChunks: List[List[Field]] = comptime for { field in variant.fields; if !field.computed } yield {
+                      if (ShouldOmit[T](field, field.read(payload))) {
+                        empty: List[Field] = []
+                        empty
+                      } else { [Field { name: FieldWireName[T](field), value: encode[field.Type](field.read(payload)) }] }
+                    }
                     return Value.Object { fields: prepend(
                       Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } }, fieldChunks.flatMap(chunk => chunk)) }
                   }
@@ -462,42 +458,40 @@ derive fn RecordInfo[T](): Option[RecordSchema] {
       comptime if (shape.positional[T]()) {
         Option.None
       } else {
-        fields: List[RecordField] = [comptime for (field in shape.fields[T]())
-          comptime if (!field.computed) {
-            info = shape.metadata[field.RawType, Decode, FieldSchema]().getOr(FieldSchema { kind: "json", optional: false })
-            provider: Option[() => DefaultSchema] = comptime if (field.hasDefault) {
-              Option.Some(() => defaultInfo(field.default()))
-            } else {
-              Option.None
-            }
-            RecordField {
-              name: field.name,
-              wireName: FieldWireName[T](field),
-              aliases: FieldAliases[T](field),
-              words: Words(field.tagged[FieldTags]().getOr(FieldTags {}).name.getOr(field.name)),
-              tags: [comptime for (tag in field.tagGroups) comptime if (tag.package != "bork/codec")
-                TagGroup { package: tag.package, value: encode[tag.Type](tag.value()) }],
-              typeName: shape.typeName[field.RawType](),
-              doc: field.doc,
-              facts: [comptime for (fact in field.facts) fact.text],
-              kind: info.kind,
-              optional: info.optional,
-              variants: info.variants,
-              hasDefault: field.hasDefault,
-              defaultValue: provider,
-              defaultInput: comptime if (field.hasDefault) {
-                Option.Some(() => materializeDefault[field.RawType](field.default()))
-              } else { Option.None },
-              recordSchema: Option.Some(() => Schema[field.RawType]()),
-              validate: input => match (decode[field.RawType](input)) {
-                error: DecodeError => atPath(error, s".${FieldWireName[T](field)}")
-                value: field.RawType => match (field.check(value)) {
-                  error: shape.ValidationError => DecodeError { path: s".${FieldWireName[T](field)}" + error.path, message: error.message }
-                  Ok => Ok
-                }
+        fields: List[RecordField] = comptime for { field in shape.fields[T](); if !field.computed } yield {
+          info = shape.metadata[field.RawType, Decode, FieldSchema]().getOr(FieldSchema { kind: "json", optional: false })
+          provider: Option[() => DefaultSchema] = comptime if (field.hasDefault) {
+            Option.Some(() => defaultInfo(field.default()))
+          } else {
+            Option.None
+          }
+          RecordField {
+            name: field.name,
+            wireName: FieldWireName[T](field),
+            aliases: FieldAliases[T](field),
+            words: Words(field.tagged[FieldTags]().getOr(FieldTags {}).name.getOr(field.name)),
+            tags: comptime for { tag in field.tagGroups; if tag.package != "bork/codec" } yield TagGroup { package: tag.package, value: encode[tag.Type](tag.value()) },
+            typeName: shape.typeName[field.RawType](),
+            doc: field.doc,
+            facts: comptime for { fact in field.facts } yield fact.text,
+            kind: info.kind,
+            optional: info.optional,
+            variants: info.variants,
+            hasDefault: field.hasDefault,
+            defaultValue: provider,
+            defaultInput: comptime if (field.hasDefault) {
+              Option.Some(() => materializeDefault[field.RawType](field.default()))
+            } else { Option.None },
+            recordSchema: Option.Some(() => Schema[field.RawType]()),
+            validate: input => match (decode[field.RawType](input)) {
+              error: DecodeError => atPath(error, s".${FieldWireName[T](field)}")
+              value: field.RawType => match (field.check(value)) {
+                error: shape.ValidationError => DecodeError { path: s".${FieldWireName[T](field)}" + error.path, message: error.message }
+                Ok => Ok
               }
             }
-        }]
+          }
+        }
         Option.Some(RecordSchema { fields: fields })
       }
     }
@@ -522,14 +516,13 @@ derive fn DecodeRecord[T](json: Value): T | DecodeError {
         if (items.length() != shape.fields[T]().length()) {
           return DecodeError { path: "", message: s"expected an array of length ${shape.fields[T]().length()}" }
         }
-        steps: List[(initial.Type) => initial.Type | DecodeError] = [comptime for (field in shape.fields[T]())
-          (state: initial.Type) => match (items.get(field.index)) {
-            Option.Some(input) => match (decode[field.RawType](input)) {
-              error: DecodeError => atPath(error, s"[${field.index}]")
-              value: field.RawType => state.set(field, value)
-            }
-            Option.None => DecodeError { path: s"[${field.index}]", message: "tuple element is missing" }
-        }]
+        steps: List[(initial.Type) => initial.Type | DecodeError] = comptime for { field in shape.fields[T]() } yield (state: initial.Type) => match (items.get(field.index)) {
+          Option.Some(input) => match (decode[field.RawType](input)) {
+            error: DecodeError => atPath(error, s"[${field.index}]")
+            value: field.RawType => state.set(field, value)
+          }
+          Option.None => DecodeError { path: s"[${field.index}]", message: "tuple element is missing" }
+        }
         start: initial.Type | DecodeError = initial
         assembled = steps.fold(start, (state, step) => match (state) {
           error: DecodeError => error
@@ -548,39 +541,38 @@ derive fn DecodeRecord[T](json: Value): T | DecodeError {
   } else {
     match (json) {
       Value.Object { fields } => {
-        match (checkInputNames(fields, [comptime for (field in shape.fields[T]()) FieldNames[T](field)], [], RejectUnknown[T]())) {
+        match (checkInputNames(fields, comptime for { field in shape.fields[T]() } yield FieldNames[T](field), [], RejectUnknown[T]())) {
           error: DecodeError => return error
           Ok => {}
         }
         _ = fields
-        steps: List[(initial.Type) => initial.Type | DecodeError] = [comptime for (field in shape.fields[T]())
-          (state: initial.Type) => {
-            comptime if (field.computed) {
-              if (inputNamedField(fields, FieldNames[T](field)).isSome()) {
-                DecodeError { path: s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}", message: "computed field is read-only" }
-              } else { state }
-            } else {
-              input: Option[Value] | DecodeError = match (inputNamedField(fields, FieldNames[T](field))) {
-                Option.Some(value) => Option.Some(value)
-                Option.None => {
-                  comptime if (field.hasDefault) { Option.None } else {
-                    info = shape.metadata[field.RawType, Decode, FieldSchema]().getOr(FieldSchema { kind: "json", optional: false })
-                    if (info.optional) { Option.Some(Value.Null) } else {
-                      DecodeError { path: s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}", message: "is missing" }
-                    }
+        steps: List[(initial.Type) => initial.Type | DecodeError] = comptime for { field in shape.fields[T]() } yield (state: initial.Type) => {
+          comptime if (field.computed) {
+            if (inputNamedField(fields, FieldNames[T](field)).isSome()) {
+              DecodeError { path: s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}", message: "computed field is read-only" }
+            } else { state }
+          } else {
+            input: Option[Value] | DecodeError = match (inputNamedField(fields, FieldNames[T](field))) {
+              Option.Some(value) => Option.Some(value)
+              Option.None => {
+                comptime if (field.hasDefault) { Option.None } else {
+                  info = shape.metadata[field.RawType, Decode, FieldSchema]().getOr(FieldSchema { kind: "json", optional: false })
+                  if (info.optional) { Option.Some(Value.Null) } else {
+                    DecodeError { path: s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}", message: "is missing" }
                   }
                 }
               }
-              match (input) {
-                error: DecodeError => error
-                Option.None => state
-                Option.Some(value) => match (decode[field.RawType](value)) {
-                  error: DecodeError => atPath(error, s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}")
-                  decoded: field.RawType => state.set(field, decoded)
-                }
+            }
+            match (input) {
+              error: DecodeError => error
+              Option.None => state
+              Option.Some(value) => match (decode[field.RawType](value)) {
+                error: DecodeError => atPath(error, s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}")
+                decoded: field.RawType => state.set(field, decoded)
               }
             }
-        }]
+          }
+        }
         start: initial.Type | DecodeError = initial
         assembled = steps.fold(start, (state, step) => match (state) {
           error: DecodeError => error
@@ -589,7 +581,7 @@ derive fn DecodeRecord[T](json: Value): T | DecodeError {
         match (assembled) {
           error: DecodeError => error
           pending: initial.Type => match (pending.finish()) {
-            error: shape.ValidationError => DecodeError { path: remapWirePath(error.path, [comptime for (field in shape.fields[T]())(field.name, inputWireName(fields, FieldWireName[T](field), FieldNames[T](field)))]), message: error.message }
+            error: shape.ValidationError => DecodeError { path: remapWirePath(error.path, comptime for { field in shape.fields[T]() } yield (field.name, inputWireName(fields, FieldWireName[T](field), FieldNames[T](field)))), message: error.message }
             value: T => value
           }
         }
@@ -637,7 +629,7 @@ derive fn DecodeSealed[T](json: Value): T | DecodeError {
             comptime if (variant.positional) {
               match (checkInputNames(fields, [], ["type", "values"], RejectUnknown[T]())) { error: DecodeError => return error, Ok => {} }
             } else {
-              match (checkInputNames(fields, [comptime for (field in variant.fields) FieldNames[T](field)], ["type"], RejectUnknown[T]())) { error: DecodeError => return error, Ok => {} }
+              match (checkInputNames(fields, comptime for { field in variant.fields } yield FieldNames[T](field), ["type"], RejectUnknown[T]())) { error: DecodeError => return error, Ok => {} }
             }
             initial = variant.builder()
             comptime if (variant.positional) {
@@ -654,14 +646,13 @@ derive fn DecodeSealed[T](json: Value): T | DecodeError {
                   if (values.length() != variant.fields.length()) {
                     return DecodeError { path: ".values", message: s"expected an array of length ${variant.fields.length()}" }
                   }
-                  steps: List[(initial.Type) => initial.Type | DecodeError] = [comptime for (field in variant.fields)
-                    (state: initial.Type) => match (values.get(field.index)) {
-                      Option.Some(input) => match (decode[field.RawType](input)) {
-                        error: DecodeError => atPath(error, s".values[${field.index}]")
-                        value: field.RawType => state.set(field, value)
-                      }
-                      Option.None => DecodeError { path: s".values[${field.index}]", message: "is missing" }
-                  }]
+                  steps: List[(initial.Type) => initial.Type | DecodeError] = comptime for { field in variant.fields } yield (state: initial.Type) => match (values.get(field.index)) {
+                    Option.Some(input) => match (decode[field.RawType](input)) {
+                      error: DecodeError => atPath(error, s".values[${field.index}]")
+                      value: field.RawType => state.set(field, value)
+                    }
+                    Option.None => DecodeError { path: s".values[${field.index}]", message: "is missing" }
+                  }
                   start: initial.Type | DecodeError = initial
                   assembled = steps.fold(start, (state, step) => match (state) {
                     error: DecodeError => error
@@ -677,34 +668,33 @@ derive fn DecodeSealed[T](json: Value): T | DecodeError {
                 }
               }
             } else {
-              steps: List[(initial.Type) => initial.Type | DecodeError] = [comptime for (field in variant.fields)
-                (state: initial.Type) => {
-                  comptime if (field.computed) {
-                    if (inputNamedField(fields, FieldNames[T](field)).isSome()) {
-                      DecodeError { path: s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}", message: "computed field is read-only" }
-                    } else { state }
-                  } else {
-                    input: Option[Value] | DecodeError = match (inputNamedField(fields, FieldNames[T](field))) {
-                      Option.Some(value) => Option.Some(value)
-                      Option.None => {
-                        comptime if (field.hasDefault) { Option.None } else {
-                          info = shape.metadata[field.RawType, Decode, FieldSchema]().getOr(FieldSchema { kind: "json", optional: false })
-                          if (info.optional) { Option.Some(Value.Null) } else {
-                            DecodeError { path: s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}", message: "is missing" }
-                          }
+              steps: List[(initial.Type) => initial.Type | DecodeError] = comptime for { field in variant.fields } yield (state: initial.Type) => {
+                comptime if (field.computed) {
+                  if (inputNamedField(fields, FieldNames[T](field)).isSome()) {
+                    DecodeError { path: s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}", message: "computed field is read-only" }
+                  } else { state }
+                } else {
+                  input: Option[Value] | DecodeError = match (inputNamedField(fields, FieldNames[T](field))) {
+                    Option.Some(value) => Option.Some(value)
+                    Option.None => {
+                      comptime if (field.hasDefault) { Option.None } else {
+                        info = shape.metadata[field.RawType, Decode, FieldSchema]().getOr(FieldSchema { kind: "json", optional: false })
+                        if (info.optional) { Option.Some(Value.Null) } else {
+                          DecodeError { path: s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}", message: "is missing" }
                         }
                       }
                     }
-                    match (input) {
-                      error: DecodeError => error
-                      Option.None => state
-                      Option.Some(value) => match (decode[field.RawType](value)) {
-                        error: DecodeError => atPath(error, s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}")
-                        decoded: field.RawType => state.set(field, decoded)
-                      }
+                  }
+                  match (input) {
+                    error: DecodeError => error
+                    Option.None => state
+                    Option.Some(value) => match (decode[field.RawType](value)) {
+                      error: DecodeError => atPath(error, s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}")
+                      decoded: field.RawType => state.set(field, decoded)
                     }
                   }
-              }]
+                }
+              }
               start: initial.Type | DecodeError = initial
               assembled = steps.fold(start, (state, step) => match (state) {
                 error: DecodeError => error
@@ -713,7 +703,7 @@ derive fn DecodeSealed[T](json: Value): T | DecodeError {
               return match (assembled) {
                 error: DecodeError => error
                 pending: initial.Type => match (pending.finish()) {
-                  error: shape.ValidationError => DecodeError { path: remapWirePath(error.path, [comptime for (field in variant.fields)(field.name, inputWireName(fields, FieldWireName[T](field), FieldNames[T](field)))]), message: error.message }
+                  error: shape.ValidationError => DecodeError { path: remapWirePath(error.path, comptime for { field in variant.fields } yield (field.name, inputWireName(fields, FieldWireName[T](field), FieldNames[T](field)))), message: error.message }
                   value: T => value
                 }
               }
@@ -721,8 +711,8 @@ derive fn DecodeSealed[T](json: Value): T | DecodeError {
           }
         }
       }
-      comptime if ([comptime for (variant in shape.variants[T]()) comptime if (VariantFallback[T](variant)) true].isEmpty()) {
-        expected: List[String] = [comptime for (variant in shape.variants[T]()) comptime if (!VariantFallback[T](variant)) VariantWireName[T](variant)]
+      comptime if ((comptime for { variant in shape.variants[T](); if VariantFallback[T](variant) } yield true).isEmpty()) {
+        expected: List[String] = comptime for { variant in shape.variants[T](); if !VariantFallback[T](variant) } yield VariantWireName[T](variant)
         DecodeError { path: ".type", message: "unknown variant " + quoted(name) + " of " + shape.name[T]() + "; expected one of " + expected.join(", ") }
       } else {
         comptime for (variant in shape.variants[T]()) {
@@ -753,8 +743,7 @@ derive fn ShapeFieldInfo[T](): FieldSchema {
     FieldSchema {
       kind: "string",
       optional: false,
-      variants: [comptime for (variant in shape.variants[T]()) comptime if (!VariantFallback[T](variant))
-        VariantSchema { name: VariantWireName[T](variant), doc: variant.doc, aliases: VariantAliases[T](variant) }]
+      variants: comptime for { variant in shape.variants[T](); if !VariantFallback[T](variant) } yield VariantSchema { name: VariantWireName[T](variant), doc: variant.doc, aliases: VariantAliases[T](variant) }
     }
   } else {
     FieldSchema { kind: "json", optional: false }

@@ -32,7 +32,7 @@ fn WireName(name: String, naming: Naming): String {
 // EnumShape identifies fieldless alternatives plus an optional String fallback.
 derive fn EnumShape[T](): Bool {
   comptime match (shape.kind[T]()) {
-    shape.Sealed => [comptime for (variant in shape.variants[T]()) comptime if (!variant.fields.isEmpty() && !VariantFallback[T](variant)) true].isEmpty()
+    shape.Sealed => (comptime for { variant in shape.variants[T](); if !variant.fields.isEmpty() && !VariantFallback[T](variant) } yield true).isEmpty()
     _ => false
   }
 }
@@ -70,7 +70,7 @@ derive fn CheckFieldNames[T](fields: List[shape.Field[T]]): Ok {
     comptime if (!wireAliasesAllowed(FieldAliases[T](field), false)) { shape.fail("codec field '" + field.name + "' has an invalid alias") }
     comptime if (!wireNameAllowed(FieldWireName[T](field))) { shape.fail("codec field '" + field.name + "' has an empty wire name or the YAML merge key '<<'") }
   }
-  comptime if (!wireNamespacesUnique([comptime for (field in fields) FieldNames[T](field)])) { shape.fail("codec fields have duplicate wire names or aliases") }
+  comptime if (!wireNamespacesUnique(comptime for { field in fields } yield FieldNames[T](field))) { shape.fail("codec fields have duplicate wire names or aliases") }
   Ok
 }
 derive fn CheckPositionalNames[T](fields: List[shape.Field[T]]): Ok {
@@ -93,7 +93,7 @@ derive fn CheckWireNames[T](): Ok {
           comptime if (!variant.positional) { CheckFieldNames[T](variant.fields) } else { CheckPositionalNames[T](variant.fields) }
         }
       }
-      comptime if (!wireNamespacesUnique([comptime for (variant in shape.variants[T]()) comptime if (!VariantFallback[T](variant)) VariantNames[T](variant)])) { shape.fail("codec variants have duplicate wire names or aliases") }
+      comptime if (!wireNamespacesUnique(comptime for { variant in shape.variants[T](); if !VariantFallback[T](variant) } yield VariantNames[T](variant))) { shape.fail("codec variants have duplicate wire names or aliases") }
       Ok
     }
     _ => Ok

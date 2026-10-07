@@ -51,7 +51,7 @@ func parse(path, src string, toks []Token, comments []Comment, diags *diag.List,
 
 func parseMode(path, src string, toks []Token, comments []Comment, diags *diag.List, compiler, script bool) *File {
 	f := &File{Path: path, Source: src, Comments: comments, Script: script}
-	p := &parser{iterationOperators: &f.IterationOperators, headParentheses: &f.HeadParentheses, patternTestOperators: &f.PatternTestOperators, toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, compiler: compiler, spans: &f.ExpressionSpans, spanSeen: map[Expr][]SourceSpan{}}
+	p := &parser{legacyStaged: &f.LegacyStagedLists, iterationOperators: &f.IterationOperators, headParentheses: &f.HeadParentheses, patternTestOperators: &f.PatternTestOperators, toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, compiler: compiler, spans: &f.ExpressionSpans, spanSeen: map[Expr][]SourceSpan{}}
 	var statements []Stmt
 	var firstStatement diag.Pos
 	// Imports come first.
@@ -257,6 +257,7 @@ type parser struct {
 	patternTestOperators        *[]diag.Pos
 	headParentheses             *[]SourceSpan
 	iterationOperators          *[]diag.Pos
+	legacyStaged                *[]LegacyStagedList
 	// noLambda is set while parsing rule premises, where `x =>` ends
 	// the premises instead of starting a lambda.
 	noLambda bool
@@ -2112,16 +2113,19 @@ func (p *parser) primary() Expr {
 			if !p.inDerivation {
 				p.errorf(prefix.Pos, "comptime list comprehensions are available only inside derive templates and derive helpers")
 			}
+			open := p.toks[p.i+1] // forHeader expects '(' right after for
 			loop := p.forHeader()
 			loop.Comptime, loop.Comprehension = true, true
+			headClose := p.toks[p.i-1]
 			p.skipNewlines()
 			var guard Expr
+			var guardOpen, guardClose Token
 			if p.at(TIdent) && p.tok().Text == "comptime" && p.peekKind() == KwIf {
 				p.next()
 				pos := p.next().Pos
-				p.expect(LParen, "after comptime if")
+				guardOpen = p.expect(LParen, "after comptime if")
 				guard = &If{Pos: pos, Comptime: true, Cond: p.expr()}
-				p.expect(RParen, "after the comprehension guard")
+				guardClose = p.expect(RParen, "after the comprehension guard")
 				p.skipNewlines()
 			}
 			value := p.expr()
@@ -2131,8 +2135,10 @@ func (p *parser) primary() Expr {
 			}
 			loop.Body = &Block{Pos: value.Position(), Tail: value}
 			lit.Elems = []Expr{loop}
+			last := p.toks[p.i-1]
 			p.skipNewlines()
-			p.expect(RBrack, "after the comptime list comprehension")
+			closeTok := p.expect(RBrack, "after the comptime list comprehension")
+			p.legacyStagedList(t, open, headClose, guardOpen, guardClose, last, closeTok, guard != nil)
 			return lit
 		}
 		p.list(RBrack, "a list element", func() {
@@ -2483,7 +2489,7 @@ func matchingBrace(s string, from int) int {
 // subExpr parses the expression inside ${...}, starting at pos.
 func (p *parser) subExpr(src string, pos diag.Pos) (x Expr) {
 	toks, _ := lexAt(pos.File, []byte(src), pos.Line, pos.Col, p.diags, p.compiler)
-	sub := &parser{iterationOperators: p.iterationOperators, headParentheses: p.headParentheses, toks: toks, diags: p.diags, imports: p.imports, compiler: p.compiler, spans: p.spans, spanSeen: p.spanSeen, inDerivation: p.inDerivation}
+	sub := &parser{legacyStaged: p.legacyStaged, iterationOperators: p.iterationOperators, headParentheses: p.headParentheses, toks: toks, diags: p.diags, imports: p.imports, compiler: p.compiler, spans: p.spans, spanSeen: p.spanSeen, inDerivation: p.inDerivation}
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(bailout); !ok {
@@ -3013,4 +3019,75 @@ func stmtPos(s Stmt) diag.Pos {
 		return s.Pos
 	}
 	return diag.Pos{}
+}
+
+// legacyStagedList records how to rewrite the bracket form
+// `[comptime for (x in xs) comptime if (c) v]` as
+// `comptime for { x in xs; if (c) } yield v`. The brackets become
+// parentheses where the list is an operand, so the yielded value cannot
+// take in what follows.
+func (p *parser) legacyStagedList(open, headOpen, headClose, guardOpen, guardClose, last, closeTok Token, guarded bool) {
+	if p.legacyStaged == nil {
+		return
+	}
+	i := 0
+	for i < len(p.toks) && p.toks[i].Pos != open.Pos {
+		i++
+	}
+	before, after := Semi, Semi
+	if i > 0 {
+		before = p.toks[i-1].Kind
+	}
+	if p.i < len(p.toks) {
+		after = p.tok().Kind
+	}
+	bare := false
+	switch before {
+	case Assign, Colon, LParen, Comma, LBrace, Arrow, Semi, KwReturn:
+		switch after {
+		case RParen, Comma, RBrace, RBrack, Semi, EOF:
+			bare = true
+		}
+	}
+	openText, closeText := "(", ")"
+	if bare {
+		openText, closeText = "", ""
+	}
+	edits := []diag.TextEdit{
+		{Start: open.Pos, End: open.End, Replacement: openText},
+		{Start: headOpen.Pos, End: headOpen.End, Replacement: "{ "},
+	}
+	// The yielded value joins the yield's line: a value left on the next
+	// line would lose its continuation indent.
+	value := func(after Token) diag.Pos {
+		j := i
+		for j < len(p.toks) && p.toks[j].Pos != after.Pos {
+			j++
+		}
+		for j++; j < len(p.toks) && p.toks[j].Kind == Semi; j++ {
+		}
+		return p.toks[min(j, len(p.toks)-1)].Pos
+	}
+	if guarded {
+		// The guard's parentheses go, unless a brace in it could start a
+		// record literal, which a filter's condition cannot.
+		inGuard, braced := false, false
+		for j := i; j < len(p.toks) && p.toks[j].Pos != guardClose.Pos; j++ {
+			inGuard = inGuard || p.toks[j].Pos == guardOpen.Pos
+			braced = braced || inGuard && p.toks[j].Kind == LBrace
+		}
+		if braced {
+			edits = append(edits,
+				diag.TextEdit{Start: headClose.Pos, End: guardOpen.Pos, Replacement: "; if "},
+				diag.TextEdit{Start: guardClose.End, End: value(guardClose), Replacement: " } yield "})
+		} else {
+			edits = append(edits,
+				diag.TextEdit{Start: headClose.Pos, End: guardOpen.End, Replacement: "; if "},
+				diag.TextEdit{Start: guardClose.Pos, End: value(guardClose), Replacement: " } yield "})
+		}
+	} else {
+		edits = append(edits, diag.TextEdit{Start: headClose.Pos, End: value(headClose), Replacement: " } yield "})
+	}
+	edits = append(edits, diag.TextEdit{Start: last.End, End: closeTok.End, Replacement: closeText})
+	*p.legacyStaged = append(*p.legacyStaged, LegacyStagedList{Pos: open.Pos, End: closeTok.End, Edits: edits})
 }

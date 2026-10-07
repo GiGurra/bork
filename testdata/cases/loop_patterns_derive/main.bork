@@ -7,8 +7,7 @@ derive instance labels[T]: Labels[T] {
       _ = toString(pair.0) + pair.1.name
     }
     comptime for (_, _) in shape.fields[T]().indexed() {}
-    [comptime for ((outer, (index, field)) in shape.fields[T]().indexed().indexed())
-      toString(outer) + ":" + toString(index) + ":" + field.name]
+    comptime for { (outer, (index, field)) in shape.fields[T]().indexed().indexed() } yield toString(outer) + ":" + toString(index) + ":" + field.name
   }
 }
 type Row = { name: String, age: Int } derive (Labels)

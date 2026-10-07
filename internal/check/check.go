@@ -400,6 +400,7 @@ type Info struct {
 	sourceDefinitions      map[diag.Pos]diag.Pos
 	sourceNames            map[diag.Pos]string
 	writtenTypes           map[*syntax.TypeExpr]Type
+	legacyStaged           []syntax.LegacyStagedList
 	constructorConstraints map[syntax.Expr][]*Constraint
 	variantCalls           map[*syntax.Call]*syntax.RecordLit
 	recordTargets          map[*syntax.RecordLit]any
@@ -577,6 +578,9 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 		},
 	}
 	c.appliedWhere = map[*syntax.TypeExpr]bool{}
+	for _, f := range files {
+		c.info.legacyStaged = append(c.info.legacyStaged, f.LegacyStagedLists...)
+	}
 	c.declarePackages(files, root)
 	c.goOpaque = map[string]Type{}
 	c.goTypes = loadGoTypes(files, goTypes)

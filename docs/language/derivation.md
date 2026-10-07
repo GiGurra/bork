@@ -42,8 +42,10 @@ are generators and filters only; compute other values in the yield.
 
 Staged block controls use the same optional head parentheses as runtime
 `if`, `for` and `match`. The older list-comprehension form,
-`[comptime for (field in xs) comptime if (cond) value]`, keeps its parentheses
-because no opening body brace ends them.
+`[comptime for (field in xs) comptime if (cond) value]`, is deprecated but
+still accepted. `bork check` reports a nonfatal
+`migration.comptime-comprehension` warning for it, and its JSON form includes
+edits that rewrite it as `comptime for { ... } yield value`.
 
 Inline `derive (...)` on a fact alias and standalone `derive Class for Alias`
 retain the alias's whole-value facts in the instance head. A derived decoder
@@ -71,8 +73,7 @@ class Lines[T] { fn lines(value: T): String }
 derive instance lines[T]: Lines[T] {
   fn lines(value: T): String {
     comptime if shape.kind[T]() == shape.Record {
-      parts: List[String] = [comptime for (field in shape.fields[T]()) comptime if (!field.computed)
-        field.name + "=" + toString(field.read(value))]
+      parts: List[String] = comptime for { field in shape.fields[T](); if !field.computed } yield field.name + "=" + toString(field.read(value))
       parts.join("\n")
     } else {
       shape.fail("Lines requires a record")
@@ -106,8 +107,7 @@ class Lines[T] { fn lines(value: T): String }
 derive instance lines[T]: Lines[T] {
   fn lines(value: T): String {
     comptime if shape.kind[T]() == shape.Record {
-      parts: List[String] = [comptime for (field in shape.fields[T]()) comptime if (!field.computed)
-        field.name + "=" + toString(field.read(value))]
+      parts: List[String] = comptime for { field in shape.fields[T](); if !field.computed } yield field.name + "=" + toString(field.read(value))
       parts.join("\n")
     } else {
       shape.fail("Lines requires a record")
@@ -202,11 +202,8 @@ class Build[T] { fn build(input: Int): T | shape.ValidationError }
 derive instance build[T]: Build[T] {
   fn build(input: Int): T | shape.ValidationError {
     initial = shape.builder[T]()
-    steps: List[(initial.Type) => initial.Type] = [
-      comptime for (field in shape.fields[T]())
-      comptime if (!field.computed && !field.hasDefault)
-      (state: initial.Type) => state.set(field, input)
-    ]
+    steps: List[(initial.Type) => initial.Type] =
+    comptime for { field in shape.fields[T](); if !field.computed && !field.hasDefault } yield (state: initial.Type) => state.set(field, input)
     steps.fold(initial, (state, step) => step(state)).finish()
   }
 }
@@ -420,13 +417,12 @@ import "bork/shape"
 class Row[T] {}
 derive instance row[T]: Row[T] {
   metadata shape.ForeignRecord = shape.ForeignRecord {
-    fields: [comptime for (field in shape.fields[T]()) comptime if (!field.computed)
-      shape.ForeignField {
-        slot: field.index,
-        name: "Col" + field.name.capitalize(),
-        tags: [shape.Tag { name: "db", value: field.name }],
-        option: shape.ForeignOption.Reject
-    }]
+    fields: comptime for { field in shape.fields[T](); if !field.computed } yield shape.ForeignField {
+      slot: field.index,
+      name: "Col" + field.name.capitalize(),
+      tags: [shape.Tag { name: "db", value: field.name }],
+      option: shape.ForeignOption.Reject
+    }
   }
 }
 type User = { name: String, age: Int = 36 } derive (Row)

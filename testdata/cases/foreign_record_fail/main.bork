@@ -3,19 +3,19 @@ import "bork/shape"
 class Twice[T] {}
 derive instance twice[T]: Twice[T] {
   metadata shape.ForeignRecord = shape.ForeignRecord {
-    fields: [comptime for (field in shape.fields[T]()) shape.ForeignField { slot: 0, name: "A", tags: [], option: shape.ForeignOption.Pointer }]
+    fields: comptime for { field in shape.fields[T]() } yield shape.ForeignField { slot: 0, name: "A", tags: [], option: shape.ForeignOption.Pointer }
   }
 }
 class Lower[T] {}
 derive instance lower[T]: Lower[T] {
   metadata shape.ForeignRecord = shape.ForeignRecord {
-    fields: [comptime for (field in shape.fields[T]()) shape.ForeignField { slot: field.index, name: field.name, tags: [shape.Tag { name: "bad tag", value: "" }], option: shape.ForeignOption.Pointer }]
+    fields: comptime for { field in shape.fields[T]() } yield shape.ForeignField { slot: field.index, name: field.name, tags: [shape.Tag { name: "bad tag", value: "" }], option: shape.ForeignOption.Pointer }
   }
 }
 class Strict[T] {}
 derive instance strict[T]: Strict[T] {
   metadata shape.ForeignRecord = shape.ForeignRecord {
-    fields: [comptime for (field in shape.fields[T]()) shape.ForeignField { slot: field.index, name: field.name.capitalize(), tags: [], option: shape.ForeignOption.Reject }]
+    fields: comptime for { field in shape.fields[T]() } yield shape.ForeignField { slot: field.index, name: field.name.capitalize(), tags: [], option: shape.ForeignOption.Reject }
   }
 }
 class Clash[T] {
@@ -32,20 +32,20 @@ derive instance empty[T]: Empty[T] {
 class Spaced[T] {}
 derive instance spaced[T]: Spaced[T] {
   metadata shape.ForeignRecord = shape.ForeignRecord {
-    fields: [comptime for (field in shape.fields[T]()) shape.ForeignField { slot: field.index, name: "Same Name", tags: [], option: shape.ForeignOption.Pointer }]
+    fields: comptime for { field in shape.fields[T]() } yield shape.ForeignField { slot: field.index, name: "Same Name", tags: [], option: shape.ForeignOption.Pointer }
   }
 }
 fn runtimeName(): String { "Name" }
 class Runtime[T] {}
 derive instance runtime[T]: Runtime[T] {
   metadata shape.ForeignRecord = shape.ForeignRecord {
-    fields: [comptime for (field in shape.fields[T]()) shape.ForeignField { slot: field.index, name: runtimeName(), tags: [], option: shape.ForeignOption.Pointer }]
+    fields: comptime for { field in shape.fields[T]() } yield shape.ForeignField { slot: field.index, name: runtimeName(), tags: [], option: shape.ForeignOption.Pointer }
   }
 }
 class Prefixed[T] {}
 derive instance prefixed[T]: Prefixed[T] {
   metadata shape.ForeignRecord = shape.ForeignRecord {
-    fields: [comptime for (field in shape.fields[T]()) shape.ForeignField { slot: field.index, name: "X" + field.name, tags: [], option: shape.ForeignOption.Pointer }]
+    fields: comptime for { field in shape.fields[T]() } yield shape.ForeignField { slot: field.index, name: "X" + field.name, tags: [], option: shape.ForeignOption.Pointer }
   }
 }
 
