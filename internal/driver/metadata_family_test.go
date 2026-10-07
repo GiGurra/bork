@@ -80,6 +80,18 @@ fn main() {}`, "metadata family Show is indexed by the target: write Show[A], fo
  fn label(value: Int): String { "int" }
 }
 fn main() {}`, "metadata for Show[Int] is declared twice in instance integer"},
+		{"refined argument", metadataFamilyClass + `pred small(n: Int) { n < 10 }
+type Small = Int where small
+instance integer: Label[Int] {
+ metadata Show[Small] = Show { show: value => toString(value) }
+ fn label(value: Int): String { "int" }
+}
+fn main() {}`, "not supported yet"},
+		{"invalid family is an ordinary key", `import "bork/shape"
+metadata type Pair[A, B] = { a: (A) uses nothing => String }
+class Label[T] { fn label(value: T): String }
+fn info[T: Label](): Option[Pair[Int, Int]] { shape.metadata[T, Label, Pair[Int, Int]]() }
+fn main() {}`, "must be a record or sealed type with one type parameter"},
 		{"lazy cycle", metadataFamilyClass + `instance integer: Label[Int] {
  metadata Show[Int] = Show { show: value => toString(Value) }
  fn label(value: Int): String { "int" }

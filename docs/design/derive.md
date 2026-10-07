@@ -355,8 +355,9 @@ always applied to the dictionary's target. Its runtime identity is the family's
 declaration, so an instance for `Option[A]` declaring `K[Option[A]]` answers
 both a generic query `K[U]` and a concrete `K[Option[Int]]`. The static result
 `K[U]` is sound because the selected dictionary for U holds the entry for
-exactly U; the Go assertion compares two types derived from identical Bork
-types. Inferring a family from `K[X]` with X equal to the target would be
+U, or for its base type when U carries facts. Both erase to the same Go type,
+so the Go assertion holds, and consume-only families make the base-type entry
+safe to use at the refined type. Inferring a family from `K[X]` with X equal to the target would be
 unstable under substitution: `K[Option[String]]`, written as a closed key for a
 generic `Option[A]` instance, would look target-indexed at A = String, and
 `Option[RecordSchema]` is already a closed key. So the opt-in is per

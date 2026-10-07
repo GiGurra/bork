@@ -153,6 +153,7 @@ func (c *checker) checkMetadataFamily(td *syntax.TypeDecl, typ Type) {
 	params := typeParamsOf(typ)
 	if td.Kind != syntax.RecordType && td.Kind != syntax.SealedType || len(params) != 1 {
 		c.errorf(td.Pos, "metadata family %s must be a record or sealed type with one type parameter", td.Name)
+		td.MetadataFamily = false // Its uses are then ordinary keys.
 		return
 	}
 	var fields []*Field
@@ -167,6 +168,7 @@ func (c *checker) checkMetadataFamily(td *syntax.TypeDecl, typ Type) {
 	for _, field := range fields {
 		if !consumesOnly(field.Type, params[0]) {
 			c.errorf(field.Decl.Type.Pos, "metadata family %s may use %s only as a callback parameter type, found %s", td.Name, params[0].Name, field.Type)
+			td.MetadataFamily = false
 		}
 	}
 }

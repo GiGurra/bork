@@ -396,6 +396,9 @@ func apiFields(fields []*syntax.FieldDecl, sources []*syntax.File) string {
 }
 func apiType(td *syntax.TypeDecl, sources []*syntax.File) string {
 	text := "type " + td.Name + apiParams(td.TypeParams) + " = "
+	if td.MetadataFamily {
+		text = syntax.MetadataFamilyKeyword + " " + text
+	}
 	if td.Private {
 		text += "private "
 	}
