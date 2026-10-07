@@ -2802,7 +2802,7 @@ func (p *parser) comprehension() *Generate {
 			panic(bailout{})
 		}
 	}
-	p.next() // }
+	p.next()              // }
 	p.noRecordLit = saved // the yielded value is in the enclosing context
 	if !p.at(KwYield) {
 		if p.at(Semi) && p.peekKind() == KwYield {
