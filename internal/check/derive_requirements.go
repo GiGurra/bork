@@ -108,7 +108,9 @@ func templateFiles(files []*syntax.File) bool {
 
 // Parsed declarations may have cyclic instance/method links. Preserve those
 // identities within the copy, while sharing no mutable nodes with the input.
-func cloneDeriveFiles(files []*syntax.File) []*syntax.File {
+func cloneDeriveFiles(files []*syntax.File) []*syntax.File { return cloneSyntax(files) }
+
+func cloneSyntax[T any](source T) T {
 	seen := map[reflect.Value]reflect.Value{}
 	var clone func(reflect.Value) reflect.Value
 	clone = func(value reflect.Value) reflect.Value {
@@ -150,7 +152,7 @@ func cloneDeriveFiles(files []*syntax.File) []*syntax.File {
 		}
 		return value
 	}
-	return clone(reflect.ValueOf(files)).Interface().([]*syntax.File)
+	return clone(reflect.ValueOf(source)).Interface().(T)
 }
 
 func programWithDeriveRequirements(files []*syntax.File, root string, diags *diag.List, goTypes GoTypes, observe func(string)) *Info {

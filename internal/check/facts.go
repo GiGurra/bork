@@ -98,7 +98,7 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 	f.validators = validationContexts(info)
 	f.validatorRequirements()
 	for _, fn := range info.FuncOf {
-		if fn.Requires != nil {
+		if fn.Requires != nil && !fn.Witness {
 			f.withFunction(fn, func() {
 				f.walk(fn.Requires, env{})
 				f.constantRequirements(fn.Requires)
@@ -125,6 +125,7 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 	for _, fn := range info.Tests {
 		f.function(fn)
 	}
+	f.witnesses(info.DefinitionWitnesses)
 	checkedDefaults := map[*syntax.FieldDecl]bool{}
 	// A map walk would reorder otherwise identical evaluator batches between
 	// checks, defeating generated-program proof reuse and Go's object cache.
@@ -230,6 +231,10 @@ type factChecker struct {
 	carryMust  map[*Var]string
 	carryFacts map[[2]*Var][]*Constraint
 	joinKnown  map[*Var][]*Constraint
+	// witness is set while checking a definition witness, whose failures
+	// are reported to witnessDiags only when no target can avoid them.
+	witness      *deriveWitnessTaint
+	witnessDiags *diag.List
 }
 
 // lambdaArg places a lambda's parameter: the lambda is argument arg of
@@ -251,6 +256,9 @@ type fact struct {
 	or         [][]fact
 	comparison *comparison
 	value      argVal
+	// wild marks the facts of a witness condition that depends on the
+	// target; it has no alternatives, so it proves nothing by itself.
+	wild bool
 }
 
 // factKey identifies a fact, to tell when it is already in use.
@@ -282,11 +290,21 @@ func factKey(ft fact) string {
 
 // env holds the facts known at a point in a function. Facts are only
 // ever added, and only for the code they dominate.
-type env struct{ facts []fact }
+//
+// In a definition witness, a wild env follows a condition or staged exit
+// that differs between expansions: its facts are unknown.
+type env struct {
+	facts []fact
+	wild  bool
+}
 
 func (e env) with(fs ...fact) env {
 	out := make([]fact, 0, len(e.facts)+len(fs))
-	return env{facts: append(append(out, e.facts...), fs...)}
+	wild := e.wild
+	for _, ft := range fs {
+		wild = wild || ft.wild
+	}
+	return env{facts: append(append(out, e.facts...), fs...), wild: wild}
 }
 
 // argVal is a value in a fact or obligation: identified by key (empty
@@ -584,6 +602,9 @@ func (f *factChecker) stmts(list []Stmt, e env) env {
 				f.diags.AddCode(trustSubjectPos(s), "facts.error", "trust needs a value with a name (bind it first: x = ...), or the fact could not be used")
 			}
 			e = e.with(facts...)
+		}
+		if f.witness != nil && f.witness.stagedExit(s) {
+			e.wild = true
 		}
 		if !f.statementCompletes(s) {
 			break
@@ -1207,6 +1228,10 @@ func (f *factChecker) oblige(x Expr, con *Constraint, subst func(string) argVal,
 		return
 	}
 	ob := f.obligationOf(con, subst, requirement)
+	if f.witness != nil {
+		f.witnessOblige(x, ob, e)
+		return
+	}
 	ok, pending := f.prove(x, ob, e, 0)
 	f.settle(x, ob, ok, pending)
 }
@@ -3023,6 +3048,14 @@ func alternatives(fs []fact) [][]fact {
 // true (or, with positive false, when it is false).
 func (f *factChecker) conditionFacts(cond Expr, positive bool) []fact {
 	cond = debugValue(cond)
+	if f.witness != nil {
+		if witnessStaged(cond) {
+			return nil // An expansion removes the branch instead of testing it.
+		}
+		if f.witness.tainted(cond) {
+			return []fact{{wild: true, or: [][]fact{}}}
+		}
+	}
 	switch c := cond.(type) {
 	case *Unary:
 		if c.Op == syntax.Not {
@@ -3656,4 +3689,50 @@ func joinedVar(v *Var) *Var {
 		v = v.Joins[0]
 	}
 	return v
+}
+
+// witnesses checks definition witnesses (see derive_witness.go). Their
+// other diagnostics and predicate evaluations are discarded: an unused
+// definition never starts the evaluator.
+func (f *factChecker) witnesses(fns []*Func) {
+	diags, pending := f.diags, f.pending
+	defer func() { f.diags, f.pending, f.witness, f.witnessDiags = diags, pending, nil, nil }()
+	for _, fn := range fns {
+		f.witnessFunction(fn, diags)
+	}
+	// An expansion repeats a definition's failure at its request; the
+	// definition's own diagnostic is the one to fix.
+	reported := map[string]bool{}
+	for _, d := range diags.Sorted() {
+		if d.Code == "facts.error" {
+			reported[d.Msg+" (derive template at "+d.Pos.String()+")"] = true
+		}
+	}
+	diags.Rewrite(0, func(d *diag.Diagnostic) bool { return !reported[d.Msg] })
+}
+
+// A witness's Invalid types can reach code written for checked programs. A
+// witness this pass cannot walk reports nothing, like one that fails to check.
+func (f *factChecker) witnessFunction(fn *Func, diags *diag.List) {
+	start := diags.Len()
+	defer func() {
+		if recover() != nil {
+			diags.Truncate(start)
+		}
+	}()
+	f.witness, f.witnessDiags, f.diags = newDeriveWitnessTaint(fn), diags, &diag.List{}
+	f.fn, f.collect, f.active = nil, nil, map[string]bool{}
+	if fn.Requires != nil {
+		f.withFunction(fn, func() { f.walk(fn.Requires, env{}) })
+	}
+	f.function(fn)
+}
+
+func (f *factChecker) witnessOblige(x Expr, ob obligation, e env) {
+	if e.wild || f.witness.tainted(x) || f.witness.obligation(ob) {
+		return
+	}
+	if ok, _ := f.prove(x, ob, e, 0); !ok {
+		f.witnessDiags.AddCode(x.Pos(), "facts.error", "%s, but that is not proven for %s%s", ob.requirement, f.describe(x), f.hint(x, ob))
+	}
 }

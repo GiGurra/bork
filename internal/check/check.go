@@ -100,6 +100,11 @@ type Func struct {
 	// Synthetic is set for a predicate that stands for a function
 	// parameter (see facts.go); it has no body to run.
 	Synthetic bool
+	// Witness is set for a definition witness of a derive template or
+	// helper and its holes (see derive_witness.go); it is never emitted.
+	// WitnessStage marks the opaque condition of a staged branch, and
+	// WitnessRepair a hole for code that failed to check in a witness.
+	Witness, WitnessStage, WitnessRepair bool
 	// Test is set for the function checking a test's body.
 	Test *syntax.TestDecl
 	// MockOf is set for the body of a `mock` statement in a test, checked
@@ -271,6 +276,9 @@ type Info struct {
 	FuncOf map[*syntax.FuncDecl]*Func
 	// ExpandedFunctions holds typed derive methods and helpers without changing parsed declarations.
 	ExpandedFunctions []*Func
+	// DefinitionWitnesses stand for every expansion of derive definitions,
+	// for the definition-time fact and lifetime checks.
+	DefinitionWitnesses []*Func
 	// Named holds every declared type: *Record, *Sealed, or (for an
 	// alias) the aliased type.
 	Named map[string]Type
@@ -742,6 +750,7 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 	// The later passes read the typed tree, which is built once the
 	// program checks.
 	if c.diags.Len() == 0 && c.deriveDiscovery == nil {
+		c.checkDeriveWitnesses(files)
 		c.zonkInfo()
 		c.checkInterpolationValidators()
 		c.checkOpaqueFields()

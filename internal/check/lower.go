@@ -138,6 +138,7 @@ func (c *checker) lower(files []*syntax.File) {
 	for _, r := range c.info.Rules {
 		l.rule(r)
 	}
+	c.info.DefinitionWitnesses = l.witnesses(c.info.DefinitionWitnesses)
 	l.interpolationBatches()
 	c.checkCarried(l.roots)
 }
@@ -521,7 +522,15 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		at.token = x.Pos
 		return &CallValue{expr: at, Fun: l.expr(x.Fun), Args: l.exprs(x.Args), Provider: l.info.assemblyValueCalls[x]}
 	case *syntax.Lambda:
-		ft := at.typ.(*FuncType)
+		ft, typed := at.typ.(*FuncType)
+		if !typed {
+			// Only a definition witness has a lambda in a dependent position.
+			ft = &FuncType{Result: Invalid}
+			for range x.Params {
+				ft.Params = append(ft.Params, Invalid)
+			}
+			at.typ = ft
+		}
 		out := &Lambda{expr: at}
 		for i, p := range x.Params {
 			v := &Var{Name: p.Name, Pos: p.Pos, Type: ft.Params[i], Kind: VarLambdaParam, Index: i}
@@ -928,3 +937,28 @@ func (l *lowerer) assertIs(source *syntax.Call, at expr, assertion *assertIsInfo
 // loop lowers `for { }`, `for (cond) { }`, and `for (init; cond; post)
 // { }`. A header name is one variable for every iteration, without the
 // initial value's identity: later iterations have other values.
+
+// witnesses lowers definition witnesses (see derive_witness.go) apart from the
+// program: their trees are no roots of it. Lowering assumes checked types,
+// and a witness's dependent types are Invalid; one it cannot lower is dropped.
+func (l *lowerer) witnesses(fns []*Func) []*Func {
+	var out []*Func
+	for _, fn := range fns {
+		roots := len(l.roots)
+		if l.witness(fn) {
+			out = append(out, fn)
+		}
+		l.roots = l.roots[:roots]
+	}
+	return out
+}
+
+func (l *lowerer) witness(fn *Func) (ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	l.function(fn)
+	return true
+}
