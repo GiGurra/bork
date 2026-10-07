@@ -22,6 +22,7 @@ fn main() {
   println((for { n: Int where positive in [-1, 2] } yield need(n)).toList())
   nested = [[Option.Some(1)], [Option.None, Option.Some(2)]]
   println((for { row in nested; .Some(v) in row } yield v).toList())
+  println((for { _: Bot in mixed } yield "bot").toList())
   every = [User { name: "x", age: 1 }]
   println((for { u: User in every } yield u.age).toList())
 }

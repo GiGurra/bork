@@ -196,7 +196,7 @@ fn main() {
 ```
 
 - `x in xs` goes through a `List` or `Seq`, and its name can be a [loop pattern](#loops) such as `(k, v)`. A later line can use earlier names, as `item in order.items` does.
-- A generator's pattern can also be any [match pattern](matching.md). Values it does not match are skipped: `.Some(v) in maybes` goes through the values in `Some`, and `u: User in accounts` through the `User`s of a union.
+- A generator's pattern can also be any [match pattern](matching.md). Values it does not match are skipped: `.Some(v) in maybes` goes through the values in `Some`, and `u: User in accounts` through the `User`s of a union. A bare name always binds, so a type test without a name is written `_: User in accounts`.
 - `if cond` skips the values for which it is false. What it proves holds in the lines after it and in the yield.
 - `name = value` binds a name for the lines after it.
 - The first line is a generator, and `yield` goes on the line of the closing `}`.

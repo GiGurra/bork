@@ -2811,7 +2811,7 @@ func (p *parser) generatorAhead() bool {
 		return true
 	}
 	switch p.tok().Kind {
-	case TIdent, Dot, LParen, LBrack, TInt, TFloat, TRune, TString, KwTrue, KwFalse, Minus:
+	case TIdent, Underscore, Dot, LParen, LBrack, TInt, TFloat, TRune, TString, KwTrue, KwFalse, Minus:
 	default:
 		return false
 	}
@@ -2910,19 +2910,25 @@ func (p *parser) comprehensionClause() any {
 	switch {
 	case p.generatorAhead():
 		var pattern Pattern
+		var in diag.Pos
 		if p.iterationPatternAhead() {
 			pattern = p.iterationPattern()
+			in = p.toks[p.i-1].Pos
 		} else {
 			pattern = p.pattern()
+			in = p.tok().Pos
 			p.iterationIn()
 		}
 		pos := pattern.Position()
 		f := &For{Pos: pos, Pattern: pattern, NamePos: pos}
 		if !irrefutable(pattern) {
 			// The values that do not match are skipped: the loop binds
-			// each one to a name no source can write, and a match tests it.
+			// each one to a name no source can write, and a match tests
+			// it. The name is placed at in, where no symbol of the
+			// pattern is, so references to it never resolve to one.
 			f.Pattern = nil
-			f.Name = fmt.Sprintf("_elem_%d_%d", pos.Line, pos.Col)
+			f.NamePos = in
+			f.Name = fmt.Sprintf("_elem_%d_%d", in.Line, in.Col)
 			f.Items = p.expr()
 			return &Match{Pos: pos, Filter: true, X: f, Arms: []*Arm{{Pattern: pattern}, {Pattern: &WildcardPat{Pos: pos}, Body: &Block{Pos: pos, End: pos}}}}
 		}

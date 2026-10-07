@@ -288,6 +288,6 @@ test('comprehension lines keep keyword and expression scopes', () => {
 });
 
 test('refutable comprehension generators highlight in', () => {
-  const ls = tokenize('xs = for {\n  .Some(v) in maybes\n  u: User in mixed\n  User { name } in users\n  [first, ...rest] in rows\n} yield v');
-  for (const row of [1, 2, 3, 4]) has(ls, row, 'in', 'keyword.control.bork');
+  const ls = tokenize('xs = for {\n  .Some(v) in maybes\n  u: User in mixed\n  User { name } in users\n  [first, ...rest] in rows\n  "a" in letters\n  \'b\' in runes\n} yield v');
+  for (const row of [1, 2, 3, 4, 5, 6]) has(ls, row, 'in', 'keyword.control.bork');
 });

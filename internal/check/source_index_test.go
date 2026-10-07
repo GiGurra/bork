@@ -272,6 +272,8 @@ func TestRefutableGeneratorIdentities(t *testing.T) {
     if value > 0
   } yield value
   println(values.toList())
+  typed = for { n: Int in [1] } yield n
+  println(typed.toList())
 }
 `), d)
 	file.Package = "refutable"
@@ -281,25 +283,28 @@ func TestRefutableGeneratorIdentities(t *testing.T) {
 		t.Fatal(d.Error())
 	}
 	index := BuildSourceIndex(files, info)
-	found := false
+	found := 0
 	for _, symbol := range index.Symbols() {
 		if strings.HasPrefix(symbol.Name, "_") {
 			t.Fatalf("hidden generator element is a symbol: %+v", symbol)
 		}
-		if symbol.Name != "value" || symbol.Definition.File != file.Path {
+		// A type test's name is at the pattern's position, which the
+		// hidden element must not share (rename would overlap).
+		want := map[string]string{"value": "[3:11 4:8 5:11]", "n": "[7:17 7:39]"}[symbol.Name]
+		if want == "" || symbol.Definition.File != file.Path {
 			continue
 		}
-		found = true
-		var lines []int
+		found++
+		var refs []string
 		for _, ref := range index.References(symbol.Definition) {
-			lines = append(lines, ref.Start.Line)
+			refs = append(refs, fmt.Sprintf("%d:%d", ref.Start.Line, ref.Start.Col))
 		}
-		if fmt.Sprint(lines) != "[3 4 5]" {
-			t.Fatalf("value: reference lines = %v", lines)
+		if got := fmt.Sprint(refs); got != want {
+			t.Fatalf("%s: references = %v, want %v", symbol.Name, got, want)
 		}
 	}
-	if !found {
-		t.Fatal("no symbol for value")
+	if found != 2 {
+		t.Fatalf("found %d of the symbols value and n", found)
 	}
 	for _, token := range SemanticTokens(file, info) {
 		if token.Start.Line == 3 && token.Start.Col == 5 && token.Kind == "variable" {
