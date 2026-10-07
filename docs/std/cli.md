@@ -447,6 +447,61 @@ root shorthand is dropped when a descendant uses it. Dynamic completers see
 only their declaring record's partial options; omitted defaults remain Missing.
 See [cli_root](../../examples/cli_root/main.bork) for a nested runnable example.
 
+## Persistent-root value sources
+
+`RootSubcommandResolved[R, T]` is the source-aware form of `RootSubcommand`.
+Its handler receives `(cli.Resolved[R], cli.Resolved[T], Scope)` after both
+records pass validation. It returns the same `RootCommand[R]`, so existing
+`RootGroup[R]` branches and leaves with different option records work unchanged.
+Legacy and source-aware leaves can share one command tree.
+
+`DispatchRootResolved[R]` and `RunRootResolved[R]` accept the same flags, files,
+settings, completions and commands as their ordinary root counterparts. Their
+optional standalone `run` handler receives `(cli.Resolved[R], Scope)`.
+`DispatchRootResolved` takes explicit arguments and returns `Ok | cli.Error |
+cli.Help`; `RunRootResolved` reads process arguments, prints help/completion
+output, and returns `Ok | cli.Error`. Like the existing root functions, both
+charge `io + net + clock + random + state`. Without a standalone handler, root
+invocation displays help. A standalone handler never runs for a selected leaf.
+
+```bork
+import "bork/cli"
+import "bork/codec"
+use codec.Defaults
+
+type Global = { region: String = "west" } derive (codec.Decode)
+type Deploy = { service: String } derive (codec.Decode)
+
+fn main() {
+  commands = [cli.RootSubcommandResolved[Global, Deploy]("deploy", "Deploy", (global, deploy, s) => {
+    println(global.value.region)
+    println(global.Source("region"))
+    println(deploy.value.service)
+    println(deploy.Source("service"))
+  })]
+  println(cli.RunRootResolved[Global]("fleet", "Shared flags", commands,
+    run: Option.Some((global, s) => { println(global.Source("region")) })))
+}
+```
+
+For `fleet --region east deploy --service api`, both sources are `Flag`.
+Root flags work before or after the selected command, including through nested
+`RootGroup` branches. Root and child config/env/flag precedence remains separate.
+Queries use dotted bork field paths local to each snapshot: for example,
+`global.Source("db.port")` and `deploy.Source("name")`. Root source keys have no
+`.root` prefix; root validation errors still have that prefix. Codec wire names
+and aliases do not change query keys. Parent defaults and config null resets
+follow the same source rules as `ParseResolved`.
+
+Both snapshots' `warnings` contain the diagnostics for the **whole selected
+invocation**, including root/leaf flag and command deprecations. Dispatch still
+prints each accepted warning once. Root-only snapshots contain their root
+invocation warnings. Source-aware leaves can also be used with ordinary
+`DispatchRoot`/`RunRoot`; ordinary leaves can be used with the resolved entry
+points. Help, completion and validation failures never invoke these handlers.
+Dynamic completers continue to receive only their declaring record's partial
+inputs, with omitted fields represented by `Missing`.
+
 ## Command-line schema adapter
 
 The options type needs a derived codec.Decode record schema, without a GoStruct
@@ -544,8 +599,8 @@ fn main() {
 }
 ```
 
-Source-aware parsing of persistent root flags through `RunRoot` is tracked
-separately; this API resolves one options record.
+For persistent-root and child snapshots, see
+[persistent-root value sources](#persistent-root-value-sources).
 
 ## Reloading configuration
 

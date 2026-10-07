@@ -1,0 +1,29 @@
+import "bork/codec"
+import "bork/process"
+
+// RootSubcommandResolved receives proven root and leaf snapshots. Sources stay
+// local to each options record; warnings describe the whole invocation.
+fn RootSubcommandResolved[R: codec.Decode, T: codec.Decode](name: String, description: String, run: (Resolved[R], Resolved[T], Scope) uses io + net + clock + random + state => Ok, flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}, completions: List[Completion] = []): RootCommand[R] {
+  leaf = makeSubcommand[T](name, description, (options, s) => {}, configFiles, resolve[T](flags, settings, name), inputFields[T](name), settings.completion, completions, settings.version)
+  RootCommand[R] { command: leaf.copy(rootApply: Option.Some((root, child, s) => applyRootChild[R, T](root, child, s, Option.None, Option.Some(run)))) }
+}
+
+// DispatchRootResolved retains persistent-root parsing and validation while
+// exposing value sources to an optional standalone root handler and leaves.
+fn DispatchRootResolved[R: codec.Decode](name: String, description: String, arguments: List[String], commands: List[RootCommand[R]], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}, completions: List[Completion] = [], run: Option[(Resolved[R], Scope) uses io + net + clock + random + state => Ok] = Option.None) uses io + net + clock + random + state: Ok | Error | Help {
+  scope s {
+    match (prepareRoot[R](name, description, flags, configFiles, settings, completions, Option.None, s, resolvedRun: run)) {
+      error: Error => error
+      root: rootPlan => dispatch(name, description, arguments, commands.map(command => command.command), s, settings.completion, configureCompletion, printError, Option.Some(root), helpGroups: settings.helpGroups)
+    }
+  }
+}
+
+// RunRootResolved reads process arguments and prints help/completion output.
+fn RunRootResolved[R: codec.Decode](name: String, description: String, commands: List[RootCommand[R]], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}, completions: List[Completion] = [], run: Option[(Resolved[R], Scope) uses io + net + clock + random + state => Ok] = Option.None) uses io + net + clock + random + state: Ok | Error {
+  match (DispatchRootResolved[R](name, description, process.Args(), commands, flags, configFiles, settings, completions, run)) {
+    help: Help => { print(help.text); printError(help.diagnostics) }
+    error: Error => error
+    Ok => {}
+  }
+}

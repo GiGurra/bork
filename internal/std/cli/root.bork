@@ -17,10 +17,10 @@ type rootPlan = {
 // RootSubcommand receives root and leaf options only after both are valid.
 fn RootSubcommand[R: codec.Decode, T: codec.Decode](name: String, description: String, run: (R, T, Scope) uses io + net + clock + random + state => Ok, flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}, completions: List[Completion] = []): RootCommand[R] {
   leaf = makeSubcommand[T](name, description, (options, s) => {}, configFiles, resolve[T](flags, settings, name), inputFields[T](name), settings.completion, completions, settings.version)
-  RootCommand[R] { command: leaf.copy(rootApply: Option.Some((root, child, s) => applyRootChild[R, T](root, child, s, run))) }
+  RootCommand[R] { command: leaf.copy(rootApply: Option.Some((root, child, s) => applyRootChild[R, T](root, child, s, Option.Some(run)))) }
 }
 
-fn applyRootChild[R: codec.Decode, T: codec.Decode](root: parsedInput, child: parsedInput, s: Scope, run: (R, T, Scope) uses io + net + clock + random + state => Ok) uses io + net + clock + random + state: Ok | Error {
+fn applyRootChild[R: codec.Decode, T: codec.Decode](root: parsedInput, child: parsedInput, s: Scope, run: Option[(R, T, Scope) uses io + net + clock + random + state => Ok], resolvedRun: Option[(Resolved[R], Resolved[T], Scope) uses io + net + clock + random + state => Ok] = Option.None) uses io + net + clock + random + state: Ok | Error {
   rootResult = codec.decode[R](root.value)
   childResult = codec.decode[T](child.value)
   rootErrors = match (rootResult) {
@@ -37,7 +37,13 @@ fn applyRootChild[R: codec.Decode, T: codec.Decode](root: parsedInput, child: pa
     options: R => match (childResult) {
       childOptions: T => {
         for (warning in child.warnings) { printError(s"${warning}\n") }
-        run(options, childOptions, s)
+        match (resolvedRun) {
+          Option.Some(handle) => handle(Resolved[R] { value: options, sources: root.sources, warnings: root.warnings }, Resolved[T] { value: childOptions, sources: child.sources, warnings: child.warnings }, s)
+          Option.None => match (run) {
+            Option.Some(handle) => handle(options, childOptions, s)
+            Option.None => Error { errors: [codec.DecodeError { path: child.path, message: "root-bound command has no typed handler" }] }
+          }
+        }
       }
       error: codec.DecodeError => Error { errors: [error] }
     }
@@ -72,7 +78,7 @@ fn RunRoot[R: codec.Decode](name: String, description: String, commands: List[Ro
   }
 }
 
-fn prepareRoot[R: codec.Decode](name: String, description: String, flags: List[Flag], configFiles: List[String], settings: Settings, completions: List[Completion], run: Option[(R, Scope) uses io + net + clock + random + state => Ok], s: Scope): rootPlan | Error {
+fn prepareRoot[R: codec.Decode](name: String, description: String, flags: List[Flag], configFiles: List[String], settings: Settings, completions: List[Completion], run: Option[(R, Scope) uses io + net + clock + random + state => Ok], s: Scope, resolvedRun: Option[(Resolved[R], Scope) uses io + net + clock + random + state => Ok] = Option.None): rootPlan | Error {
   resolved = resolveMetadataWithSchema[R](codec.Schema[R](), flags, settings, name, flagName)?
   schema = inputFields[R](name)?
   errors = resolved.fields.filter(field => field.positional).map(field => codec.DecodeError { path: s".root.${field.field}", message: "root fields cannot be positional" })
@@ -83,14 +89,17 @@ fn prepareRoot[R: codec.Decode](name: String, description: String, flags: List[F
   rootPlan {
     prepared: prepared
     automaticShorts: resolved.automaticShorts
-    hasHandler: run.isSome()
+    hasHandler: run.isSome() || resolvedRun.isSome()
     apply: (input, owner) => match (codec.decode[R](input.value)) {
       error: codec.DecodeError => withWarnings(Error { errors: [error.copy(path: s".root${error.path}")] }, input.warnings, input.path)
       options: R => {
         for (warning in input.warnings) { printError(s"${warning}\n") }
-        match (run) {
-          Option.Some(handle) => handle(options, owner)
-          Option.None => {}
+        match (resolvedRun) {
+          Option.Some(handle) => handle(Resolved[R] { value: options, sources: input.sources, warnings: input.warnings }, owner)
+          Option.None => match (run) {
+            Option.Some(handle) => handle(options, owner)
+            Option.None => {}
+          }
         }
       }
     }
