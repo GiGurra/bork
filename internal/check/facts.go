@@ -1525,6 +1525,16 @@ func (f *factChecker) proveCases(x Expr, ob obligation, e env, depth int) (bool,
 	case *SeqCall:
 		if len(x.Args) > 0 {
 			switch x.Op {
+			case "indexed":
+				if rest, ok := cutStep(ob.path, ".[]"); ok {
+					if rest, ok := cutStep(rest, ".1"); ok {
+						inner := ob
+						inner.path = ".[]" + rest
+						if cs.take(f.prove(x.Args[0], inner, e, depth+1)) {
+							return true, nil
+						}
+					}
+				}
 			case "map":
 				if rest, ok := cutStep(ob.path, ".[]"); ok {
 					if callback, ok := x.Args[1].(*Lambda); ok {
@@ -1862,6 +1872,17 @@ func typeParamPaths(t Type, tp *TypeParam, path string) ([]string, bool) {
 			return nil, false // not followed into other generic types yet
 		}
 	case *Record:
+		if t.Tuple {
+			var paths []string
+			for _, field := range t.Fields {
+				inner, ok := typeParamPaths(field.Type, tp, path+"."+field.Name)
+				if !ok {
+					return nil, false
+				}
+				paths = append(paths, inner...)
+			}
+			return paths, true
+		}
 		if mentions(t, tp) {
 			return nil, false
 		}

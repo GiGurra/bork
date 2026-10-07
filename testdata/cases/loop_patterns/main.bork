@@ -1,0 +1,43 @@
+pred positive(n: Int) { n > 0 }
+fn keep(n: Int where positive): Int { n }
+fn source(): Seq[String] uses io {
+  generate[String] {
+    println("start")
+    yield "a"
+    println("next")
+    yield "b"
+    println("end")
+  }
+}
+fn facts(rows: List[(Int where positive, String)]) uses io {
+  for (number, label) in rows { println(keep(number), label) }
+}
+fn indexedFacts(values: List[Int where positive]) uses io {
+  for (_, n) in values.indexed() { println(keep(n)) }
+  for (_, n) in values.toSeq().indexed() { println(keep(n)) }
+}
+fn main() {
+  for ((a, b), _) in [((1, 2), 3)] { println(a, b) }
+  for ((key, value) in { "b": 2, "a": 1 }.pairs()) { println(key, value) }
+  for (key, _) in { "b": 2, "a": 1 }.sorted().pairs() { println(key) }
+  for (i, text) in ["one", "two"].indexed() { println(i, text) }
+  indexed = source().indexed()
+  for (i, text) in indexed {
+    println(i, text)
+    break
+  }
+  for (i, text) in indexed { println(i, text) }
+  total = 0
+  for (i, n) in [10, 20].indexed() {
+    total = total + i + n
+    if i == 0 { continue }
+  }
+  println(total)
+  empty: List[String] = []
+  for _ in empty.indexed() {}
+  facts([(1, "positive")])
+  indexedFacts([2])
+  callbacks: List[() => Int] = []
+  for (i, n) in [10, 20].indexed() { callbacks = callbacks.append(() => i + n) }
+  for callback in callbacks { println(callback()) }
+}

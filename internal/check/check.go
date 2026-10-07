@@ -416,6 +416,7 @@ type Info struct {
 	contextVariants map[*syntax.ContextName]*Variant
 	// armPats holds the checked pattern of every match arm.
 	armPats            map[*syntax.Arm]*Pat
+	loopPats           map[*syntax.For]*Pat
 	tuplePats          map[*syntax.TupleBinding]*Pat
 	patternTests       map[*syntax.Is]*Pat
 	patternAssertions  map[*syntax.Call]*assertIsInfo
@@ -545,6 +546,7 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 			ownerScopes:            map[*syntax.Selector]*Func{},
 			contextVariants:        map[*syntax.ContextName]*Variant{},
 			armPats:                map[*syntax.Arm]*Pat{},
+			loopPats:               map[*syntax.For]*Pat{},
 			tuplePats:              map[*syntax.TupleBinding]*Pat{},
 			patternAssertions:      map[*syntax.Call]*assertIsInfo{},
 			patternCertainties:     map[*syntax.Is]bool{},

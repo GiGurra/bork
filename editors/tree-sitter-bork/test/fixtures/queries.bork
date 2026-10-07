@@ -34,3 +34,6 @@ fn predicateTest(value: Int): Bool { value is Int where positive }
 
 fn tupleTestPattern(value: (Int, String)): Bool { value is (Int, _) }
 fn functionTestPattern(value: (Int) => Int): Bool { value is (Int) => Int }
+fn tupleLoop() {
+  for (loopIndex, (loopValue, _)) in [(1, "one")].indexed() { println(loopIndex, loopValue) }
+}

@@ -1,0 +1,9 @@
+import "bork/shape"
+class Labels[T] { fn labels(value: T): List[String] }
+derive instance labels[T]: Labels[T] {
+  fn labels(value: T): List[String] {
+    fields = shape.fields[T]().indexed()
+    [comptime for ((index, field) in fields) toString(index) + field.noSuchMember]
+  }
+}
+fn main() {}

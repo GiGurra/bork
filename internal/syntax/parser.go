@@ -50,7 +50,7 @@ func parse(path, src string, toks []Token, comments []Comment, diags *diag.List,
 
 func parseMode(path, src string, toks []Token, comments []Comment, diags *diag.List, compiler, script bool) *File {
 	f := &File{Path: path, Source: src, Comments: comments, Script: script}
-	p := &parser{headParentheses: &f.HeadParentheses, patternTestOperators: &f.PatternTestOperators, toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, compiler: compiler, spans: &f.ExpressionSpans, spanSeen: map[Expr][]SourceSpan{}}
+	p := &parser{iterationOperators: &f.IterationOperators, headParentheses: &f.HeadParentheses, patternTestOperators: &f.PatternTestOperators, toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, compiler: compiler, spans: &f.ExpressionSpans, spanSeen: map[Expr][]SourceSpan{}}
 	var statements []Stmt
 	var firstStatement diag.Pos
 	// Imports come first.
@@ -255,6 +255,7 @@ type parser struct {
 	testingPattern              bool
 	patternTestOperators        *[]diag.Pos
 	headParentheses             *[]SourceSpan
+	iterationOperators          *[]diag.Pos
 	// noLambda is set while parsing rule premises, where `x =>` ends
 	// the premises instead of starting a lambda.
 	noLambda bool
@@ -1237,10 +1238,15 @@ func (p *parser) forLoop() *For {
 		end = RParen
 		p.skipNewlines()
 	}
-	if (p.at(TIdent) || p.at(Underscore)) && p.peekKind() == TIdent && p.toks[p.i+1].Text == "in" {
-		n := p.next()
-		p.next()
-		f.Name, f.NamePos = n.Text, n.Pos
+	if p.iterationPatternAhead() {
+		f.Pattern = p.iterationPattern()
+		f.NamePos = f.Pattern.Position()
+		switch pattern := f.Pattern.(type) {
+		case *VariantPat:
+			f.Name = pattern.Path[0]
+		case *WildcardPat:
+			f.Name = "_"
+		}
 		f.Items = p.expr()
 	} else if p.at(Semi) || p.at(TIdent) && (p.peekKind() == Assign || p.peekKind() == Colon) {
 		f.Clauses = true
@@ -2463,7 +2469,7 @@ func matchingBrace(s string, from int) int {
 // subExpr parses the expression inside ${...}, starting at pos.
 func (p *parser) subExpr(src string, pos diag.Pos) (x Expr) {
 	toks, _ := lexAt(pos.File, []byte(src), pos.Line, pos.Col, p.diags, p.compiler)
-	sub := &parser{headParentheses: p.headParentheses, toks: toks, diags: p.diags, imports: p.imports, compiler: p.compiler, spans: p.spans, spanSeen: p.spanSeen, inDerivation: p.inDerivation}
+	sub := &parser{iterationOperators: p.iterationOperators, headParentheses: p.headParentheses, toks: toks, diags: p.diags, imports: p.imports, compiler: p.compiler, spans: p.spans, spanSeen: p.spanSeen, inDerivation: p.inDerivation}
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(bailout); !ok {
@@ -2682,24 +2688,66 @@ func (p *parser) patternTestTypeAhead() bool {
 	return false
 }
 
-// forHeader is shared by block loops and derive list comprehensions.
+// iterationPatternAhead recognizes an iteration binding followed by in.
+// A parenthesized tuple is a binding only when in follows its closing paren.
+func (p *parser) iterationPatternAhead() bool {
+	if p.at(TIdent) || p.at(Underscore) {
+		return p.peekKind() == TIdent && p.toks[p.i+1].Text == "in"
+	}
+	if !p.at(LParen) {
+		return false
+	}
+	depth := 0
+	for i := p.i; i < len(p.toks); i++ {
+		switch p.toks[i].Kind {
+		case LParen:
+			depth++
+		case RParen:
+			depth--
+			if depth == 0 {
+				return i+1 < len(p.toks) && p.toks[i+1].Kind == TIdent && p.toks[i+1].Text == "in"
+			}
+		case EOF:
+			return false
+		}
+	}
+	return false
+}
+
+// iterationPattern parses a binding pattern and its following in token.
+func (p *parser) iterationPattern() Pattern {
+	var pattern Pattern
+	if p.at(TIdent) {
+		token := p.next()
+		pattern = &VariantPat{Pos: token.Pos, End: token.End, Path: []string{token.Text}}
+	} else {
+		pattern = p.pattern()
+	}
+	in := p.expect(TIdent, "in after the iteration pattern")
+	if in.Text != "in" {
+		p.errorf(in.Pos, "expected in after the iteration pattern")
+	} else if p.iterationOperators != nil {
+		*p.iterationOperators = append(*p.iterationOperators, in.Pos)
+	}
+	return pattern
+}
+
+// forHeader parses the parenthesized header of a derive list comprehension.
 func (p *parser) forHeader() *For {
 	pos := p.expect(KwFor, "").Pos
 	p.expect(LParen, "after for")
 	p.skipNewlines()
-	var n Token
-	if p.at(Underscore) {
-		n = p.next()
-	} else {
-		n = p.expect(TIdent, "(iteration variable)")
-	}
-	in := p.expect(TIdent, "in after the iteration variable")
-	if in.Text != "in" {
-		p.errorf(in.Pos, "expected in after the iteration variable")
-	}
+	pattern := p.iterationPattern()
 	p.skipNewlines()
 	items := p.expr()
 	p.skipNewlines()
 	p.expect(RParen, "after the iteration source")
-	return &For{Pos: pos, Name: n.Text, NamePos: n.Pos, Items: items}
+	loop := &For{Pos: pos, Pattern: pattern, NamePos: pattern.Position(), Items: items}
+	switch pattern := pattern.(type) {
+	case *VariantPat:
+		loop.Name = pattern.Path[0]
+	case *WildcardPat:
+		loop.Name = "_"
+	}
+	return loop
 }

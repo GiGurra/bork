@@ -1,0 +1,2 @@
+fn erase(source: Seq[Int] uses io): Seq[(Int, Int)] { source.indexed() }
+fn main() { _ = erase(generate[Int] { println("latent"); yield 1 }) }

@@ -55,6 +55,9 @@ func EditorInlays(info *Info, file *syntax.File, from *Package, options EditorIn
 		for _, pat := range info.tuplePats {
 			addPattern(pat)
 		}
+		for _, pat := range info.loopPats {
+			addPattern(pat)
+		}
 	}
 	if options.Parameters {
 		for call, instance := range info.instances {

@@ -66,6 +66,12 @@ func (p *deriveExpansion) descriptorType(name string, owner Type) Type {
 
 func (p *deriveExpansion) metadataType(value any) Type {
 	switch value := value.(type) {
+	case shapeTuple:
+		elems := make([]Type, len(value))
+		for i, item := range value {
+			elems[i] = p.metadataType(item)
+		}
+		return tupleType(elems)
 	case metadataList:
 		if value.element != nil {
 			return &List{Elem: value.element}

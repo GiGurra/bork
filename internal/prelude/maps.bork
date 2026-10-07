@@ -77,6 +77,11 @@ fn (m: Map[K, V]) entries[K: Eq, V](): List[Entry[K, V]] unsafe go {
   return out
 }
 
+// Lists key/value tuples in the map's traversal order.
+fn (m: Map[K, V]) pairs[K: Eq, V](): List[(K, V)] {
+  m.entries().map(entry => (entry.key, entry.value))
+}
+
 // Adds entries from b; b's values replace this map's values for shared keys.
 fn (a: Map[K, V]) merge[K: Eq, V](b: Map[K, V]): Map[K, V] unsafe go {
   out := a

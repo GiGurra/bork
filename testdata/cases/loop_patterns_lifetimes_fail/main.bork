@@ -1,0 +1,15 @@
+type Handle = resource
+fn open(s: Scope): Handle unsafe go { return Handle{handle: nil, owner:s.Own(func(){})} }
+fn escaped(): Handle {
+  scope s {
+    for (_, handle) in [(0, open(s))] { return handle }
+    panic("empty")
+  }
+}
+fn escapedIndexed(): Handle {
+  scope s {
+    for (_, handle) in [open(s)].toSeq().indexed() { return handle }
+    panic("empty")
+  }
+}
+fn main() { _ = escaped(); _ = escapedIndexed() }

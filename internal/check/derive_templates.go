@@ -1,6 +1,7 @@
 package check
 
 import (
+	"maps"
 	"reflect"
 	"strconv"
 	"strings"
@@ -336,6 +337,9 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 		if _, runtime := value.(shapeRuntimeType); runtime {
 			return nil, false
 		}
+		if index, yes := value.(shapeIndex); yes {
+			return int64(index), ok
+		}
 		return value, ok
 	case *syntax.Selector:
 		if value, known := p.tagVariantLiteral(x); known {
@@ -356,6 +360,13 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 			return nil, false
 		}
 		switch value := value.(type) {
+		case shapeTuple:
+			index, err := strconv.Atoi(x.Name)
+			if err == nil && index >= 0 && index < len(value) {
+				return value[index], true
+			}
+			p.error(x.Pos, "tuple metadata has no position %s", x.Name)
+			return nil, false
 		case metadataChecked:
 			return p.checkedTagProperty(value, x.Name)
 		case metadataRecord:
@@ -477,6 +488,24 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 			return a || b, aok && bok
 		}
 	case *syntax.Call:
+		if selector, ok := x.Fun.(*syntax.Selector); ok && selector.Name == "indexed" {
+			if value, known := p.eval(selector.X); known {
+				if source, yes := value.(shapeSequence); yes {
+					if len(x.Args) != 0 || len(x.TypeArgs) != 0 {
+						p.error(x.Pos, "indexed takes no arguments")
+						return nil, false
+					}
+					if !p.charge(x.Pos, len(source.items)) {
+						return nil, false
+					}
+					items := make([]any, len(source.items))
+					for i, item := range source.items {
+						items[i] = shapeTuple{int64(i), item}
+					}
+					return shapeSequence{items: items, element: tupleType([]Type{Int, source.element})}, true
+				}
+			}
+		}
 		if value, known := p.namingCall(x); known {
 			return value, true
 		}
@@ -896,8 +925,10 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 	switch x.(type) {
 	case *syntax.Selector, *syntax.Ident, *syntax.Call:
 		if value, ok := p.eval(x); ok {
-			if _, identifier := x.(*syntax.Ident); identifier && !metadataValue(value) {
-				break
+			if id, identifier := x.(*syntax.Ident); identifier && !metadataValue(value) {
+				if _, staged := p.env[id.Name].(shapeIndex); !staged {
+					break
+				}
 			}
 			return p.literal(x.Position(), value)
 		}
@@ -921,38 +952,34 @@ func (p *deriveExpansion) iterate(loop *syntax.For, list bool) []syntax.Expr {
 		p.error(loop.Pos, "comptime for requires a compile-time shape sequence")
 		return nil
 	}
-	if p.names[loop.Name] {
-		p.error(loop.NamePos, "%s is already defined in an enclosing scope", loop.Name)
+	pattern := loop.Pattern
+	if pattern == nil {
+		if loop.Name == "_" {
+			pattern = &syntax.WildcardPat{Pos: loop.NamePos}
+		} else {
+			pattern = &syntax.VariantPat{Pos: loop.NamePos, Path: []string{loop.Name}}
+		}
+	}
+	names := map[string]diag.Pos{}
+	if !p.stagedIterationNames(pattern, sequence.element, names) {
 		return nil
 	}
-	p.names[loop.Name] = true
-	defer delete(p.names, loop.Name)
+	savedEnv, savedNames, savedOrigins := p.env, p.names, p.origins
+	p.env, p.names, p.origins = maps.Clone(p.env), maps.Clone(p.names), maps.Clone(p.origins)
 	if p.origins == nil {
 		p.origins = map[string]diag.Pos{}
 	}
-	savedOrigin, hadOrigin := p.origins[loop.Name]
-	p.origins[loop.Name] = loop.NamePos
-	defer func() {
-		if hadOrigin {
-			p.origins[loop.Name] = savedOrigin
-		} else {
-			delete(p.origins, loop.Name)
-		}
-	}()
-	saved, existed := p.env[loop.Name]
-	defer func() {
-		if existed {
-			p.env[loop.Name] = saved
-		} else {
-			delete(p.env, loop.Name)
-		}
-	}()
+	defer func() { p.env, p.names, p.origins = savedEnv, savedNames, savedOrigins }()
+	for name, pos := range names {
+		p.names[name] = true
+		p.origins[name] = pos
+	}
 	var result []syntax.Expr
 	for _, item := range items {
 		if !p.tick(loop.Pos) {
 			break
 		}
-		p.env[loop.Name] = item
+		p.bindStagedIteration(pattern, item)
 		if list {
 			element := loop.Body.Tail
 			if guard, ok := element.(*syntax.If); ok && guard.Comptime && guard.Else == nil {
@@ -1170,7 +1197,7 @@ func (c *checker) expandDeriveBodies() {
 
 func metadataValue(value any) bool {
 	switch value.(type) {
-	case shapeField, shapeVariant, shapeFact, shapePackageTag, shapeSequence, shapeEnum, Type:
+	case shapeField, shapeVariant, shapeFact, shapePackageTag, shapeSequence, shapeTuple, shapeEnum, Type:
 		return true
 	}
 	return false

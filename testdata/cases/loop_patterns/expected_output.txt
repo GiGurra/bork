@@ -1,0 +1,20 @@
+1 2
+b 2
+a 1
+a
+b
+0 one
+1 two
+start
+0 a
+start
+0 a
+next
+1 b
+end
+31
+1 positive
+2
+2
+10
+21

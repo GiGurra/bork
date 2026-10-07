@@ -110,7 +110,11 @@ func (c *checker) checkDeriveScopes(method *syntax.FuncDecl, localNames, typeNam
 				for _, init := range node.Init {
 					walk(reflect.ValueOf(init), inner)
 				}
-				bind(inner, node.Name, node.NamePos)
+				if node.Pattern != nil {
+					pattern(node.Pattern, inner)
+				} else {
+					bind(inner, node.Name, node.NamePos)
+				}
 				walk(reflect.ValueOf(node.Cond), inner)
 				runtimeLoopBody = savedLoopBody || !node.Comptime
 				walk(reflect.ValueOf(node.Body), inner)

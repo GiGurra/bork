@@ -288,6 +288,16 @@ func _seqfromList[T any](xs []T) _Seq[T] {
 func _seqmap[A, B any](source _Seq[A], f func(A) B) _Seq[B] {
 	return _Seq[B]{func(yield func(B) bool) { _seqRun(source, func(x A) bool { return yield(f(x)) }) }}
 }
+func _seqindexed[A, B any](source _Seq[A], pair func(int64, A) B) _Seq[B] {
+ return _Seq[B]{func(yield func(B) bool) {
+  var index int64
+  _seqRun(source, func(value A) bool {
+   result := pair(index, value)
+   index++
+   return yield(result)
+  })
+ }}
+}
 func _seqfilter[T any](source _Seq[T], f func(T) bool) _Seq[T] {
 	return _Seq[T]{func(yield func(T) bool) {
 		_seqRun(source, func(x T) bool {
@@ -363,6 +373,21 @@ func (g *gen) seqCall(e *check.SeqCall) ([]ast.Stmt, ast.Expr) {
 		g.goType(e.Type())
 		g.usesOptionHelpers = true
 		g.usesSeqFirst = true
+	}
+	if e.Op == "indexed" {
+		elem := e.Args[0].Type().(*check.Seq).Elem
+		pair := e.Type().(*check.Seq).Elem
+		types = []ast.Expr{g.goType(elem), g.goType(pair)}
+		makePair := &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{
+			{Names: []*ast.Ident{ast.NewIdent("index")}, Type: ast.NewIdent("int64")},
+			{Names: []*ast.Ident{ast.NewIdent("value")}, Type: g.goType(elem)},
+		}}, Results: &ast.FieldList{List: []*ast.Field{{Type: g.goType(pair)}}}}, Body: &ast.BlockStmt{List: []ast.Stmt{
+			&ast.ReturnStmt{Results: []ast.Expr{&ast.CompositeLit{Type: g.goType(pair), Elts: []ast.Expr{
+				&ast.KeyValueExpr{Key: name("0"), Value: ast.NewIdent("index")},
+				&ast.KeyValueExpr{Key: name("1"), Value: ast.NewIdent("value")},
+			}}}},
+		}}}
+		args = append(args, makePair)
 	}
 	if e.Op == "map" || e.Op == "flatMap" {
 		types = []ast.Expr{g.goType(e.Args[0].Type().(*check.Seq).Elem), g.goType(e.Type().(*check.Seq).Elem)}

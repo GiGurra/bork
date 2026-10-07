@@ -8,6 +8,8 @@ type File struct {
 	HeadParentheses []SourceSpan
 	// PatternTestOperators includes contextual is positions, including unfinished edits.
 	PatternTestOperators []diag.Pos
+	// IterationOperators marks the contextual in tokens of loop headers.
+	IterationOperators []diag.Pos
 	// ExpressionSpans retains parser ranges, including grouping, for compiler
 	// source queries and refactorings. One node can have several grouped spans.
 	ExpressionSpans []ExpressionSpan
@@ -538,6 +540,8 @@ type Yield struct {
 // binds the loop's header names and whose Post rebinds them for the
 // next iteration; Cond may then be nil.
 type For struct {
+	// Pattern is the iteration binding; Name/NamePos remain for simple names.
+	Pattern       Pattern
 	Comptime      bool
 	Comprehension bool
 	Pos           diag.Pos

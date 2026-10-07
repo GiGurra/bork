@@ -86,6 +86,29 @@ func (c *checker) tupleBinding(s *syntax.TupleBinding) Type {
 	if t == Invalid {
 		return Ok
 	}
+	pat := c.bindingPattern(s.Pattern, t, true)
+	c.info.tuplePats[s] = pat
+	if c.info.tupleBindingValues == nil {
+		c.info.tupleBindingValues = map[any]syntax.Expr{}
+	}
+	var source func(*Pat, syntax.Expr)
+	source = func(p *Pat, value syntax.Expr) {
+		if p == nil {
+			return
+		}
+		if p.bindNode != nil {
+			c.info.tupleBindingValues[p.bindNode] = value
+		}
+		for _, field := range p.Fields {
+			source(field.Pat, &syntax.Selector{Pos: s.Pos, X: value, Name: field.Name})
+		}
+	}
+	source(pat, s.Value)
+	return Ok
+}
+
+// bindingPattern checks the irrefutable patterns shared by bindings and loops.
+func (c *checker) bindingPattern(pattern syntax.Pattern, t Type, rebind bool) *Pat {
 	names := map[string]bool{}
 	var valid func(syntax.Pattern, Type) bool
 	valid = func(p syntax.Pattern, t Type) bool {
@@ -122,31 +145,14 @@ func (c *checker) tupleBinding(s *syntax.TupleBinding) Type {
 		c.errorf(p.Position(), "tuple binding requires names, wildcards or nested tuple patterns")
 		return false
 	}
-	if !valid(s.Pattern, t) {
-		return Ok
+	if !valid(pattern, t) {
+		return nil
 	}
 	saved := c.tupleBindingMode
-	c.tupleBindingMode = true
-	pat := c.pattern(s.Pattern, t)
+	c.tupleBindingMode = rebind
+	pat := c.pattern(pattern, t)
 	c.tupleBindingMode = saved
-	c.info.tuplePats[s] = pat
-	if c.info.tupleBindingValues == nil {
-		c.info.tupleBindingValues = map[any]syntax.Expr{}
-	}
-	var source func(*Pat, syntax.Expr)
-	source = func(p *Pat, value syntax.Expr) {
-		if p == nil {
-			return
-		}
-		if p.bindNode != nil {
-			c.info.tupleBindingValues[p.bindNode] = value
-		}
-		for _, field := range p.Fields {
-			source(field.Pat, &syntax.Selector{Pos: s.Pos, X: value, Name: field.Name})
-		}
-	}
-	source(pat, s.Value)
-	return Ok
+	return pat
 }
 
 func (l *lowerer) tupleBinding(s *syntax.TupleBinding) []Stmt {
@@ -157,8 +163,20 @@ func (l *lowerer) tupleBinding(s *syntax.TupleBinding) []Stmt {
 	temp.Let = let
 	var out []Stmt
 	out = append(out, let)
+	out = append(out, l.patternBindings(l.info.tuplePats[s], &VarRef{expr: expr{pos: s.Pos, typ: temp.Type}, Var: temp})...)
+	if len(out) == 1 {
+		temp.Unused = true
+	}
+	return out
+}
+
+func (l *lowerer) patternBindings(pattern *Pat, value Expr) []Stmt {
+	var out []Stmt
 	var bind func(*Pat, Expr)
 	bind = func(p *Pat, value Expr) {
+		if p == nil {
+			return
+		}
 		if p.Bind != "" {
 			v := &Var{Name: p.Bind, Pos: bindPos(p.bindNode), Type: p.BindType, Kind: VarLet, Unused: l.info.unused[p.bindNode]}
 			l.nameRebinding(v, p.bindNode)
@@ -171,13 +189,10 @@ func (l *lowerer) tupleBinding(s *syntax.TupleBinding) []Stmt {
 		for _, field := range p.Fields {
 			rec := value.Type().(*Record)
 			f := rec.Field(field.Name)
-			bind(field.Pat, &Select{expr: expr{pos: s.Pos, typ: f.Type}, X: value, Name: f.Name, Field: f})
+			bind(field.Pat, &Select{expr: expr{pos: value.Pos(), typ: f.Type}, X: value, Name: f.Name, Field: f})
 		}
 	}
-	bind(l.info.tuplePats[s], &VarRef{expr: expr{pos: s.Pos, typ: temp.Type}, Var: temp})
-	if len(out) == 1 {
-		temp.Unused = true
-	}
+	bind(pattern, value)
 	return out
 }
 

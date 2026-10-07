@@ -368,11 +368,17 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 			elem = t.Elem
 		}
 		v := &Var{Name: x.Name, Pos: x.NamePos, Type: elem, Kind: VarLoop, Source: &VarSource{Subject: items, Path: ".[]"}}
-		if x.Name == "_" {
+		if x.Name == "_" || x.Name == "" {
 			v.GoName = fmt.Sprintf("_discard_loop_%d_%d", x.NamePos.Line, x.NamePos.Col)
 		}
 		l.vars[x] = v
-		return l.loop(x, &For{expr: at, Var: v, Items: items})
+		var bindings []Stmt
+		if pattern := l.info.loopPats[x]; pattern != nil {
+			bindings = l.patternBindings(pattern, &VarRef{expr: expr{pos: x.NamePos, typ: elem}, Var: v})
+		}
+		loop := l.loop(x, &For{expr: at, Var: v, Items: items})
+		loop.Body.Stmts = append(bindings, loop.Body.Stmts...)
+		return loop
 	case *syntax.LoopControl:
 		return l.loopControl(x, at)
 	case *syntax.StaticPartsLit:

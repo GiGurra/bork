@@ -100,3 +100,24 @@ func TestSimplifyHeadsInsideInterpolation(t *testing.T) {
 		t.Fatalf("not idempotent: %s, %v", again, err)
 	}
 }
+
+func TestLoopPatternFormattingAndSimplification(t *testing.T) {
+	for _, tc := range []struct{ source, want string }{
+		{"for (key,value) in [pair] {}", "for (key, value) in [pair] {}"},
+		{"for ((key,value) in [pair]) {}", "for (key, value) in [pair] {}"},
+		{"for ((key,_),(value,)) in entries {}", "for ((key, _), (value,)) in entries {}"},
+	} {
+		source := []byte("fn f(){" + tc.source + "}")
+		got, err := SourceWithOptions("patterns.bork", source, Options{Simplify: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(got), tc.want) {
+			t.Fatalf("got %s; want %s", got, tc.want)
+		}
+		again, err := SourceWithOptions("patterns.bork", got, Options{Simplify: true})
+		if err != nil || string(again) != string(got) {
+			t.Fatalf("not idempotent: %s %v", again, err)
+		}
+	}
+}

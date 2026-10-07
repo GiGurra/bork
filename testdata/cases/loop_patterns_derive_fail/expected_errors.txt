@@ -1,0 +1,1 @@
+main.bork:6:70: shape descriptor has no member noSuchMember

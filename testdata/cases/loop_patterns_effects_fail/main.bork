@@ -1,0 +1,7 @@
+fn effects(source: Seq[Int] uses io) {
+  for (_, _) in source.indexed() {}
+}
+fn main() {
+  source = generate[Int] { println("latent"); yield 1 }
+  effects(source)
+}

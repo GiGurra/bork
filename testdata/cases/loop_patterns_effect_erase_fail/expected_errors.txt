@@ -1,0 +1,1 @@
+main.bork:1:55: function erase returns Seq[(Int, Int)], but its body produces Seq[(Int, Int)] uses io

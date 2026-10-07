@@ -266,3 +266,11 @@ test('bare control heads do not become metadata tag groups', () => {
     has(ls, row, keyword, 'keyword.control.bork');
   }
 });
+
+test('loop tuple patterns keep expression scopes', () => {
+  const ls = tokenize('for (index, (key, value)) in entries.indexed() { println(index, key, value) }\ncomptime for (index, field) in shape.fields[T]().indexed() {}');
+  for (const line of [0, 1]) {
+    has(ls, line, 'for', 'keyword.control.bork');
+    assert.ok(!scopes(ls, line, 'index').includes('entity.name.namespace.bork'));
+  }
+});
