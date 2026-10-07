@@ -1214,11 +1214,11 @@ on the reconstructed value. Reusable command options keep independent overlays;
 partial completion still reports omitted leaves as Missing.
 
 Defaults reach the CLI through the selected decoder's optional
-[`codec.DefaultInput`](codec.md#decoder-metadata) metadata and each record field's
+[`codec.DefaultInput[T]`](codec.md#decoder-metadata) metadata and each record field's
 lazy `defaultInput` provider. Standard and derived decoders supply this metadata
 without an Encode bound. A custom decoder inside a parent default must publish
-its own typed input conversion; missing or incompatible providers produce a
-field-path metadata error. Flattened parent input must be an object, or null for
+its own typed input conversion. Provider types are checked at compile time;
+missing providers produce a field-path metadata error. Flattened parent input must be an object, or null for
 an optional record. Presentation text from DefaultSchema is never parsed as input.
 Custom selected decoders without record metadata retain their advertised input
 kind, such as literal strings or whole JSON input.
