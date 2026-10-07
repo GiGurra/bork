@@ -150,6 +150,9 @@ type deriveExpansion struct {
 	patternTest bool
 	// layout also evaluates literals of the shape layout records.
 	layout bool
+	// comptimeReads holds the template bindings that compile-time code has
+	// read, by position.
+	comptimeReads map[diag.Pos]bool
 }
 
 func (p *deriveExpansion) error(pos diag.Pos, format string, args ...any) {
@@ -333,6 +336,10 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 		value, ok := p.env[x.Name]
 		if origin, present := p.origins[x.Name]; ok && present {
 			p.c.noteDeriveSource(x.Pos, x.Name, origin, "variable")
+			if p.comptimeReads == nil {
+				p.comptimeReads = map[diag.Pos]bool{}
+			}
+			p.comptimeReads[origin] = true
 		}
 		if _, runtime := value.(shapeRuntimeType); runtime {
 			return nil, false
@@ -743,8 +750,10 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 		}
 		defer func() { p.env = saved; p.names = savedNames; p.origins = savedOrigins }()
 		out := &syntax.Block{Pos: x.Pos, End: x.End}
+		emitted := map[*syntax.Binding]*syntax.Binding{}
 		for _, stmt := range x.Stmts {
 			if binding, ok := stmt.(*syntax.Binding); ok && !binding.Lazy && binding.AsyncScope == nil {
+				delete(p.comptimeReads, binding.Pos)
 				if value, known := p.eval(binding.Value); known {
 					if _, exists := p.env[binding.Name]; exists {
 						p.error(binding.Pos, "%s is already defined in an enclosing compile-time scope", binding.Name)
@@ -766,6 +775,11 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 			}
 			expanded := p.clone(reflect.ValueOf(stmt)).Interface().(syntax.Stmt)
 			out.Stmts = append(out.Stmts, expanded)
+			if binding, ok := stmt.(*syntax.Binding); ok {
+				if runtime, yes := expanded.(*syntax.Binding); yes {
+					emitted[binding] = runtime
+				}
+			}
 			if binding, ok := expanded.(*syntax.Binding); ok {
 				if call, yes := binding.Value.(*syntax.Call); yes {
 					if operation := p.c.info.shapeBuildCalls[call]; operation != nil && operation.operation == "create" {
@@ -779,6 +793,16 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 			}
 		}
 		out.Tail = p.expr(x.Tail)
+		// A runtime binding that compile-time code read is used, even when
+		// expansion folded every read away.
+		for binding, runtime := range emitted {
+			if p.comptimeReads[binding.Pos] {
+				if p.c.info.comptimeReadBindings == nil {
+					p.c.info.comptimeReadBindings = map[*syntax.Binding]bool{}
+				}
+				p.c.info.comptimeReadBindings[runtime] = true
+			}
+		}
 		return out
 	case *syntax.Is:
 		value := p.expr(x.X)

@@ -1,0 +1,27 @@
+import "bork/shape"
+
+class Kind[T] { fn kind(): (String, String, String) }
+
+// Bindings read only by compile-time code are used.
+derive instance kind[T]: Kind[T] {
+  fn kind(): (String, String, String) {
+    names: List[String] = comptime for { field in shape.fields[T]() } yield field.name
+    sizes = [1, 2]
+    count = shape.fields[T]().length()
+    a = comptime if (names.isEmpty()) { "empty" } else { "fields" }
+    b = comptime match (sizes.length()) {
+      2 => "two"
+      _ => "other"
+    }
+    c = comptime if (count == 2) { "pair" } else { "other" }
+    (a, b, c)
+  }
+}
+
+type Row = { name: String, age: Int } derive (Kind)
+type Empty = {} derive (Kind)
+
+fn main() {
+  println(kind[Row]())
+  println(kind[Empty]())
+}

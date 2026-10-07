@@ -1,0 +1,15 @@
+import "bork/shape"
+
+class Kind[T] { fn kind(): String }
+
+// A binding that nothing reads, at runtime or compile time, is still unused.
+derive instance kind[T]: Kind[T] {
+  fn kind(): String {
+    names: List[String] = comptime for { field in shape.fields[T]() } yield field.name
+    "kind"
+  }
+}
+
+type Row = { name: String, age: Int } derive (Kind)
+
+fn main() { println(kind[Row]()) }

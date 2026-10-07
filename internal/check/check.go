@@ -427,6 +427,9 @@ type Info struct {
 	// unused holds bindings whose value is never read: *syntax.Binding,
 	// or the pattern node that bound the name.
 	unused map[any]bool
+	// comptimeReadBindings holds expanded derive template bindings that
+	// compile-time code read; they are not reported as unused.
+	comptimeReadBindings map[*syntax.Binding]bool
 	// rebindings records the previous declaration replaced by a sequential binding.
 	rebindings map[any]any
 	// Carried rebinding (see carried.go): the names each loop carries,

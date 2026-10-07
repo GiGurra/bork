@@ -1,0 +1,1 @@
+main.bork:13:39: binding names is never read; discard explicitly with _ (derive template at main.bork:8:5)
