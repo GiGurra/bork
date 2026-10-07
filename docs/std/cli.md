@@ -454,6 +454,45 @@ bound. The decoder validates supplied values and final sibling-dependent facts;
 only a proven immutable record reaches the handler. Help never reads config
 files or invokes a handler. See [entry points](#entry-points) for result handling.
 
+## Configuration discovery
+
+`FindConfig(appName, searchPaths = []) uses io` opts into discovery and returns
+`Option[String] | cli.Error`. Without search paths, it searches `./<appName>.*`,
+`~/.config/<appName>/config.*`, then `/etc/<appName>/config.*`. The home directory
+comes from the operating system (`HOME` on Unix); `XDG_CONFIG_HOME` is not used.
+Within each directory, the extension order is `.json`, `.yaml`, `.yml`.
+The first regular file wins; discovery does not merge multiple matches or read
+file contents. Directories are skipped, symlinks to regular files are followed,
+missing candidates give `None`, and other filesystem errors give `cli.Error`.
+The app name must be a nonempty file name without slashes, other than `.` or `..`.
+
+Explicit search paths replace the defaults, in priority order. The first path
+uses `<appName>.*`; subsequent paths use `config.*`. To load the match, pass it in
+`configFiles`. For example:
+
+```bork
+import "bork/cli"
+import "bork/codec"
+use codec.Defaults
+
+type Options = { port: Int = 8080 } derive (codec.Decode)
+
+fn main() {
+  match (cli.FindConfig("app")) {
+    Option.Some(path) => println(cli.Parse[Options]("app", "Example", [], configFiles: [path]))
+    Option.None => println(cli.Parse[Options]("app", "Example", []))
+    error: cli.Error => println(error)
+  }
+}
+```
+
+Place the discovered path before explicit overlay files in `configFiles` to
+keep those overlays higher priority. Environment and command-line inputs still
+win over every file. `Parse` and `Run` never discover files automatically.
+Calling `FindConfig` before parsing performs filesystem access even for help;
+applications that require help without filesystem access can check for help
+before opting into discovery.
+
 ## Configuration files
 
 `configFiles` accepts JSON and YAML files using canonical codec wire keys

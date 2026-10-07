@@ -1,0 +1,31 @@
+// FindConfig opts into conventional config discovery. Search paths are ordered
+// highest first: the first uses appName, later paths use "config". Within each
+// path JSON precedes YAML (.yaml, then .yml). No match is None.
+fn FindConfig(appName: String, searchPaths: List[String] = []) uses io: Option[String] | Error unsafe go {
+  import "os"
+  import "path/filepath"
+  import "strings"
+  failure := func(path, message string) Error { return Error{errors: []codec.DecodeError{{path: path, message: message}}} }
+  if appName == "" || appName == "." || appName == ".." || strings.ContainsAny(appName, "/\\") {
+    return failure(appName, "config app name must be a nonempty file name")
+  }
+  paths := append([]string{}, searchPaths...)
+  if len(paths) == 0 {
+    home, err := os.UserHomeDir()
+    if err != nil { return failure(appName, err.Error()) }
+    paths = []string{".", filepath.Join(home, ".config", appName), filepath.Join("/etc", appName)}
+  }
+  for i, dir := range paths {
+    base := "config"
+    if i == 0 { base = appName }
+    for _, ext := range []string{".json", ".yaml", ".yml"} {
+      candidate := filepath.Join(dir, base+ext)
+      info, err := os.Stat(candidate)
+      if os.IsNotExist(err) { continue }
+      if err != nil { return failure(candidate, err.Error()) }
+      if !info.Mode().IsRegular() { continue }
+      return Option_Some[string]{E0: candidate}
+    }
+  }
+  return Option_None[string]{}
+}
