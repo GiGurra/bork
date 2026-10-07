@@ -109,6 +109,52 @@ class Encode[T] {
   fn encode(x: T): Value
 }
 
+// RecordEncoding completes omitted object fields for consumers that require
+// every column. Only a missing canonical wire name invokes the callback.
+type RecordEncoding = { omittedField: (String) => Option[Value] }
+
+// Encoding follows the selected Encode instance; custom encoders opt in by
+// publishing RecordEncoding metadata explicitly.
+fn Encoding[T: Encode](): Option[RecordEncoding] {
+  match (shape.metadata[T, Encode, RecordEncoding]()) {
+    Option.Some(info) => Option.Some(info)
+    Option.None => shape.metadata[T, Encode, Option[RecordEncoding]]().getOr(Option.None)
+  }
+}
+
+// RecordEncodingInfo does not evaluate defaults during metadata lookup.
+derive fn RecordEncodingInfo[T](): Option[RecordEncoding] {
+  comptime match (shape.kind[T]()) {
+    shape.Record => {
+      comptime if (shape.positional[T]()) { Option.None } else {
+        Option.Some(RecordEncoding { omittedField: name => EncodeOmittedField[T](name) })
+      }
+    }
+    _ => Option.None
+  }
+}
+
+// Omission proves the input is None or equal to its pure declared default.
+// Encode just that field, with the same selected dictionary as object encoding.
+derive fn EncodeOmittedField[T](name: String): Option[Value] {
+  _ = name
+  comptime for (field in shape.fields[T]()) {
+    comptime if (!field.computed) {
+      comptime if (FieldOmit[T](field) != Omit.Never) {
+        if (name == FieldWireName[T](field)) {
+          comptime if (field.hasDefault) {
+            return Option.Some(encode[field.Type](field.default()))
+          } else {
+            absent: field.Type = Option.None
+            return Option.Some(encode[field.Type](absent))
+          }
+        }
+      }
+    }
+  }
+  Option.None
+}
+
 fn decodeMismatch(expected: String, json: Value): DecodeError {
   DecodeError { path: "", message: s"expected $expected, found ${valueKind(json)}" }
 }
@@ -314,6 +360,7 @@ instances Defaults { decodeInt8, encodeInt8, decodeInt16, encodeInt16, decodeInt
 // Structural encoding is an ordinary source derivation. Positional payloads
 // preserve slot order; named payloads preserve declaration-order object fields.
 derive instance encodeShape[T]: Encode[T] {
+  metadata Option[RecordEncoding] = RecordEncodingInfo[T]()
   fn encode(x: T): Value {
     comptime match (shape.kind[T]()) {
       shape.Record => {

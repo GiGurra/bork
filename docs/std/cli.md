@@ -545,6 +545,45 @@ fn main() {
 Source-aware parsing of persistent root flags through `RunRoot` is tracked
 separately; this API resolves one options record.
 
+## Reloading configuration
+
+`Reload[T: codec.Decode](name, description, args, flags = [], configFiles = [],
+settings = .{}) uses io` returns `cli.Resolved[T] | cli.Error | cli.Help`.
+It reruns `ParseResolved` against the current files and environment, using the
+arguments, metadata and settings supplied to this call. File overlays, selected
+config files, env/flag precedence, and both field and whole-record validation
+run again. The returned snapshot contains fresh values, winning sources and
+warnings. No previous snapshot is modified, including when reload fails.
+
+Keep the original arguments and parser settings if flags should stay fixed
+across reloads; pass different arguments to change them. Discovery is opt-in:
+rerun `FindConfig` explicitly if the selected path should change. `Reload` does
+not install a file watcher, signal handler, or mutable configuration cell; the
+application chooses when to call it and when to adopt a successful snapshot.
+Help returns `cli.Help` without reading config files as in ordinary parsing.
+
+```bork
+import "bork/cli"
+import "bork/codec"
+import "bork/process"
+use codec.Defaults
+
+type Options = { port: Int = 8080 } derive (codec.Decode)
+
+fn main() {
+  arguments = process.Args()
+  initial = cli.ParseResolved[Options]("app", "Example", arguments)
+  println(initial)
+  // A caller can invoke this later when it wants to refresh configuration.
+  refreshed = cli.Reload[Options]("app", "Example", arguments)
+  match (refreshed) {
+    resolved: cli.Resolved[Options] => println(resolved.value)
+    error: cli.Error => println(error)
+    help: cli.Help => println(help.text)
+  }
+}
+```
+
 ## Dumping effective options
 
 `Dump[T: codec.Encode](value, format: cli.ConfigFormat = .Json)` returns

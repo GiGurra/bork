@@ -1,0 +1,157 @@
+import "bork/codec"
+import "bork/encoding"
+import "example/csvomit/optional"
+use codec.Defaults
+use customEncode
+use customDecode
+use tokenEncode
+use tokenDecode
+use missingEncode
+use duplicateEncode
+use duplicateDecode
+
+type Row = {
+  optionalValue: Option[Int] codec { omit: codec.Omit.None, name: "maybe" }
+  count: Int = 3 codec { omit: codec.Omit.Default }
+  optionalDefault: Option[Int] = Option.None codec { omit: codec.Omit.NoneOrDefault }
+  someDefault: Option[Int] = Option.Some(4) codec { omit: codec.Omit.Default }
+  numbers: List[Int] = [] codec { omit: codec.Omit.Default }
+  nested: Token = Token { text: "default" } codec { omit: codec.Omit.Default }
+  unrelated: Token = Token { text: "unused" }
+} derive (codec.Encode, codec.Decode)
+
+type Token = { text: String }
+instance tokenEncode: codec.Encode[Token] {
+  fn encode(value: Token): codec.Value {
+    assert(value.text != "unused")
+    codec.Value.String { value: "encoded:" + value.text }
+  }
+}
+instance tokenDecode: codec.Decode[Token] {
+  metadata codec.FieldSchema = codec.FieldSchema { kind: "string", optional: false }
+  fn decode(input: codec.Value): Token | codec.DecodeError {
+    match (codec.decode[String](input)) {
+      text: String => Token { text: text.replaceAll("encoded:", "") }
+      error: codec.DecodeError => error
+    }
+  }
+}
+
+type Custom = { text: String }
+instance customEncode: codec.Encode[Custom] {
+  metadata codec.RecordEncoding = codec.RecordEncoding { omittedField: name => {
+    assertEqual(name, "wire")
+    Option.Some(codec.Value.String { value: "custom-default" })
+  } }
+  fn encode(value: Custom): codec.Value {
+    if (value.text == "extra") {
+      return codec.Value.Object { fields: [codec.Field { name: "extra", value: codec.Value.Null }] }
+    }
+    if (value.text == "duplicate") {
+      return codec.Value.Object { fields: [codec.Field { name: "wire", value: codec.Value.Null }, codec.Field { name: "wire", value: codec.Value.Null }] }
+    }
+    if (value.text == "custom-default") { codec.Value.Object { fields: [] } } else { codec.Value.Object { fields: [codec.Field { name: "wire", value: codec.Value.String { value: value.text } }] } }
+  }
+}
+instance customDecode: codec.Decode[Custom] {
+  metadata codec.RecordSchema = codec.RecordSchema { fields: [codec.RecordField {
+    name: "text", wireName: "wire", typeName: "String", doc: "", facts: [], kind: "string", optional: false,
+    hasDefault: true, defaultValue: Option.None, validate: input => Ok
+  }] }
+  fn decode(input: codec.Value): Custom | codec.DecodeError {
+    match (input) {
+      codec.Value.Object { fields } => match (fields.head()) {
+        Option.Some(field) => match (codec.decode[String](field.value)) {
+          text: String => Custom { text: text }
+          error: codec.DecodeError => error
+        }
+        Option.None => Custom { text: "custom-default" }
+      }
+      _ => codec.DecodeError { path: "", message: "expected object" }
+    }
+  }
+}
+
+type Missing = { value: Option[Int] } derive (codec.Decode)
+instance missingEncode: codec.Encode[Missing] {
+  fn encode(value: Missing): codec.Value { codec.Value.Object { fields: [] } }
+}
+
+fn round[T: codec.Encode + codec.Decode + Eq](values: List[T]): String {
+  match (encoding.EncodeCsv(values)) {
+    text: String => {
+      match (encoding.DecodeCsv[T](text)) {
+        decoded: List[T] => assertEqual(decoded, values)
+        _ => assert(false)
+      }
+      text
+    }
+    _ => { assert(false); "" }
+  }
+}
+
+test "omitted None and defaults keep every column and selected field codec" {
+  text = round([
+    Row { optionalValue: Option.None, unrelated: Token { text: "9" } },
+    Row { optionalValue: Option.Some(1), count: 5, optionalDefault: Option.Some(2), someDefault: Option.None, numbers: [1, 2], nested: Token { text: "other" }, unrelated: Token { text: "8" } }
+  ])
+  assertEqual(text, "maybe,count,optionalDefault,someDefault,numbers,nested,unrelated\n,3,,4,[],encoded:default,encoded:9\n1,5,2,,\"[1,2]\",encoded:other,encoded:8\n")
+}
+test "omitted None honors a custom Option codec" {
+  optional.Check()
+}
+test "custom Encode completion follows custom Decode schema" {
+  assertEqual(round([Custom { text: "custom-default" }, Custom { text: "present" }]), "wire\ncustom-default\npresent\n")
+}
+test "custom Encode without completion still rejects omissions" {
+  match (encoding.EncodeCsv([Missing { value: Option.None }])) {
+    error: encoding.CsvError => { assertEqual(error.column, "value"); assert(error.message.contains("Omit.Never")) }
+    _ => assert(false)
+  }
+}
+test "completion does not hide extra or duplicate encoded fields" {
+  match (encoding.EncodeCsv([Custom { text: "extra" }])) {
+    error: encoding.CsvError => assertEqual(error.message, "encoded fields do not match the record schema")
+    _ => assert(false)
+  }
+  match (encoding.EncodeCsv([Custom { text: "duplicate" }])) {
+    error: encoding.CsvError => { assertEqual(error.column, "wire"); assertEqual(error.message, "duplicate encoded field") }
+    _ => assert(false)
+  }
+}
+test "derived completion refuses fields without omission and unknown wire names" {
+  match (codec.Encoding[Row]()) {
+    Option.Some(info) => {
+      match (info.omittedField("unrelated")) { Option.None => {}, _ => assert(false) }
+      match (info.omittedField("optionalValue")) { Option.None => {}, _ => assert(false) }
+    }
+    Option.None => assert(false)
+  }
+  match (codec.Encoding[Int]()) { Option.None => {}, _ => assert(false) }
+}
+type DuplicateSchema = { value: String }
+instance duplicateEncode: codec.Encode[DuplicateSchema] {
+  metadata codec.RecordEncoding = codec.RecordEncoding { omittedField: name => Option.Some(codec.Value.String { value: "default" }) }
+  fn encode(value: DuplicateSchema): codec.Value { codec.Value.Object { fields: [] } }
+}
+instance duplicateDecode: codec.Decode[DuplicateSchema] {
+  metadata codec.RecordSchema = codec.RecordSchema { fields: [duplicateField(), duplicateField()] }
+  fn decode(input: codec.Value): DuplicateSchema | codec.DecodeError { DuplicateSchema { value: "default" } }
+}
+fn duplicateField(): codec.RecordField {
+  codec.RecordField { name: "value", typeName: "String", doc: "", facts: [], kind: "string", optional: false,
+    hasDefault: true, defaultValue: Option.None, validate: input => Ok }
+}
+test "completion cannot create duplicate custom schema headers" {
+  match (encoding.EncodeCsv([DuplicateSchema { value: "default" }])) {
+    error: encoding.CsvError => { assertEqual(error.row, 1); assertEqual(error.column, "value"); assertEqual(error.message, "duplicate schema field name") }
+    _ => assert(false)
+  }
+}
+type Positional = (Int, Int) derive (codec.Encode)
+type Sealed = sealed { One, Two { value: Int } } derive (codec.Encode)
+test "positional and sealed encoders do not publish record completion" {
+  match (codec.Encoding[Positional]()) { Option.None => {}, _ => assert(false) }
+  match (codec.Encoding[Sealed]()) { Option.None => {}, _ => assert(false) }
+}
+fn main() {}

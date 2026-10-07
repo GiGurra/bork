@@ -195,6 +195,13 @@ invoke it. This replaces the old `_borkDecodeFields` bridge and its erased
 `func() any` default and decoder callbacks. Hand-written instances may publish
 `metadata codec.RecordSchema = ...` to opt into the same typed adapter contract.
 
+For CSV output, `codec.Encoding[T]()` independently exposes optional
+`codec.RecordEncoding` metadata from the selected Encode instance. Its
+`omittedField(canonicalWireName)` callback returns `Option[codec.Value]` and is
+called only for missing encoded columns. Derived encoders supply typed
+None/default encodings; hand-written encoders must opt in explicitly. Decode
+schemas do not acquire Encode requirements. See [codec](std/codec.md).
+
 ## Standard Go dependencies
 
 A standard package that imports third-party Go libraries declares their pinned

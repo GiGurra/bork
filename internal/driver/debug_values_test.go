@@ -161,6 +161,7 @@ func TestDebugAdapterEarlyExit(t *testing.T) {
 
 func TestDebugDAPPassthrough(t *testing.T) {
 	for _, payload := range []string{
+		`{"seq":6,"type":"request","command":"evaluate","arguments":{"expression":"generated_name + 1","frameId":100}}`,
 		`{"seq":1,"type":"response","command":"variables","success":true,"body":{"variables":[{"name":"_t1","value":"main.Shape_Circle {radius: 2}"}]}}`,
 		`{"seq":2,"type":"event","event":"output","body":{"output":"main.Shape_Circle {radius: 2}"}}`,
 		`{"seq":5,"type":"event","event":"stopped","body":{"reason":"breakpoint","threadId":1}}`,
@@ -174,7 +175,7 @@ func TestDebugDAPPassthrough(t *testing.T) {
 			}
 			r := dapRelay{metadata: metadata, references: map[float64]gen.DebugType{1: {Name: "stale", Kind: "record"}}}
 			var output bytes.Buffer
-			err := r.copy(&output, strings.NewReader(frame), false, io.Discard)
+			err := r.copy(&output, strings.NewReader(frame), strings.Contains(payload, `"type":"request"`), io.Discard)
 			if strings.Contains(payload, `"event":"stopped"`) && len(r.references) != 0 {
 				t.Fatal("stop left stale variable handles")
 			}

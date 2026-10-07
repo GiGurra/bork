@@ -24,6 +24,26 @@ func ParseScript(path string, src []byte, diags *diag.List) *File {
 	return parseMode(path, string(src), toks, comments, diags, false, true)
 }
 
+// ParseExpression parses exactly one expression, for compiler-backed queries.
+func ParseExpression(path string, src []byte, diags *diag.List) (out Expr) {
+	toks, comments := Lex(path, src, diags)
+	var spans []ExpressionSpan
+	var operators []diag.Pos
+	p := &parser{toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, spans: &spans, spanSeen: map[Expr][]SourceSpan{}, patternTestOperators: &operators}
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(bailout); !ok {
+				panic(r)
+			}
+			out = nil
+		}
+	}()
+	out = p.expr()
+	p.skipSemis()
+	p.expect(EOF, "after the expression")
+	return out
+}
+
 func parse(path, src string, toks []Token, comments []Comment, diags *diag.List, compiler bool) *File {
 	return parseMode(path, src, toks, comments, diags, compiler, strings.HasPrefix(src, "#!"))
 }
