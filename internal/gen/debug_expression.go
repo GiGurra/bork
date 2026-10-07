@@ -23,24 +23,61 @@ func DebugExpression(source string, metadata *DebugMap, site diag.Pos, locals []
 	return text, err
 }
 
-// DebugExpressionTyped also returns the checked scalar Go type for presentation.
+// DebugEvaluation contains compiler-owned reads. A predicate is evaluated first
+// when the result depends on bounds; the relay only transports its Bool result.
+type DebugEvaluation struct {
+	Expression      string
+	Type            string
+	Predicate       string
+	present, absent string
+}
+
+// Select resolves a bounds predicate without exposing branching semantics to
+// the DAP relay. Delve never evaluates the out-of-bounds element expression.
+func (e *DebugEvaluation) Select(result string) error {
+	switch result {
+	case "true":
+		e.Expression = e.present
+	case "false":
+		e.Expression = e.absent
+	default:
+		return fmt.Errorf("debug expression: invalid bounds response from debugger")
+	}
+	e.Predicate = ""
+	return nil
+}
+
+// DebugExpressionTyped returns a single read and its checked Go type.
 func DebugExpressionTyped(source string, metadata *DebugMap, site diag.Pos, locals []check.DebugLocal) (string, string, error) {
+	plan, err := DebugExpressionPlan(source, metadata, site, locals)
+	if err != nil {
+		return "", "", err
+	}
+	if plan.Predicate != "" {
+		return "", "", fmt.Errorf("debug expression: collection access requires staged evaluation")
+	}
+	return plan.Expression, plan.Type, nil
+}
+
+// DebugExpressionPlan checks and lowers read-only expressions, retaining bounds
+// checks separately when one Delve expression cannot preserve bork semantics.
+func DebugExpressionPlan(source string, metadata *DebugMap, site diag.Pos, locals []check.DebugLocal) (*DebugEvaluation, error) {
 
 	var bindings *DebugBindings
 	for i := range metadata.Bindings {
 		scope := &metadata.Bindings[i]
 		if scope.Start.File == site.File && scope.Start.Line <= site.Line && site.Line <= scope.End.Line {
 			if bindings != nil {
-				return "", "", fmt.Errorf("debug expression: ambiguous source frame location")
+				return nil, fmt.Errorf("debug expression: ambiguous source frame location")
 			}
 			bindings = scope
 		}
 	}
 	if bindings == nil {
-		return "", "", fmt.Errorf("debug expression: selected frame has no compiler source context")
+		return nil, fmt.Errorf("debug expression: selected frame has no compiler source context")
 	}
 	if bindings.Ambiguous {
-		return "", "", fmt.Errorf("debug expression: selected frame has ambiguous generated variable names")
+		return nil, fmt.Errorf("debug expression: selected frame has ambiguous generated variable names")
 	}
 	var available []check.DebugLocal
 	for _, local := range locals {
@@ -58,13 +95,41 @@ func DebugExpressionTyped(source string, metadata *DebugMap, site diag.Pos, loca
 	locals = available
 	expr, info, err := check.DebugExpression(source, metadata.Expressions, locals)
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 	g := newGen(info)
 	g.debugExpression = true
+	if access, ok := expr.(*check.DebugListGet); ok {
+		listStatements, list := g.value(access.List)
+		indexStatements, index := g.value(access.Index)
+		if len(listStatements)+len(indexStatements) != 0 {
+			return nil, fmt.Errorf("debug expression: list operands require execution")
+		}
+		some, parseErr := parser.ParseExpr(access.Some)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		none, parseErr := parser.ParseExpr(access.None)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		length := &ast.CallExpr{Fun: ast.NewIdent("len"), Args: []ast.Expr{list}}
+		predicate := &ast.BinaryExpr{X: &ast.BinaryExpr{X: index, Op: token.GEQ, Y: &ast.BasicLit{Kind: token.INT, Value: "0"}}, Op: token.LAND, Y: &ast.BinaryExpr{X: index, Op: token.LSS, Y: length}}
+		present := &ast.CompositeLit{Type: some, Elts: []ast.Expr{&ast.KeyValueExpr{Key: ast.NewIdent("E0"), Value: &ast.IndexExpr{X: list, Index: index}}}}
+		absent := &ast.CompositeLit{Type: none}
+		texts := make([]string, 3)
+		for i, node := range []ast.Expr{predicate, present, absent} {
+			var result bytes.Buffer
+			if err := printer.Fprint(&result, token.NewFileSet(), node); err != nil {
+				return nil, err
+			}
+			texts[i] = result.String()
+		}
+		return &DebugEvaluation{Type: access.Option, Predicate: texts[0], present: texts[1], absent: texts[2]}, nil
+	}
 	stmts, out := g.value(expr)
 	if len(stmts) != 0 || out == nil {
-		return "", "", fmt.Errorf("debug expression: this expression requires execution")
+		return nil, fmt.Errorf("debug expression: this expression requires execution")
 	}
 	// Delve evaluates this syntax without injecting calls into the target. Check
 	// the lowered tree as well so future compiler changes cannot widen the subset.
@@ -82,7 +147,7 @@ func DebugExpressionTyped(source string, metadata *DebugMap, site diag.Pos, loca
 		return safe
 	})
 	if !safe {
-		return "", "", fmt.Errorf("debug expression: this expression requires execution")
+		return nil, fmt.Errorf("debug expression: this expression requires execution")
 	}
 
 	// Normal generated assignments supply literal types contextually. Delve has
@@ -95,7 +160,7 @@ func DebugExpressionTyped(source string, metadata *DebugMap, site diag.Pos, loca
 			}
 			target, parseErr := parser.ParseExpr(goType)
 			if parseErr != nil {
-				return "", "", parseErr
+				return nil, parseErr
 			}
 			out = &ast.CallExpr{Fun: target, Args: []ast.Expr{out}}
 		}
@@ -106,7 +171,7 @@ func DebugExpressionTyped(source string, metadata *DebugMap, site diag.Pos, loca
 	if strings.HasPrefix(resultType, "_") {
 		resultType = "main." + resultType
 	}
-	return result.String(), resultType, err
+	return &DebugEvaluation{Expression: result.String(), Type: resultType}, err
 }
 
 func (g *gen) debugExpressions(m *DebugMap) {
@@ -121,9 +186,29 @@ func (g *gen) debugExpressions(m *DebugMap) {
 		}
 		m.Expressions[goName] = check.DebugShape{Name: typ.String(), Kind: "scalar"}
 	}
+	options := map[string]check.DebugShape{}
+	for typ := range g.debugTypes {
+		option, ok := typ.(*check.Sealed)
+		if !ok || !option.Prelude || option.Name != "Option" || len(option.Args) != 1 {
+			continue
+		}
+		element := debugGoType(g.goType(option.Args[0]), m.Types)
+		options[element] = check.DebugShape{
+			Option: debugGoType(g.goType(option), m.Types),
+			Some:   debugGoType(g.variantType(option.Variant("Some")), m.Types),
+			None:   debugGoType(g.variantType(option.Variant("None")), m.Types),
+		}
+	}
 	for typ, expr := range g.debugTypes {
 		key := debugGoType(expr, m.Types)
 		if key == "" {
+			continue
+		}
+		if list, ok := typ.(*check.List); ok {
+			element := debugGoType(g.goType(list.Elem), m.Types)
+			shape := options[element]
+			shape.Name, shape.Kind, shape.Element = list.String(), "list", element
+			m.Expressions[strings.ReplaceAll(key, " ", "")] = shape
 			continue
 		}
 		record, ok := typ.(*check.Record)

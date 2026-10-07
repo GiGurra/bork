@@ -258,8 +258,10 @@ func (r *dapRelay) copy(dst io.Writer, src io.Reader, requests bool, stderr io.W
 				if typ, ok := r.evaluationTypes[seq]; ok {
 					delete(r.evaluationTypes, seq)
 					if body, ok := msg["body"].(map[string]any); ok && msg["success"] == true {
-						body["type"] = typ
+						// Retain the concrete result's field metadata before presenting
+						// its checked type (for example Some's fields under Option[Int]).
 						r.value(body, "result")
+						body["type"] = r.prettyType(typ)
 						changed = true
 					}
 				}

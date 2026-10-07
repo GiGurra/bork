@@ -5,7 +5,18 @@ type Outer = { inner: Inner, shape: Shape, optional: Option[Int] }
 type Box[T] = { item: T }
 type Suffix = { range_: Int }
 fn suffixFrame(range_: Int) uses io { println(range_) }
-fn main() { debugFrame(3); suffixFrame(4) }
+fn projectionFrame(optional: Option[Int], value: Inner | Outer) uses io {
+  match (optional) {
+    .Some(number) => {
+      match (value) {
+        inner: Inner => { println(number, inner.range) }
+        _: Outer => {}
+      }
+    }
+    .None => {}
+  }
+}
+fn main() { debugFrame(3); suffixFrame(4); projectionFrame(.Some(9), Inner { label: "narrowed", range: 6 }) }
 fn debugFrame(range: Int) uses io {
   fraction = 1.1
   fraction32: Float32 = 1.1
@@ -21,6 +32,8 @@ fn debugFrame(range: Int) uses io {
   payload: Payload = .Pair(3, 2.0)
   boxed = Box[Float] { item: 2.0 }
   shapes = [shape]
+  numbers = [3, 7]
+  emptyNumbers: List[Int] = []
   none: Option[Int] = .None
   nested = Outer { inner: Inner { label: "main.Shape_Circle {radius: 9}", range: 5 }, shape: shape, optional: some }
   recordUnion: Inner | Outer = nested.inner
@@ -28,5 +41,5 @@ fn debugFrame(range: Int) uses io {
   listUnion: List[Int] | Int = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   chosen = match (shape) { Shape.Circle { radius } => radius, Shape.Empty => 0.0 }
   println(y)
-  println(payload, x, shape, some, none, nested, recordUnion, scalarUnion, chosen, someFloat, boxed, shapes, listUnion, fraction, fraction32, unsigned, signed, suffix)
+  println(payload, x, shape, some, none, nested, recordUnion, scalarUnion, chosen, someFloat, boxed, shapes, numbers, emptyNumbers, listUnion, fraction, fraction32, unsigned, signed, suffix)
 }
