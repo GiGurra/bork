@@ -1,0 +1,204 @@
+==================
+Semicolon-separated class methods
+==================
+class Names[T] { fn names(value: T): List[String]; fn typeTags(value: T): String }
+---
+
+(source_file
+  (class_declaration
+    (identifier)
+    (type_parameters
+      (identifier))
+    (method_signature
+      (identifier)
+      (parameters
+        (parameter
+          (identifier)
+          (type
+            (qualified_name
+              (identifier)))))
+      (type
+        (qualified_name
+          (identifier))
+        (type_arguments
+          (type
+            (qualified_name
+              (identifier))))))
+    (method_signature
+      (identifier)
+      (parameters
+        (parameter
+          (identifier)
+          (type
+            (qualified_name
+              (identifier)))))
+      (type
+        (qualified_name
+          (identifier))))))
+
+==================
+Leading repeated and trailing class separators
+==================
+class Names[T] { ;; fn names(value: T): String;;
+; fn typeTags(value: T): String;;; }
+---
+
+(source_file
+  (class_declaration
+    (identifier)
+    (type_parameters
+      (identifier))
+    (method_signature
+      (identifier)
+      (parameters
+        (parameter
+          (identifier)
+          (type
+            (qualified_name
+              (identifier)))))
+      (type
+        (qualified_name
+          (identifier))))
+    (method_signature
+      (identifier)
+      (parameters
+        (parameter
+          (identifier)
+          (type
+            (qualified_name
+              (identifier)))))
+      (type
+        (qualified_name
+          (identifier))))))
+
+==================
+Semicolon-separated instance methods and metadata
+==================
+instance names: Names[Int] { ;; metadata Description = Description { text: "names" };; fn names(value: Int): List[String] { [] };
+; fn typeTags(value: Int): String { "Int" };; }
+---
+
+(source_file
+  (instance_declaration
+    (identifier)
+    (type
+      (qualified_name
+        (identifier))
+      (type_arguments
+        (type
+          (qualified_name
+            (identifier)))))
+    (instance_metadata
+      (type
+        (qualified_name
+          (identifier)))
+      (record_expression
+        (qualified_name
+          (identifier))
+        (record_literal
+          (identifier)
+          (string))))
+    (function_declaration
+      (identifier)
+      (parameters
+        (parameter
+          (identifier)
+          (type
+            (qualified_name
+              (identifier)))))
+      (type
+        (qualified_name
+          (identifier))
+        (type_arguments
+          (type
+            (qualified_name
+              (identifier)))))
+      (block
+        (list_literal)))
+    (function_declaration
+      (identifier)
+      (parameters
+        (parameter
+          (identifier)
+          (type
+            (qualified_name
+              (identifier)))))
+      (type
+        (qualified_name
+          (identifier)))
+      (block
+        (string)))))
+
+==================
+Derive instance member separators
+==================
+derive instance names[T]: Names[T] { ; fn names(value: T): List[String] { [] }; fn typeTags(value: T): String { "T" }; }
+---
+
+(source_file
+  (derive_template_declaration
+    (instance_declaration
+      (identifier)
+      (type_parameters
+        (identifier))
+      (type
+        (qualified_name
+          (identifier))
+        (type_arguments
+          (type
+            (qualified_name
+              (identifier)))))
+      (function_declaration
+        (identifier)
+        (parameters
+          (parameter
+            (identifier)
+            (type
+              (qualified_name
+                (identifier)))))
+        (type
+          (qualified_name
+            (identifier))
+          (type_arguments
+            (type
+              (qualified_name
+                (identifier)))))
+        (block
+          (list_literal)))
+      (function_declaration
+        (identifier)
+        (parameters
+          (parameter
+            (identifier)
+            (type
+              (qualified_name
+                (identifier)))))
+        (type
+          (qualified_name
+            (identifier)))
+        (block
+          (string))))))
+
+==================
+Empty class and instance bodies with separators
+==================
+class Empty[T] { ;;
+; }
+instance empty: Empty[Int] { ;
+;; }
+---
+
+(source_file
+  (class_declaration
+    (identifier)
+    (type_parameters
+      (identifier)))
+  (instance_declaration
+    (identifier)
+    (type
+      (qualified_name
+        (identifier))
+      (type_arguments
+        (type
+          (qualified_name
+            (identifier)))))))

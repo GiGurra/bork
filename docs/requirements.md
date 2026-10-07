@@ -166,6 +166,7 @@ Go struct value with positional E0/E1 fields. See [design](design/tuples.md).
 
 ### Type classes
 
+- **Class and instance member separators.** Newlines and semicolons separate members; leading, repeated, and trailing semicolons are accepted. Commas are not member separators.
 - **Type classes are first-class.** They attach behaviour to a *type*, not just to values of it: type-level operations like `empty`, `decode`, `parse`, or `default` that need no value to call them on.
 - **Instances can be declared for constrained types.** For example, `instance Decode[Int where positive]` decodes an `Int` and proves `positive` in one step, so a request type with refined fields decodes into already-proven values.
 - **More than one instance per (class, type) may exist.** For example, several JSON encodings or orderings of the same type.

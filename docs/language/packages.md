@@ -79,6 +79,9 @@ fn main() {
 - `instance sumInt: Monoid[Int]` provides them for one type. Instances have names.
 - `[T: Monoid]` on a function means "any `T` that has a `Monoid` instance".
 
+Class and instance members can be separated by newlines or semicolons. Leading,
+repeated, and trailing semicolons are allowed; commas are not member separators.
+
 A class is separate from the type, so you can give an instance to a type you did not write, including built-in ones.
 
 ### Which instance is used

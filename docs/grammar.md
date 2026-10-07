@@ -32,10 +32,11 @@ Use        = "use" UseItem .                (* use money.DecodeAmount, use money
 UseItem    = Ident | Ident "." ( Ident | "*" ) .
 Instances  = "instances" Ident "{" [ UseItem { Sep UseItem } [ Sep ] ] "}" .
                                              (* instances Json { ItemDecode, ItemEncode, money.Defaults } *)
-ClassDecl  = "class" Ident "[" Ident "]" "{" { MethodSig EOL } "}" .  (* class Show[T] { fn show(x: T): String } *)
+ClassDecl  = "class" Ident "[" Ident "]" "{" { EOL } [ MethodSig { EOL { EOL } MethodSig } { EOL } ] "}" .  (* class Show[T] { fn show(x: T): String } *)
 MethodSig  = "fn" Ident "(" [ Params ] ")" [ FunctionWhere ] [ Uses ] [ ":" Type ] .
-InstanceDecl = "instance" Ident [ TypeParams ] ":" Ident "[" Type "]" "{" { FuncDecl EOL } "}" .
+InstanceDecl = "instance" Ident [ TypeParams ] ":" Ident "[" Type "]" "{" { EOL } [ InstanceMember { EOL { EOL } InstanceMember } { EOL } ] "}" .
                                              (* instance showBox[T: Show]: Show[Box[T]] { fn show(x: Box[T]): String { ... } } *)
+InstanceMember = FuncDecl | "metadata" Type "=" Expr .
 Import     = "import" [ Ident ] StringLit .  (* import "example.com/shop/money", or import cash "..." *)
 QualIdent  = Ident "." Ident .               (* money.Cents, money.Amount: a name of an imported package *)
 TestDecl   = "test" StringLit [ "(" Params ")" ] Block .  (* test "adds numbers" { ... }; parameters (no defaults) make a property test *)
