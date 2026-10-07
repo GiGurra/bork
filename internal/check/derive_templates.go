@@ -944,6 +944,22 @@ func (p *deriveExpansion) loopStatements(loop *syntax.For) []syntax.Stmt {
 	return result
 }
 
+// guarded passes a staged list element's comptime guards: the element
+// they guard, and whether every one holds for this iteration.
+func (p *deriveExpansion) guarded(element syntax.Expr) (syntax.Expr, bool) {
+	for {
+		guard, ok := element.(*syntax.If)
+		if !ok || !guard.Comptime || guard.Else != nil {
+			return element, true
+		}
+		chosen, valid := p.condition(guard.Cond)
+		if !valid || !chosen {
+			return nil, false
+		}
+		element = guard.Then.Tail
+	}
+}
+
 func (p *deriveExpansion) iterate(loop *syntax.For, list bool) []syntax.Expr {
 	value, ok := p.eval(loop.Items)
 	sequence, yes := value.(shapeSequence)
@@ -981,13 +997,14 @@ func (p *deriveExpansion) iterate(loop *syntax.For, list bool) []syntax.Expr {
 		}
 		p.bindStagedIteration(pattern, item)
 		if list {
-			element := loop.Body.Tail
-			if guard, ok := element.(*syntax.If); ok && guard.Comptime && guard.Else == nil {
-				chosen, valid := p.condition(guard.Cond)
-				if !valid || !chosen {
-					continue
-				}
-				element = guard.Then.Tail
+			element, chosen := p.guarded(loop.Body.Tail)
+			if !chosen {
+				continue
+			}
+			if inner, ok := element.(*syntax.For); ok && inner.Comptime && inner.Comprehension {
+				// A later generator of `comptime for { ... } yield`.
+				result = append(result, p.iterate(inner, true)...)
+				continue
 			}
 			result = append(result, p.expr(element))
 		} else {

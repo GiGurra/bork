@@ -114,46 +114,74 @@ func (p *deriveExpansion) layoutList(x *syntax.ListLit) (any, bool) {
 			items = append(items, value)
 			continue
 		}
-		value, known := p.eval(loop.Items)
-		sequence, yes := value.(shapeSequence)
-		if !known || !yes {
-			p.error(loop.Pos, "comptime for requires a compile-time shape sequence")
+		values, known := p.layoutLoop(loop)
+		if !known {
 			return nil, false
 		}
-		saved, existed := p.env[loop.Name]
-		for _, item := range sequence.items {
-			if !p.tick(loop.Pos) {
-				return nil, false
-			}
-			p.env[loop.Name] = item
-			body := loop.Body.Tail
-			if guard, ok := body.(*syntax.If); ok && guard.Comptime && guard.Else == nil {
-				chosen, valid := p.condition(guard.Cond)
-				if !valid {
-					return nil, false
-				}
-				if !chosen {
-					continue
-				}
-				body = guard.Then.Tail
-			}
-			value, known := p.eval(body)
-			if !known {
-				return nil, false
-			}
-			items = append(items, value)
-		}
-		if existed {
-			p.env[loop.Name] = saved
-		} else {
-			delete(p.env, loop.Name)
-		}
+		items = append(items, values...)
 	}
 	element := Type(nil)
 	if list, ok := p.c.info.types[x].(*List); ok {
 		element = list.Elem
 	}
 	return metadataList{items: items, element: element}, true
+}
+
+// layoutLoop gives the values of a staged list comprehension's loop,
+// including those of the later generators nested in it.
+func (p *deriveExpansion) layoutLoop(loop *syntax.For) ([]any, bool) {
+	value, known := p.eval(loop.Items)
+	sequence, yes := value.(shapeSequence)
+	if !known || !yes {
+		p.error(loop.Pos, "comptime for requires a compile-time shape sequence")
+		return nil, false
+	}
+	var items []any
+	saved, existed := p.env[loop.Name]
+	defer func() {
+		if existed {
+			p.env[loop.Name] = saved
+		} else {
+			delete(p.env, loop.Name)
+		}
+	}()
+	for _, item := range sequence.items {
+		if !p.tick(loop.Pos) {
+			return nil, false
+		}
+		p.env[loop.Name] = item
+		body := loop.Body.Tail
+		chosen := true
+		for chosen {
+			guard, ok := body.(*syntax.If)
+			if !ok || !guard.Comptime || guard.Else != nil {
+				break
+			}
+			var valid bool
+			chosen, valid = p.condition(guard.Cond)
+			if !valid {
+				return nil, false
+			}
+			body = guard.Then.Tail
+		}
+		if !chosen {
+			continue
+		}
+		if inner, ok := body.(*syntax.For); ok && inner.Comptime && inner.Comprehension {
+			values, known := p.layoutLoop(inner)
+			if !known {
+				return nil, false
+			}
+			items = append(items, values...)
+			continue
+		}
+		value, known := p.eval(body)
+		if !known {
+			return nil, false
+		}
+		items = append(items, value)
+	}
+	return items, true
 }
 
 func (p *deriveExpansion) layoutRecord(x *syntax.RecordLit) (any, bool) {

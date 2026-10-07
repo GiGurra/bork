@@ -1,0 +1,3 @@
+["name=Ada", "age=37"]
+["Circle.radius", "Rect.w", "Rect.h"]
+["0:name/age", "0:name/skip", "1:age/name", "1:age/skip", "2:skip/name", "2:skip/age"]

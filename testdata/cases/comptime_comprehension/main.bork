@@ -1,0 +1,48 @@
+import "bork/shape"
+
+class Labels[T] { fn labels(value: T): List[String] }
+
+derive instance labels[T]: Labels[T] {
+  fn labels(value: T): List[String] {
+    comptime for {
+      field in shape.fields[T]()
+      if !field.computed
+      if field.name != "skip"
+    } yield field.name + "=" + toString(field.read(value))
+  }
+}
+
+class Paths[T] { fn paths(): List[String] }
+
+derive instance paths[T]: Paths[T] {
+  fn paths(): List[String] {
+    comptime for {
+      variant in shape.variants[T]()
+      field in variant.fields
+      if field.name != "hidden"
+    } yield variant.name + "." + field.name
+  }
+}
+
+class Pairs[T] { fn pairs(value: T): List[String] }
+
+// Tuple patterns, and a filter between two generators.
+derive instance pairs[T]: Pairs[T] {
+  fn pairs(value: T): List[String] {
+    comptime for {
+      (i, a) in shape.fields[T]().indexed()
+      if !a.computed
+      (_, b) in shape.fields[T]().indexed()
+      if a.name != b.name
+    } yield toString(i) + ":" + a.name + "/" + b.name
+  }
+}
+
+type Row = { name: String, age: Int, skip: Bool } derive (Labels, Pairs)
+type Shape = sealed { Circle { radius: Int }, Rect { w: Int, h: Int, hidden: Int }, Dot } derive (Paths)
+
+fn main() {
+  println(labels(Row { name: "Ada", age: 37, skip: true }))
+  println(paths[Shape]())
+  println(pairs(Row { name: "Ada", age: 37, skip: true }))
+}

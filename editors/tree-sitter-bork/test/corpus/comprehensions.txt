@@ -130,3 +130,68 @@ fn main() {
               (identifier))
             (qualified_name
               (identifier))))))))
+
+==================
+Comptime comprehensions
+==================
+derive instance labels[T]: Labels[T] {
+  fn labels(value: T): List[String] {
+    comptime for { field in shape.fields[T](); if !field.computed } yield field.name
+  }
+}
+
+---
+
+(source_file
+  (derive_template_declaration
+    (instance_declaration
+      name: (identifier)
+      (type_parameters
+        (identifier))
+      (type
+        (qualified_name
+          (identifier))
+        (type_arguments
+          (type
+            (qualified_name
+              (identifier)))))
+      (function_declaration
+        name: (identifier)
+        (parameters
+          (parameter
+            name: (identifier)
+            (type
+              (qualified_name
+                (identifier)))))
+        (type
+          (qualified_name
+            (identifier))
+          (type_arguments
+            (type
+              (qualified_name
+                (identifier)))))
+        (block
+          (comptime_control_expression
+            (comprehension_expression
+              (comprehension_generator
+                name: (identifier)
+                source: (call_expression
+                  function: (generic_expression
+                    (selector_expression
+                      (qualified_name
+                        (identifier))
+                      field: (identifier))
+                    (type_arguments
+                      (type
+                        (qualified_name
+                          (identifier)))))))
+              (comprehension_filter
+                condition: (unary_expression
+                  (selector_expression
+                    (qualified_name
+                      (identifier))
+                    field: (identifier))))
+              value: (selector_expression
+                (qualified_name
+                  (identifier))
+                field: (identifier)))))))))

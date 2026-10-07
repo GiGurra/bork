@@ -1628,6 +1628,10 @@
       "required": true,
       "types": [
         {
+          "type": "comprehension_expression",
+          "named": true
+        },
+        {
           "type": "for_expression",
           "named": true
         },

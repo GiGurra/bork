@@ -128,3 +128,51 @@ func TestRefutableGeneratorLineDetection(t *testing.T) {
 		}
 	}
 }
+
+func TestStagedComprehensionShape(t *testing.T) {
+	src := `derive instance labels[T]: Labels[T] {
+  fn labels(x: T): List[String] {
+    comptime for { v in shape.variants[T](); if v.exported; f in v.fields } yield f.name
+  }
+}`
+	diags := &diag.List{}
+	file := Parse("t.bork", []byte(src), diags)
+	if diags.Len() != 0 {
+		t.Fatalf("unexpected errors: %s", diags.Error())
+	}
+	var lit *ListLit
+	var find func(any)
+	find = func(x any) {
+		switch x := x.(type) {
+		case *ListLit:
+			lit = x
+		case *Block:
+			if x != nil {
+				find(x.Tail)
+			}
+		}
+	}
+	for _, d := range file.Templates {
+		for _, fn := range d.Methods {
+			find(fn.Body)
+		}
+	}
+	if lit == nil || len(lit.Elems) != 1 {
+		t.Fatalf("expected a staged list, got %#v", lit)
+	}
+	outer, ok := lit.Elems[0].(*For)
+	if !ok || !outer.Comptime || !outer.Comprehension || outer.Name != "v" {
+		t.Fatalf("expected the outer staged loop, got %#v", lit.Elems[0])
+	}
+	guard, ok := outer.Body.Tail.(*If)
+	if !ok || !guard.Comptime || guard.Else != nil {
+		t.Fatalf("expected a comptime guard, got %#v", outer.Body.Tail)
+	}
+	inner, ok := guard.Then.Tail.(*For)
+	if !ok || !inner.Comptime || !inner.Comprehension || inner.Name != "f" {
+		t.Fatalf("expected the inner staged loop, got %#v", guard.Then.Tail)
+	}
+	if _, ok := inner.Body.Tail.(*Selector); !ok {
+		t.Fatalf("expected the yielded value, got %#v", inner.Body.Tail)
+	}
+}
