@@ -195,3 +195,84 @@ derive instance labels[T]: Labels[T] {
                 (qualified_name
                   (identifier))
                 field: (identifier)))))))))
+
+==================
+Leading-dot generator boundaries and source/yield chains
+==================
+fn f() {
+  for {
+    row in rows
+      .map(r => r)
+    // Next generator, not a selector.
+    .Some(n) in row
+      .filter(x => true)
+    .Wrap { values: [.Some(v), ...rest] } in values
+    .None in empty
+  } yield n
+    .toString()
+}
+
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (comprehension_expression
+        (comprehension_generator
+          (identifier)
+          (call_expression
+            (selector_expression
+              (qualified_name
+                (identifier))
+              (identifier))
+            (argument
+              (lambda_expression
+                (identifier)
+                (qualified_name
+                  (identifier))))))
+        (comment)
+        (comprehension_generator
+          (pattern
+            (context_pattern
+              (identifier))
+            (pattern
+              (qualified_name
+                (identifier))))
+          (call_expression
+            (selector_expression
+              (qualified_name
+                (identifier))
+              (identifier))
+            (argument
+              (lambda_expression
+                (identifier)
+                (boolean)))))
+        (comprehension_generator
+          (pattern
+            (context_pattern
+              (identifier))
+            (field_pattern
+              (identifier)
+              (pattern
+                (pattern
+                  (context_pattern
+                    (identifier))
+                  (pattern
+                    (qualified_name
+                      (identifier))))
+                (identifier))))
+          (qualified_name
+            (identifier)))
+        (comprehension_generator
+          (pattern
+            (context_pattern
+              (identifier)))
+          (qualified_name
+            (identifier)))
+        (call_expression
+          (selector_expression
+            (qualified_name
+              (identifier))
+            (identifier)))))))

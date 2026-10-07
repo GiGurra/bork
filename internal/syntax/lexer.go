@@ -19,9 +19,10 @@ func Lex(file string, src []byte, diags *diag.List) ([]Token, []Comment) {
 func lexAt(file string, src []byte, line, col int, diags *diag.List, compiler bool) ([]Token, []Comment) {
 	lx := &lexer{file: file, src: src, line: line, col: col, diags: diags, compiler: compiler}
 	lx.run()
-	// A context match arm starts with the same dot as a continued selector.
-	// Once tokens are available, its => distinguishes the two without changing
-	// multiline method chains or looking through raw strings and comments.
+	// A context pattern starts with the same dot as a continued selector.
+	// Once tokens are available, its => (match arm) or in (generator)
+	// distinguishes the two without changing multiline method chains or
+	// looking through raw strings and comments.
 	var toks []Token
 	last := 0
 	for i, t := range lx.toks {
@@ -62,7 +63,7 @@ func contextPatternAhead(toks []Token) bool {
 			}
 		}
 	}
-	return i < len(toks) && toks[i].Kind == Arrow
+	return i < len(toks) && (toks[i].Kind == Arrow || toks[i].Kind == TIdent && toks[i].Text == "in")
 }
 
 // LexCompiler permits reserved names in compiler-owned sources and formatting.

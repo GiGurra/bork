@@ -1,6 +1,9 @@
 package format
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestFormatComprehensions(t *testing.T) {
 	for _, tc := range []struct{ input, want, simplified string }{
@@ -32,5 +35,33 @@ func TestFormatComprehensions(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestFormatLeadingDotGeneratorsAndChains(t *testing.T) {
+	want := `fn f() {
+  for {
+    row in rows
+      .map(r => r)
+
+    // Match values from the row.
+    .Some(n) in row
+      .filter(x => true)
+    label = n
+      .toString()
+    if label
+      .isEmpty()
+  } yield label
+    .trim()
+}
+`
+	for _, simplify := range []bool{false, true} {
+		// Both badly indented and already formatted input use the same rule.
+		for _, src := range []string{want, strings.ReplaceAll(want, "\n  ", "\n")} {
+			got, err := SourceWithOptions("dot.bork", []byte(src), Options{Simplify: simplify})
+			if err != nil || string(got) != want {
+				t.Fatalf("simplify=%v: got %q, %v; want %q", simplify, got, err, want)
+			}
+		}
 	}
 }

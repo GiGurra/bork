@@ -200,6 +200,7 @@ fn main() {
 - `if cond` skips the values for which it is false. What it proves holds in the lines after it and in the yield.
 - `name = value` binds a name for the lines after it.
 - The first line is a generator, and `yield` goes on the line of the closing `}`.
+- Newlines separate lines, including a leading-dot pattern such as `.Some(v) in row`. Method chains can still continue a source or the yield on the next line: `.method(...)` continues the expression, while `.Variant(...) in source` starts a generator.
 
 ```bork
 type User = { name: String }
@@ -209,7 +210,12 @@ fn main() {
   accounts: List[User | Bot] = [User { name: "ada" }, Bot { id: 7 }, User { name: "bo" }]
   println((for { u: User in accounts } yield u.name).toList())
   scores = [Option.Some(3), Option.None, Option.Some(5)]
-  println((for { .Some(s) in scores; if s > 4 } yield s).toList())
+  selected = for {
+    row in [scores]
+    .Some(s) in row
+    if s > 4
+  } yield s
+  println(selected.toList())
 }
 ```
 

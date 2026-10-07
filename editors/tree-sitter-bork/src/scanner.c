@@ -22,9 +22,9 @@ static void skip_space_comments(TSLexer *lexer) {
   }
 }
 
-// After a leading dot, => distinguishes a context arm from a selector chain.
+// After a leading dot, => or in distinguishes a pattern from a selector chain.
 // mark_end remains before this lookahead so strings/comments stay in the tree.
-static bool context_arm(TSLexer *lexer) {
+static bool context_pattern(TSLexer *lexer) {
   while ((lexer->lookahead >= 'a' && lexer->lookahead <= 'z') ||
          (lexer->lookahead >= 'A' && lexer->lookahead <= 'Z') ||
          (lexer->lookahead >= '0' && lexer->lookahead <= '9') ||
@@ -54,6 +54,14 @@ static bool context_arm(TSLexer *lexer) {
     }
     skip_space_comments(lexer);
   }
+  if (lexer->lookahead == 'i') {
+    lexer->advance(lexer, false);
+    if (lexer->lookahead != 'n') return false;
+    lexer->advance(lexer, false);
+    int c = lexer->lookahead;
+    return !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+             (c >= '0' && c <= '9') || c == '_' || c >= 0x80);
+  }
   if (lexer->lookahead != '=') return false;
   lexer->advance(lexer, false);
   return lexer->lookahead == '>';
@@ -67,7 +75,7 @@ static bool line_continuation(TSLexer *lexer) {
   if (lexer->lookahead == '.') {
     lexer->advance(lexer, false);
     int c = lexer->lookahead;
-    return ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c >= 0x80) && !context_arm(lexer);
+    return ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c >= 0x80) && !context_pattern(lexer);
   }
   return false;
 }
