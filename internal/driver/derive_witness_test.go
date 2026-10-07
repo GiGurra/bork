@@ -34,6 +34,8 @@ derive instance c[T]: C[T] { fn c(x: T, n: Int): Int { need(n) } }`, missing},
 }`, missing},
 		{"staged branch", `derive fn unused[T](n: Int): Int { comptime if (shape.kind[T]() == shape.Record) { need(n) } else { 0 } }`, missing},
 		{"comprehension", `derive fn unused[T](n: Int): List[Int] { [comptime for (field in shape.fields[T]()) need(n)] }`, missing},
+		{"target tuple", `type Box[A] = { v: A }
+derive fn unused[T](x: T, n: Int): Int { o = (x, n); b = Box { v: x }; _ = o; _ = b; need(n) }`, missing},
 		{"dependent call argument", `derive fn unused[T](x: T, n: Int): String { comptime for (field in shape.fields[T]()) { _ = toString(field.read(x)) + toString(need(n)) }; "" }`, missing},
 
 		{"declared", `derive fn unused[T](n: Int where positive): Int { need(n) }`, ""},

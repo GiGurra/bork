@@ -751,6 +751,7 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 	// program checks.
 	if c.diags.Len() == 0 && c.deriveDiscovery == nil {
 		c.checkDeriveWitnesses(files)
+		defer c.purgeWitnessNodes() // after lowering, or on any error
 		c.zonkInfo()
 		c.checkInterpolationValidators()
 		c.checkOpaqueFields()
@@ -763,7 +764,6 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 					observe("lower")
 				}
 				c.lower(files)
-				c.purgeWitnessNodes()
 				c.packageDependencyGraph()
 				if observe != nil {
 					observe("contracts")
@@ -904,6 +904,9 @@ type checker struct {
 	// witnessSyntax holds the syntax of definition witnesses (see
 	// derive_witness.go) until their side-table entries are purged.
 	witnessSyntax map[any]bool
+	// witnessPositions holds the position-keyed navigation tables from
+	// before witnesses were checked, restored with the purge.
+	witnessPositions [4]any
 	// Only compilation retains source identities; read-only queries do not.
 	recordPredicateRefs bool
 	bindingFiles        map[string]*syntax.File

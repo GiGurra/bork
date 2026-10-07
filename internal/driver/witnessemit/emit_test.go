@@ -5,6 +5,7 @@ package witnessemit_test
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -77,5 +78,56 @@ func TestDefinitionWitnessesLeaveEmitUnchanged(t *testing.T) {
 		if !bytes.Equal(without, with) {
 			t.Errorf("%s: definition witnesses changed the emitted program", dir)
 		}
+	}
+}
+
+// Editor data is the program's own: inlays, semantic tokens and references
+// are the same with and without witnesses, for requested and unused
+// definitions with constructors, tuples, lambdas, matches and interpolation.
+func TestDefinitionWitnessesLeaveEditorDataUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	source := `import "bork/shape"
+pred positive(n: Int) { n > 0 }
+type P = { a: Int, b: String }
+class C[T] { fn c(x: T, n: Int): String }
+derive instance c[T]: C[T] {
+  fn c(x: T, n: Int): String {
+    pair = (n, "k")
+    p = P { a: n, b: "$n" }
+    work = (k: Int) => k + 1
+    picked = match (work(n)) { 0 => "zero", _ => p.b }
+    labels: List[String] = [comptime for (field in shape.fields[T]()) field.name + picked]
+    toString(pair) + toString(labels)
+  }
+}
+derive fn unused[T](x: T, n: Int where positive): String {
+  q = P { a: n, b: "x" }
+  pair = (x, q)
+  _ = pair
+  match (n) { 1 => "one", _ => q.b }
+}
+type R = { a: Int } derive (C)
+fn main() { println(c(R { a: 1 }, 2)) }
+`
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	editorData := func() string {
+		analysis, err := driver.NewSession().Analyze(dir, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inlays, err := analysis.EditorInlays(path, check.EditorInlayOptions{Types: true, Parameters: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return fmt.Sprintf("%+v\n%+v\n%+v", inlays, analysis.SemanticTokens(path), analysis.AllReferences())
+	}
+	check.DefinitionWitnesses = false
+	without := editorData()
+	check.DefinitionWitnesses = true
+	if with := editorData(); with != without {
+		t.Errorf("definition witnesses changed editor data:\nwithout: %s\nwith:    %s", without, with)
 	}
 }

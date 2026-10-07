@@ -33,6 +33,9 @@ type lowerer struct {
 	invariants map[*Var][]*Constraint
 	// roots are the typed trees lowered, for the passes over all of them.
 	roots []Expr
+	// inWitness is set while lowering a definition witness, whose
+	// dependent expressions have the type Invalid.
+	inWitness bool
 }
 
 // nameRebinding keeps immutable identities distinct in generated Go.
@@ -523,8 +526,8 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		return &CallValue{expr: at, Fun: l.expr(x.Fun), Args: l.exprs(x.Args), Provider: l.info.assemblyValueCalls[x]}
 	case *syntax.Lambda:
 		ft, typed := at.typ.(*FuncType)
-		if !typed {
-			// Only a definition witness has a lambda in a dependent position.
+		if !typed && l.inWitness {
+			// A definition witness has lambdas in dependent positions.
 			ft = &FuncType{Result: Invalid}
 			for range x.Params {
 				ft.Params = append(ft.Params, Invalid)
@@ -540,7 +543,16 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		out.Body = l.expr(x.Body)
 		return out
 	case *syntax.TupleLit:
-		rec := at.typ.(*Record)
+		rec, typed := at.typ.(*Record)
+		if !typed && l.inWitness {
+			// A definition witness builds tuples of dependent type: their
+			// elements are still evaluated.
+			out := &Block{expr: at}
+			for _, elem := range x.Elems {
+				out.Stmts = append(out.Stmts, &ExprStmt{X: l.expr(elem)})
+			}
+			return out
+		}
 		out := &RecordLit{expr: at, Record: rec}
 		for i, elem := range x.Elems {
 			field := rec.Fields[i]
@@ -627,6 +639,17 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 			out.Record, fields = t, t.Fields
 		case *Variant:
 			out.Variant, fields = t, t.Fields
+		default:
+			if !l.inWitness {
+				break
+			}
+			// A definition witness builds records of dependent type: their
+			// field values are still evaluated.
+			block := &Block{expr: at}
+			for _, init := range x.Fields {
+				block.Stmts = append(block.Stmts, &ExprStmt{X: l.expr(init.Value)})
+			}
+			return block
 		}
 		inits := l.info.recordInits[x]
 		if inits == nil {
@@ -956,7 +979,9 @@ func (l *lowerer) witnesses(fns []*Func) []*Func {
 }
 
 func (l *lowerer) witness(fn *Func) (ok bool) {
+	l.inWitness = true
 	defer func() {
+		l.inWitness = false
 		if recover() != nil {
 			ok = false
 		}

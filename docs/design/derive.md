@@ -487,21 +487,25 @@ operations, `shape` queries, type parameters and projections, native comptime,
 and build or embed reads. A staged `if`, `match` or `for` body becomes one copy
 under an opaque condition. A runtime match of a dependent value becomes opaque
 branches. Code that still fails to check becomes a hole on the next of four
-attempts; a witness that still fails, panics, would add an instance or
-expansion, or cannot be lowered is dropped. Afterwards, the side-table entries
-keyed by witness syntax are removed, so editor and lint queries by position
-see only the program, and witness interpolations start no validator. Shipped standard packages are skipped unless
-they are the root.
+attempts. A witness that still fails, panics, cannot be lowered, or would add
+an instance, expansion or independent type to the program is dropped; types
+instantiated with Invalid arguments are removed instead. Shipped standard
+packages are skipped unless they are the root.
+
+After lowering, the side-table entries keyed by witness syntax are removed and
+the position-keyed navigation tables are restored, so editor and lint queries
+see only the program. Witness interpolations start no validator.
 
 The fact checker taints a witness's holes, staged values, values of Invalid
 type and everything computed from them. A failing obligation is reported only
-when its subject and arguments are untainted, no tainted condition dominates
-it, and no earlier staged copy, repaired hole or absorbed `Never` copy could
-have exited early. Its
-predicate evaluations are discarded, so unused definitions never start the
-evaluator. Expansions that repeat a reported failure are dropped in favour of
-the definition's diagnostic. Staged copies are reported like their types are:
-an obligation that fails for every copy fails for every target that has one.
+when its subject and arguments are untainted, no condition involving a tainted
+value dominates it, and no earlier staged copy, repaired hole or absorbed
+`Never` copy could have exited early. (A guard that returns on a tainted
+condition therefore silences everything after it.) Its predicate evaluations are
+discarded, so unused definitions never start the evaluator. Expansions that
+repeat a reported failure are dropped in favour of the definition's
+diagnostic. Staged copies are reported like their types are: an obligation
+that fails for every copy fails for every target that has one.
 
 Planned PRs (split further if review size warrants):
 

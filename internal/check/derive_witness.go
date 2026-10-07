@@ -1,6 +1,7 @@
 package check
 
 import (
+	"maps"
 	"reflect"
 	"strings"
 
@@ -81,12 +82,14 @@ func (c *checker) checkDeriveWitnesses(files []*syntax.File) {
 	}
 	savedDiags, savedPkg := c.diags, c.pkg
 	defer func() { c.diags, c.pkg = savedDiags, savedPkg }()
+	// Navigation tables keyed by source position would gain references
+	// from unused bodies; witnesses keep none of theirs.
+	c.witnessPositions = [4]any{maps.Clone(c.info.sourceDefinitions), maps.Clone(c.info.sourceNames), maps.Clone(c.info.predicateRefs), maps.Clone(c.info.deriveSourceKinds)}
 	// Declare every signature first: witness bodies call helper witnesses.
 	for _, source := range sources {
 		c.diags = &diag.List{}
 		b.enter(source)
-		source.fn = b.declare(source)
-		c.witnessNodes(reflect.ValueOf(source.fn))
+		source.fn = b.safely(func() *Func { return b.declare(source) })
 		if source.fn != nil && source.targets == nil {
 			b.helpers[source.decl] = source.fn
 		}
@@ -98,20 +101,21 @@ func (c *checker) checkDeriveWitnesses(files []*syntax.File) {
 		b.enter(source)
 		b.repairs = map[diag.Pos]bool{}
 		for attempt := 0; attempt < deriveWitnessAttempts; attempt++ {
-			body := cloneSyntax(source.decl.Body)
-			b.pin(reflect.ValueOf(body))
-			source.fn.Decl.Body = b.block(body)
-			c.witnessNodes(reflect.ValueOf(source.fn.Decl.Body))
 			c.diags = &diag.List{}
 			snapshot := c.witnessSnapshot()
-			failed := !c.checkWitness(source.fn)
+			failed := b.safely(func() *Func {
+				body := cloneSyntax(source.decl.Body)
+				b.pin(reflect.ValueOf(body))
+				source.fn.Decl.Body = b.block(body)
+				c.witnessNodes(reflect.ValueOf(body))
+				c.checkFunc(source.fn)
+				return source.fn
+			}) == nil
 			for _, d := range c.diags.Sorted() {
 				// Bindings whose only reads became holes are not failures.
 				if d.Code != "binding.unused" && d.Severity != "warning" {
 					failed = true
-					if !b.repairs[d.Pos] {
-						b.repairs[d.Pos] = true
-					}
+					b.repairs[d.Pos] = true
 				}
 			}
 			if !failed && snapshot.unchanged(c) {
@@ -141,19 +145,19 @@ func (b *deriveWitnessBuilder) enter(source *deriveWitnessSource) {
 	}
 }
 
-// checkWitness reports whether fn checked without panicking. The checker
-// assumes checked programs; Invalid types can reach code that does not
-// expect them, and such a witness is dropped like one that fails to check.
-func (c *checker) checkWitness(fn *Func) (ok bool) {
+// safely runs one step of building a witness, returning nil if it panics.
+// The checker assumes checked programs; Invalid types can reach code that
+// does not expect them, and such a witness is dropped like one that fails.
+func (b *deriveWitnessBuilder) safely(step func() *Func) (fn *Func) {
+	c := b.c
 	scopes, function, params := c.scopes, c.fn, c.typeParams
 	defer func() {
 		if recover() != nil {
 			c.scopes, c.fn, c.typeParams, c.inPrelude = scopes, function, params, false
-			ok = false
+			fn = nil
 		}
 	}()
-	c.checkFunc(fn)
-	return true
+	return step()
 }
 
 // witnessNodes records the syntax a witness was made of. Checking it
@@ -198,9 +202,6 @@ func (c *checker) witnessNodes(v reflect.Value) {
 }
 
 func (c *checker) purgeWitnessNodes() {
-	if len(c.witnessSyntax) == 0 {
-		return
-	}
 	info := reflect.ValueOf(c.info).Elem()
 	for i := 0; i < info.NumField(); i++ {
 		field := info.Field(i)
@@ -228,6 +229,13 @@ func (c *checker) purgeWitnessNodes() {
 		}
 	}
 	c.witnessSyntax = nil
+	if saved := c.witnessPositions; saved[0] != nil {
+		c.info.sourceDefinitions = saved[0].(map[diag.Pos]diag.Pos)
+		c.info.sourceNames = saved[1].(map[diag.Pos]string)
+		c.info.predicateRefs = saved[2].(map[diag.Pos]*Constraint)
+		c.info.deriveSourceKinds = saved[3].(map[diag.Pos]string)
+		c.witnessPositions = [4]any{}
+	}
 }
 
 // Witness checking must leave no trace in the emitted program. A witness that
@@ -241,7 +249,20 @@ func (c *checker) witnessSnapshot() deriveWitnessSnapshot {
 	return deriveWitnessSnapshot{len(i.ExpandedFunctions), len(i.ClassInstances), len(i.Comptimes), len(i.comptimeSyntax), len(i.Embeds), len(i.BuildReads), len(i.InterpolationBatches), len(i.Mocks), len(i.TypeOrder)}
 }
 
-func (s deriveWitnessSnapshot) unchanged(c *checker) bool { return s == c.witnessSnapshot() }
+// unchanged reports whether checking added nothing to the program. Types
+// instantiated with a dependent (Invalid) argument exist only for the
+// witness; they are removed rather than dropping it.
+func (s deriveWitnessSnapshot) unchanged(c *checker) bool {
+	order := c.info.TypeOrder
+	kept := order[:s.types]
+	for _, typ := range order[s.types:] {
+		if !witnessDependentType(typ) {
+			kept = append(kept, typ)
+		}
+	}
+	c.info.TypeOrder = kept
+	return s == c.witnessSnapshot()
+}
 
 func (s deriveWitnessSnapshot) restore(c *checker) {
 	i := c.info
@@ -263,6 +284,7 @@ func (b *deriveWitnessBuilder) declare(source *deriveWitnessSource) *Func {
 	shallow := *source.decl
 	shallow.Instance, shallow.Body, shallow.TypeParams = nil, nil, nil
 	fd := cloneSyntax(&shallow)
+	c.witnessNodes(reflect.ValueOf(fd))
 	fd.Derivation = false
 	b.pin(reflect.ValueOf(fd))
 	fn := &Func{Decl: fd, Pkg: source.pkg, Witness: true}
