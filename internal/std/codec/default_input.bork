@@ -6,11 +6,14 @@ type inputArgument = private {}
 type inputMarker = private {}
 type DefaultInput = private {
   callback: (inputArgument | inputMarker) => Value | DecodeError
-  accepts: (inputArgument | inputMarker) => Bool
+  matches: (inputArgument | inputMarker) => Bool
+  supported: Bool
 }
 
 // Input stores a typed, pure conversion for the selected Decode instance.
-fn Input[T](convert: (T) => Value | DecodeError): DefaultInput unsafe go {
+fn Input[T: Decode](convert: (T) => Value | DecodeError): DefaultInput unsafe go {
+  import "reflect"
+  import "strings"
   // Closed metadata keys require this private bridge until bork-ugmjgz.
   // Its private argument types cannot be constructed by safe external callers.
   callback := func(value any) any {
@@ -18,8 +21,12 @@ fn Input[T](convert: (T) => Value | DecodeError): DefaultInput unsafe go {
     if !ok { return DecodeError{path:"", message:"internal error: default input provider type mismatch"} }
     return convert(typed)
   }
-  accepts := func(value any) bool { _, ok := value.(T); return ok }
-  return DefaultInput{callback:callback,accepts:accepts}
+  target := reflect.TypeFor[T]()
+  // Unions erase to any, including inside generic type arguments. Reject
+  // those targets until semantic metadata keys can distinguish their members.
+  supported := !strings.Contains(target.String(), "interface {}")
+  matches := func(value any) bool { actual, ok := value.(reflect.Type); return ok && actual == target }
+  return DefaultInput{callback:callback,matches:matches,supported:supported}
 }
 
 fn materializeDefault[T: Decode](value: T): Value | DecodeError {
@@ -29,7 +36,9 @@ fn materializeDefault[T: Decode](value: T): Value | DecodeError {
   }
 }
 fn invokeDefault[T](provider: DefaultInput, value: T): Value | DecodeError unsafe go {
-  if !provider.accepts(value) { return DecodeError{path:"",message:"selected decoder DefaultInput must use codec.Input with its own decoded type"} }
+  import "reflect"
+  if !provider.supported { return DecodeError{path:"",message:"union DefaultInput providers require generic metadata keys"} }
+  if !provider.matches(reflect.TypeFor[T]()) { return DecodeError{path:"",message:"selected decoder DefaultInput must use codec.Input with its own decoded type"} }
   return provider.callback(value)
 }
 
@@ -70,7 +79,7 @@ derive fn shapeDefaultInput[T](value: T): Value | DecodeError {
   comptime match (shape.kind[T]()) {
     shape.Record => {
       comptime if (shape.positional[T]()) {
-        values: List[Value] = [comptime for (field in shape.fields[T]()) materializeDefault[field.RawType](field.read(value))?]
+        values: List[Value] = [comptime for (field in shape.fields[T]()) defaultAt(materializeDefault[field.RawType](field.read(value)), s"[${field.index}]")?]
         Value.Array { items: values }
       } else {
         fields: List[Field] = [comptime for (field in shape.fields[T]()) comptime if (!field.computed)
@@ -90,11 +99,11 @@ derive fn shapeDefaultInput[T](value: T): Value | DecodeError {
                 return Value.String { value: VariantWireName[T](variant) }
               } else {
                 comptime if (variant.positional) {
-                  values: List[Value] = [comptime for (field in variant.fields) materializeDefault[field.RawType](field.read(payload))?]
+                  values: List[Value] = [comptime for (field in variant.fields) defaultAt(materializeDefault[field.RawType](field.read(payload)), s".values[${field.index}]")?]
                   return Value.Object { fields: [Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } }, Field { name: "values", value: Value.Array { items: values } }] }
                 } else {
                   fields: List[Field] = [comptime for (field in variant.fields) comptime if (!field.computed)
-                    Field { name: FieldWireName[T](field), value: materializeDefault[field.RawType](field.read(payload))? }]
+                    Field { name: FieldWireName[T](field), value: defaultAt(materializeDefault[field.RawType](field.read(payload)), s".${FieldWireName[T](field)}")? }]
                   return Value.Object { fields: prepend(Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } }, fields) }
                 }
               }

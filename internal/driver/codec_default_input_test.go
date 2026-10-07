@@ -51,3 +51,53 @@ fn main(){
 		t.Fatalf("computed field materialized: %s", out)
 	}
 }
+
+func TestCodecDefaultInputBridgeIsPrivate(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `import "bork/codec"
+use codec.Defaults
+fn main() {
+ provider = codec.Input[Int](value => codec.Value.Number {text:toString(value)})
+ _ = provider.callback(codec.Value.Null)
+}`, "argument 1")
+	checkPreludeSource(t, `import "bork/codec"
+use codec.Defaults
+fn main() {
+ provider = codec.Input[Int](value => codec.Value.Number {text:toString(value)})
+ _ = codec.Input(provider.callback)
+}`, "no instance of Decode")
+	checkPreludeSource(t, `import "bork/codec"
+fn main() {
+ _ = codec.DefaultInput {callback: value => codec.Value.Null, matches: value => true, supported:true}
+}`, "package bork/codec controls its construction")
+}
+
+func TestCodecDefaultInputRejectsNestedErasedUnions(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/codec"
+use codec.Defaults
+instance one:codec.Decode[Int|String]{fn decode(input:codec.Value):Int|String|codec.DecodeError{1}}
+instance two:codec.Decode[Bool|Float]{fn decode(input:codec.Value):Bool|Float|codec.DecodeError{true}}
+type Box[T]={value:T}
+instance box[T:codec.Decode]:codec.Decode[Box[T]]{
+ metadata codec.DefaultInput=codec.Input[Box[Int|String]](box=>match(box.value){i:Int=>codec.Value.Number{text:toString(i)},s:String=>codec.Value.String{value:s}})
+ fn decode(input:codec.Value):Box[T]|codec.DecodeError{match(codec.decode[T](input)){error:codec.DecodeError=>error,value:T=>Box{value:value}}}
+}
+type Db={box:Box[Bool|Float]}derive(codec.Decode)
+type Options={db:Db=.{box:.{value:true}}}derive(codec.Decode)
+fn main(){match(codec.Schema[Options]()){
+ Option.Some(schema)=>schema.fields.forEach(field=>match(field.defaultInput){Option.Some(provider)=>println(provider()),Option.None=>println("none")})
+ Option.None=>println("no schema")
+}}`
+	exe, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(exe).CombinedOutput()
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), `path: ".box"`) || !strings.Contains(string(out), "union DefaultInput providers require generic metadata keys") {
+		t.Fatalf("output: %s", out)
+	}
+}

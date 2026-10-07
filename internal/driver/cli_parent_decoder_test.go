@@ -42,6 +42,16 @@ instance unsupported:codec.Decode[Unsupported]{
  metadata codec.FieldSchema=codec.FieldSchema{kind:"string",optional:false}
  fn decode(input:codec.Value):Unsupported|codec.DecodeError{Unsupported{text:"decoded"}}
 }
+type Payload=sealed{Named{token:Unsupported},Positional(Unsupported)}derive(codec.Decode)
+type DeepMissing={named:Payload}derive(codec.Decode)
+type WithDeepMissing={db:DeepMissing=.{named:.Named{token:.{text:"default"}}}}derive(codec.Decode)
+type WithPositionalMissing={db:DeepMissing=.{named:.Positional(.{text:"default"})}}derive(codec.Decode)
+type TupleMissing={tuple:(Unsupported,String)}derive(codec.Decode)
+type WithTupleMissing={db:TupleMissing=.{tuple:(.{text:"default"},"two")}}derive(codec.Decode)
+type ListMissing={values:List[Unsupported]}derive(codec.Decode)
+type WithListMissing={db:ListMissing=.{values:[.{text:"default"}]}}derive(codec.Decode)
+type MapMissing={values:Map[String,Unsupported]}derive(codec.Decode)
+type WithMapMissing={db:MapMissing=.{values:{"key":.{text:"default"}}}}derive(codec.Decode)
 type MissingLeaf={value:Unsupported}derive(codec.Decode)
 type WithMissing={db:MissingLeaf=.{value:.{text:"default"}}}derive(codec.Decode)
 type Bad={value:String="leaf"}
@@ -64,14 +74,26 @@ instance wrongProvider:codec.Decode[WrongProvider]{
  fn decode(input:codec.Value):WrongProvider|codec.DecodeError{WrongProvider{}}
 }
 type WithWrongProvider={db:WrongProvider=.{}}derive(codec.Decode)
+instance unionDecode:codec.Decode[Int|String]{
+ metadata codec.DefaultInput=codec.Input[Int|String](value=>codec.Value.Null)
+ fn decode(input:codec.Value):Int|String|codec.DecodeError{1}
+}
+type UnionRecord={value:Int|String}derive(codec.Decode)
+type WithUnion={db:UnionRecord=.{value:1}}derive(codec.Decode)
 fn main(){
  println(cli.Parse[WithCustom]("app","Custom",[]))
  println(cli.Parse[WithCustom]("app","Custom",["--custom-value","encoded:cli"]))
  println(cli.Parse[WithCustom]("app","Custom",["--custom-value","invalid"]))
  println(cli.Parse[WithMissing]("app","Missing",["--help"],configFiles:["missing.json"]))
+ println(cli.Parse[WithDeepMissing]("app","Missing",["--help"]))
+ println(cli.Parse[WithPositionalMissing]("app","Missing",["--help"]))
+ println(cli.Parse[WithTupleMissing]("app","Missing",["--help"]))
+ println(cli.Parse[WithListMissing]("app","Missing",["--help"]))
+ println(cli.Parse[WithMapMissing]("app","Missing",["--help"]))
  println(cli.Parse[WithBad]("app","Bad",["--help"]))
  println(cli.Parse[WithNoProvider]("app","Missing",["--help"]))
  println(cli.Parse[WithWrongProvider]("app","Wrong",["--help"]))
+ println(cli.Parse[WithUnion]("app","Union",["--help"]))
 }`
 	exe, err := buildFixtureOutput(t, validatorFixture(t, source))
 	if err != nil {
@@ -81,7 +103,7 @@ fn main(){
 	if err != nil {
 		t.Fatalf("run: %v\n%s", err, out)
 	}
-	for _, want := range []string{`text: "default"`, `text: "cli"`, `token needs encoded prefix`, `path: "db.value"`, `codec.DefaultInput`, `codec.Input`, `flattened parent default input must be an object or null`, `selected decoder DefaultInput must use codec.Input with its own decoded type`} {
+	for _, want := range []string{`text: "default"`, `text: "cli"`, `token needs encoded prefix`, `path: "db.value"`, `path: "db.named.token"`, `path: "db.named.values[0]"`, `path: "db.tuple[0]"`, `path: "db.values[0]"`, `path: "db.values.key"`, `codec.DefaultInput`, `codec.Input`, `flattened parent default input must be an object or null`, `selected decoder DefaultInput must use codec.Input with its own decoded type`, `union DefaultInput providers require generic metadata keys`} {
 		if !strings.Contains(string(out), want) {
 			t.Fatalf("output %q lacks %q", out, want)
 		}

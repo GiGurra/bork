@@ -977,8 +977,10 @@ fn main() {
 
 An optional parent's Some default provides the same baseline; a None default
 stays absent until a child activates the group. Explicit config null clears the
-parent baseline. A higher-precedence child can reactivate the group, using the
-leaves' own defaults and requiredness for any remaining inputs. Parent facts run
+parent baseline, even if a later config file supplies a partial object. A
+higher-precedence child can reactivate the group, using the leaves' own defaults
+and requiredness for remaining inputs. Optional descendant record defaults stay
+absent until those groups are activated. Parent facts run
 on the reconstructed value. Reusable command options keep independent overlays;
 partial completion still reports omitted leaves as Missing.
 

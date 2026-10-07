@@ -213,7 +213,7 @@ Field adapters need more than a value decoder. The selected decoder can publish 
 | `codec.RecordField` | `name: String`, `wireName: String`, `aliases: List[String]`, `words: List[String]`, `tags: List[codec.TagGroup]`, `typeName: String`, `doc: String`, `facts: List[String]`, `kind: String`, `optional: Bool`, `variants: List[codec.VariantSchema] = []`, `hasDefault: Bool`, `defaultValue: Option[() => codec.DefaultSchema]`, `defaultInput: Option[() => codec.Value \| codec.DecodeError] = Option.None`, `recordSchema: Option[() => Option[codec.RecordSchema]]`, `validate: (codec.Value) => Ok \| codec.DecodeError` |
 | `codec.DefaultSchema` | `{ display: String, configPath: Option[String], choices: List[String] }` |
 | `codec.DefaultInput` | Private selected-Decode metadata constructed by `codec.Input[T]`. |
-| `codec.Input[T](convert: (T) => codec.Value \| codec.DecodeError): codec.DefaultInput` | Advertise a pure conversion from typed values to accepted decoder input. |
+| `codec.Input[T: codec.Decode](convert: (T) => codec.Value \| codec.DecodeError): codec.DefaultInput` | Advertise a pure conversion from typed values to accepted decoder input. |
 
 Container metadata delegates to its selected element decoder, preserving variant choices through Option and List wrappers. Missing field metadata uses the general `json` kind and a required input. Record schemas describe named fields, typed validation and optional default-display callbacks. Looking up the schema does not evaluate defaults. A record field can publish a lazy `recordSchema` callback for the selected decoder of its value; `Option` forwards its inner record schema. Custom decoders without record metadata remain opaque. A field's defaultValue callback returns display text, an optional configuration path and choices from one default evaluation.
 
@@ -247,7 +247,10 @@ fn main() {}
 ```
 
 The constructor type must match the selected decoder's target. Incompatible
-metadata returns a provider error before conversion. CLI flattened parent
+metadata returns a provider error before conversion. Providers support concrete
+and sealed targets; unions inside target type arguments require generic metadata
+keys and currently return a provider error. An enclosing record or sealed provider
+can handle its union fields explicitly. CLI flattened parent
 defaults use this callback and preserve the final selected decoder and its facts;
 ordinary Decode object/default behavior is unchanged.
 

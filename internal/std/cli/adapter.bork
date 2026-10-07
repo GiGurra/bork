@@ -217,6 +217,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
       config := map[string]codec.Value{}
       configNames := map[string]string{}
       configGroups := map[string]bool{}
+      clearedDefaults := map[string]bool{}
       configExtras := map[string]flatConfigEntry{}
       var err error
       for _, path := range files {
@@ -234,6 +235,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
             if entry.group {
               _, object := entry.value.(codec.Value_Object)
               configGroups[entry.field] = object
+              if !object { clearedDefaults[entry.field] = true }
               for source := range config { if strings.HasPrefix(source, entry.field+".") { delete(config, source); delete(configNames, source) } }
               for source := range configExtras { if strings.HasPrefix(source, entry.field+".") { delete(configExtras, source) } }
               for source := range configGroups { if strings.HasPrefix(source, entry.field+".") { delete(configGroups, source) } }
@@ -255,7 +257,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
       if len(schema) != 0 { for _, group := range schema[0].groups {
         defaultActive := false
         if baseline, present := _borkOptionGet(group.defaultValue); present { _, null := baseline.(codec.Value_Null); defaultActive = !null }
-        for parent, object := range configGroups { if !object && (group.field == parent || strings.HasPrefix(group.field, parent+".")) { defaultActive = false } }
+        for parent := range clearedDefaults { if group.field == parent || strings.HasPrefix(group.field, parent+".") { defaultActive = false } }
         enabled := !group.optional || configGroups[group.field] || (!partial && defaultActive)
         parentEnabled := true
         for parent, enabled := range activeGroups { if strings.HasPrefix(group.field, parent+".") && !enabled { parentEnabled = false } }
@@ -263,6 +265,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
         for i, field := range schema { if strings.HasPrefix(field.field, group.field+".") { _, configured := config[field.field]; if configured || !shadow.Elem().Field(i).IsNil() { supplied = true } } }
         if configured, present := configGroups[group.field]; present && !configured && !supplied { enabled = false; if parentEnabled { nullGroups = append(nullGroups, group.field) } } else if supplied { enabled = true }
         enabled = enabled && parentEnabled
+        if !enabled && parentEnabled && group.optional { for parent := range clearedDefaults { if strings.HasPrefix(group.field, parent+".") { nullGroups = append(nullGroups, group.field); break } } }
         activeGroups[group.field] = enabled
         if enabled { active = append(active, group.field) }
       } }
@@ -278,7 +281,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
         var json codec.Value
         if value.IsNil() {
           baseline, hasBaseline := _borkOptionGet(field.parentDefault)
-          for group, object := range configGroups { if !object && strings.HasPrefix(field.field, group+".") { hasBaseline = false } }
+          for group := range clearedDefaults { if strings.HasPrefix(field.field, group+".") { hasBaseline = false } }
           if configured, exists := config[field.field]; exists { json = configured; key = configNames[field.field] } else if hasBaseline && !partial { json = baseline } else if field.defaultFalse && !partial { json = codec.Value_Bool{value: false} } else {
             if partial || field.declaredDefault { continue }
             if !field.optional { failures = append(failures, codec.DecodeError{path: "." + key, message: "is missing"}); continue }
@@ -352,7 +355,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
         for _, entry := range configExtras { extras = append(extras, entry) }
         sort.Slice(extras, func(i, j int) bool { return extras[i].key < extras[j].key })
         cleared := []string{}
-        for group, object := range configGroups { if !object { cleared = append(cleared, group) } }
+        for group := range clearedDefaults { cleared = append(cleared, group) }
         jsonFields = rebuildNestedFields(jsonFields, schema, active, nullGroups, cleared, extras)
       }
       return inputCollection{fields: jsonFields, errors: failures}

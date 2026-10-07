@@ -19,12 +19,14 @@ pred Healthy(value: Db) { value.host != "blocked" || value.port == 443 }
 type Db = { host: String = "leaf", port: Int = 1, enabled: Bool, label: Option[String] = .None } where Healthy derive(codec.Decode)
 type Required = { user: String, enabled: Bool } derive(codec.Decode)
 type Layer = { db: Db = .{enabled:false} } derive(codec.Decode)
+type OptionalLayer = {name:String="leaf-name",db:Option[Db]=.Some(.{host:"inner-parent",port:999,enabled:true})}derive(codec.Decode)
 type Options = {
  db: Db = .{host:"parent",port:443,enabled:true,label:.Some("label")} codec { name:"database", aliases:["oldDb"] }
  some: Option[Db] = .Some(.{host:"optional",port:80,enabled:true})
  none: Option[Db] = .None
  required: Required = .{user:"parent-user",enabled:true}
  layer: Layer = .{db:.{host:"deep",port:42,enabled:true}}
+ nested:OptionalLayer=.{name:"outer-parent",db:.Some(.{host:"outer-db",port:443,enabled:true})}
 } derive(codec.Decode)
 type Leaf = { action: String = "show" } derive(codec.Decode)
 fn suggest(request:cli.CompletionRequest,s:Scope):cli.Suggestions|cli.Error {
@@ -52,7 +54,7 @@ fn main() {
   println(cli.DispatchRoot[Options]("app","Root",args,[child]))
   return
  }
- files:List[String]=if(mode=="config"){["base.json","overlay.json"]}else if(mode=="null"){["null.json"]}else{[]}
+ files:List[String]=if(mode=="config"){["base.json","overlay.json"]}else if(mode=="null"){["null.json"]}else if(mode=="later"){["first-null.json","later-object.json"]}else if(mode=="deepnull"){["deep-null.json"]}else{[]}
  match(cli.ParseWith[Options]("app","Defaults",args,configFiles:files,settings:.{autoEnv:true,envPrefix:"BORK_PARENT"},completions:[.{field:"db.host",suggest:suggest}])) {
   help:cli.Help=>{println(help.text);eprintln(help.diagnostics)}
   other=>println(other)
@@ -62,9 +64,12 @@ fn main() {
 		t.Fatal(err)
 	}
 	for name, contents := range map[string]string{
-		"base.json":    `{"oldDb":{"host":"base","port":80},"some":{"host":"configured"}}`,
-		"overlay.json": `{"database":{"host":"config"}}`,
-		"null.json":    `{"some":null,"database":null,"required":null}`,
+		"base.json":         `{"oldDb":{"host":"base","port":80},"some":{"host":"configured"}}`,
+		"overlay.json":      `{"database":{"host":"config"}}`,
+		"null.json":         `{"some":null,"database":null,"required":null}`,
+		"first-null.json":   `{"database":null}`,
+		"later-object.json": `{"database":{"host":"reactivated"}}`,
+		"deep-null.json":    `{"nested":null}`,
 	} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(contents), 0600); err != nil {
 			t.Fatal(err)
@@ -88,6 +93,9 @@ fn main() {
 		{"config overlays baseline", "config", nil, nil, []string{`host: "config", port: 443, enabled: true`, `host: "configured", port: 80, enabled: true`}, nil},
 		{"env overlays config", "config", nil, []string{"BORK_PARENT_DATABASE_HOST=env"}, []string{`host: "env", port: 443, enabled: true`}, nil},
 		{"cli overlays env", "config", []string{"--database-host", "cli"}, []string{"BORK_PARENT_DATABASE_HOST=env"}, []string{`host: "cli", port: 443, enabled: true`}, nil},
+		{"later object retains null reset", "later", nil, nil, []string{`host: "reactivated", port: 1, enabled: false`}, nil},
+		{"ancestor reset suppresses optional record default", "deepnull", []string{"--nested-name", "reactivated"}, nil, []string{`name: "reactivated", db: Option.None`}, []string{`inner-parent`, `outer-db`}},
+		{"ancestor reset reactivated descendant uses leaf defaults", "deepnull", []string{"--nested-db-host", "reactivated"}, nil, []string{`name: "leaf-name", db: Option.Some(Db { host: "reactivated", port: 1, enabled: false`}, nil},
 		{"parent fact", "normal", []string{"--database-host", "blocked", "--database-port", "80"}, nil, []string{"Healthy"}, nil},
 		{"null clears baseline", "null", []string{"--database-host", "reactivated", "--required-user", "fresh"}, nil, []string{`host: "reactivated", port: 1, enabled: false`, `some: Option.None`, `user: "fresh", enabled: false`}, nil},
 		{"null removes required sibling", "null", []string{"--database-host", "reactivated", "--required-enabled"}, nil, []string{".required.user", "is missing"}, nil},
