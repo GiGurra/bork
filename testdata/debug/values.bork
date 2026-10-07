@@ -4,6 +4,7 @@ type Inner = { label: String, range: Int }
 type Outer = { inner: Inner, shape: Shape, optional: Option[Int] }
 type Box[T] = { item: T }
 type Suffix = { range_: Int }
+fn specialFloat(text: String): Float { match (parseFloat(text)) { value: Float => value, _: ParseError => 0.0 } }
 fn suffixFrame(range_: Int) uses io { println(range_) }
 fn projectionFrame(optional: Option[Int], value: Inner | Outer) uses io {
   match (optional) {
@@ -19,6 +20,15 @@ fn projectionFrame(optional: Option[Int], value: Inner | Outer) uses io {
 fn main() { debugFrame(3); suffixFrame(4); projectionFrame(.Some(9), Inner { label: "narrowed", range: 6 }) }
 fn debugFrame(range: Int) uses io {
   fraction = 1.1
+  negativeZero = specialFloat("-0")
+  notANumber = specialFloat("NaN")
+  infinity = specialFloat("+Inf")
+  boundary = 9007199254740992.0
+  boundary32: Float32 = 16777216.0
+  tiny = 5e-324
+  tiny32: Float32 = 1.4e-45
+  huge = 1.7976931348623157e308
+  huge32: Float32 = 3.4028235e38
   fraction32: Float32 = 1.1
   unsigned: Uint8 = 0
   signed: Int8 = -128
@@ -43,5 +53,5 @@ fn debugFrame(range: Int) uses io {
   listUnion: List[Int] | Int = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   chosen = match (shape) { Shape.Circle { radius } => radius, Shape.Empty => 0.0 }
   println(y)
-  println(payload, x, shape, some, none, nested, recordUnion, scalarUnion, chosen, someFloat, boxed, shapes, numbers, floatNumbers, float32Numbers, emptyNumbers, listUnion, fraction, fraction32, unsigned, signed, suffix)
+  println(payload, x, shape, some, none, nested, recordUnion, scalarUnion, chosen, someFloat, boxed, shapes, numbers, floatNumbers, float32Numbers, emptyNumbers, listUnion, fraction, fraction32, boundary, boundary32, tiny, tiny32, huge, huge32, negativeZero, notANumber, infinity, unsigned, signed, suffix)
 }

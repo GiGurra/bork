@@ -42,9 +42,17 @@ For example, `user.address.zip`, `count + 1`, `price > minimum`, and
 checks and lowers expressions using type information from the build's debug map
 and locals from the selected frame. Evaluation does not execute user functions.
 
-Floating-point arithmetic is rejected because Delve does not preserve runtime
-rounding, even with explicit Float/Float32 conversions. Float literals,
-inspection and comparisons of noncomputed operands remain available. Literal
+Finite Float/Float32 arithmetic uses staged reads: the compiler rounds each
+operation to its checked width before evaluating the next. This preserves
+runtime rounding for `+`, `-`, `*`, `/`, unary negation and comparisons of their
+results. For example, if `large: Float32` is 16777216, `large + 1.0 == large`
+is true. See the [rounding argument](debugger-rounding.md) for both widths.
+
+Non-finite operands/results, negative-zero operands, runtime-computed zero
+results, division by zero and floating arithmetic involving boolean short-circuit
+expressions are rejected with readable errors. These limits avoid Delve's IEEE
+special-value and evaluation-order differences. Direct value inspection, float
+literals and comparisons without arithmetic remain available. Literal
 comparisons use exact representations of the compiler-rounded values.
 
 A standalone `xs.get(i)` reads an immutable list and returns `Some(value)` or

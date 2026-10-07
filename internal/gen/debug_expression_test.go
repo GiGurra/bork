@@ -96,11 +96,16 @@ func TestDebugExpressionBindingIdentity(t *testing.T) {
 
 }
 
-func TestDebugExpressionFloatLimits(t *testing.T) {
+func TestDebugExpressionFloatConstants(t *testing.T) {
 	metadata, locals := expressionFixture()
-	for _, source := range []string{"1.0 + 2.0", "-(1.0 + 2.0)", "1.0 + 2.0 == 3.0"} {
-		if _, err := DebugExpression(source, metadata, diag.Pos{File: "main.bork", Line: 5}, locals); err == nil || !strings.Contains(err.Error(), "Delve does not preserve runtime rounding") {
-			t.Fatalf("float arithmetic %s: %v", source, err)
+	for _, test := range []struct{ source, want string }{
+		{"1.0 + 2.0", "float64(0x1.8p+01)"},
+		{"-(1.0 + 2.0)", "float64(-0x1.8p+01)"},
+		{"1.0 + 2.0 == 3.0", "0x1.8p+01 == 0x1.8p+01"},
+	} {
+		got, err := DebugExpression(test.source, metadata, diag.Pos{File: "main.bork", Line: 5}, locals)
+		if err != nil || got != test.want {
+			t.Fatalf("%s: %s, %v", test.source, got, err)
 		}
 	}
 }
@@ -114,10 +119,10 @@ func TestDebugListGetPlan(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if plan.Predicate != "range_-1 >= 0 && range_-1 < len(r.items)" || plan.Type != "main.Option[int64]" {
+		if plan.Read != "range_-1 >= 0 && range_-1 < len(r.items)" || plan.Type != "main.Option[int64]" {
 			t.Fatalf("plan: %+v", plan)
 		}
-		err = plan.Select(result)
+		err = plan.Advance(result)
 		if result == "invalid" {
 			if err == nil {
 				t.Fatal("accepted invalid predicate result")
@@ -128,7 +133,7 @@ func TestDebugListGetPlan(t *testing.T) {
 		if result == "false" {
 			want = "main.Option_None[int64]{}"
 		}
-		if err != nil || plan.Expression != want || plan.Predicate != "" {
+		if err != nil || plan.Expression != want || plan.Read != "" {
 			t.Fatalf("selected %s: %+v, %v", result, plan, err)
 		}
 	}

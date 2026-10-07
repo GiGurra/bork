@@ -77,7 +77,7 @@ func (r *dapRelay) evaluate(msg map[string]any, requests bool) (bool, error) {
 		}
 	case "evaluate":
 		result, _ := body["result"].(string)
-		if err := evaluation.plan.Select(result); err != nil {
+		if err := evaluation.plan.Advance(result); err != nil {
 			return true, r.evaluateError(evaluation.request, err.Error())
 		}
 	}
@@ -95,8 +95,8 @@ func (r *dapRelay) evaluate(msg map[string]any, requests bool) (bool, error) {
 		}
 		evaluation.plan = plan
 	}
-	if evaluation.plan.Predicate != "" {
-		return true, r.evaluateRequest(evaluation, "evaluate", map[string]any{"frameId": args["frameId"], "expression": evaluation.plan.Predicate, "context": args["context"]})
+	if evaluation.plan.Read != "" {
+		return true, r.evaluateRequest(evaluation, "evaluate", map[string]any{"frameId": args["frameId"], "expression": evaluation.plan.Read, "context": args["context"]})
 	}
 	args["expression"] = evaluation.plan.Expression
 	resultType := evaluation.plan.Type

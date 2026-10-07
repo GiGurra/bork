@@ -23,19 +23,24 @@ func DebugExpression(source string, metadata *DebugMap, site diag.Pos, locals []
 	return text, err
 }
 
-// DebugEvaluation contains compiler-owned reads. A predicate is evaluated first
-// when the result depends on bounds; the relay only transports its Bool result.
+// DebugEvaluation contains compiler-owned reads. Intermediate results are
+// checked before the next read; the relay only transports requests and results.
 type DebugEvaluation struct {
 	Expression      string
 	Type            string
-	Predicate       string
+	Read            string
 	ReadFailure     string
 	present, absent string
+	floats          []debugFloatRead
+	output          ast.Expr
 }
 
-// Select resolves a bounds predicate without exposing branching semantics to
-// the DAP relay. Delve never evaluates the out-of-bounds element expression.
-func (e *DebugEvaluation) Select(result string) error {
+// Advance checks an intermediate result and prepares the next compiler-owned
+// read. Delve never evaluates an out-of-bounds element expression.
+func (e *DebugEvaluation) Advance(result string) error {
+	if len(e.floats) != 0 {
+		return e.advanceFloat(result)
+	}
 	switch result {
 	case "true":
 		e.Expression = e.present
@@ -44,7 +49,7 @@ func (e *DebugEvaluation) Select(result string) error {
 	default:
 		return fmt.Errorf("debug expression: invalid bounds response from debugger")
 	}
-	e.Predicate = ""
+	e.Read = ""
 	return nil
 }
 
@@ -54,8 +59,8 @@ func DebugExpressionTyped(source string, metadata *DebugMap, site diag.Pos, loca
 	if err != nil {
 		return "", "", err
 	}
-	if plan.Predicate != "" {
-		return "", "", fmt.Errorf("debug expression: collection access requires staged evaluation")
+	if plan.Read != "" {
+		return "", "", fmt.Errorf("debug expression: this expression requires staged evaluation")
 	}
 	return plan.Expression, plan.Type, nil
 }
@@ -126,7 +131,10 @@ func DebugExpressionPlan(source string, metadata *DebugMap, site diag.Pos, local
 			}
 			texts[i] = result.String()
 		}
-		return &DebugEvaluation{Type: access.Option, Predicate: texts[0], present: texts[1], absent: texts[2], ReadFailure: "debug expression: debugger could not construct the Option payload; this executable may lack its concrete variant type; inspect the list's children instead"}, nil
+		return &DebugEvaluation{Type: access.Option, Read: texts[0], present: texts[1], absent: texts[2], ReadFailure: "debug expression: debugger could not construct the Option payload; this executable may lack its concrete variant type; inspect the list's children instead"}, nil
+	}
+	if debugFloatArithmetic(expr) {
+		return g.debugFloatPlan(expr)
 	}
 	stmts, out := g.value(expr)
 	if len(stmts) != 0 || out == nil {
@@ -134,20 +142,7 @@ func DebugExpressionPlan(source string, metadata *DebugMap, site diag.Pos, local
 	}
 	// Delve evaluates this syntax without injecting calls into the target. Check
 	// the lowered tree as well so future compiler changes cannot widen the subset.
-	safe := true
-	ast.Inspect(out, func(node ast.Node) bool {
-		switch n := node.(type) {
-		case nil, *ast.Ident, *ast.BasicLit, *ast.ParenExpr, *ast.SelectorExpr, *ast.UnaryExpr, *ast.BinaryExpr:
-		case *ast.CallExpr:
-			if !g.debugConversions[n] {
-				safe = false
-			}
-		default:
-			safe = false
-		}
-		return safe
-	})
-	if !safe {
+	if !g.debugReadSafe(out) {
 		return nil, fmt.Errorf("debug expression: this expression requires execution")
 	}
 
@@ -173,6 +168,23 @@ func DebugExpressionPlan(source string, metadata *DebugMap, site diag.Pos, local
 		resultType = "main." + resultType
 	}
 	return &DebugEvaluation{Expression: result.String(), Type: resultType}, err
+}
+
+func (g *gen) debugReadSafe(out ast.Expr) bool {
+	safe := true
+	ast.Inspect(out, func(node ast.Node) bool {
+		switch n := node.(type) {
+		case nil, *ast.Ident, *ast.BasicLit, *ast.ParenExpr, *ast.SelectorExpr, *ast.UnaryExpr, *ast.BinaryExpr:
+		case *ast.CallExpr:
+			if !g.debugConversions[n] {
+				safe = false
+			}
+		default:
+			safe = false
+		}
+		return safe
+	})
+	return safe
 }
 
 func (g *gen) debugExpressions(m *DebugMap) {

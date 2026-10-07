@@ -48,6 +48,7 @@ Each page covers one area in plain terms, with code you can run. Follow the Prev
 - [Standard packages](std/README.md): files, HTTP, JSON, SQL, time, and more.
 - [Editors](editors.md): VS Code, Neovim, Vim, Emacs, Helix, Zed, and any LSP client. The [VS Code extension](../editors/vscode/README.md) has its own page.
 - [Debugging](debugging.md): breakpoints and stepping in bork source.
+- [Debugger arithmetic rounding](debugger-rounding.md): Float and Float32 evaluation guarantees.
 - [JSON diagnostics](diagnostics.md), [watch mode](watch.md), and [compiler code queries](describe.md): the compiler's interfaces for editors and tools.
 
 ## For contributors

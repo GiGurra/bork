@@ -476,6 +476,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 
 type gen struct {
 	debugExpression  bool
+	debugValues      map[check.Expr]ast.Expr
 	debugConversions map[*ast.CallExpr]bool
 
 	shapeScope     *check.ClassInstance
@@ -1059,6 +1060,9 @@ func borrowedName(v string) *ast.Ident {
 // The expression is nil when e never produces a value, including when
 // one of its subexpressions diverges. Ok has a concrete value.
 func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
+	if cached := g.debugValues[e]; cached != nil {
+		return nil, cached
+	}
 	t := e.Type()
 	switch e := e.(type) {
 	case *check.Comptime:
