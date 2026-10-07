@@ -19,35 +19,14 @@ fn numbers(): Seq[Int] uses io {
   }
 }
 
-// Bridge the scoped file to a streaming reader. The generator below owns
-// the file; this helper only reads it, stopping when its consumer stops.
-fn readLines(file: fs.File) uses io: Seq[String | IoError] uses io unsafe go {
-  import "os"
-  import "bufio"
-  raw := file.handle.(*os.File)
-  return _Seq[any]{run: func(yield func(any) bool) {
-    scanner := bufio.NewScanner(raw)
-    for scanner.Scan() {
-      if !yield(scanner.Text()) { return }
-    }
-    if err := scanner.Err(); err != nil {
-      yield(IoError{path: raw.Name(), message: err.Error()})
-    }
-  }}
-}
-
 fn fileLines(path: String): Seq[String | fs.Error] uses io {
   generate[String | fs.Error] {
     scope producer {
-      // Cleanup runs in reverse order: fs.Open's file closes first.
       onClose(producer, () => println("file scope closed"))
-      match fs.Open(path, producer) {
-        file: fs.File => {
-          println("file opened")
-          for line in readLines(file) { yield line }
-        }
-        error: fs.Error => { yield error }
-      }
+      // fs.Lines opens on traversal and closes on exhaustion or early stop.
+      // Stopping this generator also stops its source before scope cleanup.
+      println("file traversal started")
+      for line in fs.Lines(path) { yield line }
     }
   }
 }

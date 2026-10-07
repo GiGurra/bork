@@ -13,7 +13,7 @@ comprehension: [(0, "fiction", 50), (1, "history", 40)]
 stock: pen 2
 stock: pad 3
 file sequence created
-file opened
+file traversal started
 line: first
 file scope closed
 consumer continued
