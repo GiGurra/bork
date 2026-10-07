@@ -743,11 +743,11 @@ func (g *gen) goFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 	}
 	aliases := g.packageAliases(fd)
 	body := g.goBodyAliases(fd)
-	if aliases != "" {
-		// Keep aliases outside the written block so local declarations can shadow them.
+	if aliases != "" && g.info.FuncOf[fd].Pkg.GoPrefix == "" {
+		// Root-package aliases are new; preserve existing local shadowing.
 		fmt.Fprintf(&buf, " {%s{/*line %s:%d:%d*/%s}}\n", aliases, file, pos.Line, pos.Col+1, body)
 	} else {
-		fmt.Fprintf(&buf, " {/*line %s:%d:%d*/%s}\n", file, pos.Line, pos.Col+1, body)
+		fmt.Fprintf(&buf, " {%s/*line %s:%d:%d*/%s}\n", aliases, file, pos.Line, pos.Col+1, body)
 	}
 	return buf.String(), nil
 }
