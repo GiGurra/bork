@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/constant"
 	"go/token"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -1288,10 +1289,17 @@ func (c *checker) pushScope() {
 }
 
 func (c *checker) popScope() {
-	for _, l := range c.scopes[len(c.scopes)-1] {
+	// Report in name order: derive templates anchor these diagnostics at
+	// one instance position, where map order would show.
+	var unused []string
+	for name, l := range c.scopes[len(c.scopes)-1] {
 		if l.node != nil && !l.used {
-			c.unusedLocal(l)
+			unused = append(unused, name)
 		}
+	}
+	slices.Sort(unused)
+	for _, name := range unused {
+		c.unusedLocal(c.scopes[len(c.scopes)-1][name])
 	}
 	c.scopes = c.scopes[:len(c.scopes)-1]
 	for len(c.inForce) > 0 && c.inForce[len(c.inForce)-1].depth > len(c.scopes) {
