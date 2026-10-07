@@ -153,6 +153,24 @@ type deriveExpansion struct {
 	// comptimeReads holds the template bindings that compile-time code has
 	// read, by position.
 	comptimeReads map[diag.Pos]bool
+	// deferredReads holds the reads made by a compile-time-only binding's
+	// initializer; they count once that binding is itself read.
+	deferredReads map[diag.Pos]map[diag.Pos]bool
+}
+
+// comptimeRead records that compile-time code read the template binding at
+// origin, along with the reads its initializer made.
+func (p *deriveExpansion) comptimeRead(origin diag.Pos) {
+	if p.comptimeReads == nil {
+		p.comptimeReads = map[diag.Pos]bool{}
+	}
+	if p.comptimeReads[origin] {
+		return
+	}
+	p.comptimeReads[origin] = true
+	for read := range p.deferredReads[origin] {
+		p.comptimeRead(read)
+	}
 }
 
 func (p *deriveExpansion) error(pos diag.Pos, format string, args ...any) {
@@ -336,10 +354,7 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 		value, ok := p.env[x.Name]
 		if origin, present := p.origins[x.Name]; ok && present {
 			p.c.noteDeriveSource(x.Pos, x.Name, origin, "variable")
-			if p.comptimeReads == nil {
-				p.comptimeReads = map[diag.Pos]bool{}
-			}
-			p.comptimeReads[origin] = true
+			p.comptimeRead(origin)
 		}
 		if _, runtime := value.(shapeRuntimeType); runtime {
 			return nil, false
@@ -754,7 +769,22 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 		for _, stmt := range x.Stmts {
 			if binding, ok := stmt.(*syntax.Binding); ok && !binding.Lazy && binding.AsyncScope == nil {
 				delete(p.comptimeReads, binding.Pos)
-				if value, known := p.eval(binding.Value); known {
+				outer := p.comptimeReads
+				p.comptimeReads = nil
+				value, known := p.eval(binding.Value)
+				initializer := p.comptimeReads
+				p.comptimeReads = outer
+				if known && metadataValue(value) {
+					if p.deferredReads == nil {
+						p.deferredReads = map[diag.Pos]map[diag.Pos]bool{}
+					}
+					p.deferredReads[binding.Pos] = initializer
+				} else {
+					for read := range initializer {
+						p.comptimeRead(read)
+					}
+				}
+				if known {
 					if _, exists := p.env[binding.Name]; exists {
 						p.error(binding.Pos, "%s is already defined in an enclosing compile-time scope", binding.Name)
 					}
