@@ -1,0 +1,10 @@
+import "bork/fs"
+
+fn escaped(path: String) uses io: Seq[String | fs.Error] uses io | fs.Error {
+  scope producer {
+    file = fs.Open(path, producer)?
+    fs.ReadLines(file)
+  }
+}
+
+fn main() { println(escaped("notes.txt")) }

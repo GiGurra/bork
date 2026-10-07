@@ -41,20 +41,6 @@ fn observeClose(file: fs.File, closed: Atom[Int]) uses io + state unsafe go {
   }
 }
 
-// Stream from the open file without owning or closing it here.
-fn readLines(file: fs.File) uses io: Seq[String] uses io unsafe go {
-  import "os"
-  import "bufio"
-  raw := file.handle.(*os.File)
-  return _Seq[string]{run: func(yield func(string) bool) {
-    scanner := bufio.NewScanner(raw)
-    for scanner.Scan() {
-      if !yield(scanner.Text()) { return }
-    }
-    if err := scanner.Err(); err != nil { panic(err) }
-  }}
-}
-
 // The generator owns its file in a local scope, rather than the consumer's.
 fn fileLines(path: String, opened: Atom[Int], closed: Atom[Int], scopeClosed: Atom[Int]): Seq[String | fs.Error] uses io + state {
   generate[String | fs.Error] {
@@ -64,7 +50,7 @@ fn fileLines(path: String, opened: Atom[Int], closed: Atom[Int], scopeClosed: At
         file: fs.File => {
           _ = update(opened, n => n + 1)
           observeClose(file, closed)
-          for (line in readLines(file)) { yield line }
+          for line in fs.ReadLines(file) { yield line }
         }
         error: fs.Error => { yield error }
       }

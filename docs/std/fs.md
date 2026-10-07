@@ -64,6 +64,7 @@ shows a handled failure without depending on a particular host error message.
 | `ErrorInfo(error: Error): IoError` | Extract common error fields. |
 | `CreateNew(path: String, s: Scope) uses io: File \| Error` | Create exclusively; an existing path gives Exists. |
 | `Lines(path: String): Seq[String \| Error] uses io: Ok` | Lazily read lines; a failure is the final element. |
+| `ReadLines(file: File) uses io: Seq[String \| Error] uses io` | Lazily consume lines from an open handle without closing it. |
 | `Entries(path: String): Seq[DirEntry \| Error] uses io: Ok` | Lazily visit directory entries in filesystem order. |
 
 `File` and `Directory` are resources. The compiler checks their
@@ -130,6 +131,40 @@ final unterminated line. There is no fixed scanner line-size limit.
 time in filesystem order. Both close on exhaustion or early stop; failures
 are final elements. Use `ReadDir` for a sorted, materialized listing.
 `ForEachLine` provides the same line handling for an already-open file.
+
+`ReadLines(file)` borrows an already-open file from its owning scope. It reads
+from the handle's current position, uses the same newline handling as `Lines`,
+and reports a read failure as its final element. Constructing the sequence
+does not read. Each traversal continues from the handle's current position;
+it does not reopen or rewind the file. Traversals share that position, so
+consume them sequentially, and do not read from, seek, or close the handle
+inside a traversal's callback. The sequence cannot outlive the file's scope.
+
+Stopping early leaves the next unread byte available to another traversal or
+to `ReadAll`/`ReadAllText`. On seekable handles, including regular files,
+`ReadLines` buffers reads and seeks back by any unread buffered bytes when
+traversal stops. On non-seekable handles such as pipes, it reads one byte at a
+time without read-ahead, trading throughput for precise partial consumption.
+`ReadLines` never closes the borrowed file, even on exhaustion or error; the
+caller's scope closes it. Use `Lines(path)` when each traversal should open
+and own a fresh file instead.
+
+```bork
+import "bork/fs"
+
+fn firstLine(path: String) uses io: Option[String | fs.Error] | fs.Error {
+  scope producer {
+    file = fs.Open(path, producer)?
+    fs.ReadLines(file).first()
+  }
+}
+
+fn main() { println(firstLine("notes.txt")) }
+```
+
+The [generators example](../../examples/generators/main.bork) opens a file
+inside a generator's scope and uses `ReadLines` across yields. Stopping its
+consumer early closes that scope and its file before the consumer continues.
 
 ## Temporary directories
 
