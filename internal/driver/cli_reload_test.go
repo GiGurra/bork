@@ -15,7 +15,8 @@ func TestCLIConfigReload(t *testing.T) {
 import "bork/codec"
 use codec.Defaults
 pred Positive(value: Int) { value > 0 }
-type Options = { port: Int where Positive = 8080, tags: List[String] = [] } derive (codec.Decode)
+pred BelowLimit(value: Options) { value.port < 9000 }
+type Options = { port: Int where Positive = 8080, tags: List[String] = [] } where BelowLimit derive (codec.Decode)
 fn write(text: String) uses io unsafe go {
  import "os"
  if err := os.WriteFile("config.json", []byte(text), 0600); err != nil { panic(err) }
@@ -43,6 +44,8 @@ fn main() {
    println(s"flag=${reload(["--port","8084"])}")
    environment("")
    println(s"invalid-file=${reload()}")
+   write("{\"port\":9999}")
+   println(s"invalid-record=${reload()}")
    println(s"old=${first.value}")
    println(s"old-source=${first.Source("port")}")
    write("invalid")
@@ -78,7 +81,7 @@ fn main() {
 		`Source.Env { name: "BORK_RELOAD_PORT" }`,
 		`invalid-env=Error`, `must be Positive`,
 		`flag=Resolved { value: Options { port: 8084, tags: ["third"] }`,
-		`Source.Flag { name: "port" }`, `invalid-file=Error`,
+		`Source.Flag { name: "port" }`, `invalid-file=Error`, `invalid-record=Error`, `must be BelowLimit`,
 		`old=Options { port: 8081, tags: ["first"] }`,
 		`old-source=Option.Some(Source.Config { path: "config.json" })`,
 		`help=Help { text: "Reload`, `malformed=Error`,
