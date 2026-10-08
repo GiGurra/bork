@@ -170,6 +170,11 @@ func (g *gen) instanceDecl(ci *check.ClassInstance) ast.Decl {
 				callable = idx
 			}
 			args = append(args, g.shapeCaptureArguments(ci)...)
+			for _, p := range m.TypeParams {
+				if g.typeMembership[p] {
+					args = append(args, membershipName(p))
+				}
+			}
 			call := &ast.CallExpr{Fun: callable, Args: args}
 			var body []ast.Stmt
 			if m.Result == check.Ok {
@@ -198,7 +203,7 @@ func (g *gen) instanceDecl(ci *check.ClassInstance) ast.Decl {
 		Name: ast.NewIdent(instName(ci)),
 		Type: &ast.FuncType{
 			TypeParams: typeParamList(ci.TypeParams),
-			Params:     &ast.FieldList{List: g.shapeDictionaryParameters(ci)},
+			Params:     &ast.FieldList{List: append(g.shapeDictionaryParameters(ci), g.membershipParams(ci.TypeParams)...)},
 			Results:    &ast.FieldList{List: []*ast.Field{{Type: g.classType(ci.Class, ci.Type)}}},
 		},
 		Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{lit}}}},
@@ -266,6 +271,7 @@ func (g *gen) declaredDictionary(d *check.Dict) ast.Expr {
 	} else {
 		args = append(args, g.shapeCaptureArguments(d.Inst)...)
 	}
+	args = append(args, g.membershipArgs(d.Inst.TypeParams, d.TypeArgs)...)
 	return &ast.CallExpr{Fun: fun, Args: args}
 }
 
@@ -325,7 +331,7 @@ func (g *gen) tupleMethod(d *check.Dict, source *check.Func, typeArgs []check.Ty
 	}
 	declared := &check.FuncType{Params: method.Params, Result: method.Result}
 	implementation := &check.FuncType{Params: source.Params, Result: source.Result}
-	if !hasTupleRepresentation(declared) && !hasTupleRepresentation(implementation) && len(shapeCaptures(source)) == 0 {
+	if !hasTupleRepresentation(declared) && !hasTupleRepresentation(implementation) && len(shapeCaptures(source)) == 0 && len(g.membershipParams(source.TypeParams)) == 0 {
 		return fun, dicts
 	}
 	want := check.SubstituteType(declared, []*check.TypeParam{d.Class.Param}, []check.Type{d.Type}).(*check.FuncType)
@@ -345,6 +351,7 @@ func (g *gen) tupleMethod(d *check.Dict, source *check.Func, typeArgs []check.Ty
 	} else {
 		args = append(args, g.shapeCaptureArguments(source.TemplateScope)...)
 	}
+	args = append(args, g.membershipArgs(source.TypeParams, typeArgs)...)
 	call := &ast.CallExpr{Fun: fun, Args: args}
 	body := []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{g.instanceResult(inst, call)}}}
 	if want.Result == check.Ok || want.Result == check.Never {
@@ -361,6 +368,7 @@ func (g *gen) funcRef(inst *check.Instance, needs ...ast.Expr) ast.Expr {
 	var dicts []ast.Expr
 	if inst.Func.Class == nil {
 		needs = append(g.shapeCaptureArguments(inst.Func.TemplateScope), needs...)
+		needs = append(needs, g.membershipArgs(inst.Func.TypeParams, inst.TypeArgs)...)
 	}
 	if inst.Func.Class != nil {
 		fun, dicts = g.methodFunc(inst)

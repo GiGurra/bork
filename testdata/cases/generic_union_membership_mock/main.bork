@@ -1,0 +1,40 @@
+type E = {}
+fn classify[T](x: T | E) uses io: String {
+  println("classify")
+  match (x) {
+    _: T => "success"
+    _: E => "error"
+  }
+}
+test "generic union membership survives mock passthrough" {
+  mock classify(x) { classify(x) }
+  assertEqual(classify[Int | String](E {}), "error")
+  saved: (Int | String | E) uses io => String = classify
+  assertEqual(saved(E {}), "error")
+}
+
+pred positive(x: Int) { x > 0 }
+fn foreign[T](x: T | E) uses io: Int where positive unsafe go { return 1 }
+pred valid[T](n: Int, value: T | E) {
+  match (value) {
+    _: T => n == 1
+    _: E => n == 2
+  }
+}
+fn foreignContract[T](x: T | E) uses io: Int where valid(x) unsafe go {
+  if _, ok := x.(E); ok { return 2 }
+  return 1
+}
+test "checked unsafe wrappers forward membership" {
+  mock foreign(x) {
+    match (x) {
+      _: T => 1
+      _: E => 2
+    }
+  }
+  assertEqual(foreign[Int | String](E {}), 2)
+}
+test "return contracts carry membership" {
+  assertEqual(foreignContract[Int | String](E {}), 2)
+  assertEqual(foreignContract[Int | String]("ok"), 1)
+}

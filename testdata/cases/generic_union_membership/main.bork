@@ -1,0 +1,95 @@
+type E = {}
+type A = { n: Int }
+type B = { text: String }
+type Holder[T] = { value: T | E }
+fn (h: Holder[T]) classify[T](): String { classify[T](h.value) }
+fn fromOption[T](value: Option[T | E]): String {
+  match (value) {
+    Option.Some(x) => classify[T](x)
+    Option.None => "none"
+  }
+}
+fn fromList[T](values: List[T | E]): List[String] { values.map(x => classify[T](x)) }
+fn nestedPattern[T](value: Option[T | E]): String {
+  match (value) {
+    Option.Some(t: T) => s"success: $t"
+    Option.Some(_: E) => "error"
+    Option.None => "none"
+  }
+}
+class Classify[T] { fn render(x: T): String }
+instance classifyHolder[T]: Classify[Holder[T]] {
+  fn render(h: Holder[T]): String { classify[T](h.value) }
+}
+fn renderGeneric[T: Classify](x: T): String { render(x) }
+fn callback[T](x: T | E): String {
+  f: (T | E) => String = classify
+  f(x)
+}
+fn classify[T](x: T | E): String {
+  match (x) {
+    t: T => s"success: $t"
+    _: E => "error"
+  }
+}
+fn propagate[T](x: T | E): String | E {
+  v = x?
+  toString(v)
+}
+fn propagateRest[T](x: Int | T | E): Int | T | E { x? }
+fn two[T, U](x: T | U | E): String {
+  match (x) {
+    _: T => "first"
+    _: U => "second"
+    _: E => "error"
+  }
+}
+fn propagateOption[T](value: Option[T | E]): Option[String] | E {
+  match (value) {
+    Option.Some(x) => Option.Some(toString(x?))
+    Option.None => Option.None
+  }
+}
+fn forward[T](x: T | E): String { classify[T](x) }
+fn extend[T](x: T | String | E): String { classify[T | String](x) }
+fn invoke(f: (Int | String | E) => String, x: Int | String | E): String { f(x) }
+fn main() {
+  println(extend[A | B](E {}))
+  println(extend[A | B]("extended"))
+  println(classify[A | B](E {}))
+  println(classify[A | B](A { n: 7 }))
+  println(classify[A | B](B { text: "bee" }))
+  println(propagateRest[A | B](E {}))
+  println(propagateRest[A | B](A { n: 10 }))
+  println(two[Int | String, A | B](E {}))
+  println(two[Int | String, A | B](A { n: 10 }))
+  println(two[Int | String, A | B]("text"))
+  println(propagateOption[A | B](Option.Some(E {})))
+  println(propagateOption[A | B](Option.Some(A { n: 9 })))
+  println(propagateOption[A | B](Option.None))
+  println(propagate[Int | String]("kept"))
+  println(fromOption[A | B](Option.Some(E {})))
+  println(fromOption[A | B](Option.Some(A { n: 8 })))
+  println(fromList[A | B]([E {}, B { text: "bee" }]))
+  println(nestedPattern[A | B](Option.Some(E {})))
+  println(nestedPattern[A | B](Option.Some(B { text: "bee" })))
+  println(Holder[A | B] { value: E {} }.classify())
+  println(callback[A | B](E {}))
+  println(renderGeneric(Holder[A | B] { value: E {} }))
+  method: (Holder[A | B]) => String = Holder.classify
+  println(method(Holder[A | B] { value: E {} }))
+  narrow: Float32 = 1.25
+  println(classify[Float32 | String](narrow))
+  println(classify[Float | String](1.5))
+  println(classify[Float32 | String](E {}))
+  println(classify[Int | String](E {}))
+  println(classify[Int | String]("ok"))
+  println(forward[Int | String](E {}))
+  f: (Int | String | E) => String = classify
+  println(f(E {}))
+  println(invoke(classify, E {}))
+  match (propagate[Int | String](E {})) {
+    s: String => println(s"WRONG success: $s")
+    _: E => println("error")
+  }
+}

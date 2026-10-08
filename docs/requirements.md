@@ -2817,7 +2817,7 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 ### Consequences
 
 - **Union order has meaning for `?`.** For subtyping, `A | B` and `B | A` are still the same type. But reordering a published signature changes what callers' `?` keeps, so it is an API change. The formatter never reorders unions, and a future API-diff tool should flag it.
-- **Type parameters are not flattened.** In `fn retry[T, E](...): T | E | Timeout`, the leftmost member is `T` as a whole, even if `T` is itself a union at the call site.
+- **Type parameters are not flattened.** In `fn retry[T, E](...): T | E | Timeout`, the leftmost member is `T` as a whole, even if `T` is itself a union at the call site. Generated generic calls carry membership predicates where needed: a match on `T`, or `?` keeping `T`, accepts only its Bork members, including through function values and callbacks. Go `any` alone does not define membership.
 
 ### Open questions
 
