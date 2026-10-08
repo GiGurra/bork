@@ -1,5 +1,7 @@
 classify
 classify
 ok    generic union membership survives mock passthrough
-1 passed, 0 failed
+ok    checked unsafe wrappers forward membership
+ok    return contracts carry membership
+3 passed, 0 failed
 exit code 0

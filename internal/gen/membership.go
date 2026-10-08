@@ -98,6 +98,23 @@ func (g *gen) membershipNeeds() {
 			}
 		}
 		for fn := range funcs {
+			// Test-mode wrappers call result and field predicates outside fn.Body.
+			// Their instantiated constraints can mention any of the caller's parameters.
+			predicates := invariantPreds(fn.Result, map[check.Type]bool{})
+			for _, member := range fn.ResultConstraints {
+				for _, con := range member.Constraints {
+					predicates = append(predicates, constraintPreds(con)...)
+				}
+			}
+			for _, pred := range predicates {
+				for _, p := range pred.TypeParams {
+					if g.typeMembership[p] {
+						for _, caller := range fn.TypeParams {
+							mark(caller)
+						}
+					}
+				}
+			}
 			check.WalkComptime(fn.Body, func(e check.Expr) bool {
 				var inst *check.Instance
 				switch e := e.(type) {
