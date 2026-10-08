@@ -5,7 +5,7 @@ type Row = { value: Int }
 type Range = { lo: Int, hi: Int where atLeast(lo) }
 type Outer = { range: Range }
 type Batch = { lo: Int, values: List[Int where atLeast(lo)] }
-type Full = { values: List[Int] where nonempty }
+type FilledBatch = { values: List[Int] where nonempty }
 fn need(x: Int where positive): Int { x }
 fn take(lo: Int, hi: Int where atLeast(lo)): Int { hi }
 fn all(lo: Int, xs: List[Int where atLeast(lo)]): Int { xs.length() }
@@ -25,6 +25,6 @@ fn wrong(xs: List[Range], other: Int): Int {
 fn batches(xs: List[Batch]): Int {
   match xs { [Batch { lo }, Batch { values: [value, ...rest] }, ...] => take(lo, value) + all(lo, rest), _ => 0 }
 }
-fn suffix(xs: List[Full]): Int {
-  match xs { [Full { values: [_, ...rest] }, ...] => needList(rest), _ => 0 }
+fn suffix(xs: List[FilledBatch]): Int {
+  match xs { [FilledBatch { values: [_, ...rest] }, ...] => needList(rest), _ => 0 }
 }
