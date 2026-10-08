@@ -1,0 +1,19 @@
+pred positive(x: Int) { x > 0 }
+type Box[T] = { value: T }
+type AliasBox[T] = { value: T }
+type PosPair = (Int where positive, Int)
+fn direct(x: Box[(Int where positive, Int)]): Int { x.value.0 }
+fn alias(x: AliasBox[PosPair]): Int { x.value.0 }
+fn option(x: Option[(Int where positive, Int)]): Int {
+  match x { Option.Some(value) => value.0, Option.None => 0 }
+}
+fn need(x: Int where positive): Int { x }
+fn scalar(box: Box[(Int, Int)]): Int { need(box.value.0) }
+fn payload(x: Option[(Int, Int)]): Int {
+  match x { Option.Some(value) => need(value.0), Option.None => 0 }
+}
+fn main() {
+  x = Box { value: (-1, 0) }
+  y = AliasBox { value: (-2, 0) }
+  println(need(x.value.0), direct(x), need(y.value.0), alias(y), scalar(x), payload(Option.Some((-1, 0))))
+}

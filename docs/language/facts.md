@@ -323,6 +323,10 @@ Tuple element facts are checked like record field facts. A parameter of type
 `.0` access and tuple destructuring preserve the proof. Decode validates constrained
 elements before returning success and reports JSON index paths.
 
+Tuple facts in a generic argument belong to the annotation that requires them.
+A parameter of type `Box[(Int where positive, Int)]` does not give the same
+fact to a separate value of type `Box[(Int, Int)]`.
+
 To see what the compiler knows at some point in your code, ask it with [`bork describe`](../cli.md#describe).
 
 The [payments example](../../examples/payments/main.bork) uses facts end to end.

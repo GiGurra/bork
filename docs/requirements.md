@@ -151,6 +151,11 @@ Element constraints must be checked at construction/boundaries and decoding, and
 tuples must preserve effects and scope lifetimes. Tuples lower to a single anonymous
 Go struct value with positional E0/E1 fields. See [design](design/tuples.md).
 
+Tuple facts in generic arguments stay local to their annotations. Cached record
+and sealed instances share erased shapes; a tuple constraint in one use must
+never become a guarantee of unrelated values with the same shape. Facts declared
+by the generic type itself still apply to every instance.
+
 ## 2. Type system
 
 ### Decided
