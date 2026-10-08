@@ -129,36 +129,43 @@ fn main() {
 
 ## Lazy sequences
 
-A `Seq[T]` describes a series of values without computing them. Nothing runs until something consumes the sequence, and only as much as is needed.
+A `Seq[T]` describes a series of values computed on demand. `generate[T] { ... }` builds one; `[T]` is the element type. Creating it does not run the block. A consumer asks for a value, the block runs to a `yield`, and that value is handed to the consumer. The block continues only when the consumer asks for the next value.
 
 ```bork
-fn squares(): Seq[Int] {
-  generate[Int] {
-    for (n in Seq.range(1, 1_000_000)) {
-      yield n * n
-    }
-  }
-}
-
 fn main() {
-  println(squares().filter(n => n % 2 == 0).take(3).toList())
-  for (n in squares()) {
-    if (n > 20) { break }
-    println(n)
+  values = generate[Int] {
+    for n in [1, 2] {
+      println("produced:", n)
+      yield n
+    }
+    println("finished")
   }
+  println("sequence created")
+  println(values.take(1).toList())
+  println(values.toList())
 }
 ```
 
-- `generate[T] { ... }` writes a sequence as a block that calls `yield` for each value.
-- `map`, `filter`, `flatMap`, `take`, `drop`, and `indexed` build a new sequence and do no work yet.
+```text
+sequence created
+produced: 1
+[1]
+produced: 1
+produced: 2
+finished
+[1, 2]
+```
+
+Nothing prints from the block at creation. `take(1)` limits consumption to the first yield, so neither the second value nor `finished` runs on that traversal. The second traversal starts from the top: values are recomputed, not cached. `toList()` pulls all values from the sequence it receives into a list; `generate` itself does not collect them.
+
+- `map`, `filter`, `flatMap`, `take`, `drop`, and `indexed` build a new sequence and do no work yet. For example, `values.filter(n => n > 1).map(n => n * 10)` runs only when consumed.
 - `for`, `forEach`, `fold`, `first`, and `toList` consume the sequence.
+- Stopping early with `break` or `take` ends the generator block and closes scopes inside it, including their resource cleanup.
 - `xs.toSeq()` makes a sequence from a list, and `Seq.range(start, end)` one of integers.
 
 `Seq[T].indexed()` gives a lazy `Seq[(Int, T)]` with the source’s effects.
 The index starts at zero on each traversal. It visits each source element once
 and stops as soon as its consumer stops.
-
-The first line of `main` computes only as many squares as it takes to find three even ones. A sequence can be consumed more than once, and each time it starts from the beginning.
 
 Standard packages use sequences for input that should not be loaded all at once, such as the lines of a file or the rows of a query. Such a sequence does I/O as it is consumed, and its type says so: `Seq[String] uses io`. The function that consumes it needs that [effect](effects.md).
 
@@ -166,7 +173,7 @@ The runnable [generators example](../../examples/generators/main.bork) shows par
 
 ### Comprehensions
 
-A comprehension writes a sequence as generator lines, filters and bindings, then the value to yield:
+A comprehension is shorthand that desugars to a `generate` block, with the same laziness, restart on each traversal, and early-stop cleanup. Use it when the shape is generators, filters, bindings, and one yield at the end:
 
 ```bork
 type Item = { name: String, active: Bool, qty: Int }
@@ -226,7 +233,9 @@ fn main() {
 [5]
 ```
 
-A comprehension is a `generate` block written another way. It is lazy, including its first source: nothing runs until the sequence is consumed, and each consumption starts again. It has the effects of what it runs. When its consumer stops early, it stops its sources, so a generator that holds a resource releases it then. The element type is the yield's type, or the one the context expects (`xs: Seq[Int | String] = for { ... } yield n`).
+The first source is lazy too. A comprehension has the effects of what it runs. Its element type is the yield's type, or the one the context expects (`xs: Seq[Int | String] = for { ... } yield n`).
+
+Use `generate` when the shape needs more control: state carried between values (such as Fibonacci numbers), several yields per step or yields in different branches, a scope/resource owned for the duration of consumption, or early `return`/`continue` logic. The [generators example](../../examples/generators/main.bork) puts the same squares sequence in both forms side by side.
 
 ## Bytes
 
