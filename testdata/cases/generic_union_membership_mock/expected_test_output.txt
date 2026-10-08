@@ -3,5 +3,6 @@ classify
 ok    generic union membership survives mock passthrough
 ok    checked unsafe wrappers forward membership
 ok    return contracts carry membership
-3 passed, 0 failed
+ok    contract dictionaries carry union membership
+4 passed, 0 failed
 exit code 0

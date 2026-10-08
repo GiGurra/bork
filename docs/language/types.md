@@ -358,7 +358,7 @@ fn main() {
 
 Type arguments are usually worked out from the values. When there is nothing to work them out from, write them: `Tree[Int].Leaf`, or `xs: List[Int] = []`.
 
-Union members can coincide after specialization. For example, `T | Int` becomes `Int` when `T` is `Int`. This also works inside callback signatures and container elements, including when a generic function is saved as a function value.
+Union members can coincide after specialization. For example, `T | Int` becomes `Int` when `T` is `Int`. This also works inside callback signatures and container elements, including when a generic function is saved as a function value. Generic record and sealed-variant fields follow the same rule, including lazy fields and fields replaced by `copy`.
 
 ```bork
 fn apply[T](witness: T, callback: (T | Int) => Int, value: T | Int): Int {
