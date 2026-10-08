@@ -181,6 +181,11 @@ fn main() {
 }
 ```
 
+Each loop element retains facts declared for every element of its source list.
+A guard on one loop variable proves a fact only about that variable; it does
+not prove the same fact about another element, including a nested loop over
+the same list.
+
 ## Relations between values
 
 A predicate with more than one parameter relates values to each other. The value being constrained is its first argument, and the rest are written in the `where`:
