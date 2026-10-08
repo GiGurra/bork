@@ -29,5 +29,10 @@ fn main() {
   println("🙂å".byteSubstring(0, 7) is OutOfRange)
   println("🙂å".byteSubstring(0, 9223372036854775807) is OutOfRange)
   println("🙂å".substring(0, 3) is OutOfRange)
+  println("🙂å".byteSubstring(4, 6) == "å")
+  println("🙂å".byteSubstring(1, 4) is OutOfRange)
+  println("🙂å".byteSubstring(0, 1) is OutOfRange)
+  println("🙂å".byteSubstring(2, 2) is OutOfRange)
+  println("🙂å".byteSubstring(4, 5) is OutOfRange)
   println("🙂å".runeCount(), "á".runeCount())
 }

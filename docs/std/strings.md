@@ -26,7 +26,7 @@ fn main() {
 | `substring(from: Int, to: Int): String \| OutOfRange` | Code points from from to the exclusive to; requires `0 <= from <= to <= runeCount()`. |
 | `byteLength(): Int` | UTF-8 byte length. |
 | `byteIndexOf(part: String): Option[Int]` | First matching byte offset; None if absent; empty part gives Some(0). |
-| `byteSubstring(from: Int, to: Int): String \| OutOfRange` | Bytes from from to the exclusive to; requires `0 <= from <= to <= byteLength()`. |
+| `byteSubstring(from: Int, to: Int): String \| OutOfRange` | Bytes from from to the exclusive to; requires `0 <= from <= to <= byteLength()` and both bounds on code-point boundaries. |
 
 [Regex](regex.md) match fields `start` and `end` also count code points, with an
 exclusive end. `text.substring(found.start, found.end)` extracts the match.
@@ -35,10 +35,16 @@ Code points are not grapheme clusters. A letter followed by a combining accent
 counts as two code points even when displayed as one character; emoji sequences
 can contain several code points. These methods do not normalize Unicode text.
 
+Code-point indexing makes search results safe to compose with text slices. It
+requires scanning UTF-8: converting a byte search result to a code-point offset
+is O(n) in the prefix length, and rune access and slicing also scan the text.
+Regex converts offsets incrementally in O(n) across the matched input prefix.
+The byte methods avoid converting indexes to code points.
+
 The `byte*` methods support byte-oriented interop. Use `byteIndexOf` results
-with `byteSubstring`, and `indexOf` results with `substring`. Cutting through a
-code point with `byteSubstring` can produce invalid UTF-8. Prefer code-point
-methods for text.
+with `byteSubstring`, and `indexOf` results with `substring`. `byteSubstring` returns OutOfRange if either bound falls inside a
+code point, including an empty slice at an interior byte. It preserves UTF-8
+when the input is valid UTF-8. Prefer code-point methods for text.
 
 Before code-point indexing, `indexOf` and regex offsets counted UTF-8 bytes.
 Callers that require the old String search unit should use `byteIndexOf` and

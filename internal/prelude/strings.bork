@@ -64,9 +64,6 @@ fn (s: String) endsWith(suffix: String): Bool unsafe go {
 fn (s: String) indexOf(part: String): Option[Int] unsafe go {
   import "strings"
   import "unicode/utf8"
-  // Match the same decoded code points that runeAt and substring expose.
-  if !utf8.ValidString(s) { s = string([]rune(s)) }
-  if !utf8.ValidString(part) { part = string([]rune(part)) }
   i := strings.Index(s, part)
   if i < 0 {
     return Option_None[int64]{}
@@ -139,11 +136,15 @@ fn (s: String) substring(from: Int, to: Int): String | OutOfRange unsafe go {
 }
 // byteSubstring slices UTF-8 bytes from from up to (not including) to.
 // It is OutOfRange unless 0 <= from <= to <= s.byteLength().
-// Cutting through a code point can produce invalid UTF-8; prefer substring.
+// Both bounds must be on code-point boundaries; splitting UTF-8 is OutOfRange.
 fn (s: String) byteSubstring(from: Int, to: Int): String | OutOfRange unsafe go {
   import "fmt"
+  import "unicode/utf8"
   if from < 0 || to < from || to > int64(len(s)) {
     return OutOfRange{value: fmt.Sprintf("%d to %d", from, to), target: fmt.Sprintf("a String of %d bytes", len(s))}
+  }
+  if from < int64(len(s)) && !utf8.RuneStart(s[from]) || to < int64(len(s)) && !utf8.RuneStart(s[to]) {
+    return OutOfRange{value: fmt.Sprintf("%d to %d", from, to), target: "UTF-8 code-point boundaries"}
   }
   return s[from:to]
 }
