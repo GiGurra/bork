@@ -196,7 +196,7 @@ fn main() {
       http.Text(200, "ok")
       }, admission: Option.Some(http.Admission { maxInFlight: 1 })))
     url = s"http://${http.Address(server)}"
-    println("handler panic", match (http.Get(s"$url/panic", app)) { _: IoError => true, _ => false })
+    println("handler panic", status(http.Get(s"$url/panic", app)))
     println("after panic", status(http.Get(url, app)), load(server))
   }
   scope app {

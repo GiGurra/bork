@@ -1,0 +1,7 @@
+import "bork/log"
+
+// Request panic logs use the same configured logger and logged ambient values
+// as application log.Error calls. Response bodies do not expose panic details.
+fn logHandlerPanic(method: String, path: String, failure: String) {
+  log.Error("HTTP handler panicked", { "method": method, "path": path, "failure": failure })
+}

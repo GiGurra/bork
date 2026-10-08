@@ -340,6 +340,27 @@ Admission precedes body buffering and middleware and holds capacity through requ
 
 Go detects HTTP/1 disconnects only after consuming the body, so unread-body waiters can remain until timeout, cancellation or permit transfer. Admission does not peek at or drain bodies. `AdmissionState(server) uses state: Option[AdmissionLoad]` gives a consistent `{ inFlight: Int, queued: Int }` snapshot, or None when disabled. See the [admission fixture](../../testdata/cases/http_admission/main.bork) for concurrent requests.
 
+## Handler panics
+
+A panic in an eager or streaming handler cancels its request scope and joins
+request tasks and cleanup. The listener keeps serving other requests, and admission
+capacity is released. Panics from unawaited request tasks or request cleanup are
+handled at the same boundary.
+
+Before response commitment, the server returns 500 with a generic body. After
+streaming status/headers are committed, it aborts the response; a client may have
+received partial bytes and cannot rely on its status to detect truncation.
+Each recovered panic emits a structured Error record through the logger configured by
+bork/log, with method, path and failure attributes and the request's bound logged
+ambient values. Multiple failures aggregated by scope cleanup remain one record;
+a handler panic followed by a cleanup panic produces two records. Panic details
+stay out of the response body. Panics unwinding a
+handler's own nested ambient bindings have already restored those bindings; the
+record uses the values still bound at the request boundary.
+
+Handlers, tasks and cleanup must cooperate with cancellation. This boundary does
+not forcibly stop arbitrary code or change panic behavior outside HTTP requests.
+
 ## Shared retries
 
 Retrying asserts that repeating the operation is safe. Only Overloaded is retried; responses, BodyTooLarge, IoError, Cancelled and DeadlineExceeded return directly. Share one scope-owned RetryBudget per destination across callers.

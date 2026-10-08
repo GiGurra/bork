@@ -1,0 +1,34 @@
+{"level":"ERROR","msg":"HTTP handler panicked","requestId":"request-42","method":"GET","path":"/boom","failure":"handler exploded"}
+response /boom 500
+{"level":"ERROR","msg":"HTTP handler panicked","requestId":"request-42","method":"GET","path":"/task","failure":"task exploded"}
+response /task 500
+{"level":"ERROR","msg":"HTTP handler panicked","requestId":"request-42","method":"GET","path":"/cleanup","failure":"cleanup exploded"}
+response /cleanup 500
+{"level":"ERROR","msg":"HTTP handler panicked","requestId":"request-42","method":"GET","path":"/double","failure":"handler exploded"}
+{"level":"ERROR","msg":"HTTP handler panicked","requestId":"request-42","method":"GET","path":"/double","failure":"cleanup exploded"}
+response /double 500
+{"level":"ERROR","msg":"HTTP handler panicked","requestId":"request-42","method":"GET","path":"/multiple","failure":"second cleanup exploded; and then: first cleanup exploded"}
+response /multiple 500
+response /health 200
+eager cancelled and idle true true
+{"level":"ERROR","msg":"HTTP handler panicked","requestId":"request-42","method":"GET","path":"/boom","failure":"handler exploded"}
+response /boom 500
+{"level":"ERROR","msg":"HTTP handler panicked","requestId":"request-42","method":"GET","path":"/task","failure":"task exploded"}
+response /task 500
+{"level":"ERROR","msg":"HTTP handler panicked","requestId":"request-42","method":"GET","path":"/cleanup","failure":"cleanup exploded"}
+response /cleanup 500
+{"level":"ERROR","msg":"HTTP handler panicked","requestId":"request-42","method":"GET","path":"/double","failure":"handler exploded"}
+{"level":"ERROR","msg":"HTTP handler panicked","requestId":"request-42","method":"GET","path":"/double","failure":"cleanup exploded"}
+response /double 500
+{"level":"ERROR","msg":"HTTP handler panicked","requestId":"request-42","method":"GET","path":"/multiple","failure":"second cleanup exploded; and then: first cleanup exploded"}
+response /multiple 500
+{"level":"ERROR","msg":"HTTP handler panicked","requestId":"request-42","method":"GET","path":"/committed","failure":"committed exploded"}
+response /committed 200
+{"level":"ERROR","msg":"HTTP handler panicked","requestId":"request-42","method":"GET","path":"/committed-cleanup","failure":"committed cleanup exploded"}
+response /committed-cleanup 200
+{"level":"ERROR","msg":"HTTP handler panicked","requestId":"request-42","method":"GET","path":"/committed-fork","failure":"fork committed exploded"}
+response /committed-fork 200
+{"level":"ERROR","msg":"HTTP handler panicked","requestId":"request-42","method":"POST","path":"/boom","failure":"handler exploded"}
+stalled upload 500
+response /health 204
+stream cancelled and idle true true
