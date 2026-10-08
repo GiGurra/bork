@@ -477,10 +477,11 @@ func (info *Info) args(call *syntax.Call) []syntax.Expr {
 // A name bound inside the pattern (`Option.Some(v)`) has the
 // field path to it from the subject (".value"), and the Field.
 type patSource struct {
-	Subject syntax.Expr
-	Member  Type
-	Path    string
-	Field   *Field
+	Subject      syntax.Expr
+	Member       Type
+	Path         string
+	Field        *Field
+	ElementsOnly bool
 }
 
 // Program type-checks a program: the root package (whose import path is
