@@ -18,17 +18,17 @@ func TestMainResult(t *testing.T) {
 import "bork/fs"
 type Failure = { message: String }
 instance failureShow: Show[Failure] { fn show(e: Failure): String { e.message } }
-fn fail(): Ok | Failure { Failure { message: "failed" } }
+fn attempt(ok: Bool): Ok | Failure { if (ok) { Ok } else { Failure { message: "failed" } } }
 fn main(): Ok | Failure | fs.Error | process.ExitCode {
  scope s {
   dir = fs.TempDir(s)?
   println(fs.DirectoryPath(dir))
   match (process.Args()) {
-   ["ok"] => {}
+   ["ok"] => attempt(true)?
    ["code"] => return process.ExitCode { code: 23, message: "usage" }
    ["silent"] => return process.ExitCode { code: 255 }
    ["record"] => return Failure { message: "record" }
-   _ => fail()?
+   _ => attempt(false)?
   }
  }
 }
@@ -165,8 +165,34 @@ fn main(): Ok | fs.Error {
 	if path == "" {
 		t.Fatal("missing temporary directory path")
 	}
-	defer os.RemoveAll(path)
+	defer func() {
+		if err := os.RemoveAll(path); err != nil {
+			t.Error(err)
+		}
+	}()
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("ExitNow unexpectedly closed scope: %v", err)
+	}
+}
+
+func TestMainResultTestMode(t *testing.T) {
+	root := t.TempDir()
+	writeFixtureFile(t, root, "main.bork", `type Failure = sealed { Broken }
+instance failureShow: Show[Failure] { fn show(e: Failure): String { "computed" } }
+fn main(): Ok | Failure { comptime { Failure.Broken } }
+test "entrypoint is not run" { assertEqual(1, 1) }
+`)
+	exe := filepath.Join(t.TempDir(), "program")
+	if err := Build(root, exe); err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(exe).CombinedOutput()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 1 || string(output) != "error: computed\n" {
+		t.Fatalf("normal program: %q (%v)", output, err)
+	}
+	var report bytes.Buffer
+	if code, err := Test(root, &report, TestOptions{}); err != nil || code != 0 {
+		t.Fatalf("test mode: code %d, %v\n%s", code, err, report.String())
 	}
 }

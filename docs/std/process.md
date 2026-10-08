@@ -34,7 +34,10 @@ the arguments. A nonzero exit is a `Result`; `Check` turns it into `ExitError`.
 
 `fn main(): Ok | E` may return failures or propagate them with `?`. After main's
 scopes close, a failure prints `error: <Show>` to stderr and exits with status 1.
-`Ok` exits with 0. To choose a failure status, return
+`Ok` exits with 0. When a cancelling signal caused shutdown, its status
+(130 for Interrupt, 143 for Terminate) takes precedence over an ordinary
+failure and suppresses error output. An explicit `ExitCode` keeps its chosen
+status and message even during signal shutdown. To choose a failure status, return
 `ExitCode { code: Int where ValidExitCode, message: String = "" }` from main.
 `ValidExitCode` requires 1 through 255. A nonempty message prints as
 `error: <message>`; an empty message prints nothing.

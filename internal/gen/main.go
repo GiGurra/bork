@@ -25,7 +25,11 @@ func (g *gen) resultMain(result check.Type) *ast.FuncDecl {
 		}
 		cases += fmt.Sprintf("case %s: if failure.message != \"\" { fmt.Fprintln(os.Stderr, \"error:\", failure.message) }; os.Exit(int(failure.code))\n", g.text(g.goType(member)))
 	}
-	cases += "default: fmt.Fprintln(os.Stderr, \"error:\", _str(failure)); os.Exit(1)\n"
+	cases += "default:\n"
+	if g.usesScopes {
+		cases += "_borkSignalExit()\n"
+	}
+	cases += "fmt.Fprintln(os.Stderr, \"error:\", _str(failure)); os.Exit(1)\n"
 	source := "package main\nfunc main() { switch failure := _borkMain().(type) {" + cases + "} }"
 	file, err := parser.ParseFile(token.NewFileSet(), "", source, 0)
 	if err != nil {

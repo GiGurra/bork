@@ -47,7 +47,9 @@ shows a handled registration error.
 
 SIGINT (Ctrl+C) and SIGTERM cancel every root scope by default, including nested
 tasks through their parents. Cleanup finishes before a normal return exits with
-130 or 143. An explicit `process.ExitNow(code)` keeps its chosen code. Copies within
+130 or 143. An ordinary failure returned from main also uses the signal status, without
+printing an error. An explicit `process.ExitCode` returned from main or
+`process.ExitNow(code)` keeps its chosen code. Copies within
 500 ms count as one cancellation; another cancelling signal after that window
 terminates immediately. Other signals keep their Go/OS defaults, and there is no
 default grace deadline. Three Ctrl+C presses within 5 seconds, each counted press at least 500 ms
