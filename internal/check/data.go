@@ -467,9 +467,10 @@ func (c *checker) try(e *syntax.Try) Type {
 	if inDeferred {
 		if result == nil {
 			if u, ok := xt.(*Union); ok {
-				ctx.returns = append(ctx.returns, u.Members[1:]...)
-				c.info.tries[e] = &TryInfo{Kept: u.Members[0], Rest: u.Members[1:]}
-				return u.Members[0]
+				info := c.tryUnion(e, u)
+				ctx.returns = append(ctx.returns, info.Rest...)
+				c.info.tries[e] = info
+				return info.Kept
 			}
 			c.errorf(e.Pos, "? on an Option in a %s needs a result type annotation", ctx.name)
 			return Invalid
@@ -477,7 +478,7 @@ func (c *checker) try(e *syntax.Try) Type {
 	}
 	switch t := xt.(type) {
 	case *Union:
-		info := &TryInfo{Kept: t.Members[0], Rest: t.Members[1:]}
+		info := c.tryUnion(e, t)
 		var misfits []string
 		for _, m := range info.Rest {
 			if !assignable(m, result) {
@@ -507,6 +508,21 @@ func (c *checker) try(e *syntax.Try) Type {
 	return Invalid
 }
 
+// tryUnion keeps the first member unless a direct binding annotation names
+// another member. Ordinary expected types do not change propagation.
+func (c *checker) tryUnion(e *syntax.Try, t *Union) *TryInfo {
+	kept := 0
+	for i, member := range t.Members {
+		if identical(member, c.tryAnnotations[e]) {
+			kept = i
+			break
+		}
+	}
+	rest := append([]Type{}, t.Members[:kept]...)
+	rest = append(rest, t.Members[kept+1:]...)
+	return &TryInfo{Kept: t.Members[kept], Rest: rest}
+}
+
 // wrappedTry checks the mapper as an ordinary lambda. Lowering turns its
 // body into the failure arm of a match, preserving all ordinary return checks.
 func (c *checker) wrappedTry(e *syntax.Try, xt, result Type, inDeferred bool) Type {
@@ -514,7 +530,7 @@ func (c *checker) wrappedTry(e *syntax.Try, xt, result Type, inDeferred bool) Ty
 	var failure Type
 	switch t := xt.(type) {
 	case *Union:
-		info.Kept, info.Rest = t.Members[0], t.Members[1:]
+		info = c.tryUnion(e, t)
 		failure = newUnion(info.Rest)
 	case *Sealed:
 		if IsOption(t) {
