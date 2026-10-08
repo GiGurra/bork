@@ -2551,6 +2551,9 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 					owner := src.Subject
 					steps := strings.Split(strings.TrimPrefix(src.Path, "."), ".")
 					for _, step := range steps[:len(steps)-1] {
+						if owner == nil {
+							break
+						}
 						owner = f.project(owner, step)
 					}
 					if owner != nil {
