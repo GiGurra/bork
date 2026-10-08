@@ -161,6 +161,11 @@ func (g *gen) instanceArgument(inst *check.Instance, i int, value ast.Expr) ast.
 	if inst.Func.Class != nil {
 		return value // dictMethod exposes the checked, specialized signature
 	}
+	// The declared parameter remains Go any even when substitution collapses
+	// its union. Preserve numeric/rune constants before Go boxes them.
+	if _, union := inst.Func.Params[i].(*check.Union); union {
+		value = g.typed(value, inst.Params[i])
+	}
 	if adapted := g.okResultArgument(inst, i, value); adapted != nil {
 		return adapted
 	}

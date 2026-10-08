@@ -310,6 +310,8 @@ fn main() {
 }
 ```
 
+Numeric literals keep their checked Bork type when passed to a generic union parameter, including when its type arguments reduce the union to a single type. A literal checked as `Int` still matches an `Int` pattern; one checked as `Float32` still matches `Float32`.
+
 This prints `1000000 255 3 0.3`. Arithmetic on number literals is exact, which is why `0.1 + 0.2` is `0.3`. That applies to literals only. Floats held in names are ordinary 64-bit floats, and adding those two gives `0.30000000000000004`.
 
 Integer literals can also use binary (`0b1010`) and octal (`0o17`) prefixes, with `_` separators. Import [bork/strconv](../std/strconv.md) for `n.Hex()`, `n.Binary()`, `n.Octal()`, and `n.Format(base)` formatting, plus String parsing methods such as `text.ParseInt(base: 16)` and `text.ParseByte(base: 0)`. Formatting returns `String`; parsing returns the number or `ParseError`, including on overflow.
