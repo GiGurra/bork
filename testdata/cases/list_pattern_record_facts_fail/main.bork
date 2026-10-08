@@ -1,10 +1,15 @@
 pred positive(x: Int) { x > 0 }
 pred atLeast(x: Int, lo: Int) { x >= lo }
+pred nonempty(xs: List[Int]) { xs.length() > 0 }
 type Row = { value: Int }
 type Range = { lo: Int, hi: Int where atLeast(lo) }
 type Outer = { range: Range }
+type Batch = { lo: Int, values: List[Int where atLeast(lo)] }
+type Full = { values: List[Int] where nonempty }
 fn need(x: Int where positive): Int { x }
 fn take(lo: Int, hi: Int where atLeast(lo)): Int { hi }
+fn all(lo: Int, xs: List[Int where atLeast(lo)]): Int { xs.length() }
+fn needList(xs: List[Int] where nonempty): Int { xs.length() }
 fn siblings(xs: List[Row]): Int {
   match xs { [Row { value: a }, Row { value: b }, ...] => if positive(a) { need(b) } else { 0 }, _ => 0 }
 }
@@ -16,4 +21,10 @@ fn nested(xs: List[List[Outer]]): Int {
 }
 fn wrong(xs: List[Range], other: Int): Int {
   match xs { [Range { hi }, ...] => take(other, hi), _ => 0 }
+}
+fn batches(xs: List[Batch]): Int {
+  match xs { [Batch { lo }, Batch { values: [value, ...rest] }, ...] => take(lo, value) + all(lo, rest), _ => 0 }
+}
+fn suffix(xs: List[Full]): Int {
+  match xs { [Full { values: [_, ...rest] }, ...] => needList(rest), _ => 0 }
 }

@@ -837,20 +837,27 @@ func constantSpan(x syntax.Expr) (diag.Pos, diag.Pos) {
 // patVars makes variables of the names pat binds, from the value
 // subject it matches.
 func (l *lowerer) patVars(p *Pat, subject Expr) {
-	l.patVarsOwned(p, subject, nil)
+	l.patVarsOwned(p, subject, nil, "")
 }
 
-func (l *lowerer) patVarsOwned(p *Pat, subject, owner Expr) {
+func (l *lowerer) patVarsOwned(p *Pat, subject, owner Expr, basePath string) {
 	if p == nil {
 		return
+	}
+	makeSource := func(src *patSource) *VarSource {
+		source := &VarSource{Subject: subject, Member: src.Member, Path: strings.TrimPrefix(src.Path, basePath), Field: src.Field, ElementsOnly: src.ElementsOnly}
+		if basePath != "" {
+			source.Member = nil
+		}
+		if src.Field != nil {
+			source.Owner = owner
+		}
+		return source
 	}
 	if p.Bind != "" {
 		v := &Var{Label: l.info.assemblyNames[p.bindNode], Name: p.Bind, Pos: bindPos(p.bindNode), Type: p.BindType, Kind: VarPattern, Unused: l.info.unused[p.bindNode] || p.Bind == "_"}
 		if src := l.info.patSources[p.bindNode]; src != nil {
-			v.Source = &VarSource{Subject: subject, Member: src.Member, Path: src.Path, Field: src.Field, ElementsOnly: src.ElementsOnly}
-			if src.Field != nil {
-				v.Source.Owner = owner
-			}
+			v.Source = makeSource(src)
 		}
 		if p.Bind == "_" {
 			v.GoName = fmt.Sprintf("_discard_%d_%d", v.Pos.Line, v.Pos.Col)
@@ -865,22 +872,25 @@ func (l *lowerer) patVarsOwned(p *Pat, subject, owner Expr) {
 		// needs a distinct owner for its fields' identities and predicates.
 		v := p.Var
 		if v == nil {
-			source := &VarSource{Subject: subject, Member: src.Member, Path: src.Path, Field: src.Field}
-			if src.Field != nil {
-				source.Owner = owner
-			}
-			v = &Var{Name: "_patternOwner", Type: p.Type, Kind: VarPattern, Source: source}
+			v = &Var{Name: "_patternOwner", Type: p.Type, Kind: VarPattern, Source: makeSource(src)}
 		}
 		fieldOwner = &VarRef{expr: expr{typ: v.Type}, Var: v}
 	}
 	for _, f := range p.Fields {
-		l.patVarsOwned(f.Pat, subject, fieldOwner)
+		l.patVarsOwned(f.Pat, subject, fieldOwner, basePath)
+	}
+	listSubject, listPath := subject, basePath
+	if src := p.source; src != nil && src.Field != nil && owner != nil {
+		// A list field's own element promises are relative to that field,
+		// including predicates that refer to its record's siblings.
+		listSubject = &Select{expr: expr{typ: src.Field.Type}, X: owner, Name: src.Field.Name, Field: src.Field}
+		listPath = src.Path
 	}
 	for _, e := range p.Elems {
-		l.patVars(e, subject)
+		l.patVarsOwned(e, listSubject, nil, listPath)
 	}
-	l.patVars(p.Rest, subject)
-	l.patVarsOwned(p.Sub, subject, owner)
+	l.patVarsOwned(p.Rest, listSubject, nil, listPath)
+	l.patVarsOwned(p.Sub, subject, owner, basePath)
 	if p.guard != nil {
 		p.Guard = l.expr(p.guard)
 	}

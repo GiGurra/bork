@@ -1,4 +1,4 @@
-main.bork:9:81: need requires x to be positive, but that is not proven for b (check it first with if (positive(b)) { ... })
-main.bork:12:60: take requires hi to be atLeast(lo), but that is not proven for hi (check it first with if (atLeast(hi, lo)) { ... })
-main.bork:15:101: take requires hi to be atLeast(lo), but that is not proven for hi (check it first with if (atLeast(hi, lo)) { ... })
-main.bork:18:49: take requires hi to be atLeast(lo), but that is not proven for hi (check it first with if (atLeast(hi, other)) { ... })
+main.bork:8:1: Full is a built-in type and cannot be redefined
+main.bork:8:39: where clauses here are not supported yet, so the fact would not be checked
+main.bork:29:22: Full has no field values
+main.bork:29:63: undefined: rest
