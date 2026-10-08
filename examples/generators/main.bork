@@ -4,12 +4,21 @@ import "bork/fs"
 
 type Shelf = { name: String, scores: List[Option[Int]] }
 
+// The same lazy squares sequence in two forms. [Int] is the element type.
 fn squares(): Seq[Int] {
   generate[Int] {
     for n in [1, 2, 3] { yield n * n }
   }
 }
 
+fn squaresComprehension(): Seq[Int] {
+  for { n in [1, 2, 3] } yield n * n
+}
+
+// A comprehension fits generators, filters, bindings, then one final yield.
+// Use generate for state carried between values (such as Fibonacci), multiple
+// or branching yields, a resource scope, or early return/continue logic.
+// Here generate lets us trace execution before each yield.
 fn numbers(): Seq[Int] uses io {
   generate[Int] {
     for n in Seq.range(1, 1_000_000) {
@@ -19,6 +28,7 @@ fn numbers(): Seq[Int] uses io {
   }
 }
 
+// This generate owns a resource scope for the duration of consumption.
 fn fileLines(path: String): Seq[String | fs.Error] uses io {
   generate[String | fs.Error] {
     scope producer {
@@ -55,11 +65,16 @@ fn files() uses io: Ok | fs.Error {
 }
 
 fn main() {
-  // Start with a finite, pure generator.
+  // Both forms create a lazy Seq[Int]; toList pulls all its values into a list.
   println("squares:", squares().toList())
+  println("squares comprehension:", squaresComprehension().toList())
 
-  values = numbers()
+  values = numbers() // Creating the sequence runs none of the block.
   println("sequence created")
+  // Each yield hands over one value; the block resumes only for the next request.
+  // take is lazy too; toList consumes it and stops after the first yield.
+  println("first:", values.take(1).toList())
+  // Another traversal starts from the top: produced values are not cached.
   println("evens times ten:", values.filter(n => n % 2 == 0).map(n => n * 10).take(2).toList())
 
   // Each traversal starts over; break stops the large source immediately.
