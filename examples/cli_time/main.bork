@@ -16,13 +16,13 @@ type Options = {
   retries: List[time.Duration] = []
 } derive (codec.Decode)
 
-fn main() {
+fn main(): Ok | process.ExitCode {
   match (cli.Run[Options]("timer", "Duration and RFC3339 flags", (options, s) => {
     println(s"timeout=${time.FormatDuration(options.timeout)}")
     println(options.since.map(value => time.Format(value, time.RFC3339())))
     println(options.retries.map(time.FormatDuration))
   })) {
-    error: cli.Error => { eprintln(error.Render("timer")); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("timer") } }
     Ok => {}
   }
 }

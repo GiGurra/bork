@@ -110,17 +110,17 @@ fn demo() uses io + net + clock + state: Ok | sql.Error | IoError {
   println("application scope closed")
 }
 
-fn main() {
+fn main(): Ok | process.ExitCode {
   log.Configure(log.Defaults().copy(timestamps: false))
   result = match (process.Args()) {
     [] => demo()
     ["demo"] => demo()
     ["serve"] => serve()
-    _ => { eprintln("usage: service_tour [demo|serve]"); process.Exit(2) }
+    _ => { return process.ExitCode { code: 2, message: "usage: service_tour [demo|serve]" } }
   }
   match (result) {
     Ok => {}
-    error => { eprintln(toString(error)); process.Exit(1) }
+    error => { return process.ExitCode { code: 1, message: toString(error) } }
   }
 }
 

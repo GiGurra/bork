@@ -67,20 +67,18 @@ fn readFile(path: String) uses io: String | fs.Error {
   }
 }
 
-fn main() {
+fn main(): Ok | process.ExitCode {
   path = match (process.Args()) {
     [p] => p
     _ => {
-      eprintln("usage: signup FILE")
-      process.Exit(2)
+      return process.ExitCode { code: 2, message: "usage: signup FILE" }
     }
   }
   match (readFile(path)) {
     text: String => (handleAll(text.lines(), 1)).forEach(line => println(line))
     e: fs.Error => {
       detail = fs.ErrorInfo(e)
-      eprintln(s"signup: ${detail.path}: ${detail.message}")
-      process.Exit(1)
+      return process.ExitCode { code: 1, message: s"signup: ${detail.path}: ${detail.message}" }
     }
   }
 }

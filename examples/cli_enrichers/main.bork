@@ -11,11 +11,11 @@ fn fieldDocs(previous: List[cli.FieldSpec], field: cli.FieldSpec): cli.FieldSpec
   field.copy(description: s"Configure ${field.field}; ${previous.length()} fields precede it.")
 }
 fn policy(): cli.Settings { .{ enrichers: [teamNames, fieldDocs] } }
-fn main() {
+fn main(): Ok | process.ExitCode {
   match (cli.Run[Options]("enrichers", "Compose reusable metadata policies", (options, s) => {
     println(s"${options.host}:${options.port}")
     }, settings: policy())) {
-    error: cli.Error => { eprintln(error.Render("enrichers")); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("enrichers") } }
     Ok => {}
   }
 }

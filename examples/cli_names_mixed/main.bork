@@ -25,7 +25,7 @@ fn flags(): List[cli.Flag] {
     .{ field: "debug", envName: cli.Mapping.Disabled },
     .{ field: "apiToken", long: cli.Mapping.Disabled, envName: cli.Mapping.Disabled }]
 }
-fn main() {
+fn main(): Ok | process.ExitCode {
   match (cli.Run[Options]("mixed", "Derived and explicit names in one command", (options, s) => {
     // env.txt: the --server-host flag beats MIXED_SERVER_HOST, MIXED_LISTEN=7000
     // beats settings.json's port 6000, and MIXED_DEBUG is ignored because debug
@@ -33,7 +33,7 @@ fn main() {
     println(s"host ${options.serverHost}, port ${options.port}, debug ${options.debug}")
     println(s"api token from config: ${options.apiToken}")
     }, flags: flags(), settings: settings())) {
-    error: cli.Error => { eprintln(error.Render("mixed")); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("mixed") } }
     Ok => {}
   }
 }

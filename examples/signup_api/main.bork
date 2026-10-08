@@ -121,19 +121,17 @@ fn demo() uses io + net + clock + state: Ok | IoError {
   }
 }
 
-fn main() {
+fn main(): Ok | process.ExitCode {
   result = match (process.Args()) {
     ["serve", addr] => serve(addr)
     ["demo"] => demo()
     _ => {
-      eprintln("usage: signup_api serve ADDR | demo")
-      process.Exit(2)
+      return process.ExitCode { code: 2, message: "usage: signup_api serve ADDR | demo" }
     }
   }
   match (result) {
     e: IoError => {
-      eprintln(s"signup_api: ${e.path}: ${e.message}")
-      process.Exit(1)
+      return process.ExitCode { code: 1, message: s"signup_api: ${e.path}: ${e.message}" }
     }
     _ => {}
   }

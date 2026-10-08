@@ -4,11 +4,11 @@ import "bork/cli"
 import "bork/process"
 use codec.Defaults
 type Options = { serverHost: String = "localhost", internalToken: String = "development" } derive (codec.Decode)
-fn main() {
+fn main(): Ok | process.ExitCode {
   match (cli.Run[Options]("env", "Opt into automatic environment bindings", (options, s) => {
     println(s"Connecting to ${options.serverHost}")
     }, flags: [.{ field: "internalToken", long: cli.Mapping.Disabled, envName: cli.Mapping.Disabled }], settings: .{ autoEnv: true, envPrefix: "BORK_EXAMPLE" })) {
-    error: cli.Error => { eprintln(error.Render("env")); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("env") } }
     Ok => {}
   }
 }

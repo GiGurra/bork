@@ -5,9 +5,11 @@ import "bork/process"
 use codec.Defaults
 
 type Options = { name: String = "world" } derive (codec.Decode)
-match (cli.Run[Options]("greet", "A greeting script", (options, s) => {
-  println(s"Hello, ${options.name}!")
-})) {
-  error: cli.Error => { eprintln(error.Render("greet")); process.Exit(2) }
-  Ok => {}
+fn main(): Ok | process.ExitCode {
+  match (cli.Run[Options]("greet", "A greeting script", (options, s) => {
+    println(s"Hello, ${options.name}!")
+  })) {
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("greet") } }
+    Ok => {}
+  }
 }

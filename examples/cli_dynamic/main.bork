@@ -23,11 +23,11 @@ fn completions(): List[cli.Completion] { [.{ field: "resource", suggest: resourc
 fn flags(): List[cli.Flag] {
   [.{ field: "namespace", short: "n", env: "DEPLOY_NAMESPACE" }, .{ field: "config", configFile: true }]
 }
-fn main() {
+fn main(): Ok | process.ExitCode {
   match (cli.RunWith[Options]("deploy", "Deploy a resource with context-aware suggestions", (options, s) => {
     println(s"${options.namespace}/${options.resource}")
     }, completions: completions(), flags: flags())) {
-    error: cli.Error => { eprintln(error.Render("deploy")); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("deploy") } }
     Ok => {}
   }
 }

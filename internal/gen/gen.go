@@ -356,6 +356,11 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	if main != nil {
 		funcs = append(funcs, main)
 	}
+	if main == nil && !g.testMode && !g.evalMode {
+		if entry := info.Funcs["main"]; entry != nil && entry.Result != check.Ok {
+			funcs = append(funcs, g.resultMain(entry.Result))
+		}
+	}
 	// Types come last, once it is known which prelude types are used.
 	decls := append(g.typeDecls(), funcs...)
 	decls = append(decls, g.extraFuncs...)
@@ -399,7 +404,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	for i := len(info.Classes) - 1; i >= 0; i-- {
 		decls = append([]ast.Decl{g.classDecl(info.Classes[i])}, decls...)
 	}
-	if g.usesScopes && !g.testMode && !g.evalMode {
+	if g.usesScopes && !g.testMode && !g.evalMode && (info.Funcs["main"] == nil || info.Funcs["main"].Result == check.Ok) {
 		for _, declaration := range decls {
 			if entry, ok := declaration.(*ast.FuncDecl); ok && entry.Name.Name == "main" {
 				entry.Name = ast.NewIdent("_borkMain")
@@ -907,6 +912,9 @@ func handoffChan(x ast.Expr) ast.Expr {
 // funcName is the Go name of a function. A prelude function the package
 // replaced (but the prelude still uses) gets a name of its own.
 func (g *gen) funcName(fn *check.Func) *ast.Ident {
+	if fn.Decl != nil && fn.Decl.Name == "main" && fn.Pkg != nil && fn.Pkg.Root && fn.Result != check.Ok {
+		return ast.NewIdent("_borkMain")
+	}
 	if fn.Decl != nil && fn.Decl.IsMethod {
 		// _m_List_first, or _pm_List_first for the prelude's.
 		prefix := "_m_"
@@ -994,7 +1002,7 @@ func (g *gen) signature(fd *syntax.FuncDecl) *ast.FuncDecl {
 		ftype.TypeParams = &ast.FieldList{List: []*ast.Field{tps}}
 	}
 	goName := g.funcName(fn)
-	if fd.Name == "main" {
+	if fd.Name == "main" && fn.Result == check.Ok {
 		goName = ast.NewIdent("main")
 	}
 	return &ast.FuncDecl{Name: goName, Type: ftype}

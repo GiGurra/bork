@@ -5,12 +5,12 @@ import "bork/test"
 use codec.Defaults
 
 type Options = { name: String } derive (codec.Decode)
-fn main() {
+fn main(): Ok | process.ExitCode {
   match (cli.Run[Options]("greet", "Version before decoding", (options, s) => {
     println(s"Hello, ${options.name}.")
     }, settings: .{ version: "1.2.3" })) {
     Ok => {}
-    error: cli.Error => { eprintln(error.Render("greet")); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("greet") } }
   }
 }
 

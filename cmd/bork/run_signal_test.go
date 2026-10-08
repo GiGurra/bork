@@ -245,7 +245,7 @@ func TestRunInterruptStopsHTTPServer(t *testing.T) {
 
 func TestRunSignalKeepsExplicitExitCode(t *testing.T) {
 	t.Parallel()
-	source := strings.Replace(runSignalCooperative, "println(\"cancelled\")", "{ println(\"cancelled\"); process.Exit(7) }", 1)
+	source := strings.Replace(runSignalCooperative, "println(\"cancelled\")", "{ println(\"cancelled\"); process.ExitNow(7) }", 1)
 	source = "import \"bork/process\"\n" + source
 	job := startRunSignal(t, "ready", writeRunSignal(t, source, false))
 	if err := syscall.Kill(-job.group, syscall.SIGINT); err != nil {

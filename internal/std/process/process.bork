@@ -73,9 +73,15 @@ fn Args() uses io: List[String] unsafe go {
   return os.Args[1:]
 }
 
-// Exit ends the program with the given status code, without closing
-// scopes.
-fn Exit(code: Int) uses io: Never unsafe go {
+// ExitCode returns a custom failure status from main after scopes close.
+// An empty message suppresses stderr output.
+pred ValidExitCode(code: Int) { code >= 1 && code <= 255 }
+type ExitCode = { code: Int where ValidExitCode, message: String = "" }
+
+// ExitNow immediately terminates the process. It skips all scope cleanup,
+// including temporary-file removal and child-process shutdown. Prefer
+// returning a failure or ExitCode from main.
+fn ExitNow(code: Int) uses io: Never unsafe go {
   import "os"
   os.Exit(int(code))
 }

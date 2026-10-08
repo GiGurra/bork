@@ -23,7 +23,7 @@ fn utf8Bytes(n: Int): Int { n }
 fn utf8String(n: Int): Int { n }
 fn main() { println(bytes(1), utf8Bytes(2), utf8String(3)) }`, ""},
 		{"process", `import "bork/process"
-fn main() { println(process.Args()); if (false) { process.Exit(1) } }`, ""},
+fn main() { println(process.Args()); if (false) { process.ExitNow(1) } }`, ""},
 		{"cancellable sleep", `import "bork/time"
 fn main() { scope s { cancel(s); println(time.Sleep(s, 0.nanos())) } }`, ""},
 		{"rune methods", `fn main() { println('1'.isDigit(), 'a'.isLetter(), ' '.isSpace(), 'A'.isUpper(), 'a'.isLower(), toString('a')) }`, ""},

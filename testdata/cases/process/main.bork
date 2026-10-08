@@ -223,7 +223,7 @@ fn main() {
       println(env.Get("BORK_PROCESS_TEST"))
       println(input())
       eprintln("stderr")
-      process.Exit(7)
+      process.ExitNow(7)
     }
     ["sleep"] => childSleep()
     ["cwd"] => println(cwd())

@@ -18,7 +18,7 @@ type Options = {
   excited: Bool = false
 } derive (codec.Decode)
 
-fn main() {
+fn main(): Ok | process.ExitCode {
   result = cli.Run[Options]("greet", "Greet someone", (options, s) => {
     ending = if (options.excited) { "!" } else { "." }
     println(s"Hello, ${options.name}${ending}")
@@ -26,8 +26,7 @@ fn main() {
   match (result) {
     Ok => {}
     error: cli.Error => {
-      eprintln(error.Render("greet"))
-      process.Exit(2)
+      return process.ExitCode { code: 2, message: error.Render("greet") }
     }
   }
 }
@@ -36,7 +35,8 @@ fn main() {
 Build with `bork build greet.bork -o greet`, then run `./greet --name Ada`.
 The handler receives an `Options` record and a fresh scope; the scope closes
 when the handler returns. Help skips the handler. Errors remain values, so the
-application prints them to stderr and exits with status 2.
+application returns an ExitCode; after scope cleanup, main prints its message
+with an `error:` prefix to stderr and exits with status 2.
 
 
 ```text
@@ -55,7 +55,7 @@ Flags:
       --excited       Print an excited greeting. (default false)
   -h, --help          help for greet
 $ ./greet
-Error: .name: is missing
+error: Error: .name: is missing
 
 Try 'greet --help' for usage.
 $ echo $?
@@ -417,12 +417,12 @@ use codec.Defaults
 
 type Global = { region: String = "west", verbose: Bool } derive (codec.Decode)
 type Deploy = { service: String } derive (codec.Decode)
-fn main() {
+fn main(): Ok | process.ExitCode {
   commands = [cli.RootSubcommand[Global, Deploy]("deploy", "Deploy a service", (global, deploy, s) => {
     println(s"${global.region}/${deploy.service}/${global.verbose}")
   })]
   match (cli.RunRoot[Global]("fleet", "Shared flags", commands)) {
-    error: cli.Error => { eprintln(error.Render("fleet")); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("fleet") } }
     Ok => {}
   }
 }
