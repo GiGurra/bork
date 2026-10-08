@@ -293,16 +293,27 @@ func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]T
 		return nil
 	}
 	out := append([]*Constraint(nil), c.info.shapeTypeFacts[t]...)
-	_, isParam := typ.(*TypeParam)
-	if t.Union == nil && len(t.Args) == 0 && !isParam {
+	if tp := c.typeParams[t.Name]; tp != nil && t.Union == nil && t.Func == nil && t.Tuple == nil && len(t.Args) == 0 {
+		out = append(out, c.aliasFacts[tp]...)
+	}
+	alias := false
+	if t.Union == nil && t.Func == nil && t.Tuple == nil && c.typeParams[t.Name] == nil {
 		if e := c.lookupType(t.Name); e != nil && e.decl.Kind == syntax.AliasType {
-			out = append(out, c.aliasConstraints(e)...)
+			if len(e.params) > 0 {
+				out = append(out, c.genericAliasConstraints(e, t, typ, scope)...)
+				alias = true
+			} else if _, isParam := typ.(*TypeParam); !isParam {
+				out = append(out, c.aliasConstraints(e)...)
+			}
 		}
 	}
 	for _, ref := range t.Where {
 		if con := c.constraint(ref, typ, scope); con != nil {
 			out = append(out, con)
 		}
+	}
+	if alias {
+		return out
 	}
 	// Constraints inside type arguments apply to the elements.
 	inner := func(cons []*Constraint, step string) {
@@ -409,12 +420,42 @@ func fieldPathsOf(base Type, tp *TypeParam) []string {
 func (c *checker) aliasConstraints(e *typeEntry) []*Constraint {
 	if !e.constraintsDone {
 		e.constraintsDone = true
-		savedPkg, savedPrelude := c.pkg, c.inPrelude
+		savedPkg, savedPrelude, savedParams, savedFacts := c.pkg, c.inPrelude, c.typeParams, c.aliasFacts
 		c.pkg, c.inPrelude = e.pkg, e.prelude
+		c.typeParams, c.aliasFacts = map[string]*TypeParam{}, nil
+		for _, tp := range e.params {
+			c.typeParams[tp.Name] = tp
+		}
 		e.constraints = c.constraintsOf(e.decl.Alias, e.typ, nil)
-		c.pkg, c.inPrelude = savedPkg, savedPrelude
+		c.pkg, c.inPrelude, c.typeParams, c.aliasFacts = savedPkg, savedPrelude, savedParams, savedFacts
 	}
 	return e.constraints
+}
+
+// Expand argument facts in the alias's lexical scope, applying the ordinary
+// position checks to its target rather than to the alias's argument list.
+func (c *checker) genericAliasConstraints(e *typeEntry, written *syntax.TypeExpr, typ Type, scope map[string]Type) []*Constraint {
+	if len(written.Args) != len(e.params) || typ == Invalid {
+		return nil
+	}
+	facts := map[*TypeParam][]*Constraint{}
+	for i, arg := range written.Args {
+		argType := c.info.writtenTypes[arg]
+		if argType == nil {
+			argType = c.resolveType(arg)
+		}
+		facts[e.params[i]] = c.constraintsOf(arg, argType, scope)
+	}
+	savedPkg, savedPrelude, savedParams, savedFacts, savedApplied := c.pkg, c.inPrelude, c.typeParams, c.aliasFacts, c.appliedWhere
+	c.pkg, c.inPrelude, c.aliasFacts = e.pkg, e.prelude, facts
+	c.typeParams, c.appliedWhere = map[string]*TypeParam{}, map[*syntax.TypeExpr]bool{}
+	for _, tp := range e.params {
+		c.typeParams[tp.Name] = tp
+	}
+	out := c.constraintsOf(e.decl.Alias, typ, scope)
+	c.unappliedIn(e.decl.Alias, "in a type alias")
+	c.pkg, c.inPrelude, c.typeParams, c.aliasFacts, c.appliedWhere = savedPkg, savedPrelude, savedParams, savedFacts, savedApplied
+	return out
 }
 
 func (c *checker) constraint(ref *syntax.PredRef, subject Type, scope map[string]Type) *Constraint {

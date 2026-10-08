@@ -961,6 +961,7 @@ type checker struct {
 	inPrelude bool
 	// typeParams holds the type parameters in scope.
 	typeParams map[string]*TypeParam
+	aliasFacts map[*TypeParam][]*Constraint
 	// lambdaDepth counts the lambdas being checked around the current
 	// expression.
 	comptimeContext    *comptimeContext

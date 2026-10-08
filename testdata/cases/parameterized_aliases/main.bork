@@ -1,0 +1,39 @@
+import "example.com/genericaliases/api"
+type Nested[T] = api.Items[api.Maybe[T]]
+type Identity[T] = T
+fn identity[T](x: Identity[T]): T { x }
+fn indexedResult(): Int | Option[Int] {
+  index: api.Index[Int] = { "numbers": [1] }
+  index.get("numbers")?.get(0)?
+}
+fn propagated(x: api.Result[Int]): api.Result[Int] { x? }
+fn positive(xs: api.Items[api.Pos]): Int | Option[Int] {
+  value = xs.get(0)?
+  api.Need(value)
+}
+fn direct(x: Identity[Int where api.Positive]): Int { api.Need(x) }
+fn nestedFacts(xs: api.Items[api.Maybe[api.Pos]]): Int | Option[Int] {
+  outer = xs.get(0)?
+  api.Need(outer?)
+}
+fn declared(xs: api.PositiveItems[String]): Int | Option[Int] { api.Need(xs.get(0)?) }
+fn dependent(threshold: Int, x: Int where api.Above(threshold)): Int | Option[Int] {
+  xs: api.Items[Int where api.Above(threshold)] = [x]
+  n = xs.get(0)?
+  api.NeedAbove(n, threshold)
+}
+fn guarded(x: Int): Int {
+  match x { n: Identity[Int where api.Positive] => n, _ => 0 }
+}
+fn main() {
+  explicit: api.Maybe[Int] = api.Maybe[Int].Some(17)
+  println(explicit)
+  pair: api.Pair[Int, String] = (13, "pair")
+  holder: api.Holder = .{ later: api.LaterAlias[Int] { value: 14 } }
+  println(pair, holder.later.value)
+  xs: api.Items[Int] = [1, 2]
+  nested: Nested[Int] = [Option.Some(3), Option.None]
+  wrapped: api.Wrapped[Int] = api.Wrapped[Int] { value: xs }
+  println(api.Apply(9, n => { println(n); "applied" }), api.ApplySame(10, n => { println(n); "same" }), guarded(11), guarded(0))
+  println(identity(xs), nested, wrapped.value, indexedResult(), propagated(4), propagated(api.Failure { message: "failed" }), positive([5]), direct(6), nestedFacts([Option.Some(7)]), api.NonemptyLength([8]), declared([15]), dependent(15, 16))
+}
