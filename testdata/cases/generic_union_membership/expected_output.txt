@@ -1,0 +1,32 @@
+error
+success: extended
+error
+success: A { n: 7 }
+success: B { text: "bee" }
+E {}
+A { n: 10 }
+error
+second
+first
+E {}
+Option.Some("A { n: 9 }")
+Option.None
+kept
+error
+success: A { n: 8 }
+["error", "success: B { text: \"bee\" }"]
+error
+success: B { text: "bee" }
+error
+error
+error
+error
+success: 1.25
+success: 1.5
+error
+error
+success: ok
+error
+error
+error
+error

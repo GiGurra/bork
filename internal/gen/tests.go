@@ -671,6 +671,7 @@ func (g *gen) constraintCond(con *check.Constraint, x ast.Expr, t check.Type) as
 			args = append(args, g.shapeCaptureArgument(a.Param))
 		}
 	}
+	args = append(args, g.membershipArgs(inst.Func.TypeParams, inst.TypeArgs)...)
 	return &ast.CallExpr{Fun: g.instance(inst), Args: args}
 }
 

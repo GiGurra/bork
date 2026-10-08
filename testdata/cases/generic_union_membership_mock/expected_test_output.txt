@@ -1,0 +1,5 @@
+classify
+classify
+ok    generic union membership survives mock passthrough
+1 passed, 0 failed
+exit code 0

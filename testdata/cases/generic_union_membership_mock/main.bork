@@ -1,0 +1,14 @@
+type E = {}
+fn classify[T](x: T | E) uses io: String {
+  println("classify")
+  match (x) {
+    _: T => "success"
+    _: E => "error"
+  }
+}
+test "generic union membership survives mock passthrough" {
+  mock classify(x) { classify(x) }
+  assertEqual(classify[Int | String](E {}), "error")
+  saved: (Int | String | E) uses io => String = classify
+  assertEqual(saved(E {}), "error")
+}

@@ -227,6 +227,12 @@ Unions are how functions report failure. The result type lists the success value
 
 A union can be given a name: `type Lookup = String | NotFound`.
 
+A generic type parameter keeps its union membership. If `T` is `Int | String`,
+a `t: T` pattern in a function taking `T | NotFound` matches integers and
+strings; `NotFound` still reaches its own arm. The same applies to `?`: when
+`T` is the success member, it keeps either integer or string values and
+propagates `NotFound`.
+
 ## Option
 
 `Option[T]` is a value that may be missing. It is an ordinary sealed type with the variants `Some(T)` and `None`. There is no null.
