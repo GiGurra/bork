@@ -174,6 +174,7 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 	}
 	f.defaultUse = diag.Pos{}
 	f.defaultDecl = diag.Pos{}
+	f.defaultInvariants()
 	f.evaluate(eval)
 }
 

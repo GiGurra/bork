@@ -87,7 +87,7 @@ type Html = { text: String }
 type Builder = { parts: List[String], done: String, next: Int }
 
 fn escape(text: String): String {
-  text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+  text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll("\"", "&quot;").replaceAll("'", "&#39;")
 }
 
 fn HTML(parts: StaticParts): Builder {
@@ -106,11 +106,15 @@ fn main() {
   comment = "<script>alert(1)</script>"
   page = HTML"<p>$comment</p>"
   println(page.text)
+  label = "\"quoted\" & 'single'"
+  attribute = HTML"<p title=\"$label\">reply</p>"
+  println(attribute.text)
 }
 ```
 
 ```text
 <p>&lt;script&gt;alert(1)&lt;/script&gt;</p>
+<p title="&quot;quoted&quot; &amp; &#39;single&#39;">reply</p>
 ```
 
 The compiler turns `HTML"<p>$comment</p>"` into three steps:
