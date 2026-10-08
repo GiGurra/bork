@@ -1,0 +1,2 @@
+main.bork:6:33: ? cannot be used in a package value initializer (it would return from the enclosing function); use match
+main.bork:11:32: ? cannot be used in a lazy initializer (it would return from the enclosing function); use match
