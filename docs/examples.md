@@ -67,6 +67,7 @@ Each example's expected output is kept in [testdata/examples](../testdata/exampl
 | [slow_downstream](../examples/slow_downstream/main.bork) | Bounded admission and a shared retry budget against a slow service | `bork run examples/slow_downstream` |
 | [sql](../examples/sql/main.bork) | SQLite connections and transactions owned by scopes | `bork run examples/sql` |
 | [http_multi](../examples/http_multi/main.bork) | API, metrics and debug listeners with one application lifetime | `bork run examples/http_multi` |
+| [http_stream_client](../examples/http_stream_client/README.md) | Binary downloads and producer-backed uploads | `bork run examples/http_stream_client` |
 | [service_tour](../examples/service_tour/main.bork) | The [service tour](tour-service.md): environment configuration, validated JSON and SQLite | `bork run examples/service_tour -- demo` |
 
 ### Keep a service running
