@@ -1,5 +1,4 @@
 // Package signal owns temporary process-wide signal registrations in scopes.
-import "bork/time"
 
 type Signal = sealed { Interrupt, Terminate, Hangup, User1, User2 }
 type Error = { message: String }
@@ -28,7 +27,7 @@ fn numbers(values: List[Signal]): List[Int] | Error unsafe go {
 
 // Configure replaces the process cancellation policy until its owner closes.
 // A newer live Configure wins. None grace waits indefinitely for cleanup.
-fn Configure(s: Scope, cancel: List[Signal] = [.Interrupt, .Terminate], grace: Option[time.Duration] = .None) uses io + state: Policy | Error {
+fn Configure(s: Scope, cancel: List[Signal] = [.Interrupt, .Terminate], grace: Option[Duration] = .None) uses io + state: Policy | Error {
   register(s, "configure", numbers(cancel)?, grace)
 }
 
@@ -38,7 +37,7 @@ fn Ignore(s: Scope, signals: List[Signal]) uses io + state: Policy | Error {
   register(s, "ignore", numbers(signals)?, .None)
 }
 
-fn register(s: Scope, kind: String, values: List[Int], grace: Option[time.Duration]) uses io + state: Policy | Error unsafe go {
+fn register(s: Scope, kind: String, values: List[Int], grace: Option[Duration]) uses io + state: Policy | Error unsafe go {
   import "time"
   duration, bounded := _borkOptionGet(grace)
   if bounded && duration.nanos < 0 { return Error{message: "grace must be nonnegative"} }

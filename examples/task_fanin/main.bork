@@ -6,6 +6,6 @@ fn main() {
     good: Task[Int | Failed] = fork(s, () => 3)
     println([good].awaitAllUntil[Int, Failed](s))
     println(race(s, [child => 9]))
-    println(withTimeout(s, 0, child => 10))
+    println(withTimeout(s, 0.seconds(), child => 10))
   }
 }

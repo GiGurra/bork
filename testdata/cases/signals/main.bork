@@ -1,5 +1,4 @@
 import "bork/signal"
-import "bork/time"
 
 fn reload(s: Scope) uses io + state: signal.Signal | signal.Error | Cancelled | Closed {
   events = signal.Subscribe(s, [.Hangup])?
@@ -30,7 +29,7 @@ test "mock buffers notifications" {
 
 test "invalid grace and empty registrations" {
   scope app {
-    assert(match (signal.Configure(app, grace: .Some(time.Nanoseconds(-1)))) { error: signal.Error => error.message == "grace must be nonnegative"; _ => false })
+    assert(match (signal.Configure(app, grace: .Some((-1).nanos()))) { error: signal.Error => error.message == "grace must be nonnegative"; _ => false })
     assert(match (signal.Subscribe(app, [])) { _: signal.Error => true; _ => false })
     assert(match (signal.Ignore(app, [])) { _: signal.Error => true; _ => false })
   }

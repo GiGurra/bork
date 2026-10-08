@@ -21,7 +21,7 @@ fn logged(handler: http.Handler): http.Handler {
   }
 }
 fn main() {
-  scope app with cleanupTimeout(5000) {
+  scope app with cleanupTimeout(5.seconds()) {
     match (http.ListenRoutes(if (process.Args() == ["demo"]) { "127.0.0.1:0" } else { "localhost:8080" }, app, [
       .{ pattern: "GET /users/{id}", handler: logged(user) },
       .{ pattern: "GET /health", handler: (req, rs) => http.Text(200, "ok") },

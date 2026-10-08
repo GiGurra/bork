@@ -59,7 +59,7 @@ fn main() {
   scope app {
     remote = openServer(app)
     base = serverURL(remote)
-    match (http.Send("POST", base, { "x-many": ["a", "b"] }, "payload", app, 2000)) {
+    match (http.Send("POST", base, { "x-many": ["a", "b"] }, "payload", app, 2.seconds())) {
       response: http.Response => {
         println(response.status, response.body)
         println(response.headers.get("X-Many"))
@@ -71,11 +71,11 @@ fn main() {
       response: http.Response => println(response.body)
       _ => println("unexpected")
     }
-    timeout = dynamicTimeout()
+    timeout = dynamicTimeout().millis()
     if (http.ValidTimeout(timeout)) { println(timedOut(http.Get(base + "/wait", app, timeout))) } else { println("unexpected") }
-    println(timedOut(http.Get(base + "/body", app, 20)))
+    println(timedOut(http.Get(base + "/body", app, 20.millis())))
     scope request {
-      task = fork(request, () => http.Get(base + "/cancel", request, 2000))
+      task = fork(request, () => http.Get(base + "/cancel", request, 2.seconds()))
       started(remote)
       cancel(request)
       println(cancelledResult(await(task)))
@@ -83,7 +83,7 @@ fn main() {
     observed = atom(false)
     scope request {
       fork(request, () => {
-        result = cancelledResult(http.Get(base + "/close", request, 2000))
+        result = cancelledResult(http.Get(base + "/close", request, 2.seconds()))
         _ = update(observed, previous => result)
       })
       started(remote)

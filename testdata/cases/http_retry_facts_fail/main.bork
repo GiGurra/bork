@@ -1,14 +1,12 @@
 import "bork/http"
 fn main() {
   scope s {
-    _ = http.OpenRetryBudget(s, capacity: 0, refillMs: 1)
-    _ = http.OpenRetryBudget(s, capacity: 1, refillMs: 0)
-    _ = http.OpenRetryBudget(s, capacity: 1, refillMs: 9223372036855)
-    budget = http.OpenRetryBudget(s, capacity: 1, refillMs: 1)
+    _ = http.OpenRetryBudget(s, capacity: 0, refill: 1.millis())
+    _ = http.OpenRetryBudget(s, capacity: 1, refill: 0.millis())
+    budget = http.OpenRetryBudget(s, capacity: 1, refill: 1.millis())
     _ = http.Retry(s, budget, attempt => http.Text(200, "ok"), maxAttempts: 0)
-    _ = http.Retry(s, budget, attempt => http.Text(200, "ok"), baseDelayMs: -1)
-    _ = http.Retry(s, budget, attempt => http.Text(200, "ok"), maxDelayMs: 9223372036855)
-    _ = http.Retry(s, budget, attempt => http.Text(200, "ok"), baseDelayMs: 20, maxDelayMs: 10)
-    _ = http.Retry(s, budget, attempt => http.Text(200, "ok"), baseDelayMs: 2000)
+    _ = http.Retry(s, budget, attempt => http.Text(200, "ok"), baseDelay: (-1).millis())
+    _ = http.Retry(s, budget, attempt => http.Text(200, "ok"), baseDelay: 20.millis(), maxDelay: 10.millis())
+    _ = http.Retry(s, budget, attempt => http.Text(200, "ok"), baseDelay: 2000.millis())
   }
 }

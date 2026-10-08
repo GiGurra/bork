@@ -22,13 +22,13 @@ fn main() {
   scope parent {
     child = openScope(parent)
     println("initial", hasDeadline(child.scope))
-    cancelAfter(parent, 60000)
+    cancelAfter(parent, 60000.millis())
     println("existing child", sameDeadline(deadline(parent), deadline(child.scope)))
-    cancelAfter(parent, 120000)
+    cancelAfter(parent, 120000.millis())
     println("cannot extend", sameDeadline(deadline(parent), deadline(child.scope)))
-    cancelAfter(child.scope, 10000)
+    cancelAfter(child.scope, 10000.millis())
     println("child earlier", earlier(deadline(child.scope), deadline(parent)))
-    cancelAfter(parent, 0)
+    cancelAfter(parent, 0.millis())
     println("new parent earlier", sameDeadline(deadline(parent), deadline(child.scope)))
     println("HTTP ancestor deadline", deadlineResult(http.Get("://invalid", child.scope)))
     closeScope(child)
@@ -36,14 +36,14 @@ fn main() {
   scope parent {
     scope lexical {
       println("lexical initial", hasDeadline(lexical))
-      cancelAfter(parent, 60000)
+      cancelAfter(parent, 60000.millis())
       println("lexical later parent", sameDeadline(deadline(parent), deadline(lexical)))
     }
   }
   scope huge {
-    cancelAfter(huge, 9223372036854775807)
+    cancelAfter(huge, 9223372036854775807.millis())
     println("saturated", farFuture(huge), cancelled(huge))
-    cancelAfter(huge, -9223372036854775808)
+    cancelAfter(huge, (-9223372036854775808).millis())
     println("negative immediate", cancelled(huge))
   }
 }

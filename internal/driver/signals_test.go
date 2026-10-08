@@ -12,10 +12,9 @@ import (
 func TestSignalPlatformCompilation(t *testing.T) {
 	dir := t.TempDir()
 	source := `import "bork/signal"
-import "bork/time"
 fn main() {
  scope app {
-  println(signal.Configure(app, grace: .Some(time.Nanoseconds(1))))
+  println(signal.Configure(app, grace: .Some(1.nanos())))
   println(signal.Ignore(app,[.Interrupt]))
   println(signal.Subscribe(app,[.User1]))
   events = signal.MockSubscription(app)

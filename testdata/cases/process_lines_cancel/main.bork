@@ -12,7 +12,7 @@ fn run(p: Scope) uses io + state + clock: Ok | IoError | Cancelled | OutOfRange 
   child = process.Start(p, "sh", ["-c", "sleep 30"], stdout: .Pipe)?
   start = time.Now()
   got = scope s {
-    cancelAfter(s, 100)
+    cancelAfter(s, 100.millis())
     lines = child.Stdout().LinesChannel(s)
     lines.receive(s)
   }

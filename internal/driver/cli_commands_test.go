@@ -27,7 +27,7 @@ type Serve = {
 type Echo = { words: List[String] } derive (codec.Decode)
 fn commands(): List[cli.Command] {
  [cli.Subcommand[Serve]("serve", "Serve a host", (options, s) => {
-    _ = time.Sleep(s, time.Nanoseconds(0))
+    _ = time.Sleep(s, 0.nanos())
     onClose(s, () => { println("serve closed") })
     println(options)
   }, [cli.Flag { field: "port", short: "p", env: "BORK_SUBCOMMAND_PORT" }, cli.Flag { field: "config", configFile: true }], configFiles: ["base.json"]),

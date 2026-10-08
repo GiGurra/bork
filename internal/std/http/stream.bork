@@ -178,20 +178,20 @@ fn OpenBody(s: Scope, next: (Scope) => ReadResult in s) uses net + clock + state
 
 // GetStream returns once response headers arrive. Its timeout covers subsequent
 // body reads. No total byte limit is imposed unless maxBodyBytes is supplied.
-fn GetStream(url: String, s: Scope, timeoutMs: TimeoutMs = 0, maxBodyBytes: Option[BodyLimit] = .None) uses net + clock + state: StreamResult {
-  SendStream("GET", url, {:}, s, timeoutMs: timeoutMs, maxBodyBytes: maxBodyBytes)
+fn GetStream(url: String, s: Scope, timeout: Timeout = Duration { nanos: 0 }, maxBodyBytes: Option[BodyLimit] = .None) uses net + clock + state: StreamResult {
+  SendStream("GET", url, {:}, s, timeout: timeout, maxBodyBytes: maxBodyBytes)
 }
 
 // SendStream consumes/closes its upload before returning final response headers.
 // An early response ends an unfinished upload; this is not a full-duplex client.
 // Streaming uploads are not replayable;
 // redirects follow Go's policy for requests without GetBody.
-fn SendStream(method: String, url: String, headers: Headers, s: Scope, body: Option[BodyReader] in s = .None, timeoutMs: TimeoutMs = 0, maxBodyBytes: Option[BodyLimit] = .None) uses net + clock + state: StreamResult {
+fn SendStream(method: String, url: String, headers: Headers, s: Scope, body: Option[BodyReader] in s = .None, timeout: Timeout = Duration { nanos: 0 }, maxBodyBytes: Option[BodyLimit] = .None) uses net + clock + state: StreamResult {
   upload: Option[BodyReader] = match (body) {
     .Some(source) => .Some(forwardBody(s, source))
     .None => .None
   }
-  sendStream(method, url, headers, s, upload, timeoutMs, maxBodyBytes)
+  sendStream(method, url, headers, s, upload, timeout, maxBodyBytes)
 }
 
 // Cancel an upload's source as well as its pipe, so a blocked source Read
@@ -205,7 +205,7 @@ fn forwardBody(s: Scope, source: BodyReader in s) uses net + clock + state: Body
   return upload
 }
 
-fn sendStream(method: String, url: String, headers: Headers, s: Scope, body: Option[BodyReader] in s, timeoutMs: TimeoutMs, maxBodyBytes: Option[BodyLimit]) uses net + clock + state: StreamResult unsafe go {
+fn sendStream(method: String, url: String, headers: Headers, s: Scope, body: Option[BodyReader] in s, timeout: Timeout, maxBodyBytes: Option[BodyLimit]) uses net + clock + state: StreamResult unsafe go {
   import "context"
   import "errors"
   import "io"
@@ -220,7 +220,7 @@ fn sendStream(method: String, url: String, headers: Headers, s: Scope, body: Opt
   handle := _borkNewResourceHandle(nil, s)
   ctx := handle.Context()
   stop := func() {}
-  if timeoutMs > 0 { ctx, stop = context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond) }
+  if timeout.nanos > 0 { ctx, stop = context.WithTimeout(ctx, time.Duration(timeout.nanos)) }
   stopUpload := func() bool { return true }
   if upload, ok := _borkOptionGet(body); ok { stopUpload = context.AfterFunc(ctx, func() { Close(upload) }) }
   wroteRequest := make(chan struct{})

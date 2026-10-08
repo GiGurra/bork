@@ -52,16 +52,16 @@ func _borkFanInJoin(s *_Scope) {
  if failure != nil { panic(failure) }
 }
 
-func _borkFanInTimeout(s *_Scope, ms int64, work func(*_Scope) any) any {
+func _borkFanInTimeout(s *_Scope, nanos int64, work func(*_Scope) any) any {
  child := _scopeWith(s.ctx)
  child.name = "withTimeout"
  s.Defer(child.close)
  defer _borkFanInAbort(child)
  expired := make(chan struct{})
- duration := time.Duration(max(int64(0), min(ms, int64(9223372036854)))) * time.Millisecond
+ duration := time.Duration(max(int64(0), nanos))
  timer := time.AfterFunc(duration, func() { child.cancel(errors.New("deadline exceeded")); close(expired) })
  defer timer.Stop()
- if ms <= 0 { child.cancel(errors.New("deadline exceeded")) }
+ if nanos <= 0 { child.cancel(errors.New("deadline exceeded")) }
  if child.ctx.Err() != nil { return Cancelled{reason: child._cancelReason()} }
  value := work(child)
  _borkFanInJoin(child)

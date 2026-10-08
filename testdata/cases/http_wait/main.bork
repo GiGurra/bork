@@ -63,7 +63,7 @@ fn main() {
     println("any cancellation", http.WaitAny([a, b]) == Ok, !cancelled(second.scope))
     // WaitAll must keep waiting for the second scope after the first ends.
     fork(second.scope, () => {
-      _ = delay(second.scope, 50)
+      _ = delay(second.scope, 50.millis())
       cancel(second.scope)
     })
     failed = stopped[http.AdmissionLoad](a, "accept failed", false)

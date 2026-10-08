@@ -17,7 +17,7 @@ negative, oversized, comma-joined, or repeated values receive 400 before the
 body is read or application work is admitted.
 
 Listen, ListenRoutes and ListenTLS gain a final named option
-`requestTimeoutMs: TimeoutMs = 0`. A positive value bounds each request from its
+`requestTimeout: Timeout = Duration { nanos: 0 }`. A positive value bounds each request from its
 arrival at Bork's outer handler. Admission, body reads, handler work and
 cooperative cleanup observe cancellation at that deadline. Zero adds no server policy deadline. The effective
 request deadline is the earliest of this policy, the incoming budget, and the
@@ -67,7 +67,7 @@ context but cannot be deducted exactly at the receiver. The header
 is reserved: explicit or propagated fields with that name are removed and the
 client writes exactly its effective scope/timeout budget; without a deadline it
 sends no budget header; declarations must not use this reserved name. Applications express a tighter bound through scopes or
-the existing timeoutMs argument.
+the existing timeout argument.
 
 Relative budgets avoid synchronized wall clocks. They start at each receiver,
 so network transit is not deducted from the remote timer; the caller still

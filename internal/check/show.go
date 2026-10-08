@@ -26,7 +26,7 @@ func (c *checker) validShow(ci *ClassInstance) bool {
 		c.errorf(ci.Decl.Type.Pos, "Show instances require a declared record or sealed type; wrap basic types, lists and maps in a declared type")
 		return false
 	}
-	if pkg != c.pkg || ci.Prelude {
+	if pkg != c.pkg {
 		c.errorf(ci.Decl.Type.Pos, "a Show instance must be declared in the type's own package, so its text is the same everywhere")
 		return false
 	}

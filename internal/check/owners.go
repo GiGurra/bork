@@ -376,7 +376,7 @@ func (l *lifeChecker) callLife(x *Call) lifetime {
 	// Policies are given where a scope starts (with, or openScope's), so
 	// that moves can tell whether its tasks may outlive it.
 	if x.Func.Prelude && x.Func.Decl.Name == "setScopePolicy" {
-		l.errorf(x.Pos(), "setScopePolicy cannot be called directly; give policies where the scope starts: scope s with taskTimeout(100) { ... }, or openScope(parent, [taskTimeout(100)])")
+		l.errorf(x.Pos(), "setScopePolicy cannot be called directly; give policies where the scope starts: scope s with taskTimeout(100.millis()) { ... }, or openScope(parent, [taskTimeout(100.millis())])")
 	}
 	if x.Func.Prelude && x.Func.Decl.Name == "scopeOf" && len(x.Args) == 1 {
 		v, ok := x.Args[0].(*VarRef)

@@ -27,9 +27,9 @@ fn main(): Ok | fs.Error | Cancelled | process.ExitCode {
   dir = fs.TempDir(s)?
   println(fs.DirectoryPath(dir))
   if (process.Args().isEmpty()) {
-   time.Sleep(s, time.Nanoseconds(3600000000000))?
+   time.Sleep(s, 1.hours())?
   } else {
-   time.Sleep(s, time.Nanoseconds(3600000000000))?{ _ => process.ExitCode { code: 23, message: "chosen" } }
+   time.Sleep(s, 1.hours())?{ _ => process.ExitCode { code: 23, message: "chosen" } }
   }
  }
 }

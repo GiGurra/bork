@@ -36,20 +36,20 @@ Names below belong to `http`. All client calls return `Result = Response | Overl
 
 | Signature | Meaning |
 | --- | --- |
-| `Get(url: String, s: Scope, timeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216) uses net + clock + state: Result` | GET and read the response. |
-| `Post(url: String, contentType: String, body: String, s: Scope, timeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216) uses net + clock + state: Result` | POST a body with a Content-Type header. |
-| `Send(method: String, url: String, headers: Headers, body: String, s: Scope, timeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216) uses net + clock + state: Result` | Send an arbitrary method and repeated headers. |
+| `Get(url: String, s: Scope, timeout: Timeout = Duration { nanos: 0 }, maxBodyBytes: BodyLimit = 16777216) uses net + clock + state: Result` | GET and read the response. |
+| `Post(url: String, contentType: String, body: String, s: Scope, timeout: Timeout = Duration { nanos: 0 }, maxBodyBytes: BodyLimit = 16777216) uses net + clock + state: Result` | POST a body with a Content-Type header. |
+| `Send(method: String, url: String, headers: Headers, body: String, s: Scope, timeout: Timeout = Duration { nanos: 0 }, maxBodyBytes: BodyLimit = 16777216) uses net + clock + state: Result` | Send an arbitrary method and repeated headers. |
 | `HeaderOf(headers: Headers, name: String): Option[String]` | Find the first header value without regard to case. |
-| `RetryAfter(headers: Headers, now: time.Instant): Option[time.Duration]` | Parse an overload hint with an explicit clock reading. |
+| `RetryAfter(headers: Headers, now: time.Instant): Option[Duration]` | Parse an overload hint with an explicit clock reading. |
 
 | Type | Fields or constraint |
 | --- | --- |
 | `Headers` | `Map[String, List[String]]`; preserves repeated values. Use `{:}` for no headers. |
 | `Status` | Int in `100..599`; guard dynamic values with `http.ValidStatus`. |
 | `BodyLimit` | Nonnegative Int; guard dynamic limits with `http.ValidBodyLimit`. |
-| `TimeoutMs` | Int in `0..9223372036854`; guard with `http.ValidTimeout`. |
+| `Timeout` | Nonnegative Duration; guard with `http.ValidTimeout`. |
 | `Response` | `{ status: Status, headers: Headers, body: String }` |
-| `Overloaded` | `{ retryAfter: Option[time.Duration], response: Response }` |
+| `Overloaded` | `{ retryAfter: Option[Duration], response: Response }` |
 | `BodyTooLarge` | `{ limit: BodyLimit }`; decoded response exceeds maxBodyBytes. |
 | `DeadlineExceeded` | `{ message: String }` |
 
@@ -95,8 +95,8 @@ Use `GetStream` or `SendStream` to receive headers before the complete body arri
 
 | Signature | Meaning |
 | --- | --- |
-| `GetStream(url: String, s: Scope, timeoutMs: TimeoutMs = 0, maxBodyBytes: Option[BodyLimit] = .None)` | GET; return `StreamResult`. |
-| `SendStream(method: String, url: String, headers: Headers, s: Scope, body: Option[BodyReader] in s = .None, timeoutMs: TimeoutMs = 0, maxBodyBytes: Option[BodyLimit] = .None)` | Send an optional binary upload stream; return `StreamResult`. |
+| `GetStream(url: String, s: Scope, timeout: Timeout = Duration { nanos: 0 }, maxBodyBytes: Option[BodyLimit] = .None)` | GET; return `StreamResult`. |
+| `SendStream(method: String, url: String, headers: Headers, s: Scope, body: Option[BodyReader] in s = .None, timeout: Timeout = Duration { nanos: 0 }, maxBodyBytes: Option[BodyLimit] = .None)` | Send an optional binary upload stream; return `StreamResult`. |
 | `Read(body: BodyReader, size: ReadSize = 4096)` | Read up to size immutable bytes; return `ReadResult`. |
 | `Close(body: BodyReader)` | Abandon a stream early; safe more than once. |
 | `OpenBody(s: Scope, next: (Scope) => ReadResult in s)` | Create a producer-backed upload with no queued chunks. Adds the callback's effects. |
@@ -136,10 +136,10 @@ All listener functions return `Server | IoError`. Their final options share thes
 
 | Named option | Meaning |
 | --- | --- |
-| `drainTimeoutMs: TimeoutMs = 0` | Graceful shutdown limit; zero inherits the scope's cleanup timeout. |
+| `drainTimeout: Timeout = Duration { nanos: 0 }` | Graceful shutdown limit; zero inherits the scope's cleanup timeout. |
 | `maxBodyBytes: BodyLimit = 16777216` | Incoming buffered-body limit; `BodyLimit` is a nonnegative Int. |
 | `admission: Option[Admission] = Option.None` | Optional bound on active and queued application requests. |
-| `requestTimeoutMs: TimeoutMs = 0` | Cap each incoming request's deadline; zero adds no cap. |
+| `requestTimeout: Timeout = Duration { nanos: 0 }` | Cap each incoming request's deadline; zero adds no cap. |
 
 | Signature before the shared options | Effects |
 | --- | --- |
@@ -271,7 +271,7 @@ Incoming bodies and Multipart default to 16 MiB. Override `maxBodyBytes` with a 
 
 ## Multiple listeners
 
-Closing the server scope cancels request scopes, stops accepting new connections, and drains active handlers. A zero `drainTimeoutMs` inherits `cleanupTimeout`; without that policy draining is unbounded. A positive server timeout overrides the default and cannot exceed a positive scope cleanup timeout (`IoError` otherwise). Expiry forcibly closes connections; cooperative handlers can still be finishing.
+Closing the server scope cancels request scopes, stops accepting new connections, and drains active handlers. A zero `drainTimeout` inherits `cleanupTimeout`; without that policy draining is unbounded. A positive server timeout overrides the default and cannot exceed a positive scope cleanup timeout (`IoError` otherwise). Expiry forcibly closes connections; cooperative handlers can still be finishing.
 
 Wait/WaitAny/WaitAll can finish before draining completes. Scope cleanup performs the drain. WaitAny reports an unexpected stop as `IoError { path: address, message }`; a completed failure remains an error after cancellation. WaitAll returns the first unexpected failure in list order. Both return Ok immediately for an empty list.
 
@@ -289,7 +289,7 @@ fn serve(app: Scope) uses io + net + clock + random + state: Ok | IoError {
 }
 
 fn main() {
-  scope app with cleanupTimeout(5000) {
+  scope app with cleanupTimeout(5.seconds()) {
     match (serve(app)) {
       _: Ok => {}
       error: IoError => eprintln(error.path + ": " + error.message)
@@ -302,9 +302,9 @@ This server waits for scope cancellation (Ctrl+C) or listener failure. Each list
 
 ## Deadlines between services
 
-Get, Post and Send forward the scope's remaining deadline, including a tighter `timeoutMs`, in the reserved `Bork-Timeout-Ns` header. Each call and redirect recomputes the budget. An exhausted deadline returns `DeadlineExceeded` before sending; manual values of this header are replaced, or removed when there is no deadline.
+Get, Post and Send forward the scope's remaining deadline, including a tighter `timeout`, in the reserved `Bork-Timeout-Ns` header. Each call and redirect recomputes the budget. An exhausted deadline returns `DeadlineExceeded` before sending; manual values of this header are replaced, or removed when there is no deadline.
 
-Incoming requests use the earliest listener/context deadline, server `requestTimeoutMs` cap and caller budget. Missing budgets add no limit; zero returns 504. Invalid or repeated budgets return 400 before admission or body buffering. Deadline expiry while queued or reading a body returns 504 where possible; ordinary admission timeout remains 429/503.
+Incoming requests use the earliest listener/context deadline, server `requestTimeout` cap and caller budget. Missing budgets add no limit; zero returns 504. Invalid or repeated budgets return 400 before admission or body buffering. Deadline expiry while queued or reading a body returns 504 where possible; ordinary admission timeout remains 429/503.
 
 A handler's scope carries this deadline into outgoing calls and local operations, including later changes to the listener deadline. Handlers must cooperate with cancellation and may return their own response after cancellation. Request scopes do not inherit listener cleanup policies: use explicit taskTimeout/cleanupTimeout scopes when bounded task/finalizer waits are needed. A deadline does not forcibly stop arbitrary code or bound total cleanup time.
 
@@ -318,8 +318,8 @@ An Admission limits application work and buffered bodies per listener. It does n
 | --- | --- |
 | `maxInFlight: InFlightLimit` | Positive Int; required. |
 | `maxQueued: QueueLimit = 0` | Nonnegative Int. |
-| `queueTimeoutMs: TimeoutMs = 0` | Zero disables queue waiting. |
-| `retryAfterMs: TimeoutMs = 0` | Rejection hint, rounded upward to seconds. |
+| `queueTimeout: Timeout = Duration { nanos: 0 }` | Zero disables queue waiting. |
+| `retryAfter: Timeout = Duration { nanos: 0 }` | Rejection hint, rounded upward to seconds. |
 | `status: AdmissionStatus = 503` | 429 or 503. |
 
 ```bork
@@ -327,7 +327,7 @@ import "bork/http"
 
 fn main() {
   scope app {
-    limit = http.Admission { maxInFlight: 64, maxQueued: 32, queueTimeoutMs: 25, retryAfterMs: 100 }
+    limit = http.Admission { maxInFlight: 64, maxQueued: 32, queueTimeout: 25.millis(), retryAfter: 100.millis() }
     match (http.Listen("127.0.0.1:0", app, (req, rs) => http.Text(200, "ok"), admission: .Some(limit))) {
       server: http.Server => println(http.AdmissionState(server))
       error: IoError => eprintln(error.message)
@@ -336,7 +336,7 @@ fn main() {
 }
 ```
 
-Admission precedes body buffering and middleware and holds capacity through request tasks, cleanup and response writing. Waiters use a bounded FIFO queue; a full queue rejects immediately. Zero maxQueued or queueTimeoutMs disables waiting. Cancellation removes queued requests; body errors and handler panics release capacity. Shutdown cancels queued waits.
+Admission precedes body buffering and middleware and holds capacity through request tasks, cleanup and response writing. Waiters use a bounded FIFO queue; a full queue rejects immediately. Zero maxQueued or queueTimeout disables waiting. Cancellation removes queued requests; body errors and handler panics release capacity. Shutdown cancels queued waits.
 
 Go detects HTTP/1 disconnects only after consuming the body, so unread-body waiters can remain until timeout, cancellation or permit transfer. Admission does not peek at or drain bodies. `AdmissionState(server) uses state: Option[AdmissionLoad]` gives a consistent `{ inFlight: Int, queued: Int }` snapshot, or None when disabled. See the [admission fixture](../../testdata/cases/http_admission/main.bork) for concurrent requests.
 
@@ -370,14 +370,14 @@ import "bork/http"
 
 fn main() {
   scope app {
-    budget = http.OpenRetryBudget(app, capacity: 4, refillMs: 1000)
+    budget = http.OpenRetryBudget(app, capacity: 4, refill: 1.seconds())
     attempts = atom(0)
     result = http.Retry(app, budget, operation: attempt => {
       count = update(attempts, n => n + 1)
       if (count == 1) {
         http.Overloaded { response: http.Text(503, "busy"), retryAfter: .None }
       } else { http.Text(200, "ok") }
-      }, baseDelayMs: 0, maxDelayMs: 0)
+      }, baseDelay: 0.seconds(), maxDelay: 0.seconds())
     match (result) {
       response: http.Response => println(response.status, response.body)
       error => eprintln(toString(error))
@@ -394,16 +394,16 @@ The retry reaches its second attempt:
 
 | Signature | Meaning |
 | --- | --- |
-| `OpenRetryBudget(s: Scope, capacity: RetryCount, refillMs: RefillMs, clock: Option[time.Clock] in s = .None) uses clock + state: RetryBudget` | Positive capacity and refill interval (milliseconds within TimeoutMs); starts full, adds one token per interval up to capacity. |
-| `Retry(s: Scope, budget: RetryBudget in s, operation: (Scope) => Result, maxAttempts: RetryCount = 3, baseDelayMs: TimeoutMs = 20, maxDelayMs: TimeoutMs where AtLeastBase(baseDelayMs) = 1000, jitter: Option[(Int) uses random + state => Int] = .None) uses clock + random + state: Result` | Retry with shared tokens and fresh attempt scopes; adds operation effects. |
+| `OpenRetryBudget(s: Scope, capacity: RetryCount, refill: Refill, clock: Option[time.Clock] in s = .None) uses clock + state: RetryBudget` | Positive capacity and refill interval (positive Duration); starts full, adds one token per interval up to capacity. |
+| `Retry(s: Scope, budget: RetryBudget in s, operation: (Scope) => Result, maxAttempts: RetryCount = 3, baseDelay: Timeout = Duration { nanos: 20000000 }, maxDelay: Timeout where AtLeastBase(baseDelay) = Duration { nanos: 1000000000 }, jitter: Option[(Duration) uses random + state => Duration] = .None) uses clock + random + state: Result` | Retry with shared tokens and fresh attempt scopes; adds operation effects. |
 
 The first attempt spends no token; maxAttempts includes it. Further attempts reserve shared tokens before work, and concurrent callers cannot overspend. Tokens are not refunded. Every attempt finishes its task/resource cleanup before the next attempt. Closing the budget cancels active attempts and waits; operations must cooperate. Attachment extends ownership; the budget and any captured injected clock must outlive their explicit scope.
 
-Waits add the nonnegative server hint to full jitter from zero through capped exponential local backoff. maxDelayMs caps only local backoff and cannot be below baseDelayMs; a valid server hint is never shortened. Overflow, insufficient remaining deadline, exhausted attempts or an empty budget return the last Overloaded. Expired deadlines return DeadlineExceeded; cancellation returns Cancelled. Negative manually constructed hints count as zero.
+Waits add the nonnegative server hint to full jitter from zero through capped exponential local backoff. maxDelay caps only local backoff and cannot be below baseDelay; a valid server hint is never shortened. Overflow, insufficient remaining deadline, exhausted attempts or an empty budget return the last Overloaded. Expired deadlines return DeadlineExceeded; cancellation returns Cancelled. Negative manually constructed hints count as zero.
 
 Retry-After accepts exactly one nonnegative whole-seconds or HTTP-date value. Missing, malformed, repeated or overflowing values become None; past dates give zero. Raw headers remain available on `Overloaded.response`. Date hints use the client clock and are approximate under clock skew.
 
-For deterministic refill, inject `time.FixedClock` or another Clock; the default uses monotonic system time and needs no refill goroutine. Backward readings pause refill until the clock catches up. Custom jitter receives a nanosecond ceiling and its result is clamped to `0..ceiling`; timed waits and scope deadlines still use real time. See [slow_downstream](../../examples/slow_downstream/main.bork) for shared retry/admission bounds.
+For deterministic refill, inject `time.FixedClock` or another Clock; the default uses monotonic system time and needs no refill goroutine. Backward readings pause refill until the clock catches up. Custom jitter receives a Duration ceiling and its result is clamped to `0..ceiling`; timed waits and scope deadlines still use real time. See [slow_downstream](../../examples/slow_downstream/main.bork) for shared retry/admission bounds.
 
 ## TLS certificates
 

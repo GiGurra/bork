@@ -1,10 +1,10 @@
 httpPort:Int:time_env.port
 unsupported
 2024-01-02T03:04:05.123Z
-Duration { nanos: 2000000000 }
+2s
 1.5s
-Duration { nanos: 7380000000000 }
-OutOfRange { value: "9223372036855", target: "Duration" }
+2h3m0s
+2562047h47m16.854775807s
 OutOfRange { value: "instant + duration", target: "Instant" }
 OutOfRange { value: "end - start", target: "Duration" }
 instant is outside the Unix nanosecond range

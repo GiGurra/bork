@@ -1,9 +1,9 @@
-type Duration = go "time.Duration"
+type NativeDuration = go "time.Duration"
 type Box[T] = { value: T }
 pred anyValue[T](v: T) { true }
 class Validate[T] { fn validate(v: T): Bool }
 instance validateBox[T]: Validate[Box[T]] {
   fn validate(v: Box[T]): Bool { anyValue(v.value) }
 }
-fn Check(d: Duration): Bool { validate(Box { value: d }) }
+fn Check(d: NativeDuration): Bool { validate(Box { value: d }) }
 fn main() {}

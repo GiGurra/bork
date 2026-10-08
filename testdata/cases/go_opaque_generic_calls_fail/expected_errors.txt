@@ -1,4 +1,4 @@
-main.bork:4:30: T of Wrap cannot be Duration: its generic implementation uses predicate anyValue, which cannot depend on opaque Go values
-main.bork:10:28: T of Promise cannot be Duration: its generic implementation uses facts, which cannot depend on opaque Go values
-main.bork:13:43: T of BuildThenShow cannot be Duration: its generic implementation uses facts, which cannot depend on opaque Go values
-main.bork:14:58: T of Wrap cannot be Duration: its generic implementation uses predicate anyValue, which cannot depend on opaque Go values
+main.bork:4:36: T of Wrap cannot be NativeDuration: its generic implementation uses predicate anyValue, which cannot depend on opaque Go values
+main.bork:10:34: T of Promise cannot be NativeDuration: its generic implementation uses facts, which cannot depend on opaque Go values
+main.bork:13:49: T of BuildThenShow cannot be NativeDuration: its generic implementation uses facts, which cannot depend on opaque Go values
+main.bork:14:70: T of Wrap cannot be NativeDuration: its generic implementation uses predicate anyValue, which cannot depend on opaque Go values

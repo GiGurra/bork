@@ -1,6 +1,4 @@
 main.bork:3:41: http.Admission requires maxInFlight to be http.ValidInFlight, but http.ValidInFlight(0) is false
 main.bork:4:55: http.Admission requires maxQueued to be http.ValidQueueLimit, but http.ValidQueueLimit(-1) is false
-main.bork:5:60: http.Admission requires queueTimeoutMs to be http.ValidTimeout, but http.ValidTimeout(-1) is false
-main.bork:6:60: http.Admission requires queueTimeoutMs to be http.ValidTimeout, but http.ValidTimeout(9223372036855) is false
-main.bork:7:58: http.Admission requires retryAfterMs to be http.ValidTimeout, but http.ValidTimeout(9223372036855) is false
-main.bork:8:52: http.Admission requires status to be http.ValidAdmissionStatus, but http.ValidAdmissionStatus(500) is false
+main.bork:5:59: http.Admission requires queueTimeout to be http.ValidTimeout, but http.ValidTimeout(Duration { nanos: -1000000 }) is false
+main.bork:6:52: http.Admission requires status to be http.ValidAdmissionStatus, but http.ValidAdmissionStatus(500) is false

@@ -78,12 +78,12 @@ fn route(db: sql.Connection in request, req: http.Request, request: Scope) uses 
 fn start(config: Config, app: Scope) uses io + net + clock + state: http.Server | sql.Error | IoError {
   db = sql.OpenSqlite(config.database, app)?
   setup(db)?
-  http.Listen(config.address, app, handler: (req, request) => route(attach(db, request), req, request), drainTimeoutMs: 5000, requestTimeoutMs: 2000)
+  http.Listen(config.address, app, handler: (req, request) => route(attach(db, request), req, request), drainTimeout: 5.seconds(), requestTimeout: 2.seconds())
 }
 
 fn serve() uses io + net + clock + state: Ok | env.ConfigError | sql.Error | IoError {
   config = env.Load[Config]("TOUR")?
-  scope app with cleanupTimeout(5000) {
+  scope app with cleanupTimeout(5.seconds()) {
     server = start(config, app)?
     log.Info("listening", { "address": http.Address(server) })
     http.WaitAny([server])
@@ -98,7 +98,7 @@ fn show(label: String, result: http.Result) uses io {
 }
 
 fn demo() uses io + net + clock + state: Ok | sql.Error | IoError {
-  scope app with cleanupTimeout(5000) {
+  scope app with cleanupTimeout(5.seconds()) {
     server = start(Config { address: "127.0.0.1:0", database: ":memory:" }, app)?
     base = "http://" + http.Address(server)
     show("GET /health", http.Get(base + "/health", app))
@@ -183,7 +183,7 @@ test "listener startup failure returns its error" {
 }
 
 test "scope cleanup releases the listener" {
-  address = scope app with cleanupTimeout(5000) {
+  address = scope app with cleanupTimeout(5.seconds()) {
     match (start(Config { address: "127.0.0.1:0", database: ":memory:" }, app)) {
       server: http.Server => http.Address(server)
       error => panic(toString(error))
@@ -237,7 +237,7 @@ test "setup failure returns before opening a listener" {
     sql.Error { operation: "exec", message: "cannot create table" }
   }
   statements.expect(times: 1)
-  listeners = mock http.Listen(addr, s, handler, drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs) {
+  listeners = mock http.Listen(addr, s, handler, drainTimeout, maxBodyBytes, admission, requestTimeout) {
     IoError { path: addr, message: "listener must not start" }
   }
   listeners.expect(times: 0)

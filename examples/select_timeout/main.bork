@@ -5,7 +5,7 @@ import "bork/time"
 
 type TimedOut = {}
 
-fn ms(n: Int): time.Duration { time.Nanoseconds(n * 1_000_000) }
+fn ms(n: Int): time.Duration { (n * 1_000_000).nanos() }
 
 // ask starts a worker that answers after a delay, and waits for the
 // answer for at most patience. (The delays here are far apart, so the
@@ -56,7 +56,7 @@ fn main() {
     // A deadline on the scope stops every select waiting in it: the
     // select gives Cancelled.
     never = channel[String](s)
-    println(withTimeout(s, 20, c => select {
+    println(withTimeout(s, 20.millis(), c => select {
       message = never.receive(c) => message
     }))
   }

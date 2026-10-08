@@ -30,7 +30,7 @@ fn tagged(handler: http.Handler): http.Handler {
   (req, rs) => handler(req, rs).copy(headers: { "X-Middleware": ["yes"] })
 }
 fn call(base: String, path: String, s: Scope, method: String = "GET", body: String = "") uses net + io + clock + state {
-  match (http.Send(method, base + path, {:}, body, s, 2000)) {
+  match (http.Send(method, base + path, {:}, body, s, 2.seconds())) {
     response: http.Response => println(response.status, response.body)
     error => println("unexpected", toString(error))
   }
@@ -39,9 +39,9 @@ fn main() {
   drainTest()
   forcedDrain(1000)
   forcedDrain(0)
-  scope s with cleanupTimeout(1000) {
+  scope s with cleanupTimeout(1000.millis()) {
     more(s)
-    match (http.Listen("127.0.0.1:0", s, (req, rs) => http.Text(200, req.body), 0, 3)) {
+    match (http.Listen("127.0.0.1:0", s, (req, rs) => http.Text(200, req.body), 0.millis(), 3)) {
       server: http.Server => {
         base = "http://" + http.Address(server)
         call(base, "/", s, "POST", "abc")
@@ -49,7 +49,7 @@ fn main() {
       }
       error: IoError => println("unexpected", error.message)
     }
-    match (http.Listen("127.0.0.1:0", s, (req, rs) => http.Text(200, "empty"), 0, 0)) {
+    match (http.Listen("127.0.0.1:0", s, (req, rs) => http.Text(200, "empty"), 0.millis(), 0)) {
       server: http.Server => {
         base = "http://" + http.Address(server)
         call(base, "/", s)
@@ -75,7 +75,7 @@ fn main() {
     }
     println(match (http.ListenRoutes("127.0.0.1:0", s, [http.Route { pattern: "GET /x", handler: (req, rs) => endpoint(0, req, rs) }, http.Route { pattern: "GET /x", handler: (req, rs) => endpoint(0, req, rs) }])) { _: IoError => true; _ => false })
     println(match (http.ListenRoutes("127.0.0.1:0", s, [http.Route { pattern: "GET /{", handler: (req, rs) => endpoint(0, req, rs) }])) { _: IoError => true; _ => false })
-    println(match (http.Listen("127.0.0.1:0", s, (request, rs) => http.Text(200, "ok"), 1001)) { _: IoError => true; _ => false })
+    println(match (http.Listen("127.0.0.1:0", s, (request, rs) => http.Text(200, "ok"), 1001.millis())) { _: IoError => true; _ => false })
     println(match (http.ListenTLS("127.0.0.1:0", s, [http.Route { pattern: "/", handler: (req, rs) => endpoint(0, req, rs) }], "missing-cert", "missing-key")) { _: IoError => true; _ => false })
   }
 }

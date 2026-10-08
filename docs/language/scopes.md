@@ -97,7 +97,7 @@ Awaiting inside the block lets a delayed task finish before cancellation:
 
 ```bork
 fn delayed(s: Scope) uses clock + state: String | Cancelled {
-  delay(s, 10)?
+  delay(s, 10.millis())?
   "finished"
 }
 
@@ -123,7 +123,7 @@ fn main() {
   scope s {
     onClose(s, () => println("cleanup"))
     fork(s, () => {
-      println(delay(s, 60_000))
+      println(delay(s, 1.minutes()))
     })
   }
 }
@@ -136,7 +136,7 @@ cleanup
 
 Cancellation is cooperative. Code that never checks it can continue running,
 and the scope normally waits for that code too. The exception is
-`taskTimeout(ms)`: when its join deadline expires, the scope leaves remaining
+`taskTimeout(duration)`: when its join deadline expires, the scope leaves remaining
 tasks running and proceeds with cleanup. Those tasks may encounter closed
 resources; see [cancellation and timeouts](#cancellation-and-timeouts).
 
@@ -148,13 +148,13 @@ A scope can be cancelled. Its tasks see this at their next cancellation point, s
 
 ```bork
 fn slowAnswer(s: Scope) uses clock + state: Int | Cancelled {
-  delay(s, 2000)?
+  delay(s, 2.seconds())?
   42
 }
 
 fn main() {
   scope s {
-    println(withTimeout(s, 50, child => slowAnswer(child)))
+    println(withTimeout(s, 50.millis(), child => slowAnswer(child)))
   }
 }
 ```
@@ -163,20 +163,20 @@ fn main() {
 Cancelled { reason: "deadline exceeded" }
 ```
 
-`withTimeout(s, ms, work)` runs `work` in a child scope and cancels it after the time limit. `cancel(s)` cancels a scope directly, and `cancelAfter(s, ms)` after a delay. Cancellation is a value like any other failure: it shows up in result types as `Cancelled`, and `?` passes it along.
+`withTimeout(s, duration, work)` runs `work` in a child scope and cancels it after the time limit. `cancel(s)` cancels a scope directly, and `cancelAfter(s, duration)` after a delay. Cancellation is a value like any other failure: it shows up in result types as `Cancelled`, and `?` passes it along.
 
 A scope can be given limits when it is opened:
 
 ```bork
 fn main() {
-  scope s with taskTimeout(100), cleanupTimeout(500) {
+  scope s with taskTimeout(100.millis()), cleanupTimeout(500.millis()) {
     println(checkpoint(s))
   }
 }
 ```
 
-- `taskTimeout(ms)` limits how long the scope waits for its tasks to stop once it has been cancelled. After that it stops waiting, and a task that is still running is left behind. This is the one case where a task outlives its scope.
-- `cleanupTimeout(ms)` limits how long the scope waits for each resource to close.
+- `taskTimeout(duration)` limits how long the scope waits for its tasks to stop once it has been cancelled. After that it stops waiting, and a task that is still running is left behind. This is the one case where a task outlives its scope.
+- `cleanupTimeout(duration)` limits how long the scope waits for each resource to close.
 
 ## Channels
 

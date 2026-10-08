@@ -4,7 +4,7 @@ type Envelope = { payload: Payload }
 
 type Payload = go "*example.com/bindtest.Payload"
 type Same = go "*example.com/bindtest.PayloadAlias"
-type Duration = go "time.Duration"
+type NativeDuration = go "time.Duration"
 type Stringer = go "fmt.Stringer"
 type Handle = resource go "*example.com/bindtest.Handle"
 
@@ -21,9 +21,9 @@ fn TypedNilStringer(): Stringer | GoValueError unsafe go "example.com/bindtest.T
 fn StringerError() uses state: Stringer | GoError unsafe go "example.com/bindtest.StringerError"
 fn NullablePayload(p: Option[Payload]) uses state: String unsafe go "example.com/bindtest.NullablePayload"
 fn NullableStringer(s: Option[Stringer]) uses state: String unsafe go "example.com/bindtest.NullableStringer"
-fn DurationString(d: Duration): String unsafe go "(fmt.Stringer).String"
-fn GetDuration(): Duration unsafe go "example.com/bindtest.Duration"
-fn Seconds(d: Duration): Float unsafe go "(time.Duration).Seconds"
+fn DurationString(d: NativeDuration): String unsafe go "(fmt.Stringer).String"
+fn GetDuration(): NativeDuration unsafe go "example.com/bindtest.Duration"
+fn Seconds(d: NativeDuration): Float unsafe go "(time.Duration).Seconds"
 fn DurationInt(): Int unsafe go "example.com/bindtest.Duration"
 fn ContextPresent(s: Scope): Bool unsafe go "example.com/bindtest.ContextPresent"
 fn OpenHandle(s: Scope) uses state: Handle | GoValueError unsafe go "example.com/bindtest.OpenHandle"
@@ -34,7 +34,7 @@ fn CloseCount() uses state: Int unsafe go "example.com/bindtest.CloseCount"
 
 fn id[T](v: T): T { v }
 fn Choice(p: Payload): Payload | String { id(p) }
-fn StringerChoice(s: Stringer): Stringer | Duration { id(s) }
+fn StringerChoice(s: Stringer): Stringer | NativeDuration { id(s) }
 fn Box(s: String): Payload unsafe go {
   import "example.com/bindtest"
   return _borkOpaque[Same](bindtest.NewPayload(s))
@@ -55,7 +55,7 @@ fn main() {
       println(v, Show(v))
       match (StringerChoice(v)) {
         s: Stringer => println("stringer", Show(s))
-        d: Duration => println("duration", Seconds(d))
+        d: NativeDuration => println("duration", Seconds(d))
       }
     }
     Option.None => println("missing")

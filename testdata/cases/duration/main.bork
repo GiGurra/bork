@@ -1,0 +1,39 @@
+import "bork/time"
+
+fn seconds(n: Int): Duration { n.seconds() }
+fn nanos(n: Int): Duration { n.nanos() }
+fn identity(value: time.Duration): Duration { value }
+fn main() {
+  assertEqual(250.millis().nanos, 250000000)
+  assertEqual(5.seconds().nanos, 5000000000)
+  assertEqual(2.minutes().nanos, 120000000000)
+  assertEqual(1.hours().nanos, 3600000000000)
+  assertEqual(3.micros().nanos, 3000)
+  assertEqual(0.seconds().nanos, 0)
+  assertEqual((-1).seconds().nanos, -1000000000)
+  assertEqual(9223372036854775807.seconds().nanos, 9223372036854775807)
+  assertEqual((-9223372036854775808).seconds().nanos, -9223372036854775808)
+  assertEqual(seconds(9223372036854775807).nanos, 9223372036854775807)
+  assertEqual(seconds(-9223372036854775808).nanos, -9223372036854775808)
+  maximum = nanos(9223372036854775807)
+  minimum = nanos(-9223372036854775808)
+  assertEqual(maximum.add(1.nanos()), maximum)
+  assertEqual(minimum.add((-1).nanos()), minimum)
+  assertEqual(maximum.subtract((-1).nanos()), maximum)
+  assertEqual(minimum.subtract(1.nanos()), minimum)
+  assertEqual(minimum.subtract(minimum), 0.nanos())
+  assertEqual(maximum.multiply(2), maximum)
+  assertEqual(minimum.multiply(2), minimum)
+  assertEqual(minimum.multiply(-1), maximum)
+  assertEqual((-1).nanos().multiply(-9223372036854775808), maximum)
+  assertEqual(1.nanos().multiply(-9223372036854775808), minimum)
+  assertEqual(0.nanos().multiply(-9223372036854775808), 0.nanos())
+  assertEqual((-3).seconds().multiply(-2), 6.seconds())
+  assertEqual(2.seconds().subtract(500.millis()), 1500.millis())
+  assertEqual(identity(5.seconds()), 5.seconds())
+  println([2.seconds(), 250.millis(), 1.seconds()].sorted())
+  scope s {
+    println(delay(s, (-1).nanos()))
+    println(withTimeout(s, 1.nanos(), child => delay(child, 1.seconds())))
+  }
+}

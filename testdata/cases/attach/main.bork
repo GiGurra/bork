@@ -21,7 +21,7 @@ fn main() {
       // app closes too.
       shared = attach(conn, app)
       fork(app, () => {
-        _ = time.Sleep(app, time.Nanoseconds((10) * 1000000))
+        _ = time.Sleep(app, ((10) * 1000000).nanos())
         println(query(shared, "in a task of app"))
       })
       println("job ends")

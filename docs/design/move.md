@@ -258,7 +258,7 @@ lifetime has ended:
   pinned.
 
 This is deliberately conservative. A synchronous prelude function that takes a
-scope only for cancellation (`withTimeout(s, ms, f)`) pins what `f` captures.
+scope only for cancellation (`withTimeout(s, (ms).millis(), f)`) pins what `f` captures.
 That costs nothing until someone wants to move such a value, and the error
 names the pinning call. A `keeps nothing` marker for such functions can come
 later if it turns out to matter.

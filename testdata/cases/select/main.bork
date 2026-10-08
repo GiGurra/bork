@@ -3,7 +3,7 @@ import "bork/time"
 type TimedOut = {}
 
 fn ms(n: Int): time.Duration {
-  time.Nanoseconds(n * 1_000_000)
+  (n * 1_000_000).nanos()
 }
 
 // An arm's body is code of the enclosing function: return leaves it.
@@ -162,7 +162,7 @@ fn main() {
         _ => 0
       })
     }
-    println(withTimeout(s, 10, c => select {
+    println(withTimeout(s, 10.millis(), c => select {
       x = channel[Int](c).receive(c) => x
     }))
   }

@@ -25,7 +25,7 @@ const runSignalCooperative = `import "bork/time"
 fn main() uses io + clock + state {
   scope s {
     println("ready")
-    match (time.Sleep(s, time.Nanoseconds(3600000000000))) {
+    match (time.Sleep(s, 3600000000000.nanos())) {
       _: Ok => println("slept")
       _: Cancelled => println("cancelled")
     }
@@ -261,8 +261,8 @@ func TestRunSignalKeepsExplicitExitCode(t *testing.T) {
 
 func TestRunSignalGraceStopsUnresponsiveProgram(t *testing.T) {
 	t.Parallel()
-	source := "import \"bork/signal\"\nimport \"bork/time\"\n" + runSignalStubborn
-	source = strings.Replace(source, "scope s {", "scope s {\n    _ = signal.Configure(s, grace: .Some(time.Nanoseconds(200000000)))\n", 1)
+	source := "import \"bork/signal\"\n" + runSignalStubborn
+	source = strings.Replace(source, "scope s {", "scope s {\n    _ = signal.Configure(s, grace: .Some(200000000.nanos()))\n", 1)
 	source = strings.Replace(source, "uses io + clock {", "uses io + clock + state {", 1)
 	job := startRunSignal(t, "ready", writeRunSignal(t, source, true))
 	if err := syscall.Kill(-job.group, syscall.SIGTERM); err != nil {
@@ -275,7 +275,7 @@ func TestRunSignalGraceStopsUnresponsiveProgram(t *testing.T) {
 
 func TestRunSignalWithoutScopeUsesOSDefault(t *testing.T) {
 	t.Parallel()
-	source := "import \"bork/time\"\nfn block() uses clock unsafe go {\n import \"time\"\n for { time.Sleep(time.Hour) }\n}\nfn main() uses io + clock { println(time.Nanoseconds(1)); println(\"ready\"); block() }\n"
+	source := "fn block() uses clock unsafe go {\n import \"time\"\n for { time.Sleep(time.Hour) }\n}\nfn main() uses io + clock { println(1.nanos()); println(\"ready\"); block() }\n"
 	job := startRunSignal(t, "ready", writeRunSignal(t, source, true))
 	if err := syscall.Kill(-job.group, syscall.SIGINT); err != nil {
 		t.Fatal(err)

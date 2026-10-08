@@ -8,10 +8,10 @@ import "bork/time"
 fn main() {
   clock = time.FixedClock(time.Instant { unixNanos: 0 })
   println(time.Format(time.Read(clock), time.RFC3339()))
-  println(time.FormatDuration(time.Nanoseconds(1_500_000_000)))
+  println(time.FormatDuration(1500.millis()))
   match (time.ParseDuration("oops")) {
     _: ParseError => println("invalid duration")
-    value: time.Duration => println(value)
+    value: Duration => println(value)
   }
 }
 ```
@@ -22,6 +22,34 @@ fn main() {
 invalid duration
 ```
 
+## Duration
+
+`Duration` is in the prelude; no import is needed. `time.Duration` names the
+same type. Build spans with `250.millis()`, `5.seconds()`, or `2.minutes()`.
+The methods `nanos()`, `micros()`, `millis()`, `seconds()`, `minutes()`, and
+`hours()` work on every `Int`. Use `0.seconds()` for zero. Negative values
+represent negative spans. Constructors saturate at the signed 64-bit
+nanosecond limits, about 292 years in either direction, and never return an
+error union.
+
+`duration.add(other)`, `subtract(other)`, and `multiply(factor: Int)` also
+saturate. Equality compares nanoseconds; `Ord` supports sorting and `Show`
+renders readable text such as `1.5s` in nested and generic values too.
+Use `.nanos` when you need the underlying integer. HTTP and network timeouts
+require nonnegative durations, and retry refill intervals must be positive;
+guard a dynamic span with `http.ValidTimeout(duration)`, `net.ValidTimeout`,
+or `http.ValidRefill` as appropriate. Literal unit constructors are folded by
+the compiler, so `timeout: 5.seconds()` satisfies these facts directly.
+
+All prelude and standard timeout, delay, and grace parameters take Duration.
+Defaults in declarations use closed record values, such as
+`Duration { nanos: 0 }`; a method call is not a closed declaration default.
+
+Old millisecond calls such as `delay(s, 5000)` and `timeoutMs: 5000` become
+`delay(s, 5.seconds())` and `timeout: 5.seconds()`. `bork check --json` offers
+edits for these arguments and the removed `time.Nanoseconds(n)` and
+`time.Milliseconds(n)` constructors. The latter now saturates via `n.millis()`.
+
 ## API
 
 | Signature | Meaning |
@@ -30,8 +58,6 @@ invalid duration
 | `SystemClock(): Clock` | Build a clock backed by Now. |
 | `FixedClock(instant: Instant): Clock` | Build a clock that always returns one instant. |
 | `Read(clock: Clock) uses clock: Instant` | Read the supplied clock. |
-| `Nanoseconds(n: Int): Duration` | Construct a duration directly. |
-| `Milliseconds(n: Int): Duration \| OutOfRange` | Convert milliseconds with overflow checking. |
 | `ParseDuration(text: String): Duration \| ParseError` | Parse a duration such as "1.5s". |
 | `FormatDuration(duration: Duration): String` | Format a duration. |
 | `RFC3339(): String` | Return the RFC3339 layout with optional nanoseconds. |
@@ -50,7 +76,7 @@ invalid duration
 | `Clock` | `now: () uses clock => Instant` |
 
 Instants are signed Unix nanoseconds, covering roughly 1677-09-21 through
-2262-04-11. Durations are signed nanoseconds. `Milliseconds`, `Add`, and
+2262-04-11. Durations are signed nanoseconds. `Add` and
 `Between` give `OutOfRange` instead of wrapping. Formatting layouts use Go's
 reference instant, such as `"2006-01-02"`; `RFC3339()` supplies a common layout.
 
@@ -84,7 +110,7 @@ import "bork/time"
 fn main() {
   scope app {
     cancel(app)
-    println(time.Sleep(app, time.Nanoseconds(1_000_000)))
+    println(time.Sleep(app, 1.millis()))
   }
 }
 ```
@@ -94,11 +120,11 @@ Nonpositive durations finish immediately. For a deadline across several
 operations, use `withTimeout` or `cancelAfter` on their scope; every cancellable
 operation then observes the same cancellation.
 
-`cancelAfter(s, ms)` records the earliest scope deadline, also visible to HTTP
+`cancelAfter(s, duration)` records the earliest scope deadline, also visible to HTTP
 and Go-context consumers. Repeating it cannot extend it; existing children
 observe deadlines later added to ancestors. External context values and
-limits are retained. Zero or negative milliseconds cancel immediately; large
-positive values saturate safely. The deadline cause is
+limits are retained. Zero or negative durations cancel immediately. Unit constructors saturate
+at the signed nanosecond limits. The deadline cause is
 `context.DeadlineExceeded`, with reason `"context deadline exceeded"`.
 See [cancellation and timeouts](../language/scopes.md#cancellation-and-timeouts).
 
@@ -109,8 +135,8 @@ import "bork/time"
 
 fn main() {
   scope app {
-    ticks = time.Tick(app, time.Nanoseconds(1_000_000))
-    deadline = time.After(app, time.Nanoseconds(5_000_000))
+    ticks = time.Tick(app, 1.millis())
+    deadline = time.After(app, 5.millis())
     match (ticks.receive(app)) {
       _: time.Instant => println("tick")
       other => println(other)

@@ -1,8 +1,8 @@
 import "bork/net"
 
 fn echo(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError | Cancelled {
-  match (net.Read(conn, 4096, 1000)) {
-    data: Bytes => { _ = net.Write(conn, data, 1000)?; checkpoint(s) }
+  match (net.Read(conn, 4096, 1.seconds())) {
+    data: Bytes => { _ = net.Write(conn, data, 1.seconds())?; checkpoint(s) }
     _: net.Eof => checkpoint(s)
     error: IoError => error
     stopped: Cancelled => stopped
@@ -10,9 +10,9 @@ fn echo(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError |
 }
 fn run(s: Scope) uses io + net + state + clock: Ok | IoError | Cancelled {
   server = net.Listen("127.0.0.1:0", s, echo)?
-  client = net.Dial(net.Address(server), s, 1000)?
-  _ = net.WriteLine(client, "hello", 1000)?
-  println(net.ReadLine(client, 1000))
+  client = net.Dial(net.Address(server), s, 1.seconds())?
+  _ = net.WriteLine(client, "hello", 1.seconds())?
+  println(net.ReadLine(client, 1.seconds()))
 }
 fn main() {
   println(scope app { run(app) })

@@ -2,15 +2,15 @@ import "bork/time"
 import "bork/rand"
 
 pred PositiveRetryCount(count: Int) { count > 0 }
-pred ValidRefill(ms: Int) { ms > 0 && ms <= 9223372036854 }
-pred AtLeastBase(ms: Int, base: Int) { ms >= base }
+pred ValidRefill(duration: Duration) { duration.nanos > 0 }
+pred AtLeastBase(duration: Duration, base: Duration) { duration.nanos >= base.nanos }
 type RetryCount = Int where PositiveRetryCount
-type RefillMs = Int where ValidRefill
+type Refill = Duration where ValidRefill
 type RetryBudget = resource
 
 // OpenRetryBudget begins full and lazily adds one token per refill interval.
 // None uses monotonic system time. An injected Clock supports deterministic tests.
-fn OpenRetryBudget(s: Scope, capacity: RetryCount, refillMs: RefillMs, clock: Option[time.Clock] in s = .None) uses clock + state: RetryBudget unsafe go {
+fn OpenRetryBudget(s: Scope, capacity: RetryCount, refill: Refill, clock: Option[time.Clock] in s = .None) uses clock + state: RetryBudget unsafe go {
   import "context"
   import "errors"
   import "sync"
@@ -22,7 +22,7 @@ fn OpenRetryBudget(s: Scope, capacity: RetryCount, refillMs: RefillMs, clock: Op
   ctx, closeBudget := context.WithCancelCause(context.Background())
   var mu sync.Mutex
   tokens := capacity
-  interval := time.Duration(refillMs) * time.Millisecond
+  interval := time.Duration(refill.nanos)
   last := now()
   available := func(spend bool) bool {
     mu.Lock()
@@ -50,15 +50,25 @@ fn OpenRetryBudget(s: Scope, capacity: RetryCount, refillMs: RefillMs, clock: Op
   })}
 }
 
-fn drawRetryJitter(ceiling: Int) uses random: Int {
-  upper = ceiling + 1
-  if (rand.Above(upper, 0)) { rand.IntBetween(0, upper) } else { 0 }
+fn drawRetryJitter(ceiling: Duration) uses random: Duration {
+  if (ceiling.nanos == 9223372036854775807) {
+    // Map the negative half of Int to 0..MaxInt64 without overflowing.
+    lower = -9223372036854775808
+    upper = 0
+    if (rand.Above(upper, lower)) {
+      drawn = rand.IntBetween(lower, upper)
+      (drawn + 9223372036854775807 + 1).nanos()
+    } else { 0.nanos() }
+  } else {
+    upper = ceiling.nanos + 1
+    if (rand.Above(upper, 0)) { rand.IntBetween(0, upper).nanos() } else { 0.nanos() }
+  }
 }
 
 // Retry asserts replay safety. Only Overloaded is retried; maxAttempts includes
 // the free initial attempt. Each retry consumes a shared token just before work.
 // jitter receives a nanosecond ceiling; its result is clamped to 0..ceiling.
-fn Retry(s: Scope, budget: RetryBudget in s, operation: (Scope) => Result, maxAttempts: RetryCount = 3, baseDelayMs: TimeoutMs = 20, maxDelayMs: TimeoutMs where AtLeastBase(baseDelayMs) = 1000, jitter: Option[(Int) uses random + state => Int] = .None) uses clock + random + state: Result unsafe go {
+fn Retry(s: Scope, budget: RetryBudget in s, operation: (Scope) => Result, maxAttempts: RetryCount = 3, baseDelay: Timeout = Duration { nanos: 20000000 }, maxDelay: Timeout where AtLeastBase(baseDelay) = Duration { nanos: 1000000000 }, jitter: Option[(Duration) uses random + state => Duration] = .None) uses clock + random + state: Result unsafe go {
   import "context"
   import "errors"
   import "time"
@@ -87,8 +97,8 @@ fn Retry(s: Scope, budget: RetryBudget in s, operation: (Scope) => Result, maxAt
     _borkScopeClose(attempt)
     return result
   }
-  backoff := int64(time.Duration(baseDelayMs) * time.Millisecond)
-  capDelay := int64(time.Duration(maxDelayMs) * time.Millisecond)
+  backoff := int64(time.Duration(baseDelay.nanos))
+  capDelay := int64(time.Duration(maxDelay.nanos))
   for attempt := int64(1); ; attempt++ {
     if failure := cancelled(); failure != nil { return failure }
     result := run()
@@ -102,7 +112,7 @@ fn Retry(s: Scope, budget: RetryBudget in s, operation: (Scope) => Result, maxAt
     minimum := int64(0)
     if hint, ok := _borkOptionGet(overloaded.retryAfter); ok && hint.nanos > 0 { minimum = hint.nanos }
     local := int64(0)
-    if injected, ok := _borkOptionGet(jitter); ok { local = injected(backoff) } else { local = drawRetryJitter(backoff) }
+    if injected, ok := _borkOptionGet(jitter); ok { local = injected(Duration{nanos: backoff}).nanos } else { local = drawRetryJitter(Duration{nanos: backoff}).nanos }
     if local < 0 { local = 0 }
     if local > backoff { local = backoff }
     if failure := cancelled(); failure != nil { return failure }

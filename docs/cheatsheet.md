@@ -140,7 +140,7 @@ compiler knows.
 
 ```bork
 fn work(s: Scope) uses clock + state: Int | Cancelled {
-  delay(s, 1)?
+  delay(s, 1.millis())?
   42
 }
 

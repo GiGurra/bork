@@ -15,16 +15,16 @@ type FinalStatus = Int where ValidFinalStatus
 
 // ListenStream handles bodies incrementally in each request's scope. Shared
 // listener bounds, admission and deadline options have the same eager defaults.
-fn ListenStream(addr: String, s: Scope, handler: (StreamRequest, BodyWriter, Scope) => StreamOutcome, drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = .None, requestTimeoutMs: TimeoutMs = 0) uses net + clock + state: Server | IoError unsafe go {
-  return start(addr, s, nil, []StreamRoute{{pattern: "/", handler: handler}}, _borkNone[Certificate](), drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs)
+fn ListenStream(addr: String, s: Scope, handler: (StreamRequest, BodyWriter, Scope) => StreamOutcome, drainTimeout: Timeout = Duration { nanos: 0 }, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = .None, requestTimeout: Timeout = Duration { nanos: 0 }) uses net + clock + state: Server | IoError unsafe go {
+  return start(addr, s, nil, []StreamRoute{{pattern: "/", handler: handler}}, _borkNone[Certificate](), drainTimeout, maxBodyBytes, admission, requestTimeout)
 }
-fn ListenStreamRoutes(addr: String, s: Scope, routes: List[StreamRoute], drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = .None, requestTimeoutMs: TimeoutMs = 0) uses io + net + clock + random + state: Server | IoError unsafe go {
-  return start(addr, s, nil, routes, _borkNone[Certificate](), drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs)
+fn ListenStreamRoutes(addr: String, s: Scope, routes: List[StreamRoute], drainTimeout: Timeout = Duration { nanos: 0 }, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = .None, requestTimeout: Timeout = Duration { nanos: 0 }) uses io + net + clock + random + state: Server | IoError unsafe go {
+  return start(addr, s, nil, routes, _borkNone[Certificate](), drainTimeout, maxBodyBytes, admission, requestTimeout)
 }
-fn ListenStreamTLS(addr: String, s: Scope, routes: List[StreamRoute], certFile: String, keyFile: String, drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = .None, requestTimeoutMs: TimeoutMs = 0) uses io + net + clock + random + state: Server | IoError unsafe go {
+fn ListenStreamTLS(addr: String, s: Scope, routes: List[StreamRoute], certFile: String, keyFile: String, drainTimeout: Timeout = Duration { nanos: 0 }, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = .None, requestTimeout: Timeout = Duration { nanos: 0 }) uses io + net + clock + random + state: Server | IoError unsafe go {
   pair := LoadCertificate(certFile, keyFile)
   if failure, failed := pair.(IoError); failed { return failure }
-  return start(addr, s, nil, routes, _borkSome(pair.(Certificate)), drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs)
+  return start(addr, s, nil, routes, _borkSome(pair.(Certificate)), drainTimeout, maxBodyBytes, admission, requestTimeout)
 }
 
 // BeginResponse commits final status and headers once. Write/Flush without it

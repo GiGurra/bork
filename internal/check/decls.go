@@ -81,6 +81,11 @@ func (c *checker) declareType(td *syntax.TypeDecl, prelude bool) {
 		return
 	}
 	if prev, ok := c.preludePkg.types[td.Name]; ok && !prelude {
+		// An explicit same-name alias re-exports a prelude type unchanged.
+		if td.Kind == syntax.AliasType && td.Alias.Name == td.Name && len(td.Alias.Args) == 0 && len(td.TypeParams) == 0 {
+			c.pkg.types[td.Name] = prev
+			return
+		}
 		c.errorf(td.Pos, "%s is a built-in type and cannot be redefined", prev.decl.Name)
 		return
 	}

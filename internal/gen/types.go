@@ -893,13 +893,9 @@ func (s *_Scope) deadline() (time.Time, bool) {
 	return deadline, found
 }
 
-// cancelAfter never extends a deadline. Nonpositive delays cancel now; large
-// positive millisecond values saturate instead of overflowing Go durations.
-func (s *_Scope) cancelAfter(ms int64) {
-	var delay time.Duration
-	if ms > 0 {
-		if ms > (1<<63-1)/int64(time.Millisecond) { delay = time.Duration(1<<63-1) } else { delay = time.Duration(ms)*time.Millisecond }
-	}
+// cancelAfter never extends a deadline. Nonpositive delays cancel now.
+func (s *_Scope) cancelAfter(nanos int64) {
+	delay := time.Duration(max(int64(0), nanos))
 	deadline := time.Now().Add(delay)
 	s.mu.Lock()
 	if s.closed || s.ctx.Err() != nil || (!s.deadlineAt.IsZero() && !deadline.Before(s.deadlineAt)) {

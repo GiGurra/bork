@@ -1,6 +1,5 @@
 // Package process runs argv commands without a shell, owned by a scope.
 import "bork/signal"
-import "bork/time"
 
 type Process = resource
 
@@ -92,7 +91,7 @@ fn ExitNow(code: Int) uses io: Never unsafe go {
 // Some([]) clears it. Inherited output pipes are bounded to one second (plus
 // cancelGrace) after exit/cancellation. A successful exit with open pipes is
 // IoError; nonzero Result output may truncate.
-fn Run(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input in s = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: time.Duration = time.Duration { nanos: 0 }) uses io + state: Result | IoError | Cancelled {
+fn Run(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input in s = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: Duration = Duration { nanos: 0 }) uses io + state: Result | IoError | Cancelled {
   child = Start(s, name, arguments, environment, directory, runInput(stdin), runOutput(stdout), runErrorOutput(stderr), cancelGrace)?
   child.Wait()
 }
@@ -127,8 +126,8 @@ fn runErrorOutput(output: ErrorOutput): ErrorOutput {
 // Other targets kill only the direct child. Closing the scope cancels and
 // reaps it even if Wait was never called. Captured output drains in the
 // background whether or not anyone waits.
-fn Start(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input in s = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: time.Duration = time.Duration { nanos: 0 }) uses io + state: Process | IoError | Cancelled {
-  start(s, name, arguments, environment, directory, inputStream(stdin), source(stdin), outputStream(stdout), errorStream(stderr), cancelGrace.nanos)
+fn Start(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input in s = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: Duration = Duration { nanos: 0 }) uses io + state: Process | IoError | Cancelled {
+  start(s, name, arguments, environment, directory, inputStream(stdin), source(stdin), outputStream(stdout), errorStream(stderr), cancelGrace)
 }
 
 fn inputStream(input: Input): stream {
@@ -179,7 +178,7 @@ fn noBytes(): Bytes unsafe go { return _borkBytesFrom(nil) }
 
 // The resource value is one dispatcher over the child's operations, so each
 // method below names a single Go type.
-fn start(s: Scope, name: String, arguments: List[String], environment: Option[List[String]], directory: String, stdin: stream, from: Option[Reader], stdout: stream, stderr: stream, graceNanos: Int) uses io + state: Process | IoError | Cancelled unsafe go {
+fn start(s: Scope, name: String, arguments: List[String], environment: Option[List[String]], directory: String, stdin: stream, from: Option[Reader], stdout: stream, stderr: stream, cancelGrace: Duration) uses io + state: Process | IoError | Cancelled unsafe go {
   import "bytes"
   import "context"
   import "errors"
@@ -230,7 +229,7 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
       }
     })
   }
-  grace := time.Duration(graceNanos)
+  grace := time.Duration(cancelGrace.nanos)
   // A child that exited on its own keeps its Result even if the scope is
   // cancelled while its output drains; only a cancellation that reached the
   // child reports Cancelled.
@@ -617,7 +616,7 @@ fn signalNumber(name: String): Int | IoError unsafe go {
 // if it still runs after grace. Wait then gives the child's Result (Signaled,
 // or the exit code it chose on SIGTERM). Targets without SIGTERM kill at once.
 // Stop does not cancel sibling tasks or the scope.
-fn (child: Process) Stop(grace: time.Duration = time.Duration { nanos: 5_000_000_000 }) uses io + state {
+fn (child: Process) Stop(grace: Duration = Duration { nanos: 5000000000 }) uses io + state {
   _ = operate(child, "stop", grace.nanos)
 }
 

@@ -35,7 +35,7 @@ test "fake clock remains fixed" {
   assertEqual(time.Read(clock), time.Read(clock))
 }
 test "negative arithmetic overflow is checked" {
-  assert(time.Add(time.Instant { unixNanos: -9223372036854775808 }, time.Nanoseconds(-1)) is OutOfRange)
+  assert(time.Add(time.Instant { unixNanos: -9223372036854775808 }, (-1).nanos()) is OutOfRange)
   assert(time.Between(time.Instant { unixNanos: 1 }, time.Instant { unixNanos: -9223372036854775808 }) is OutOfRange)
 }
 test "invalid duration and instant text is rejected" {

@@ -31,7 +31,7 @@ type Holder = { conn: Conn }
 type Scopes = { a: Scope, b: Scope }
 
 fn slow(): ScopePolicy {
-  taskTimeout(10)
+  taskTimeout(10.millis())
 }
 
 fn finish(b: OwnedScope, s: Scope) uses state: Scope {
@@ -122,11 +122,11 @@ fn main() {
       }
       _ = move(q, app)
       r = connect("r", s)
-      b = openScope(s, [taskTimeout(10)])
+      b = openScope(s, [taskTimeout(10.millis())])
       fork(b.scope, () => println(query(r, "orphan")))
       closeScope(b)
       _ = move(r, app)
-      setScopePolicy(s, taskTimeout(10))
+      setScopePolicy(s, taskTimeout(10.millis()))
       t = connect("t", s)
       if (query(t, "") != "" && query(move(t, app), "") != "") {
         println("")
@@ -158,7 +158,7 @@ fn main() {
     }
     scope s {
       jj = connect("jj", s)
-      scope inner with cleanupTimeout(10) {
+      scope inner with cleanupTimeout(10.millis()) {
         onClose(inner, () => println(query(jj, "slow finalizer")))
       }
       _ = move(jj, app)

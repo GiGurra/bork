@@ -96,7 +96,7 @@ fn main() {
     println("zero nonempty", kind(http.Read(zero.body)))
     zipped = response(http.GetStream(base + "/gzip", app, maxBodyBytes: .Some(4)))
     println("gzip", kind(http.Read(zipped.body)), kind(http.Read(zipped.body)))
-    meta = response(http.SendStream("GET", base + "/meta", { "Bork-Timeout-Ns": ["bad"], "traceparent": ["00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"] }, app, timeoutMs: 1000))
+    meta = response(http.SendStream("GET", base + "/meta", { "Bork-Timeout-Ns": ["bad"], "traceparent": ["00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"] }, app, timeout: 1000.millis()))
     budget = parseInt(http.HeaderOf(meta.headers, "X-Budget").getOr("bad"))
     println("budget forwarded", match (budget) { nanos: Int => nanos > 0 && nanos <= 1000000000, _ => false })
     println("trace forwarded", http.HeaderOf(meta.headers, "X-Trace"))
@@ -105,7 +105,7 @@ fn main() {
     println("overload", overloaded.status, http.HeaderOf(overloaded.headers, "Retry-After"), kind(http.Read(overloaded.body)))
     redirected = response(http.GetStream(base + "/redirect", app))
     println("redirect", redirected.status, kind(http.Read(redirected.body)))
-    timed = response(http.GetStream(base + "/wait", app, timeoutMs: 50))
+    timed = response(http.GetStream(base + "/wait", app, timeout: 50.millis()))
     println("early headers", timed.status, http.HeaderOf(timed.headers, "X-Test"))
     println("timeout body", kind(http.Read(timed.body)))
     abandoned = response(http.GetStream(base + "/wait", app))
@@ -141,14 +141,14 @@ fn main() {
     println("producer close", true)
     scope request {
       source = response(http.GetStream(base + "/wait", app))
-      rejected = response(http.SendStream("POST", base + "/reject", {:}, request, body: .Some(source.body), timeoutMs: 1000))
+      rejected = response(http.SendStream("POST", base + "/reject", {:}, request, body: .Some(source.body), timeout: 1000.millis()))
       println("upload abandoned", rejected.status)
       http.Close(rejected.body)
       println("source closed", kind(http.Read(source.body)))
     }
     scope request {
       source = response(http.GetStream(base + "/wait", app))
-      match (http.SendStream("POST", base + "/uploadwait", {:}, request, body: .Some(source.body), timeoutMs: 50)) {
+      match (http.SendStream("POST", base + "/uploadwait", {:}, request, body: .Some(source.body), timeout: 50.millis())) {
         _: http.DeadlineExceeded => println("upload timeout", true)
         error => panic(toString(error))
       }
@@ -165,7 +165,7 @@ fn main() {
       body = http.OpenBody(temporary, producer => {
         n = update(count, i => i + 1)
         if (n == 1) { encoding.Utf8("ready") } else {
-          match (delay(producer, 100000)) {
+          match (delay(producer, 100000.millis())) {
             _: Ok => match (fs.ReadAll(file)) { bytes: Bytes => bytes, error: fs.Error => fs.ErrorInfo(error) }
             stopped: Cancelled => stopped
           }
@@ -177,7 +177,7 @@ fn main() {
     println("captured producer joined", kind(http.Read(captured)))
     chunk = encoding.Utf8("x".repeat(1048576))
     buffered = http.OpenBody(app, producer => chunk)
-    rejection = response(http.SendStream("POST", base + "/bufferedreject", {:}, app, body: .Some(buffered), timeoutMs: 1000))
+    rejection = response(http.SendStream("POST", base + "/bufferedreject", {:}, app, body: .Some(buffered), timeout: 1000.millis()))
     println("buffered rejection", rejection.status)
     finishReject(server)
     println("early response body", match (http.Read(rejection.body)) {
@@ -188,7 +188,7 @@ fn main() {
     })
     attachedUpload = scope temporary {
       source = response(http.GetStream(base + "/wait", app))
-      reply = response(http.SendStream("POST", base + "/reject", {:}, temporary, body: .Some(source.body), timeoutMs: 1000))
+      reply = response(http.SendStream("POST", base + "/reject", {:}, temporary, body: .Some(source.body), timeout: 1000.millis()))
       attach(reply.body, app)
     }
     println("upload response attached", match (http.Read(attachedUpload)) {

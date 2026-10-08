@@ -64,7 +64,7 @@ fn server(path: String) uses io + state + clock {
   scope child {
     onClose(child, () => println("closed"))
     ready(path)
-    println(match (delay(child, 60000)) {
+    println(match (delay(child, 60000.millis())) {
       _: Ok => false
       _: Cancelled => true
     })

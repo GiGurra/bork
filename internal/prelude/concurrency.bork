@@ -46,10 +46,9 @@ fn cancelled(s: Scope) uses state: Bool unsafe go {
 }
 
 // cancelAfter sets an observable deadline and only ever shortens it. Existing
-// children see later ancestor deadlines too. Nonpositive ms cancels immediately;
-// huge positive values saturate rather than overflowing the Go duration.
-fn cancelAfter(s: Scope, ms: Int) uses clock + state unsafe go {
-  s.cancelAfter(ms)
+// children see later ancestor deadlines too. Nonpositive durations cancel immediately.
+fn cancelAfter(s: Scope, duration: Duration) uses clock + state unsafe go {
+  s.cancelAfter(duration.nanos)
 }
 
 // checkpoint gives Cancelled if s has been cancelled: a cancellation
@@ -61,10 +60,10 @@ fn checkpoint(s: Scope) uses state: Ok | Cancelled unsafe go {
   return _borkOk()
 }
 
-// delay pauses for ms milliseconds, or until s is cancelled.
-fn delay(s: Scope, ms: Int) uses clock + state: Ok | Cancelled unsafe go {
+// delay pauses for duration, or until s is cancelled.
+fn delay(s: Scope, duration: Duration) uses clock + state: Ok | Cancelled unsafe go {
   import "time"
-  if !s._sleep(time.Duration(ms) * time.Millisecond) {
+  if !s._sleep(time.Duration(duration.nanos)) {
     return Cancelled{reason: s._cancelReason()}
   }
   return _borkOk()

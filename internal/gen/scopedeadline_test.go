@@ -52,17 +52,17 @@ func TestLateAncestorAndEarliestDeadline(t *testing.T) {
  defer child.close()
  owned:=_openScope(child)
  if _,ok:=owned.ctx.Deadline();ok {t.Fatal("unexpected deadline")}
- parent.cancelAfter(60000)
+ parent.cancelAfter(60000000000)
  first:=mustDeadline(t,parent)
  if !mustDeadline(t,owned).Equal(first) {t.Fatal("preexisting descendant missed deadline")}
- parent.cancelAfter(120000)
+ parent.cancelAfter(120000000000)
  if !mustDeadline(t,parent).Equal(first) {t.Fatal("deadline extended")}
- parent.cancelAfter(30000)
+ parent.cancelAfter(30000000000)
  earlier:=mustDeadline(t,parent)
  if !earlier.Before(first) || !mustDeadline(t,owned).Equal(earlier) {t.Fatal("shorter ancestor deadline ignored")}
- owned.cancelAfter(10000)
+ owned.cancelAfter(10000000000)
  own:=mustDeadline(t,owned)
- parent.cancelAfter(20000)
+ parent.cancelAfter(20000000000)
  if !mustDeadline(t,owned).Equal(own) {t.Fatal("later ancestor replaced earlier child")}
  parent.cancelAfter(0)
  <-owned.ctx.Done()
@@ -78,7 +78,7 @@ func TestExternalDeadlineAndContextIdentity(t *testing.T) {
  child:=_newScope(scope,"child")
  defer child.close()
  expected,_:=ctx.Deadline()
- scope.cancelAfter(7200000)
+ scope.cancelAfter(7200000000000)
  if !mustDeadline(t,child).Equal(expected) {t.Fatal("external limit lost")}
  if child.ctx.Value(key{})!="trace" {t.Fatal("context value lost")}
  scope.cancelAfter(0)
@@ -96,7 +96,7 @@ func TestDelayBoundaries(t *testing.T) {
  defer s.close()
  s.cancelAfter(math.MaxInt64)
  if s.ctx.Err()!=nil || time.Until(mustDeadline(t,s))<time.Hour {t.Fatal("large delay overflowed")}
- s.cancelAfter(5000)
+ s.cancelAfter(5000000000)
  if time.Until(mustDeadline(t,s))>6*time.Second {t.Fatal("saturated deadline could not shorten")}
 }
 func TestConcurrentDeadlineAndClose(t *testing.T) {
@@ -109,7 +109,7 @@ func TestConcurrentDeadlineAndClose(t *testing.T) {
    go func(index int) {
     defer workers.Done()
     for repeat:=0;repeat<100;repeat++ {
-     parent.cancelAfter(int64(10000+index))
+     parent.cancelAfter(int64(10000+index)*int64(time.Millisecond))
      child.ctx.Deadline()
     }
    }(index)
@@ -123,7 +123,7 @@ func TestConcurrentDeadlineAndClose(t *testing.T) {
 func TestTimerCause(t *testing.T) {
  s:=_scopeWith(context.Background())
  defer s.close()
- s.cancelAfter(1)
+ s.cancelAfter(1000000)
  select {
  case <-s.ctx.Done():
   if !errors.Is(context.Cause(s.ctx),context.DeadlineExceeded) || !errors.Is(s.ctx.Err(),context.DeadlineExceeded) {t.Fatal("timer lost typed deadline")}
@@ -136,7 +136,7 @@ func TestContendedAbsoluteDeadline(t *testing.T) {
  started:=make(chan struct{})
  finished:=make(chan struct{})
  s.mu.Lock()
- go func(){close(started);s.cancelAfter(200);close(finished)}()
+ go func(){close(started);s.cancelAfter(200000000);close(finished)}()
  <-started
  // Keep the setter waiting past its deadline. Scheduling from the original
  // delay after this lock would add another 200ms to the advertised deadline.

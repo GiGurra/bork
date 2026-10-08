@@ -5,10 +5,10 @@ fn instant(): time.Instant { time.Instant { unixNanos: 0 } }
 fn main() {
   scope app {
     scope short {
-      budget = http.OpenRetryBudget(short, capacity: 1, refillMs: 1)
+      budget = http.OpenRetryBudget(short, capacity: 1, refill: 1.millis())
       _ = http.Retry(app, budget, attempt => http.Text(200, "ok"))
       clock = time.Clock { now: () => instantFor(short) }
-      _ = http.OpenRetryBudget(app, capacity: 1, refillMs: 1, clock: .Some(clock))
+      _ = http.OpenRetryBudget(app, capacity: 1, refill: 1.millis(), clock: .Some(clock))
     }
   }
 }

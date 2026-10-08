@@ -1,0 +1,3 @@
+[250ms, 1s, 2s]
+Ok
+Cancelled { reason: "deadline exceeded" }

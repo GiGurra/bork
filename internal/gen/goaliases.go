@@ -3,6 +3,7 @@ package gen
 import (
 	"go/ast"
 	"go/parser"
+	"go/printer"
 	"go/token"
 	"slices"
 	"strings"
@@ -55,8 +56,20 @@ func (g *gen) goBodyAliases(fd *syntax.FuncDecl) string {
 		member := selector.Sel.Name
 		var generated string
 		if typ := pkg.TypeNamed(member); typ != nil {
-			g.goType(typ)
-			generated = typeName(member, pkg).Name
+			var canonical strings.Builder
+			if err := printer.Fprint(&canonical, token.NewFileSet(), g.goType(typ)); err != nil {
+				panic(err)
+			}
+			generated = canonical.String()
+			// The Go body supplies its own type arguments after the selector.
+			if len(check.TypeArgs(typ)) > 0 {
+				switch typ := typ.(type) {
+				case *check.Record:
+					generated = typeName(typ.Name, typ.Pkg).Name
+				case *check.Sealed:
+					generated = typeName(typ.Name, typ.Pkg).Name
+				}
+			}
 		} else if class := pkg.ClassNamed(member); class != nil {
 			generated = className(class).Name
 		} else if fn := pkg.Funcs[member]; fn != nil {

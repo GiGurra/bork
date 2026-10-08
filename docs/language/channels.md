@@ -233,7 +233,7 @@ import "bork/time"
 type TimedOut = {}
 
 fn reply(s: Scope, replies: Channel[String]) uses clock + state: String | Closed | TimedOut | Cancelled {
-  deadline = time.After(s, time.Nanoseconds(50_000_000))
+  deadline = time.After(s, 50.millis())
   select {
     r = replies.receive(s) => r
     _ = deadline.receive(s) => TimedOut {}
@@ -251,7 +251,7 @@ fn main() {
 TimedOut {}
 ```
 
-To bound everything that happens in a block, rather than one wait, give the block a deadline instead: in `withTimeout(s, ms, c => ...)`, every operation waiting in `c` gives `Cancelled` when the time is up, `select` included.
+To bound everything that happens in a block, rather than one wait, give the block a deadline instead: in `withTimeout(s, duration, c => ...)`, every operation waiting in `c` gives `Cancelled` when the time is up, `select` included.
 
 ### Not waiting
 

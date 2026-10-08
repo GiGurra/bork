@@ -16,7 +16,7 @@ fn boom(path: String, rs: Scope, stopped: Atom[Bool] in rs) uses clock + state {
   }
   if (path == "/cleanup") { return }
   _ = fork(rs, () => {
-    match (delay(rs, 100000)) {
+    match (delay(rs, 100000.millis())) {
       _: Cancelled => { _ = update(stopped, n => true) }
       _: Ok => panic("task was not cancelled")
     }
@@ -35,7 +35,7 @@ fn stream(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope, stopped: 
       match (http.Write(output, encoding.Utf8("partial"))) { _: Int => {}, error => panic(toString(error)) }
       match (http.Flush(output)) { _: Ok => {}, error => panic(toString(error)) }
       _ = ready.send(rs, true)
-      _ = delay(rs, 100000)
+      _ = delay(rs, 100000.millis())
     })
     match (ready.receive(rs)) { _: Bool => {}, error => panic(toString(error)) }
     panic("fork committed exploded")

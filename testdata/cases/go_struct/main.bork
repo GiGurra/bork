@@ -12,8 +12,8 @@ type Options = {
 } derive (GoStruct, codec.Decode, codec.Encode)
 type Phantom[T] = { value: Int = 7 } derive (GoStruct)
 type Url = go "net/url.URL" { scheme: String = "https", host: String = "example.com" } derive (GoStruct)
-type Duration = go "time.Duration"
-type OpaqueField = { value: Duration } derive (GoStruct)
+type NativeDuration = go "time.Duration"
+type OpaqueField = { value: NativeDuration } derive (GoStruct)
 fn Read[T: GoStruct](text: String): T | GoValueError unsafe go {
   import "encoding/json"
   value := _d_T_GoStruct.New()

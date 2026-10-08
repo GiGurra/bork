@@ -61,7 +61,7 @@ func (c *checker) namedArgs(e *syntax.Call, name string, fn *Func, args []syntax
 				if fn.Decl.IsMethod {
 					candidates = candidates[1:]
 				}
-				if replacement := closestParam(arg.Name, candidates); replacement != "" {
+				if replacement := closestParam(arg.Name, candidates); !c.durationNamedFix(arg, value, fn) && replacement != "" {
 					c.diags.Suggest(arg.Pos, "call.unknown_argument", arg.NameEnd, diag.Fix{
 						Message: "use parameter " + replacement,
 						Edits:   []diag.TextEdit{{Start: arg.Pos, End: arg.NameEnd, Replacement: replacement}},

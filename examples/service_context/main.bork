@@ -21,7 +21,7 @@ fn budget(headers: http.Headers): Int {
   }
 }
 fn main() {
-  scope app with cleanupTimeout(5000) {
+  scope app with cleanupTimeout(5.seconds()) {
     downstream = server(http.Listen("127.0.0.1:0", app, handler: (request, s) => {
       // Boundary labels forward automatically. Typed needs are bound explicitly.
       match (http.TraceParentOf(request.headers)) {
@@ -34,7 +34,7 @@ fn main() {
         }
         _ => http.Text(400, "missing trace")
       }
-      }, requestTimeoutMs: 1000))
+      }, requestTimeout: 1.seconds()))
     target = "http://" + http.Address(downstream)
     middle = server(http.Listen("127.0.0.1:0", app, handler: (request, s) => {
       result = reply(http.Get(target, s))
@@ -45,9 +45,9 @@ fn main() {
           Option.None => panic("missing downstream budget")
         }]
       })
-      }, requestTimeoutMs: 2000))
+      }, requestTimeout: 2.seconds()))
     scope caller {
-      cancelAfter(caller, 5000)
+      cancelAfter(caller, 5.seconds())
       with (trace: root()) {
         result = reply(http.Get("http://" + http.Address(middle), caller))
         middleBudget = budget({ "Bork-Timeout-Ns": [match (http.HeaderOf(result.headers, "middle-budget")) {

@@ -56,13 +56,13 @@ func TestFirstKeepsLoserAndReportsPanic(t *testing.T) {
 func TestTimeoutJoinsAndStopsDeadline(t *testing.T) {
  s := _scopeWith(context.Background()); defer s.close()
  var finished atomic.Bool
- result := _borkFanInTimeout(s, 100, func(child *_Scope) any {
+ result := _borkFanInTimeout(s, 100000000, func(child *_Scope) any {
   child.Go(func() any { <-child.ctx.Done(); finished.Store(true); return nil })
   return 7
  })
  if _, ok := result.(Cancelled); !ok || !finished.Load() { t.Fatal("deadline did not cancel and join forked task") }
  var retained *_Scope
- if _borkFanInTimeout(s, 100, func(child *_Scope) any { retained=child; return 8 }) != 8 { t.Fatal("success lost") }
+ if _borkFanInTimeout(s, 100000000, func(child *_Scope) any { retained=child; return 8 }) != 8 { t.Fatal("success lost") }
  time.Sleep(150*time.Millisecond)
  if retained.ctx.Err() != nil || s.ctx.Err() != nil { t.Fatal("successful callback's resources later cancelled") }
 }
@@ -84,7 +84,7 @@ func TestSynchronousPanicJoins(t *testing.T) {
  var finished atomic.Bool
  func() {
   defer func(){ if recover() != "callback" { t.Error("original panic lost") } }()
-  _borkFanInTimeout(s, 10000, func(child *_Scope) any {
+  _borkFanInTimeout(s, 10000000000, func(child *_Scope) any {
    child.Go(func() any { <-child.ctx.Done(); finished.Store(true); return nil })
    panic("callback")
   })

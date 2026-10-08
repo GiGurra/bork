@@ -604,7 +604,7 @@ fn use() needs traceId: String {
 
 func TestDescribeSpecializedConstructors(t *testing.T) {
 	t.Parallel()
-	source := `type Duration = go "time.Duration"
+	source := `type NativeDuration = go "time.Duration"
 type Handle = resource
 type Box[T] = { values: List[T] }
 type State[T] = sealed { Empty, Value { value: T } }
@@ -612,7 +612,7 @@ fn main() {
  x = Box[Option[Int]] { values: [.None] }
  y = State[String].Value { value: "text" }
  z = State[Int].Empty
- d = Option[Duration].None
+ d = Option[NativeDuration].None
  h = Option[Handle].None
  println(x); println(y); println(z); println(d); println(h)
 }
@@ -624,7 +624,7 @@ fn main() {
 		{"Box[Option", "Box[Option[Int]]", true},
 		{"Option[Int]]", "Option[Int]", true},
 		{"Int]]", "Int", false},
-		{"Duration].None", "Duration", true},
+		{"NativeDuration].None", "NativeDuration", true},
 		{"Handle].None", "Handle", true},
 		{"State[String]", "State[String]", true},
 		{"String].Value", "String", false},

@@ -8,7 +8,7 @@ fn ioRace(s: Scope) uses io + state: Option[Int] | Cancelled {
   race(s, [child => { println("racing callback"); 7 }])
 }
 fn clockRace(s: Scope) uses clock + state: Option[Int] | Cancelled {
-  race(s, [child => { _ = time.Sleep(child, time.Nanoseconds((1) * 1000000)); 8 }])
+  race(s, [child => { _ = time.Sleep(child, ((1) * 1000000).nanos()); 8 }])
 }
 fn pick(callbacks: List[() => Int]): () => Int {
   () => match (callbacks) { [callback, ...] => callback(); [] => 0 }

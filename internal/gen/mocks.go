@@ -616,7 +616,6 @@ const mockRuntime = `package main
 
 import (
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -790,13 +789,12 @@ func _mockExpectFn[A any](f *_mockFrame) func(func(A) bool, bool, Option[int64],
 }
 
 func _mockWaitFn[A any](f *_mockFrame) func(func(A) bool, bool, int64, int64, string) {
-	return func(match func(A) bool, where bool, calls, ms int64, at string) {
+	return func(match func(A) bool, where bool, calls, nanos int64, at string) {
 		m := func(a any) bool { return match(a.(A)) }
-		if calls < 0 || ms < 0 {
-			panic(fmt.Sprintf("%s: cannot wait for %d calls of the mock of %s for %dms: neither can be negative", at, calls, f.name, ms))
+		if calls < 0 || nanos < 0 {
+			panic(fmt.Sprintf("%s: cannot wait for %d calls of the mock of %s for %s: neither can be negative", at, calls, f.name, time.Duration(nanos)))
 		}
-		ms = min(ms, int64(math.MaxInt64/time.Millisecond))
-		wait := time.Duration(ms) * time.Millisecond
+		wait := time.Duration(nanos)
 		deadline := time.Now().Add(wait)
 		timer := time.AfterFunc(wait, func() {
 			f.mu.Lock()
@@ -815,7 +813,7 @@ func _mockWaitFn[A any](f *_mockFrame) func(func(A) bool, bool, int64, int64, st
 				return
 			}
 			if !time.Now().Before(deadline) {
-				panic(fmt.Sprintf("%s: waited %dms for %s of the mock of %s, but it answered %d%s", at, ms, _mockCalls(calls, where), f.name, n, f.callList()))
+				panic(fmt.Sprintf("%s: waited %s for %s of the mock of %s, but it answered %d%s", at, wait, _mockCalls(calls, where), f.name, n, f.callList()))
 			}
 			f.changed.Wait()
 		}

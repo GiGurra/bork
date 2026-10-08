@@ -72,15 +72,15 @@ require deciding what old fork does at saturation and is deferred.
 
 Add an optional `admission: Option[Admission] = Option.None` to Listen,
 ListenRoutes and ListenTLS. None preserves current server behavior. The record
-has proven positive maxInFlight, nonnegative maxQueued, and queueTimeoutMs/
-retryAfterMs in the existing TimeoutMs range (0 through 9223372036854), and a rejection status restricted to 429 or 503:
+has proven positive maxInFlight, nonnegative maxQueued, and queueTimeout/
+retryAfter as a nonnegative Duration, and a rejection status restricted to 429 or 503:
 
 ```bork fragment
 http.Admission {
   maxInFlight: 64,
   maxQueued: 32,
-  queueTimeoutMs: 25,
-  retryAfterMs: 100,
+  queueTimeout: 25.millis(),
+  retryAfter: 100.millis(),
   status: 503,
 }
 ```
@@ -95,7 +95,7 @@ responses, redirects and unknown routes also consume listener capacity.
 
 The queue is FIFO and bounded by maxQueued. An idle permit admits directly
 unless existing queued requests must be served first. A full queue rejects at
-once. maxQueued zero means no waiting; queueTimeoutMs zero also means no waiting.
+once. maxQueued zero means no waiting; queueTimeout zero also means no waiting.
 Queued requests wait in their existing Go request goroutine, never an additional
 worker. Request-context cancellation removes the waiter promptly and releases its
 place. Go detects HTTP/1 client disconnects only after consuming a request
@@ -127,7 +127,7 @@ routed and TLS listeners retain their full effect bound.
 Add public HTTP failure types:
 
 ```bork fragment
-http.Overloaded { retryAfter: Option[time.Duration], response: http.Response }
+http.Overloaded { retryAfter: Option[Duration], response: http.Response }
 http.DeadlineExceeded { message: String }
 ```
 
@@ -142,7 +142,7 @@ Construction errors in URL/method/headers remain IoError. Body read cancellation
 and timeout follow the same classification as the request itself.
 
 Retry-After accepts a nonnegative decimal delta-seconds or an HTTP date, as
-specified by HTTP. Convert safely to time.Duration; an absent, malformed,
+specified by HTTP. Convert safely to Duration; an absent, malformed,
 ambiguous repeated or out-of-range value gives None. Past dates give zero.
 Parsing a date uses the injected/system clock and is approximate under clock
 skew. A large valid retry delay is not silently shortened: if the caller cannot
@@ -162,7 +162,7 @@ retry automatically inside Get/Post/Send.
 Add a scope-owned retry budget resource in bork/http. Create it once per
 upstream/destination group, and share it across operations/tasks instead of
 creating a fresh allowance for every request. A budget has a proven positive
-capacity and refill interval in the positive TimeoutMs range, begins full, and accrues one retry token per
+capacity and refill interval as a positive Duration, begins full, and accrues one retry token per
 interval up to capacity. Compute replenishment lazily from monotonic system time by default;
 `clock: Option[time.Clock] = .None` permits an injected clock (including
 FixedClock or SystemClock with native `mock time.Now()` in tests). Backward
@@ -180,14 +180,14 @@ The helper takes an explicit operation and policy:
 
 ```bork fragment
 http.Retry(s, budget, operation, maxAttempts: 3,
-           baseDelayMs: 20, maxDelayMs: 1000)
+           baseDelay: 20.millis(), maxDelay: 1.seconds())
 ```
 
 Operation returns Response | Overloaded | BodyTooLarge | DeadlineExceeded | Cancelled |
 IoError, and receives the attempt scope. The helper charges operation effects
 plus clock, random and state. maxAttempts includes the initial attempt and is
-positive. Delays are nonnegative and proven to fit Go durations; maxDelayMs is
-at least baseDelayMs. There is no retry of BodyTooLarge, IoError, DeadlineExceeded, Cancelled,
+positive. Delays are nonnegative and proven to fit Go durations; maxDelay is
+at least baseDelay. There is no retry of BodyTooLarge, IoError, DeadlineExceeded, Cancelled,
 or ordinary HTTP status responses in the first version. Exhausting attempts or
 the shared budget returns the last Overloaded, without another attempt.
 
@@ -203,7 +203,7 @@ nanosecond ceiling and its result is clamped to 0..ceiling, never reported as an
 IoError. Clock injection controls refill; waits and scope deadlines use real time.
 Wait for serverMinimum + uniform jitter in [0, cappedBackoff], with serverMinimum
 zero when Retry-After is absent. Check the addition for overflow; an unrepresentable
-wait returns the last Overloaded. The wait is at least any valid Retry-After; maxDelayMs caps local backoff, not
+wait returns the last Overloaded. The wait is at least any valid Retry-After; maxDelay caps local backoff, not
 server-specified Retry-After. Waiting is scope-cancellable and consumes no retry
 token. Check scope/budget cancellation, remaining deadline and maxAttempts
 before waiting and immediately before token admission. If Retry-After or backoff
