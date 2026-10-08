@@ -350,9 +350,11 @@ handled at the same boundary.
 Before response commitment, the server returns 500 with a generic body. After
 streaming status/headers are committed, it aborts the response; a client may have
 received partial bytes and cannot rely on its status to detect truncation.
-Each failure emits a structured Error record through the logger configured by
+Each recovered panic emits a structured Error record through the logger configured by
 bork/log, with method, path and failure attributes and the request's bound logged
-ambient values. Panic details stay out of the response body. Panics unwinding a
+ambient values. Multiple failures aggregated by scope cleanup remain one record;
+a handler panic followed by a cleanup panic produces two records. Panic details
+stay out of the response body. Panics unwinding a
 handler's own nested ambient bindings have already restored those bindings; the
 record uses the values still bound at the request boundary.
 
