@@ -3464,9 +3464,10 @@ watch and hover contexts, invalid operands and unsupported syntax.
 
 `lazy name = expr` defers one initializer until its first read, memoizes its
 result and keeps the static type T. Local bindings are implemented, including
-concurrent readers, cached panics, scoped captures and initializer-local return/?.
-An Option ? needs an annotated lazy result type; union ? and explicit return
-can contribute to an inferred result. Lazy record fields provide a passable lazy
+concurrent readers, cached panics, scoped captures and initializer-local returns.
+`?` is rejected inside lazy/async initializers, including lazy field recipes;
+use `match` to handle outcomes explicitly. Explicit return can contribute to an
+inferred result. Lazy record fields provide a passable lazy
 value through `type Lazy[T] = { lazy value: T }`. Pure sibling-dependent defaults
 are computed fields: construction creates their cells, copies invalidate affected
 dependencies, and structural equality, Show, encoding and writable schemas omit

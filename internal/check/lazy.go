@@ -23,13 +23,14 @@ type LazyDescription struct {
 
 // A result boundary at exactly depth; nested lambdas retain their own rules.
 type initializerContext struct {
-	name     string
-	parent   *initializerContext
-	external map[any]bool
-	captures map[string]bool
-	depth    int
-	want     Type
-	returns  []Type
+	name      string
+	parent    *initializerContext
+	external  map[any]bool
+	captures  map[string]bool
+	depth     int
+	want      Type
+	returns   []Type
+	rejectTry bool
 }
 
 func (c *checker) deferredInitializer(s *syntax.Binding, want Type) Type {
@@ -64,6 +65,7 @@ func (c *checker) valueInitializer(s *syntax.Binding, want Type, boundary string
 	saved := c.initializerContext
 	c.lambdaDepth++
 	ctx := &initializerContext{name: boundary, depth: c.lambdaDepth, want: want, parent: saved, external: map[any]bool{}, captures: map[string]bool{}}
+	ctx.rejectTry = s.Lazy || s.AsyncScope != nil
 	for _, scope := range c.scopes {
 		for _, local := range scope {
 			ctx.external[local.decl] = true

@@ -38,8 +38,8 @@ next statement, only that it can run concurrently with that statement and other
 tasks. Two declarations can therefore overlap without either being read.
 
 The initializer is a function boundary returning T, exactly as for lazy.
-Explicit `return` and `?` return from that boundary, not the enclosing function;
-Option `?` needs a result annotation. `break`, `continue` and `yield` cannot
+Explicit `return` returns from that boundary. `?` is rejected in the
+initializer; use `match` to handle each outcome explicitly, as in a lambda. `break`, `continue` and `yield` cannot
 cross it. Ordinary inference, constrained annotations and result proof checks
 apply before scheduling.
 
@@ -119,7 +119,7 @@ Acceptance covers scope-expression evaluation exactly once before scheduling,
 its effects and enclosing-boundary return/?, runtime predicates/validators
 reading async values without compile-time scheduling, concurrent start before reads, read-once/repeated/concurrent
 reads, closure and alias behavior, loop cells, annotation/inference/generics,
-initializer-local return/?, constrained results, effects and ambient captures,
+initializer-local returns and rejection of initializer `?`, constrained results, effects and ambient captures,
 mock task context, unread work and unread panics at scope exit, repeated panic
 reads, cancellation and scope policies. Negative cases cover a non-Scope owner,
 missing effects, short captures, scalar cell/closure escape, reading after owner
