@@ -45,13 +45,13 @@ fn (m: Mock[A]) expectWhere[A](matches: (A) uses nothing => Bool, times: Option[
 }
 
 // waitFor waits until the mock has answered `calls` calls (from any
-// task), and fails the test if that takes more than `ms` milliseconds.
-fn (m: Mock[A]) waitFor[A](calls: Int, ms: Int = 5000) uses state + clock {
-  m.waitFn((a) => true, false, calls, ms, compilerCallerLocation())
+// task), and fails the test if that takes more than `timeout`.
+fn (m: Mock[A]) waitFor[A](calls: Int, timeout: Duration = Duration { nanos: 5000000000 }) uses state + clock {
+  m.waitFn((a) => true, false, calls, timeout.nanos, compilerCallerLocation())
 }
 
 // waitForWhere is waitFor, counting only the calls whose arguments
 // match.
-fn (m: Mock[A]) waitForWhere[A](matches: (A) uses nothing => Bool, calls: Int, ms: Int = 5000) uses state + clock {
-  m.waitFn(matches, true, calls, ms, compilerCallerLocation())
+fn (m: Mock[A]) waitForWhere[A](matches: (A) uses nothing => Bool, calls: Int, timeout: Duration = Duration { nanos: 5000000000 }) uses state + clock {
+  m.waitFn(matches, true, calls, timeout.nanos, compilerCallerLocation())
 }

@@ -6,7 +6,7 @@ fn checked(x: Int): Int | Failure {
   if (x == 3) { Failure { message: "three" } } else { x * 2 }
 }
 fn slow(s: Scope, x: Int) uses clock + state: Int {
-  _ = time.Sleep(s, time.Nanoseconds((4 - x) * 1000000))
+  _ = time.Sleep(s, ((4 - x) * 1000000).nanos())
   x * 2
 }
 

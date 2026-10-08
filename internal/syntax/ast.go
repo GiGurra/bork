@@ -933,8 +933,8 @@ type Lambda struct {
 type ScopeExpr struct {
 	Pos  diag.Pos
 	Name string
-	// Policies are those of `scope s with taskTimeout(100),
-	// cleanupTimeout(500) { ... }`; none for the defaults.
+	// Policies are those of `scope s with taskTimeout(100.millis()),
+	// cleanupTimeout(500.millis()) { ... }`; none for the defaults.
 	Policies []Expr
 	Body     *Block
 }

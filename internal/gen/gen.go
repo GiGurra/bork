@@ -792,9 +792,12 @@ func (g *gen) packageAliases(fd *syntax.FuncDecl) string {
 		}
 		seen[lit] = true
 		if t := pkg.TypeNamed(lit); t != nil && len(check.TypeArgs(t)) == 0 {
-			g.goType(t)
-			if pkg.GoPrefix != "" {
-				fmt.Fprintf(&out, "type %s = %s%s; ", lit, pkg.GoPrefix, lit)
+			var canonical strings.Builder
+			if err := printer.Fprint(&canonical, token.NewFileSet(), g.goType(t)); err != nil {
+				panic(err)
+			}
+			if canonical.String() != lit {
+				fmt.Fprintf(&out, "type %s = %s; ", lit, canonical.String())
 			}
 		} else if t, v, ok := strings.Cut(lit, "_"); ok && variantOf(pkg.TypeNamed(t), v) != nil {
 			variant := variantOf(pkg.TypeNamed(t), v)

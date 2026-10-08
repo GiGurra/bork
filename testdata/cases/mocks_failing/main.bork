@@ -15,7 +15,7 @@ test "a failing test with a task waiting in a mock fails, and does not hang" {
       s"got $r"
     }
     fork(s, () => println(Fetch("a")))
-    _ = time.Sleep(s, time.Nanoseconds((30) * 1000000))
+    _ = time.Sleep(s, ((30) * 1000000).nanos())
     assertEqual(1, 2)
   }
 }

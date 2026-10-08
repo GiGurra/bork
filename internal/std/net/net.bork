@@ -6,21 +6,21 @@ type Socket = resource
 type Eof = {}
 type Packet = { data: Bytes, address: String }
 type Endpoint = { host: String, port: String }
-pred ValidTimeout(ms: Int) { ms >= 0 && ms <= 9223372036854 }
-type TimeoutMs = Int where ValidTimeout
+pred ValidTimeout(duration: Duration) { duration.nanos >= 0 }
+type Timeout = Duration where ValidTimeout
 pred ValidReadSize(size: Int) { size > 0 && size <= 16777216 }
 type ReadSize = Int where ValidReadSize
 
 // Dial opens a TCP connection. Zero timeout uses only scope cancellation.
-fn Dial(address: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net + state + clock: Connection | IoError | Cancelled unsafe go {
+fn Dial(address: String, s: Scope, timeout: Timeout = Duration { nanos: 0 }) uses net + state + clock: Connection | IoError | Cancelled unsafe go {
   import "bufio"
   import "context"
   import "net"
   import "time"
   ctx := _borkScopeContext(s)
-  if timeoutMs > 0 {
+  if timeout.nanos > 0 {
     var stop context.CancelFunc
-    ctx, stop = context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
+    ctx, stop = context.WithTimeout(ctx, time.Duration(timeout.nanos))
     defer stop()
   }
   raw, err := (&net.Dialer{}).DialContext(ctx, "tcp", address)
@@ -97,7 +97,7 @@ fn RemoteAddress(conn: Connection): String unsafe go {
 
 // Read returns available bytes, up to size. Eof means a clean closed stream.
 // One reader and one writer may run concurrently; concurrent readers may not.
-fn Read(conn: Connection, size: ReadSize = 4096, timeoutMs: TimeoutMs = 0) uses net + state + clock: Bytes | Eof | IoError | Cancelled unsafe go {
+fn Read(conn: Connection, size: ReadSize = 4096, timeout: Timeout = Duration { nanos: 0 }) uses net + state + clock: Bytes | Eof | IoError | Cancelled unsafe go {
   import "bufio"
   import "io"
   import "net"
@@ -106,7 +106,7 @@ fn Read(conn: Connection, size: ReadSize = 4096, timeoutMs: TimeoutMs = 0) uses 
   state := handle.Value.(struct { conn net.Conn; reader *bufio.Reader; pending *[]byte })
   if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
   deadline := time.Time{}
-  if timeoutMs > 0 { deadline = time.Now().Add(time.Duration(timeoutMs)*time.Millisecond) }
+  if timeout.nanos > 0 { deadline = time.Now().Add(time.Duration(timeout.nanos)) }
   if err := state.conn.SetReadDeadline(deadline); err != nil { return IoError{path: state.conn.RemoteAddr().String(), message: err.Error()} }
   if len(*state.pending) > 0 {
     n := min(int(size), len(*state.pending))
@@ -125,11 +125,11 @@ fn Read(conn: Connection, size: ReadSize = 4096, timeoutMs: TimeoutMs = 0) uses 
 
 // ReadLine removes LF or CRLF and preserves a final unterminated line.
 // Invalid UTF-8 is ParseError; a final bare CR is preserved.
-fn ReadLine(conn: Connection, timeoutMs: TimeoutMs = 0) uses net + state + clock: String | Eof | IoError | Cancelled | ParseError {
-  raw = readLine(conn, timeoutMs)?
+fn ReadLine(conn: Connection, timeout: Timeout = Duration { nanos: 0 }) uses net + state + clock: String | Eof | IoError | Cancelled | ParseError {
+  raw = readLine(conn, timeout)?
   encoding.ParseUtf8(raw)
 }
-fn readLine(conn: Connection, timeoutMs: TimeoutMs) uses net + state + clock: Bytes | Eof | IoError | Cancelled unsafe go {
+fn readLine(conn: Connection, timeout: Timeout) uses net + state + clock: Bytes | Eof | IoError | Cancelled unsafe go {
   import "bufio"
   import "io"
   import "net"
@@ -138,7 +138,7 @@ fn readLine(conn: Connection, timeoutMs: TimeoutMs) uses net + state + clock: By
   state := handle.Value.(struct { conn net.Conn; reader *bufio.Reader; pending *[]byte })
   if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
   deadline := time.Time{}
-  if timeoutMs > 0 { deadline = time.Now().Add(time.Duration(timeoutMs)*time.Millisecond) }
+  if timeout.nanos > 0 { deadline = time.Now().Add(time.Duration(timeout.nanos)) }
   if err := state.conn.SetReadDeadline(deadline); err != nil { return IoError{path: state.conn.RemoteAddr().String(), message: err.Error()} }
   suffix, err := state.reader.ReadBytes('\n')
   data := append(*state.pending, suffix...)
@@ -157,7 +157,7 @@ fn readLine(conn: Connection, timeoutMs: TimeoutMs) uses net + state + clock: By
 }
 
 // Write returns the number sent; an error may follow a partial write.
-fn Write(conn: Connection, data: Bytes, timeoutMs: TimeoutMs = 0) uses net + state + clock: Int | IoError | Cancelled unsafe go {
+fn Write(conn: Connection, data: Bytes, timeout: Timeout = Duration { nanos: 0 }) uses net + state + clock: Int | IoError | Cancelled unsafe go {
   import "bufio"
   import "net"
   import "time"
@@ -165,7 +165,7 @@ fn Write(conn: Connection, data: Bytes, timeoutMs: TimeoutMs = 0) uses net + sta
   state := handle.Value.(struct { conn net.Conn; reader *bufio.Reader; pending *[]byte })
   if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
   deadline := time.Time{}
-  if timeoutMs > 0 { deadline = time.Now().Add(time.Duration(timeoutMs)*time.Millisecond) }
+  if timeout.nanos > 0 { deadline = time.Now().Add(time.Duration(timeout.nanos)) }
   if err := state.conn.SetWriteDeadline(deadline); err != nil { return IoError{path: state.conn.RemoteAddr().String(), message: err.Error()} }
   n, err := state.conn.Write(_borkBytesData(data))
   if err != nil {
@@ -174,8 +174,8 @@ fn Write(conn: Connection, data: Bytes, timeoutMs: TimeoutMs = 0) uses net + sta
   }
   return int64(n)
 }
-fn WriteLine(conn: Connection, line: String, timeoutMs: TimeoutMs = 0) uses net + state + clock: Int | IoError | Cancelled {
-  Write(conn, encoding.Utf8(line + "\n"), timeoutMs)
+fn WriteLine(conn: Connection, line: String, timeout: Timeout = Duration { nanos: 0 }) uses net + state + clock: Int | IoError | Cancelled {
+  Write(conn, encoding.Utf8(line + "\n"), timeout)
 }
 
 // Bind opens a UDP socket. Address accepts a numeric IP and port, including 0.
@@ -195,14 +195,14 @@ fn SocketAddress(socket: Socket): String unsafe go {
   import "net"
   return socket.handle.(*_borkResourceHandle).Value.(*net.UDPConn).LocalAddr().String()
 }
-fn Receive(socket: Socket, timeoutMs: TimeoutMs = 0) uses net + state + clock: Packet | IoError | Cancelled unsafe go {
+fn Receive(socket: Socket, timeout: Timeout = Duration { nanos: 0 }) uses net + state + clock: Packet | IoError | Cancelled unsafe go {
   import "net"
   import "time"
   handle := socket.handle.(*_borkResourceHandle)
   raw := handle.Value.(*net.UDPConn)
   if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
   deadline := time.Time{}
-  if timeoutMs > 0 { deadline = time.Now().Add(time.Duration(timeoutMs)*time.Millisecond) }
+  if timeout.nanos > 0 { deadline = time.Now().Add(time.Duration(timeout.nanos)) }
   if err := raw.SetReadDeadline(deadline); err != nil { return IoError{path: raw.LocalAddr().String(), message: err.Error()} }
   data := make([]byte, 65535)
   n, from, err := raw.ReadFromUDP(data)
@@ -212,7 +212,7 @@ fn Receive(socket: Socket, timeoutMs: TimeoutMs = 0) uses net + state + clock: P
   }
   return Packet{data: _borkBytesFrom(data[:n]), address: from.String()}
 }
-fn Send(socket: Socket, address: String, data: Bytes, timeoutMs: TimeoutMs = 0) uses net + state + clock: Int | IoError | Cancelled unsafe go {
+fn Send(socket: Socket, address: String, data: Bytes, timeout: Timeout = Duration { nanos: 0 }) uses net + state + clock: Int | IoError | Cancelled unsafe go {
   import "net"
   import "net/netip"
   import "time"
@@ -222,7 +222,7 @@ fn Send(socket: Socket, address: String, data: Bytes, timeoutMs: TimeoutMs = 0) 
   if err != nil { return IoError{path: address, message: err.Error()} }
   if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
   deadline := time.Time{}
-  if timeoutMs > 0 { deadline = time.Now().Add(time.Duration(timeoutMs)*time.Millisecond) }
+  if timeout.nanos > 0 { deadline = time.Now().Add(time.Duration(timeout.nanos)) }
   if err := raw.SetWriteDeadline(deadline); err != nil { return IoError{path: address, message: err.Error()} }
   n, err := raw.WriteToUDPAddrPort(_borkBytesData(data), target)
   if err != nil {

@@ -14,16 +14,16 @@ fn drainTest() uses io + net + clock + state {
   scope app {
     started = openSignal(app)
     finished = atom(false)
-    scope serverScope with cleanupTimeout(1000) {
+    scope serverScope with cleanupTimeout(1000.millis()) {
       match (http.Listen("127.0.0.1:0", serverScope, (req, rs) => {
         mark(started)
-        _ = time.Sleep(rs, time.Nanoseconds(50000000))
+        _ = time.Sleep(rs, 50000000.nanos())
         _ = update(finished, old => true)
         http.Text(200, "drained")
       })) {
         server: http.Server => {
           address = "http://" + http.Address(server)
-          fork(app, () => { _ = http.Get(address, app, 2000) })
+          fork(app, () => { _ = http.Get(address, app, 2.seconds()) })
           waitMark(started)
         }
         error: IoError => println("unexpected", error.message)
@@ -42,18 +42,18 @@ fn forcedDrain(policy: Int) uses io + net + clock + state {
     clientDone = openSignal(app)
     finished = atom(false)
     failed = atom(false)
-    scope serverScope with cleanupTimeout(policy) {
+    scope serverScope with cleanupTimeout((policy).millis()) {
       match (http.Listen("127.0.0.1:0", serverScope, (req, rs) => {
         mark(started)
         waitMark(gate)
         _ = update(finished, old => true)
         mark(completed)
         http.Text(200, "too late")
-        }, 10)) {
+        }, 10.millis())) {
         server: http.Server => {
           address = "http://" + http.Address(server)
           fork(app, () => {
-            failure = match (http.Get(address, app, 2000)) { _: IoError => true; _ => false }
+            failure = match (http.Get(address, app, 2.seconds())) { _: IoError => true; _ => false }
             _ = update(failed, old => failure)
             mark(clientDone)
           })

@@ -17,7 +17,7 @@ fn configuredHost(config: settings.Config where settings.Configured): String {
 fn main() {
   local = settings.Defaults(host: "localhost")
   staging = settings.New(host: "staging.example", port: 8443,
-    connectTimeoutMs: 250, readTimeoutMs: 3000,
+    connectTimeout: 250.millis(), readTimeout: 3.seconds(),
     tls: .Files { cert: "staging.pem", key: "staging.key" },
     debug: "requests")
   production = settings.ForProduction(config: staging, host: "production.example",
@@ -29,7 +29,7 @@ fn main() {
   println(configuredHost(production))
   println(json.Encode(production))
   // Decoding completes defaults and checks the same field/type invariants.
-  println(json.Decode[settings.Config]("{\"host\":\"decoded.example\",\"connectTimeoutMs\":100,\"readTimeoutMs\":500,\"bodyLimitBytes\":4096}"))
+  println(json.Decode[settings.Config]("{\"host\":\"decoded.example\",\"connectTimeout\":\"100ms\",\"readTimeout\":\"500ms\",\"bodyLimitBytes\":4096}"))
   println(json.Decode[settings.Config]("{\"host\":\"invalid.example\",\"bodyLimitBytes\":512}"))
 
   deployment: Deployment = .{ name: "staging", config: staging }
@@ -39,7 +39,7 @@ fn main() {
 
   // These fail at compile time:
   // println(settings.New(host: "localhost", port: 0))
-  // println(settings.New(host: "localhost", connectTimeoutMs: 5000, readTimeoutMs: 1000))
+  // println(settings.New(host: "localhost", connectTimeout: 5.seconds(), readTimeout: 1.seconds()))
   // println(settings.New(host: "localhost", bodyLimitBytes: 512))
   // bad: settings.Config = .{ host: "outside its owning package" }
   // println(production.copy(port: 9000))

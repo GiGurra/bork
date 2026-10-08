@@ -30,7 +30,7 @@ shows a handled registration error.
 
 | Signature | Meaning |
 | --- | --- |
-| `Configure(s: Scope, cancel: List[Signal] = [.Interrupt, .Terminate], grace: Option[time.Duration] = .None) uses io + state: Policy \| Error` | Replace process cancellation policy while owned. |
+| `Configure(s: Scope, cancel: List[Signal] = [.Interrupt, .Terminate], grace: Option[Duration] = .None) uses io + state: Policy \| Error` | Replace process cancellation policy while owned. |
 | `Ignore(s: Scope, signals: List[Signal]) uses io + state: Policy \| Error` | Suppress signals unless a subscription handles them. |
 | `Subscribe(s: Scope, signals: List[Signal]) uses io + state: Subscription \| Error` | Receive signals and suppress their cancellation and OS defaults. |
 | `(events: Subscription) Next() uses io + state: Signal \| Cancelled \| Closed` | Wait for the next notification. |
@@ -75,7 +75,7 @@ import "bork/time"
 fn configure(app: Scope) uses io + state: signal.Policy | signal.Error {
   signal.Configure(app,
     cancel: [.Interrupt, .Terminate, .Hangup],
-    grace: .Some(time.Nanoseconds(5_000_000_000)))
+    grace: .Some(5_000_000_000.nanos()))
 }
 
 fn main() {
@@ -94,7 +94,7 @@ registration or the default. An empty list removes all cancellation signals;
 signals without other registrations regain their OS behavior. Duplicate names
 are accepted once.
 
-`grace: .None` waits indefinitely for cleanup. A nonnegative `time.Duration`
+`grace: .None` waits indefinitely for cleanup. A nonnegative `Duration`
 starts at the first cancelling signal and forces exit with that signal's status
 when it expires, even if tasks or finalizers are stuck. Zero expires immediately;
 negative durations return `signal.Error`. Later configuration cannot undo

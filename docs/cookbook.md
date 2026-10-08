@@ -223,7 +223,7 @@ fn main() {
 `delay` takes milliseconds and returns `Ok | Cancelled`. A cancelled scope interrupts the wait.
 
 ```bork
-fn nap(s: Scope) uses clock + state: Ok | Cancelled { delay(s, 10)? }
+fn nap(s: Scope) uses clock + state: Ok | Cancelled { delay(s, 10.millis())? }
 fn main() { scope s { println(nap(s)) } }
 ```
 
@@ -233,11 +233,11 @@ fn main() { scope s { println(nap(s)) } }
 
 ```bork
 fn answer(child: Scope) uses clock + state: Int | Cancelled {
-  delay(child, 1000)?
+  delay(child, 1000.millis())?
   42
 }
 fn main() {
-  scope app { println(withTimeout(app, 5, answer)) }
+  scope app { println(withTimeout(app, 5.millis(), answer)) }
 }
 ```
 
@@ -247,7 +247,7 @@ A pure parallel map preserves result order. For cancellable work, use the varian
 
 ```bork
 fn square(s: Scope, n: Int) uses clock + state: Int | Cancelled {
-  delay(s, 1)?
+  delay(s, 1.millis())?
   n * n
 }
 fn main() {
@@ -276,8 +276,8 @@ Replay only operations that your application considers safe. This GET uses one b
 import "bork/http"
 fn main() {
   scope s {
-    cancelAfter(s, 1000)
-    budget = http.OpenRetryBudget(s, capacity: 2, refillMs: 1000)
+    cancelAfter(s, 1000.millis())
+    budget = http.OpenRetryBudget(s, capacity: 2, refill: 1000.millis())
     println(http.Retry(s, budget, child => http.Get("https://example.com", child), maxAttempts: 3))
   }
 }
@@ -317,7 +317,7 @@ fn healthy(s: Scope) uses net + clock + state: Bool {
 }
 fn main() { println("run with bork test recipe.bork") }
 test "an upstream is healthy" {
-  calls = mock http.Get(url, s, timeoutMs, maxBodyBytes) { http.Text(200, "ok") }
+  calls = mock http.Get(url, s, timeout, maxBodyBytes) { http.Text(200, "ok") }
   calls.expect(times: 1)
   scope s { assert(healthy(s)) }
 }

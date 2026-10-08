@@ -1,4 +1,4 @@
-Admission { maxInFlight: 2, maxQueued: 0, queueTimeoutMs: 0, retryAfterMs: 0, status: 503 }
+Admission { maxInFlight: 2, maxQueued: 0, queueTimeout: 0s, retryAfter: 0s, status: 503 }
 invalid decoded capacity true
 /first
 bounded AdmissionLoad { inFlight: 1, queued: 2 }

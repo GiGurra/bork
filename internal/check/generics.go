@@ -704,6 +704,7 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 		for i, a := range args {
 			if i < len(inst.Params) && types[i] != Invalid && !c.open(types[i]) && !fitsParam(types[i], inst.Params[i]) {
 				c.errorf(a.Position(), "%s to %s must be %s, found %s", argLabel(fn, i), name, inst.Params[i], types[i])
+				c.durationArgumentFix(e, fn, a, inst.Params[i], types[i])
 			}
 		}
 	}

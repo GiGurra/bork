@@ -755,9 +755,9 @@ use codec.Defaults
 use time.Codecs
 
 type Options = {
-  timeout: time.Duration
+  timeout: Duration
   since: Option[time.Instant]
-  retries: List[time.Duration] = []
+  retries: List[Duration] = []
 } derive (codec.Decode)
 
 fn main() {

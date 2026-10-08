@@ -189,12 +189,12 @@ fn route(db: sql.Connection in request, req: http.Request, request: Scope) uses 
 fn start(config: Config, app: Scope) uses io + net + clock + state: http.Server | sql.Error | IoError {
   db = sql.OpenSqlite(config.database, app)?
   setup(db)?
-  http.Listen(config.address, app, handler: (req, request) => route(attach(db, request), req, request), drainTimeoutMs: 5000, requestTimeoutMs: 2000)
+  http.Listen(config.address, app, handler: (req, request) => route(attach(db, request), req, request), drainTimeout: 5000.millis(), requestTimeout: 2000.millis())
 }
 
 fn serve() uses io + net + clock + state: Ok | env.ConfigError | sql.Error | IoError {
   config = env.Load[Config]("TOUR")?
-  scope app with cleanupTimeout(5000) {
+  scope app with cleanupTimeout(5000.millis()) {
     server = start(config, app)?
     log.Info("listening", { "address": http.Address(server) })
     http.WaitAny([server])
@@ -209,7 +209,7 @@ fn show(label: String, result: http.Result) uses io {
 }
 
 fn demo() uses io + net + clock + state: Ok | sql.Error | IoError {
-  scope app with cleanupTimeout(5000) {
+  scope app with cleanupTimeout(5000.millis()) {
     server = start(Config { address: "127.0.0.1:0", database: ":memory:" }, app)?
     base = "http://" + http.Address(server)
     show("GET /health", http.Get(base + "/health", app))
@@ -252,7 +252,7 @@ ConfigError { errors: [DecodeError { path: "TOUR_ADDRESS", message: "must be non
 
 The program exits with code 1. An unavailable database path or occupied listener address follows the same nonzero startup-error path.
 
-SIGINT and SIGTERM cancel root scopes by default. `http.WaitAny` returns when the listener stops or its scope is cancelled. Leaving `app` cancels its work and runs resource cleanup. The listener stops accepting requests, cancels request scopes, and drains active handlers for at most 5 seconds. Shutdown lets cooperative handlers finish cancellation and cleanup; it does not promise that an in-flight write succeeds. `cleanupTimeout(5000)` bounds each resource cleanup wait. See [signal handling](std/signal.md) for process exit codes, repeated signals and custom policies.
+SIGINT and SIGTERM cancel root scopes by default. `http.WaitAny` returns when the listener stops or its scope is cancelled. Leaving `app` cancels its work and runs resource cleanup. The listener stops accepting requests, cancels request scopes, and drains active handlers for at most 5 seconds. Shutdown lets cooperative handlers finish cancellation and cleanup; it does not promise that an in-flight write succeeds. `cleanupTimeout(5000.millis())` bounds each resource cleanup wait. See [signal handling](std/signal.md) for process exit codes, repeated signals and custom policies.
 
 ## Test handlers directly
 

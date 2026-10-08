@@ -11,7 +11,7 @@ main.bork:17:33: UnownedResult returns *os.File, which has a Close method, but U
   hint: declare the Go type with resource go
 main.bork:18:18: NoNilError is bound to example.com/bindtest.NilPayload() *bindtest.Payload, whose result *bindtest.Payload may not fit Payload, but its result has no GoValueError
   hint: declare the result as Payload | GoValueError
-main.bork:19:31: ResultMismatch is bound to example.com/bindtest.NewPayload(s string) *bindtest.Payload, whose result *bindtest.Payload does not convert to Duration
+main.bork:19:31: ResultMismatch is bound to example.com/bindtest.NewPayload(s string) *bindtest.Payload, whose result *bindtest.Payload does not convert to NativeDuration
 main.bork:20:43: Go type bindtest.Payload has no method Text
 main.bork:21:48: Go type *bindtest.Payload has no method Missing
 main.bork:22:44: "(*example.com/bindtest.Payload).Value.Text" is not a Go function name; write its import path and name, such as "os.Getenv"

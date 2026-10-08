@@ -1,1 +1,1 @@
-main.bork:8:31: T of validate cannot be Duration: its generic implementation uses predicate anyValue, which cannot depend on opaque Go values
+main.bork:8:37: T of validate cannot be NativeDuration: its generic implementation uses predicate anyValue, which cannot depend on opaque Go values

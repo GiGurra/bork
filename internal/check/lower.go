@@ -516,6 +516,9 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 				}
 				call.TypeArgNames = append(call.TypeArgNames, name)
 			}
+			if literal := durationLiteral(call); literal != nil {
+				return literal
+			}
 			return call
 		}
 		if b := l.info.callBuiltins[x]; b != BuiltinNone {

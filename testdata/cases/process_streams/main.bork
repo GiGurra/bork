@@ -106,7 +106,7 @@ fn settle(s: Scope, child: process.Process) uses io + state + clock: process.Res
   match (child.TryWait()) {
     Option.Some(value) => value
     Option.None => {
-      delay(s, 10)?
+      delay(s, 10.millis())?
       settle(s, child)
     }
   }
@@ -144,7 +144,7 @@ fn robustness(s: Scope, directory: String) uses io + state + clock: Ok | IoError
   escalated = scope patient {
     fork(patient, () => {
       waitReady(deaf)
-      cancelAfter(patient, 0)
+      cancelAfter(patient, 0.millis())
     })
     process.Run(patient, "/bin/sh", ["-c", "trap '' TERM; echo ready > \"$1\"; while true; do sleep 0.05; done", "sh", deaf], cancelGrace: time.Duration { nanos: 200_000_000 })
   }
@@ -181,7 +181,7 @@ fn adopted(s: Scope) uses io + state: process.Process | IoError | Cancelled {
 
 fn cancellation(directory: String) uses io + state + clock: Ok | IoError | Cancelled {
   limited = scope limited {
-    cancelAfter(limited, 100)
+    cancelAfter(limited, 100.millis())
     process.Run(limited, "sleep", ["5"])
   }
   println(match (limited) {
@@ -189,7 +189,7 @@ fn cancellation(directory: String) uses io + state + clock: Ok | IoError | Cance
     _ => "unexpected"
   })
   moved = scope deadline {
-    cancelAfter(deadline, 100)
+    cancelAfter(deadline, 100.millis())
     adopted(deadline)?.Wait()
   }
   println(match (moved) {
@@ -202,7 +202,7 @@ fn cancellation(directory: String) uses io + state + clock: Ok | IoError | Cance
   graced = scope patient {
     fork(patient, () => {
       waitReady(trapping)
-      cancelAfter(patient, 0)
+      cancelAfter(patient, 0.millis())
     })
     process.Run(patient, "/bin/sh", ["-c", "trap 'echo graceful exit; exit 3' TERM; echo ready > \"$1\"; while true; do sleep 0.05; done", "sh", trapping], stdout: .File { path: path }, cancelGrace: time.Duration { nanos: 2_000_000_000 })
   }

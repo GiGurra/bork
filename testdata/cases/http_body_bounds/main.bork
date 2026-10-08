@@ -84,12 +84,12 @@ fn main() {
     println("send", show(http.Send("GET", base, {:}, "", app, maxBodyBytes: 4)))
     println("default", show(http.Get(base + "/default", app)))
     println("max int", show(http.Get(base, app, maxBodyBytes: 9223372036854775807)))
-    println("probe timeout", show(http.Get(base + "/probe", app, timeoutMs: 50, maxBodyBytes: 4)))
+    println("probe timeout", show(http.Get(base + "/probe", app, timeout: 50.millis(), maxBodyBytes: 4)))
     scope request {
-      cancelAfter(request, 50)
+      cancelAfter(request, 50.millis())
       println("probe scope", show(http.Get(base + "/probe", request, maxBodyBytes: 4)))
     }
-    println("overflow", show(http.Get(base + "/overflow", app, timeoutMs: 1000, maxBodyBytes: 4)))
+    println("overflow", show(http.Get(base + "/overflow", app, timeout: 1000.millis(), maxBodyBytes: 4)))
     println("overflow closed", overflowClosed(server))
     println("truncated", show(http.Get(base + "/truncated", app, maxBodyBytes: 10)))
   }

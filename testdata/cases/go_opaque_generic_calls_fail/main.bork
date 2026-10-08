@@ -1,15 +1,15 @@
-type Duration = go "time.Duration"
+type NativeDuration = go "time.Duration"
 pred anyValue[T](v: T) { true }
 fn Wrap[T](v: T): Bool { anyValue(v) }
-fn Call(d: Duration): Bool { Wrap(d) }
+fn Call(d: NativeDuration): Bool { Wrap(d) }
 fn Promise[T](d: T): Int where related(d) {
   trust (related(1, d))
   1
 }
 pred related[T](x: Int, p: T) { true }
-fn Get(d: Duration): Int { Promise(d) }
+fn Get(d: NativeDuration): Int { Promise(d) }
 type FactBox[T] = { value: T where anyValue }
 fn BuildThenShow[T](v: T): String { toString(FactBox { value: v }) }
-fn HiddenFieldFact(d: Duration): String { BuildThenShow(d) }
-fn Indirect(d: Duration): Bool { p: (Duration) => Bool = Wrap; p(d) }
+fn HiddenFieldFact(d: NativeDuration): String { BuildThenShow(d) }
+fn Indirect(d: NativeDuration): Bool { p: (NativeDuration) => Bool = Wrap; p(d) }
 fn main() {}

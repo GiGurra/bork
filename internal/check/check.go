@@ -1382,7 +1382,7 @@ func (c *checker) scopeExpr(e *syntax.ScopeExpr, want Type) Type {
 	for _, p := range e.Policies {
 		policy := c.preludePkg.TypeNamed("ScopePolicy")
 		if t := c.exprWant(p, policy); t != Invalid && !assignable(t, policy) {
-			c.errorf(p.Position(), "a scope's policy must be a ScopePolicy (such as taskTimeout(100), cleanupTimeout(500), or logFailures()), found %s", t)
+			c.errorf(p.Position(), "a scope's policy must be a ScopePolicy (such as taskTimeout(100.millis()), cleanupTimeout(500.millis()), or logFailures()), found %s", t)
 		}
 		if c.fn != nil {
 			c.fn.Calls = append(c.fn.Calls, c.preludePkg.Funcs["setScopePolicy"])
@@ -1994,6 +1994,12 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 		if c.removedChannelCall(e, id) {
 			for _, arg := range e.Args {
 				c.exprWant(arg, nil)
+			}
+			return Invalid
+		}
+		if c.removedDurationCall(e, id) {
+			for _, arg := range e.Args {
+				c.exprWant(arg, Int)
 			}
 			return Invalid
 		}

@@ -2,7 +2,7 @@ fn badRace(s: Scope) uses state: Option[Int] | Cancelled {
   race(s, [child => { println(1); 1 }])
 }
 fn badTimeout(s: Scope) uses clock + state: Int | Cancelled {
-  withTimeout(s, 100, child => { println(1); 1 })
+  withTimeout(s, 100.millis(), child => { println(1); 1 })
 }
 fn forward(works: List[(Scope) => Int]) uses state: Option[Int] | Cancelled {
   scope s { race(s, works) }

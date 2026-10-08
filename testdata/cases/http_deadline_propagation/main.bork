@@ -19,8 +19,9 @@ fn resultText(result: http.Result): String {
   }
 }
 fn invoke(url: String, s: Scope, ms: Int) uses net + clock + state: String {
-  if (http.ValidTimeout(ms)) {
-    resultText(http.Send("POST", url, { "bork-timeout-ns": ["bogus"] }, "ok", s, timeoutMs: ms))
+  timeout = ms.millis()
+  if (http.ValidTimeout(timeout)) {
+    resultText(http.Send("POST", url, { "bork-timeout-ns": ["bogus"] }, "ok", s, timeout: timeout))
   } else { panic("bad test timeout") }
 }
 fn waitDeadline(s: Scope) uses clock + state: String unsafe go {
@@ -147,7 +148,7 @@ fn outgoingChecks(run: (String, Scope, Int) => String) uses io + net + clock + s
       return
     }
     if r.URL.Path == "/tighten" {
-      tighten.Load().cancelAfter(1000)
+      tighten.Load().cancelAfter(int64(time.Second))
       w.Header().Set("Location", "/end")
       w.WriteHeader(307)
       return
@@ -172,7 +173,7 @@ fn outgoingChecks(run: (String, Scope, Int) => String) uses io + net + clock + s
   if last.Load() <= 0 || last.Load() >= first.Load() { panic("redirect budget did not shrink") }
   ancestor := _borkScopeWith(context.Background())
   defer _borkScopeAbort(ancestor)
-  ancestor.cancelAfter(30000)
+  ancestor.cancelAfter(int64(30*time.Second))
   child := _newScope(ancestor, "redirect child")
   defer _borkScopeAbort(child)
   tighten.Store(ancestor)
@@ -301,7 +302,7 @@ fn main() {
         if (request.path == "/cleanup") { _ = slowCleanup(s) }
         http.Text(200, budget(s))
       }
-      }, requestTimeoutMs: 1000))
+      }, requestTimeout: 1000.millis()))
     println("policy", rawChecks(http.Address(server), true))
   }
   println("outgoing", outgoingChecks(invoke))
@@ -319,9 +320,9 @@ fn main() {
       _ = release.receive(app)
       http.Text(200, budget(s))
     }))
-    active = fork(app, () => http.Get(s"http://${http.Address(server)}", app, timeoutMs: 30000))
+    active = fork(app, () => http.Get(s"http://${http.Address(server)}", app, timeout: 30000.millis()))
     _ = entered.receive(app)
-    cancelAfter(app, 10000)
+    cancelAfter(app, 10000.millis())
     _ = release.send(app, true)
     println("later listener deadline", withinBudget(resultText(await(active)), 10000000000))
   }
@@ -331,7 +332,7 @@ fn main() {
     server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
       if (request.path == "/held") { _ = entered.send(app, true); _ = release.receive(app) }
       http.Text(200, "ok")
-      }, admission: Option.Some(http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 1000 })))
+      }, admission: Option.Some(http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeout: 1000.millis() })))
     active = fork(app, () => http.Get(s"http://${http.Address(server)}/held", app))
     _ = entered.receive(app)
     println("queued deadline", queuedDeadline(http.Address(server)))

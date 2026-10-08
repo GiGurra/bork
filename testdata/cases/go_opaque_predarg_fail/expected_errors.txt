@@ -1,1 +1,1 @@
-main.bork:3:21: predicate withOpaque cannot take Duration, which holds a Go value that can change
+main.bork:3:21: predicate withOpaque cannot take NativeDuration, which holds a Go value that can change

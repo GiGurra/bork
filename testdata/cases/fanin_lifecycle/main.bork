@@ -8,7 +8,7 @@ fn label(value: Int | String | Closed): String {
 
 fn loser(child: Scope, started: Channel[Int], finished: Atom[Bool]) uses clock + state: Int | Cancelled {
   assertEqual(started.send(child, 1), {})
-  waited = delay(child, 10000)
+  waited = delay(child, 10000.millis())
   assertEqual(update(finished, old => true), true)
   match (waited) { c: Cancelled => c; _ => 999 }
 }
@@ -47,9 +47,9 @@ test "awaitFirst leaves losing tasks in their owner scope" {
 test "timeout includes callback-forked tasks and preserves parent cancellation" {
   scope s {
     finished = atom(false)
-    result = withTimeout(s, 100, child => {
+    result = withTimeout(s, 100.millis(), child => {
       fork(child, () => {
-        waited = delay(child, 10000)
+        waited = delay(child, 10000.millis())
         match (waited) { c: Cancelled => assertEqual(c.reason, "deadline exceeded"); _ => panic("expected deadline") }
         assertEqual(update(finished, old => true), true)
       })
@@ -63,7 +63,7 @@ test "timeout includes callback-forked tasks and preserves parent cancellation" 
 
 test "successful timeout resources remain open until the parent closes" {
   scope s {
-    result = withTimeout(s, 1000000, child => channel[Int](child, 1))
+    result = withTimeout(s, 1000000.millis(), child => channel[Int](child, 1))
     match (result) {
       ch: Channel[Int] => assertEqual(ch.send(s, 3), {})
       _ => panic("expected a channel")

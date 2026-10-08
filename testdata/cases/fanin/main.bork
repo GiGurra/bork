@@ -1,6 +1,6 @@
 type Failure = { message: String }
 fn work(s: Scope, n: Int) uses clock + state: Int | Cancelled {
-  delay(s, n)?
+  delay(s, (n).millis())?
   n
 }
 fn checked(n: Int): Int | Failure {
@@ -22,11 +22,11 @@ fn main() {
     println(checkedTasks.awaitAllUntil[Int, Failure](s))
     println([fork(s, () => checked(3))].awaitAllUntil[Int, Failure](s))
     println(race(s, [child => 7]))
-    println(withTimeout(s, 1000000, child => work(child, 1)))
-    println(withTimeout(s, 0, child => 1))
-    println(withTimeoutDo(s, 1000000, child => {}))
-    println(genericUnion(withTimeout(s, 1000000, canceledValue)).reason)
-    timeout: (Scope, Int, (Scope) uses nothing => Cancelled) uses clock + state => Cancelled = withTimeout
-    println(timeout(s, 1000000, canceledValue).reason)
+    println(withTimeout(s, 1000000.millis(), child => work(child, 1)))
+    println(withTimeout(s, 0.millis(), child => 1))
+    println(withTimeoutDo(s, 1000000.millis(), child => {}))
+    println(genericUnion(withTimeout(s, 1000000.millis(), canceledValue)).reason)
+    timeout: (Scope, Duration, (Scope) uses nothing => Cancelled) uses clock + state => Cancelled = withTimeout
+    println(timeout(s, 1000000.millis(), canceledValue).reason)
   }
 }

@@ -29,12 +29,12 @@ fn main() {
 
 test "duration codec round trips the signed nanosecond range" {
   [-9223372036854775808, -1, 0, 1, 9223372036854775807].forEach(nanos => {
-    value = time.Nanoseconds(nanos)
+    value = (nanos).nanos()
     assertEqual(test.AssertIs[time.Duration](codec.decode[time.Duration](codec.encode(value))), value)
   })
   assertEqual(test.AssertIs[time.Duration](json.Decode[time.Duration]("\"1h2m3s\"")).nanos, 3723000000000)
   assertEqual(test.AssertIs[time.Duration](yaml.Decode[time.Duration]("250ms")).nanos, 250000000)
-  assertEqual(json.Encode(time.Nanoseconds(1500000000)), "\"1.5s\"")
+  assertEqual(json.Encode(1500000000.nanos()), "\"1.5s\"")
 }
 
 test "instant wire strings normalize offsets and preserve fractions" {

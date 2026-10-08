@@ -3,7 +3,7 @@ import "bork/time"
 
 // Model eight independent I/O waits with cancellation-aware delays.
 fn work(s: Scope, n: Int) uses clock + state: Int | Cancelled {
-  delay(s, 50)?
+  delay(s, 50.millis())?
   n * n
 }
 

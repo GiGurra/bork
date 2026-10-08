@@ -36,13 +36,13 @@ the arguments. A nonzero exit is a `Result`; `Check` turns it into `ExitError`.
 | --- | --- |
 | `Args() uses io: List[String]` | Return arguments without the program name. |
 | `Exit(code: Int) uses io: Never` | Exit immediately without closing scopes. |
-| `Run(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input in s = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: time.Duration = time.Duration { nanos: 0 }) uses io + state: Result \| IoError \| Cancelled` | Start a child and wait for its result. |
-| `Start(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input in s = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: time.Duration = time.Duration { nanos: 0 }) uses io + state: Process \| IoError \| Cancelled` | Start a scope-owned child. |
+| `Run(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input in s = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: Duration = Duration { nanos: 0 }) uses io + state: Result \| IoError \| Cancelled` | Start a child and wait for its result. |
+| `Start(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input in s = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: Duration = Duration { nanos: 0 }) uses io + state: Process \| IoError \| Cancelled` | Start a scope-owned child. |
 | `(child: Process) Wait() uses io + state: Result \| IoError \| Cancelled` | Wait for the same immutable result on each call. |
 | `(child: Process) TryWait() uses io + state: Option[Result \| IoError \| Cancelled]` | Poll; None means the child is running. |
 | `(child: Process) Pid(): Int` | Read the process ID without effects. |
 | `(child: Process) Signal(value: signal.Signal) uses io + state: Ok \| IoError` | Send a signal to the running child’s group. |
-| `(child: Process) Stop(grace: time.Duration = time.Duration { nanos: 5_000_000_000 }) uses io + state: Ok` | Send SIGTERM, then SIGKILL after grace. |
+| `(child: Process) Stop(grace: Duration = Duration { nanos: 5_000_000_000 }) uses io + state: Ok` | Send SIGTERM, then SIGKILL after grace. |
 | `(child: Process) Kill() uses io + state: Ok` | Kill the running child’s group immediately. |
 | `(child: Process) Stdin(): Writer` | Get the configured stdin pipe. |
 | `(child: Process) Stdout(): Reader` | Get the configured stdout pipe. |
@@ -251,9 +251,9 @@ import "bork/time"
 
 fn bounded() uses io + state + clock: process.Result | IoError | Cancelled {
   scope limited {
-    cancelAfter(limited, 2000)
+    cancelAfter(limited, 2000.millis())
     process.Run(limited, "sleep", ["10"],
-      cancelGrace: time.Nanoseconds(100_000_000))
+      cancelGrace: 100_000_000.nanos())
   }
 }
 
@@ -263,7 +263,7 @@ fn main() {
 ```
 
 By default cancellation kills at once. A positive `cancelGrace` (a
-`time.Duration`) sends SIGTERM first and SIGKILL only if the child is still
+`Duration`) sends SIGTERM first and SIGKILL only if the child is still
 running after that long, so it can clean up. Scope cleanup then waits at most
 the grace period plus one second.
 
@@ -280,7 +280,7 @@ the grace period plus one second.
 - `Signal(signal)` sends a `bork/signal` Signal (`.Interrupt`, `.Terminate`,
   `.Hangup`, `.User1`, `.User2`) to the child's process group. It does nothing
   after the child has finished; unsupported signals give IoError.
-- `Stop(grace: time.Duration = time.Duration { nanos: 5_000_000_000 })` ends the child gracefully: SIGTERM to its group, then
+- `Stop(grace: Duration = Duration { nanos: 5_000_000_000 })` ends the child gracefully: SIGTERM to its group, then
   SIGKILL after `grace`. `Kill()` sends SIGKILL at once. Neither cancels the
   scope; `Wait` gives the child's Result, such as
   `Signaled { number: 15, name: "SIGTERM" }`, or the code the child chose when

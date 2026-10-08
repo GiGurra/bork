@@ -65,11 +65,11 @@ fn race[T](s: Scope, works: List[(Scope) => T]) uses state: Option[T] | Cancelle
 
 // withTimeout bounds a child operation cooperatively. The deadline includes
 // tasks the callback forks. Returned resources stay owned until s closes.
-fn withTimeout[T](s: Scope, ms: Int, work: (Scope) => T) uses clock + state: T | Cancelled unsafe go {
-  return _borkFanInTimeout(s, ms, func(child *_Scope) any { return work(child) })
+fn withTimeout[T](s: Scope, duration: Duration, work: (Scope) => T) uses clock + state: T | Cancelled unsafe go {
+  return _borkFanInTimeout(s, duration.nanos, func(child *_Scope) any { return work(child) })
 }
 
 // withTimeoutDo runs an Ok callback with the same cooperative deadline.
-fn withTimeoutDo(s: Scope, ms: Int, work: (Scope) => Ok) uses clock + state: Ok | Cancelled unsafe go {
-  return _borkFanInTimeout(s, ms, func(child *_Scope) any { work(child); return _borkOk() })
+fn withTimeoutDo(s: Scope, duration: Duration, work: (Scope) => Ok) uses clock + state: Ok | Cancelled unsafe go {
+  return _borkFanInTimeout(s, duration.nanos, func(child *_Scope) any { work(child); return _borkOk() })
 }

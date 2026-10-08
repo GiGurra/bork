@@ -140,7 +140,7 @@ func TestConcurrentRunsAndRebuildWhileRunning(t *testing.T) {
 fn main() uses io + clock + state {
   scope s {
     println("ready")
-    _ = time.Sleep(s, time.Nanoseconds(3000000000))
+    _ = time.Sleep(s, 3000000000.nanos())
     println(42)
   }
 }

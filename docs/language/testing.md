@@ -139,7 +139,7 @@ test "the reminder says how long is left" {
 `A` is the generated call-record type. Fields use the target's parameter names,
 but omit parameters that can carry scope lifetimes and parameters whose types
 mention the target's type parameters. For `http.Get`, the record has `url` and
-`timeoutMs`, but no `s`. Inspect omitted arguments inside the mock body.
+`timeout`, but no `s`. Inspect omitted arguments inside the mock body.
 Matchers have type `(A) uses nothing => Bool`.
 
 | Method | Effects | Meaning |
@@ -149,8 +149,8 @@ Matchers have type `(A) uses nothing => Bool`.
 | `calls(): List[String]` | `state` | Formatted calls in call-start order |
 | `expect(times: Option[Int] = .None, atLeast: Option[Int] = .None, atMost: Option[Int] = .None)` | `state` | Check the count when the mock's block ends |
 | `expectWhere(matches, times: Option[Int] = .None, atLeast: Option[Int] = .None, atMost: Option[Int] = .None)` | `state` | Check the count of matching calls at block exit |
-| `waitFor(calls: Int, ms: Int = 5000)` | `state + clock` | Wait for a count, failing on timeout |
-| `waitForWhere(matches, calls: Int, ms: Int = 5000)` | `state + clock` | Wait for a matching count, failing on timeout |
+| `waitFor(calls: Int, timeout: Duration = Duration { nanos: 5000000000 })` | `state + clock` | Wait for a count, failing on timeout |
+| `waitForWhere(matches, calls: Int, timeout: Duration = Duration { nanos: 5000000000 })` | `state + clock` | Wait for a matching count, failing on timeout |
 
 Give `times` for an exact count, or `atLeast`/`atMost` for bounds; do not mix
 those forms. With no bounds, `expect()` requires at least one call.
@@ -173,7 +173,7 @@ fn healthy(url: String, s: Scope) uses net + clock + state: Bool {
 }
 
 test "health check uses the requested URL" {
-  gets = mock http.Get(url, s, timeoutMs, maxBodyBytes) { http.Text(200, "ok") }
+  gets = mock http.Get(url, s, timeout, maxBodyBytes) { http.Text(200, "ok") }
   gets.expect(times: 1)
   gets.expectWhere(call => call.url == "https://service.example/health", times: 1)
   scope s {

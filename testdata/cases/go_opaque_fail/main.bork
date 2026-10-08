@@ -2,7 +2,7 @@ import codec "bork/codec"
 use codec.Defaults
 
 type Payload = go "*example.com/bindtest.Payload"
-type Duration = go "time.Duration"
+type NativeDuration = go "time.Duration"
 type Handle = resource go "*example.com/bindtest.Handle"
 type Unowned = go "*os.File"
 type Generic[T] = go "time.Duration"
@@ -16,7 +16,7 @@ fn MissingOwner(): Handle | GoValueError unsafe go "example.com/bindtest.OpenHan
 fn TwoOwners(a: Scope, b: Scope): Handle | GoValueError unsafe go "example.com/bindtest.OpenHandle"
 fn UnownedResult(name: String): Unowned | GoError unsafe go "os.Open"
 fn NoNilError(): Payload unsafe go "example.com/bindtest.NilPayload"
-fn ResultMismatch(s: String): Duration unsafe go "example.com/bindtest.NewPayload"
+fn ResultMismatch(s: String): NativeDuration unsafe go "example.com/bindtest.NewPayload"
 fn BadReceiver(p: Payload): Int unsafe go "(example.com/bindtest.Payload).Text"
 fn MissingMethod(p: Payload): String unsafe go "(*example.com/bindtest.Payload).Missing"
 fn FieldPath(p: Payload): String unsafe go "(*example.com/bindtest.Payload).Value.Text"

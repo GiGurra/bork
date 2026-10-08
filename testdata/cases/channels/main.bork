@@ -50,8 +50,8 @@ fn main() {
   // waits in, even when the channel belongs to an outer one.
   scope s {
     ch = channel[Int](s)
-    println(withTimeout(s, 10, c => ch.receive(c)))
-    cancelAfter(s, 10)
+    println(withTimeout(s, 10.millis(), c => ch.receive(c)))
+    cancelAfter(s, 10.millis())
     println(ch.receive(s))
   }
   // Operations that do not wait.

@@ -2,28 +2,28 @@ import "bork/encoding"
 import "bork/net"
 
 fn echo(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError | Cancelled {
-  line = net.Read(conn, 4096, 1000)
+  line = net.Read(conn, 4096, 1.seconds())
   match (line) {
-    data: Bytes => { _ = net.Write(conn, data, 1000)?; checkpoint(s) }
+    data: Bytes => { _ = net.Write(conn, data, 1.seconds())?; checkpoint(s) }
     _: net.Eof => checkpoint(s)
     error: IoError => error
     stopped: Cancelled => stopped
   }
 }
 fn lines(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError | Cancelled {
-  _ = net.Write(conn, encoding.Utf8("first\r\nlast\r"), 1000)?
+  _ = net.Write(conn, encoding.Utf8("first\r\nlast\r"), 1.seconds())?
   checkpoint(s)
 }
 fn quiet(conn: net.Connection, s: Scope) uses clock + state: Ok | IoError | Cancelled {
-  delay(s, 60000)
+  delay(s, 60000.millis())
 }
 fn broken(conn: net.Connection, s: Scope): Ok | IoError | Cancelled {
   panic("test handler panic")
 }
 fn partial(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError | Cancelled {
-  _ = net.Write(conn, encoding.Utf8("first"), 1000)?
-  match (net.Read(conn, 1, 1000)) {
-    _: Bytes => { _ = net.WriteLine(conn, "last", 1000)?; checkpoint(s) }
+  _ = net.Write(conn, encoding.Utf8("first"), 1.seconds())?
+  match (net.Read(conn, 1, 1.seconds())) {
+    _: Bytes => { _ = net.WriteLine(conn, "last", 1.seconds())?; checkpoint(s) }
     _: net.Eof => checkpoint(s)
     error: IoError => error
     stopped: Cancelled => stopped
@@ -36,63 +36,63 @@ fn sharedServer(s: Scope) uses net + state + clock: net.Server | IoError | Cance
   scope child { server = net.Listen("127.0.0.1:0", child, echo)?; attach(server, s) }
 }
 fn sharedConnection(s: Scope, address: String) uses net + state + clock: net.Connection | IoError | Cancelled {
-  scope child { conn = net.Dial(address, child, 1000)?; attach(conn, s) }
+  scope child { conn = net.Dial(address, child, 1.seconds())?; attach(conn, s) }
 }
 fn exercise(s: Scope) uses io + net + state + clock: Ok | IoError | Cancelled | ParseError {
   server = net.Listen("127.0.0.1:0", s, echo)?
-  conn = net.Dial(net.Address(server), s, 1000)?
+  conn = net.Dial(net.Address(server), s, 1.seconds())?
   println(net.RemoteAddress(conn) == net.Address(server))
   binary = [toByte(0), toByte(255), toByte(42)].toBytes()
-  println(net.Write(conn, binary, 1000))
-  println(net.Read(conn, 4096, 1000))
-  println(net.Read(conn, 4096, 1000))
+  println(net.Write(conn, binary, 1.seconds()))
+  println(net.Read(conn, 4096, 1.seconds()))
+  println(net.Read(conn, 4096, 1.seconds()))
   lineServer = net.Listen("127.0.0.1:0", s, lines)?
-  lineConn = net.Dial(net.Address(lineServer), s, 1000)?
-  println(net.ReadLine(lineConn, 1000))
-  println(net.ReadLine(lineConn, 1000))
-  println(net.ReadLine(lineConn, 1000))
+  lineConn = net.Dial(net.Address(lineServer), s, 1.seconds())?
+  println(net.ReadLine(lineConn, 1.seconds()))
+  println(net.ReadLine(lineConn, 1.seconds()))
+  println(net.ReadLine(lineConn, 1.seconds()))
   socket = net.Bind("127.0.0.1:0", s)?
   sender = net.Bind("127.0.0.1:0", s)?
-  println(net.Send(sender, net.SocketAddress(socket), binary, 1000))
-  packet = net.Receive(socket, 1000)?
+  println(net.Send(sender, net.SocketAddress(socket), binary, 1.seconds()))
+  packet = net.Receive(socket, 1.seconds())?
   println(packet.data == binary)
   println(packet.address == net.SocketAddress(sender))
-  println(match (net.Receive(socket, 10)) { _: IoError => true; _ => false })
+  println(match (net.Receive(socket, 10.millis())) { _: IoError => true; _ => false })
   println(net.SplitAddress("[::1]:80"))
   println(net.JoinAddress("::1", "80"))
   println(net.Resolve("127.0.0.1", s))
   partialServer = net.Listen("127.0.0.1:0", s, partial)?
-  partialConn = net.Dial(net.Address(partialServer), s, 1000)?
-  println(match (net.ReadLine(partialConn, 100)) { _: IoError => true; _ => false })
-  _ = net.Write(partialConn, encoding.Utf8("!"), 1000)?
-  println(net.ReadLine(partialConn, 1000))
-  mixedConn = net.Dial(net.Address(partialServer), s, 1000)?
-  println(match (net.ReadLine(mixedConn, 100)) { _: IoError => true; _ => false })
-  println(net.Read(mixedConn, 2, 1000))
-  _ = net.Write(mixedConn, encoding.Utf8("!"), 1000)?
-  println(net.ReadLine(mixedConn, 1000))
+  partialConn = net.Dial(net.Address(partialServer), s, 1.seconds())?
+  println(match (net.ReadLine(partialConn, 100.millis())) { _: IoError => true; _ => false })
+  _ = net.Write(partialConn, encoding.Utf8("!"), 1.seconds())?
+  println(net.ReadLine(partialConn, 1.seconds()))
+  mixedConn = net.Dial(net.Address(partialServer), s, 1.seconds())?
+  println(match (net.ReadLine(mixedConn, 100.millis())) { _: IoError => true; _ => false })
+  println(net.Read(mixedConn, 2, 1.seconds()))
+  _ = net.Write(mixedConn, encoding.Utf8("!"), 1.seconds())?
+  println(net.ReadLine(mixedConn, 1.seconds()))
   quietServer = net.Listen("127.0.0.1:0", s, quiet)?
   scope pending {
-    blocked = net.Dial(net.Address(quietServer), pending, 1000)?
-    println(match (net.Read(blocked, 8, 10)) { _: IoError => true; _ => false })
-    cancelAfter(pending, 10)
+    blocked = net.Dial(net.Address(quietServer), pending, 1.seconds())?
+    println(match (net.Read(blocked, 8, 10.millis())) { _: IoError => true; _ => false })
+    cancelAfter(pending, 10.millis())
     println(match (net.Read(blocked)) { _: Cancelled => true; _ => false })
   }
   scope waiting {
     blocked = net.Bind("127.0.0.1:0", waiting)?
-    cancelAfter(waiting, 10)
+    cancelAfter(waiting, 10.millis())
     println(match (net.Receive(blocked)) { _: Cancelled => true; _ => false })
   }
   brokenServer = net.Listen("127.0.0.1:0", s, broken)?
-  brokenConn = net.Dial(net.Address(brokenServer), s, 1000)?
-  println(match (net.Read(brokenConn, 8, 1000)) { _: net.Eof => true; _ => false })
+  brokenConn = net.Dial(net.Address(brokenServer), s, 1.seconds())?
+  println(match (net.Read(brokenConn, 8, 1.seconds())) { _: net.Eof => true; _ => false })
   attachedSocket = sharedSocket(s)?
-  println(net.Send(sender, net.SocketAddress(attachedSocket), [].toBytes(), 1000))
-  println(net.Receive(attachedSocket, 1000)?.data.isEmpty())
+  println(net.Send(sender, net.SocketAddress(attachedSocket), [].toBytes(), 1.seconds()))
+  println(net.Receive(attachedSocket, 1.seconds())?.data.isEmpty())
   attachedServer = sharedServer(s)?
   attachedConn = sharedConnection(s, net.Address(attachedServer))?
-  _ = net.Write(attachedConn, binary, 1000)?
-  println(net.Read(attachedConn, 4096, 1000) == binary)
+  _ = net.Write(attachedConn, binary, 1.seconds())?
+  println(net.Read(attachedConn, 4096, 1.seconds()) == binary)
   scope ended {
     cancelledSocket = net.Bind("127.0.0.1:0", ended)?
     cancel(ended)

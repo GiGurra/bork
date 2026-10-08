@@ -158,7 +158,7 @@ fn cancellation() uses io + state + clock: Ok | IoError | Cancelled {
     // Closing the unread pipe can beat the process kill at cancellation.
     // Ignore SIGPIPE so the child stays alive until the deadline kills it.
     child = process.Start(limited, "/bin/sh", ["-c", "trap '' PIPE; while true; do echo spam 2>/dev/null; done"], stdout: .Pipe)?
-    cancelAfter(limited, 100)
+    cancelAfter(limited, 100.millis())
     child.Wait()
   }
   println(match (flooded) {
@@ -167,14 +167,14 @@ fn cancellation() uses io + state + clock: Ok | IoError | Cancelled {
   })
   waiting = scope limited {
     child = process.Start(limited, "sleep", ["5"], stdout: .Pipe)?
-    cancelAfter(limited, 100)
+    cancelAfter(limited, 100.millis())
     show(child.Stdout().NextLine())
   }
   println(waiting)
   writing = scope limited {
     child = process.Start(limited, "sleep", ["5"], stdin: .Pipe)?
     big = encoding.Utf8("x".repeat(1048576))
-    cancelAfter(limited, 100)
+    cancelAfter(limited, 100.millis())
     match (child.Stdin().Write(big)) {
       stopped: Cancelled => stopped.reason
       _ => "unexpected"

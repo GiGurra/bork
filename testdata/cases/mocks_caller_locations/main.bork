@@ -20,5 +20,5 @@ test "task expectation keeps the task call site" {
 
 test "waitForWhere keeps its call site" {
   calls = mock Fetch(url) { url }
-  calls.waitForWhere(c => c.url == "missing", 1, ms: 0)
+  calls.waitForWhere(c => c.url == "missing", 1, timeout: 0.millis())
 }

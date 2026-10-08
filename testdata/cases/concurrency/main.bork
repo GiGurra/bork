@@ -1,6 +1,6 @@
 import "bork/time"
 fn slow(s: Scope, n: Int, ms: Int) uses clock + state: Int {
-  _ = time.Sleep(s, time.Nanoseconds((ms) * 1000000))
+  _ = time.Sleep(s, ((ms) * 1000000).nanos())
   n * n
 }
 
@@ -14,7 +14,7 @@ fn main() {
     a = fork(s, () => slow(s, 3, 30))
     b = fork(s, () => slow(s, 4, 10))
     fork(s, () => {
-      _ = time.Sleep(s, time.Nanoseconds((5) * 1000000))
+      _ = time.Sleep(s, ((5) * 1000000).nanos())
       println("forked task ran")
     })
     await(a) + await(b)

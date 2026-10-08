@@ -1,1 +1,1 @@
-main.bork:3:29: facts on instantiated field n cannot refer to sibling tag of type Duration, which holds a Go value that can change
+main.bork:3:29: facts on instantiated field n cannot refer to sibling tag of type NativeDuration, which holds a Go value that can change

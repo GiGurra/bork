@@ -1,7 +1,7 @@
 import "bork/time"
 
 fn ms(n: Int): time.Duration {
-  time.Nanoseconds(n * 1_000_000)
+  (n * 1_000_000).nanos()
 }
 
 fn describe(r: time.Instant | Closed | Cancelled): String {
@@ -31,6 +31,6 @@ fn main() {
     never = time.After(s, ms(60_000))
     never.close()
     println(describe(never.receive(s)))
-    println(withTimeout(s, 5, c => describe(time.After(c, ms(60_000)).receive(c))))
+    println(withTimeout(s, 5.millis(), c => describe(time.After(c, ms(60_000)).receive(c))))
   }
 }

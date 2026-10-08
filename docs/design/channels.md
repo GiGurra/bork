@@ -27,7 +27,7 @@ so that a late send cannot panic.
 
 | # | Finding | Severity |
 |---|---|---|
-| 1 | **Cancellation only reaches operations through the channel's owner scope.** An operation running in a narrower scope never sees that scope's cancellation. `scope s { ch = channel[Int](s, 0); withTimeout(s, 50, c => receive(ch)) }` hangs forever: the deadline cancels `c`, but `receive` waits on `s`, and `withTimeout` joins its work. Reproduced with a built binary. The same applies to `race` losers and to tasks of an owned child scope. | bug |
+| 1 | **Cancellation only reaches operations through the channel's owner scope.** An operation running in a narrower scope never sees that scope's cancellation. `scope s { ch = channel[Int](s, 0); withTimeout(s, 50.millis(), c => receive(ch)) }` hangs forever: the deadline cancels `c`, but `receive` waits on `s`, and `withTimeout` joins its work. Reproduced with a built binary. The same applies to `race` losers and to tasks of an owned child scope. | bug |
 | 2 | **`Closed` is not final.** Close and a blocked send race: a sender blocked on a full buffer when the channel closes picks at random between "space freed" and "closed", so it can still deliver after a receiver has already been given `Closed`. The value is then either lost (no one receives again) or received after `Closed`. Its `send` returned `Ok` either way. | bug (narrow race) |
 | 3 | **Cancellation is not decisive.** `receive` selects between data and `ctx.Done()` at random, so after cancellation it may keep returning values for a while; `send` likewise may still succeed. Callers cannot rely on "cancelled means stopped". | semantics |
 | 4 | **`received` hides cancellation.** It returns a partial list on `Cancelled`, which looks like a complete one. | semantics |
@@ -110,15 +110,15 @@ fn (ch: Channel[T]) toList[T](s: Scope) uses state: List[T] | Cancelled
 ```
 
 **Every blocking operation names the scope it may be cancelled by**
-(`send(s, x)`, `receive(s)`, `values(s)`), exactly like `delay(s, ms)` and
+(`send(s, x)`, `receive(s)`, `values(s)`), exactly like `delay(s, duration)` and
 `time.Sleep(s, d)`. This is the fix for finding 1: the operation waits on
 the caller's scope, not only on the channel's owner. It also gives up with
 `Cancelled` when the channel's owner scope is cancelled (which a caller's
 scope nested in the owner sees anyway). There is no implicit "current scope"
 in bork's runtime, and inventing one (goroutine-local state) would be a
 larger change than the problem warrants. The cost is one argument per call;
-the payoff is that `withTimeout(s, 50, c => ch.receive(c))` works, and the
-mistake `withTimeout(s, 50, c => ch.receive(s))` is visible in the code
+the payoff is that `withTimeout(s, 50.millis(), c => ch.receive(c))` works, and the
+mistake `withTimeout(s, 50.millis(), c => ch.receive(s))` is visible in the code
 (a later lint can flag a lambda that ignores its scope parameter while
 waiting on an outer one).
 
@@ -278,7 +278,7 @@ fn Tick(s: Scope, every: Duration where positive) uses clock + state: Channel[In
 
 **Two styles, one rule.** A deadline that bounds a whole piece of work
 (including tasks it starts, HTTP calls and `delay`s) belongs on the
-*scope*: `withTimeout(s, ms, c => ...)` or `cancelAfter(s, ms)`, after
+*scope*: `withTimeout(s, duration, c => ...)` or `cancelAfter(s, duration)`, after
 which every select and channel operation with that scope gives `Cancelled`
 on its own, with no arm needed. A timeout that is *part of the
 conversation* (wait for a reply for 200 ms, then resend; tick every second;
@@ -287,7 +287,7 @@ give up waiting on one source but keep the others) is a `time.After` or
 
 ```bork fragment
 scope s {
-  cancelAfter(s, 5000)                  // the whole exchange: implicit Cancelled
+  cancelAfter(s, 5000.millis())                  // the whole exchange: implicit Cancelled
   replyBy = time.After(s, millis(200))  // this request: an arm
   match (select {
     r = replies.receive(s) => r          // Reply | Closed

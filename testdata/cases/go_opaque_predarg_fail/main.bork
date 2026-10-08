@@ -1,4 +1,4 @@
-type Duration = go "time.Duration"
+type NativeDuration = go "time.Duration"
 pred withOpaque[T](x: Int, p: T) { true }
-fn Use(x: Int where withOpaque(d), d: Duration) {}
+fn Use(x: Int where withOpaque(d), d: NativeDuration) {}
 fn main() {}

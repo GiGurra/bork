@@ -46,7 +46,7 @@ fn main() {
   match (parsed) {
     instant: time.Instant => {
       println(time.Format(time.Read(time.FixedClock(instant)), time.RFC3339()))
-      next = time.Add(instant, time.Nanoseconds(2000000000))
+      next = time.Add(instant, 2000000000.nanos())
       match (next) {
         end: time.Instant => println(time.Between(instant, end))
         error: OutOfRange => println(error)
@@ -54,10 +54,10 @@ fn main() {
     }
     error: ParseError => println(error)
   }
-  println(time.FormatDuration(time.Nanoseconds(1500000000)))
+  println(time.FormatDuration(1500000000.nanos()))
   println(time.ParseDuration("2h3m"))
-  println(time.Milliseconds(9223372036855))
-  println(time.Add(time.Instant { unixNanos: 9223372036854775807 }, time.Nanoseconds(1)))
+  println(9223372036855.millis())
+  println(time.Add(time.Instant { unixNanos: 9223372036854775807 }, 1.nanos()))
   println(time.Between(time.Instant { unixNanos: -1 }, time.Instant { unixNanos: 9223372036854775807 }))
   match (time.Parse("2500-01-01T00:00:00Z", time.RFC3339())) {
     error: ParseError => println(error.message)
@@ -74,6 +74,6 @@ fn main() {
     result: Config | env.Missing | jsoncodec.JsonError | codec.DecodeError = env.LoadJson("BORK_ENV_JSON_TEST")
     println(result)
     cancel(s)
-    println(time.Sleep(s, time.Nanoseconds(1000000)))
+    println(time.Sleep(s, 1000000.nanos()))
   }
 }

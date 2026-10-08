@@ -50,7 +50,7 @@ fn binary(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope) uses net 
   _ = http.Write(writer, bytes)?
 }
 fn wait(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope) uses clock + state: http.StreamOutcome {
-  delay(rs, 100000)?
+  delay(rs, 100000.millis())?
 }
 fn duplex(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope) uses net + clock + state: http.StreamOutcome {
   for {
@@ -223,13 +223,13 @@ fn main() {
       active = server(http.ListenStreamRoutes("127.0.0.1:0", serving, [
         .{ pattern: "/read", handler: (req, writer, rs) => blockedRead(req, writer, rs, readStopped) },
         .{ pattern: "/flood", handler: (req, writer, rs) => flood(req, writer, rs, writeStopped) },
-        ], drainTimeoutMs: 1000))
+        ], drainTimeout: 1000.millis()))
       _ = hold(http.Address(active), "/read", app)
       _ = hold(http.Address(active), "/flood", app)
     }
     println("cancel blocked read/write", current(readStopped), current(writeStopped))
-    timed = server(http.ListenStream("127.0.0.1:0", app, wait, requestTimeoutMs: 50))
-    match (http.Get("http://" + http.Address(timed), app, timeoutMs: 1000)) {
+    timed = server(http.ListenStream("127.0.0.1:0", app, wait, requestTimeout: 50.millis()))
+    match (http.Get("http://" + http.Address(timed), app, timeout: 1000.millis())) {
       value: http.Response => println("server timeout", value.status)
       error => panic(toString(error))
     }

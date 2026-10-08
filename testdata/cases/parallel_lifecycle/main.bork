@@ -14,7 +14,7 @@ fn risky(child: Scope, x: Int, started: Channel[Int], finished: Atom[Bool]) uses
   } else {
     sent = started.send(child, 1)
     assertEqual(sent, {})
-    waited = delay(child, 10000)
+    waited = delay(child, 10000.millis())
     assertEqual(update(finished, old => true), true)
     match (waited) {
       _: Ok => x
@@ -56,7 +56,7 @@ test "cancelling the callback scope returns cancellation, not partial results" {
 
 fn waiting(child: Scope, x: Int, started: Channel[Int]) uses clock + state: Int | Cancelled {
   match (started.send(child, x)) { _: Ok => {}; c: Cancelled => return c; _ => panic("start channel closed") }
-  delay(child, 10000)?
+  delay(child, 10000.millis())?
   x
 }
 

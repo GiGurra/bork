@@ -21,6 +21,7 @@ use `prelude/<filename>` in diagnostics and `bork describe`.
 | [classes.bork](classes.bork) | `Eq`, `Show`, `Ord`, and primitive ordering instances |
 | [gostruct.bork](gostruct.bork) | `GoStruct` and its source derive template (imports `bork/shape`) |
 | [fanin.bork](fanin.bork) | Ordered task fan-in, races, and cooperative timeouts |
+| [duration.bork](duration.bork) | Duration, unit constructors, saturating arithmetic and readable text |
 | [concurrency.bork](concurrency.bork) | Tasks, cancellation, atoms, channels, and cancellable delay |
 | [select.bork](select.bork) | Internal helpers the `select` expression is lowered to |
 | [scopes.bork](scopes.bork) | Resource attachment, scope policies, and finalizers |
@@ -48,7 +49,7 @@ Task lists support `awaitAll()` (ordered), `awaitFirst(s)` (first completion),
 and `awaitAllUntil[Success, Failure](s)` (first observed failure). Existing
 tasks remain in their original scopes; `race(s, [child => work(child)])`
 starts its own child tasks, cancels losers, and joins all before returning.
-`withTimeout(s, milliseconds, child => work(child))` includes forked tasks
+`withTimeout(s, duration, child => work(child))` includes forked tasks
 in its cooperative deadline; use `withTimeoutDo` for an Ok callback.
 A successful timeout stops its timer, keeping returned resources usable until
 the parent closes. Race resources follow the cancelled race scope.

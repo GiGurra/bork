@@ -1,5 +1,5 @@
 fn escapedTimeout() uses clock + state: Channel[Int] | Cancelled {
-  scope s { withTimeout(s, 1000000, child => channel[Int](child, 1)) }
+  scope s { withTimeout(s, 1000000.millis(), child => channel[Int](child, 1)) }
 }
 fn escapedSelection(wait: Scope) uses state: Channel[Int] | Closed | Cancelled {
   scope source {

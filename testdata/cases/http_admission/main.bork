@@ -20,7 +20,7 @@ fn load(server: http.Server) uses state: http.AdmissionLoad {
 fn waitQueued(s: Scope, server: http.Server, count: Int, attempts: Int = 5000) uses clock + state {
   if (load(server).queued == count) {} else {
     if (attempts == 0) { panic("queue count did not settle") }
-    _ = time.Sleep(s, time.Nanoseconds((1) * 1000000))
+    _ = time.Sleep(s, ((1) * 1000000).nanos())
     waitQueued(s, server, count, attempts - 1)
   }
 }
@@ -28,7 +28,7 @@ fn waitIdle(s: Scope, server: http.Server, attempts: Int = 5000) uses clock + st
   snapshot = load(server)
   if (snapshot.inFlight == 0 && snapshot.queued == 0) {} else {
     if (attempts == 0) { panic("admission permits did not settle") }
-    _ = time.Sleep(s, time.Nanoseconds((1) * 1000000))
+    _ = time.Sleep(s, ((1) * 1000000).nanos())
     waitIdle(s, server, attempts - 1)
   }
 }
@@ -116,7 +116,7 @@ fn main() {
       _ = permits.receive(app)
       http.Text(200, request.path)
     }
-    policy = http.Admission { maxInFlight: 1, maxQueued: 2, queueTimeoutMs: 5000, retryAfterMs: 1 }
+    policy = http.Admission { maxInFlight: 1, maxQueued: 2, queueTimeout: 5000.millis(), retryAfter: 1.millis() }
     server = mustServer(http.Listen("127.0.0.1:0", app, handler, admission: Option.Some(policy)))
     url = s"http://${http.Address(server)}"
     first = fork(app, () => http.Get(s"$url/first", app))
@@ -151,7 +151,7 @@ fn main() {
     entered = channel[Bool](app, 1)
     permits = channel[Bool](app, 0)
     handler: http.Handler = (request, s) => { _ = entered.send(app, true); _ = permits.receive(app); http.Text(200, "ok") }
-    server = mustServer(http.Listen("127.0.0.1:0", app, handler, admission: Option.Some(http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 5, status: 429 })))
+    server = mustServer(http.Listen("127.0.0.1:0", app, handler, admission: Option.Some(http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeout: 5.millis(), status: 429 })))
     url = s"http://${http.Address(server)}"
     active = fork(app, () => http.Get(url, app))
     _ = entered.receive(app)
@@ -160,8 +160,8 @@ fn main() {
     _ = permits.send(app, true)
     println(status(await(active)))
   }
-  immediate(http.Admission { maxInFlight: 1, maxQueued: 0, queueTimeoutMs: 5000 })
-  immediate(http.Admission { maxInFlight: 1, maxQueued: 10, queueTimeoutMs: 0 })
+  immediate(http.Admission { maxInFlight: 1, maxQueued: 0, queueTimeout: 5000.millis() })
+  immediate(http.Admission { maxInFlight: 1, maxQueued: 10, queueTimeout: 0.millis() })
   scope app {
     server = mustServer(http.ListenRoutes("127.0.0.1:0", app, [http.Route {
       pattern: "POST /body", handler: (request, s) => http.Text(200, request.body),
@@ -177,9 +177,9 @@ fn main() {
     owner = openScope(app)
     server = mustServer(http.Listen("127.0.0.1:0", owner.scope, (request, s) => {
       _ = entered.send(app, true)
-      _ = delay(s, 5000)
+      _ = delay(s, 5000.millis())
       http.Text(200, "stopped")
-      }, admission: Option.Some(http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 5000 })))
+      }, admission: Option.Some(http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeout: 5000.millis() })))
     url = s"http://${http.Address(server)}"
     active = fork(app, () => http.Get(url, app))
     _ = entered.receive(app)
@@ -205,7 +205,7 @@ fn main() {
     server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
       if (request.path == "/held") { _ = entered.send(app, true); _ = permits.receive(app) }
       http.Text(200, "ok")
-      }, admission: Option.Some(http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 5000 })))
+      }, admission: Option.Some(http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeout: 5000.millis() })))
     raceTransfer(server, entered, permits, app, 30)
     println("cancel transfer race", load(server))
   }
@@ -217,7 +217,7 @@ fn main() {
       _ = permits.receive(app)
       http.Text(200, "ok")
       }, admission: Option.Some(http.Admission {
-        maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 1000, retryAfterMs: 9223372036854,
+        maxInFlight: 1, maxQueued: 1, queueTimeout: 1000.millis(), retryAfter: 9223372036854.millis(),
     })))
     url = s"http://${http.Address(server)}"
     active = fork(app, () => http.Get(url, app))

@@ -5,8 +5,8 @@ import "bork/signal"
 // cancelled, not when the latest attachment's scope ends.
 
 fn echo(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError | Cancelled {
-  match (net.ReadLine(conn, 1000)) {
-    line: String => { _ = net.WriteLine(conn, line, 1000)?; echo(conn, s) }
+  match (net.ReadLine(conn, 1.seconds())) {
+    line: String => { _ = net.WriteLine(conn, line, 1.seconds())?; echo(conn, s) }
     _: net.Eof => checkpoint(s)
     stopped: Cancelled => stopped
     error: IoError | ParseError => IoError { path: "echo", message: toString(error) }
@@ -14,8 +14,8 @@ fn echo(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError |
 }
 
 fn roundTrip(conn: net.Connection, text: String) uses net + state + clock: String {
-  match (net.WriteLine(conn, text, 1000)) {
-    _: Int => match (net.ReadLine(conn, 1000)) {
+  match (net.WriteLine(conn, text, 1.seconds())) {
+    _: Int => match (net.ReadLine(conn, 1.seconds())) {
       line: String => line
       _ => "read failed"
     }
@@ -25,7 +25,7 @@ fn roundTrip(conn: net.Connection, text: String) uses net + state + clock: Strin
 
 fn run(app: Scope) uses io + net + state + clock: Ok | IoError | Cancelled {
   server = net.Listen("127.0.0.1:0", app, echo)?
-  conn = net.Dial(net.Address(server), app, 1000)?
+  conn = net.Dial(net.Address(server), app, 1.seconds())?
   // A shorter scope attaches it and ends: app still owns it.
   scope short {
     shared = attach(conn, short)
@@ -36,7 +36,7 @@ fn run(app: Scope) uses io + net + state + clock: Ok | IoError | Cancelled {
   // a scope that is cancelled while an attachment's scope is not.
   scope outer {
     kept = scope inner {
-      opened = net.Dial(net.Address(server), inner, 1000)?
+      opened = net.Dial(net.Address(server), inner, 1.seconds())?
       a = attach(opened, outer)
       cancel(inner)
       println(roundTrip(opened, "inner cancelled"))

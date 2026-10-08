@@ -148,7 +148,7 @@ test "a mock in a scope's body lasts until the scope's tasks are done" {
   scope s {
     mock Fetch(url) { s"fake $url" }
     fork(s, () => {
-      _ = time.Sleep(s, time.Nanoseconds((30) * 1000000))
+      _ = time.Sleep(s, ((30) * 1000000).nanos())
       rLate = Fetch("late")
       _ = update(results, rs => rs.append(rLate))
     })
@@ -166,11 +166,11 @@ test "a task that outlives a block gets the mock from outside it" {
       fork(s, () => {
         rNow = Fetch("now")
         _ = update(results, rs => rs.append(rNow))
-        _ = time.Sleep(s, time.Nanoseconds((30) * 1000000))
+        _ = time.Sleep(s, ((30) * 1000000).nanos())
         rLater = Fetch("later")
         _ = update(results, rs => rs.append(rLater))
       })
-      _ = time.Sleep(s, time.Nanoseconds((10) * 1000000))
+      _ = time.Sleep(s, ((10) * 1000000).nanos())
     }
   }
   assertEqual(current(results), ["inner", "outer"])

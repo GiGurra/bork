@@ -1,7 +1,8 @@
 // Package time provides immutable instants, durations, and injectable clocks.
 // Instants use signed Unix nanoseconds (1677-09-21 through 2262-04-11).
 type Instant = { unixNanos: Int }
-type Duration = { nanos: Int }
+// Re-export the prelude span type.
+type Duration = Duration
 type Clock = { now: () uses clock => Instant }
 
 // Now reads the system clock. Use Read with an injected Clock in testable code.
@@ -12,17 +13,6 @@ fn Now() uses clock: Instant unsafe go {
 fn SystemClock(): Clock { Clock { now: () => Now() } }
 fn FixedClock(instant: Instant): Clock { Clock { now: () => instant } }
 fn Read(clock: Clock) uses clock: Instant { clock.now() }
-fn Nanoseconds(n: Int): Duration { Duration { nanos: n } }
-
-// Milliseconds reports OutOfRange instead of wrapping a duration.
-fn Milliseconds(n: Int): Duration | OutOfRange unsafe go {
-  import "strconv"
-  if n > 9223372036854 || n < -9223372036854 {
-    return OutOfRange{value: strconv.FormatInt(n, 10), target: "Duration"}
-  }
-  return Duration{nanos: n * 1000000}
-}
-
 fn ParseDuration(text: String): Duration | ParseError unsafe go {
   import "time"
   d, err := time.ParseDuration(text)

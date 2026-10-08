@@ -62,8 +62,8 @@ fn signup(body: String): http.Response {
 // slow does work that takes longer than the request's deadline allows;
 // the request scope is cancelled, and delay gives Cancelled.
 fn slow(rs: Scope) uses clock + state: http.Response {
-  cancelAfter(rs, 20)
-  match (delay(rs, 2000)) {
+  cancelAfter(rs, 20.millis())
+  match (delay(rs, 2000.millis())) {
     c: Cancelled => http.Text(503, s"gave up: ${c.reason}")
     _ => http.Text(200, "done")
   }

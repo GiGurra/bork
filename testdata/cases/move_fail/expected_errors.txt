@@ -13,7 +13,7 @@ main.bork:114:16: w cannot be moved: it is borrowed (a parameter, a value from a
 main.bork:116:16: z cannot be moved: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; attach it instead to keep it open until app closes too
 main.bork:123:16: q cannot be moved: the task of inner started at line 121 may still use it; attach it instead
 main.bork:128:16: r cannot be moved: the task of b.scope started at line 126 may still use it; attach it instead
-main.bork:129:7: setScopePolicy cannot be called directly; give policies where the scope starts: scope s with taskTimeout(100) { ... }, or openScope(parent, [taskTimeout(100)])
+main.bork:129:7: setScopePolicy cannot be called directly; give policies where the scope starts: scope s with taskTimeout(100.millis()) { ... }, or openScope(parent, [taskTimeout(100.millis())])
 main.bork:134:21: t may have been moved to scope app at line 131; to keep using it here, attach it instead of moving it
 main.bork:137:16: u cannot be moved: the async binding of v at line 136 may still use it; attach it instead
 main.bork:141:16: o2 cannot be moved: onClose, given scope s, at line 140 may still use it; attach it instead

@@ -8,7 +8,7 @@ fn main() {
   }
   println("after the blocking scope")
   // A timeout: a finalizer that takes longer is left behind.
-  scope s with cleanupTimeout(10) {
+  scope s with cleanupTimeout(10.millis()) {
     onClose(s, () => println("quick finalizer done"))
     onClose(s, () => {
       stubborn(200)
@@ -17,13 +17,13 @@ fn main() {
   }
   println("after the scope with a timeout")
   // A policy is a value, and a scope can have several.
-  policy = ScopePolicy.CleanupTimeout { ms: 50 }
-  scope s with policy, taskTimeout(1000) {
+  policy = ScopePolicy.CleanupTimeout { duration: 50.millis() }
+  scope s with policy, taskTimeout(1000.millis()) {
     onClose(s, () => println("finalizer within the limit"))
   }
   // A task timeout: a task that ignores cancellation is orphaned, and
   // the scope's finalizers still run.
-  scope s with taskTimeout(10) {
+  scope s with taskTimeout(10.millis()) {
     onClose(s, () => println("the scope's finalizer still runs"))
     fork(s, () => {
       stubborn(200)

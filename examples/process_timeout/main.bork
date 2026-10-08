@@ -5,7 +5,7 @@ import "bork/time"
 
 fn run(s: Scope) uses io + state + clock: Ok | IoError | Cancelled | Closed {
   slow = scope limited {
-    cancelAfter(limited, 200)
+    cancelAfter(limited, 200.millis())
     process.Run(limited, "sleep", ["10"])
   }
   println(match (slow) {
