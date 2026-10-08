@@ -170,7 +170,7 @@ func TestCodecSourceTupleEncodeGenericAndComptime(t *testing.T) {
 	source := `import "bork/codec"
 import "bork/json"
 use codec.Defaults
-fn pair[A: codec.Encode, B: codec.Encode](left: A, right: B): String { json.Encode((left, right)) }
+fn pair[A: codec.Encode, B: codec.Encode](left: A, right: B): String | json.JsonError { json.Encode((left, right)) }
 encoded: codec.Value = comptime { codec.encode((1, "compile")) }
 fn main() {
   println(pair(2, "runtime"))

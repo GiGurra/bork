@@ -158,7 +158,7 @@ import "bork/json"
 use codec.Defaults
 type Person = { name: String, age: Int } derive (codec.Encode, codec.Decode)
 fn main() {
-  text = json.Encode(Person { name: "Ada", age: 37 })
+  text = match (json.Encode(Person { name: "Ada", age: 37 })) { text: String => text; error: json.JsonError => { eprintln(error.message); return } }
   println(text)
   decoded: Person | json.JsonError | codec.DecodeError = json.Decode(text)
   println(decoded)

@@ -2,11 +2,12 @@ import codec "bork/codec"
 
 import "bork/encoding"
 import "bork/json"
+import "bork/math"
 import "bork/fs"
 use codec.Defaults
 
 type Item = { name: String, count: Int } derive (codec.Encode)
-fn nextText(reader: json.Reader) uses io: String {
+fn nextText(reader: json.Reader) uses io: String | json.JsonError {
   match (json.Next(reader)) {
     Option.Some(value) => json.Render(value)
     Option.None => "EOF"
@@ -27,6 +28,9 @@ fn exercise(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied 
   path = fs.Join([root, "lines.jsonl"])
   scope writing {
     writer = json.CreateLines(path, writing)?
+    for (value in [math.NaN(), math.Inf(), -math.Inf()]) {
+      println(json.Write(writer, value) is json.JsonError)
+    }
     json.Write(writer, Item { name: "one\ntwo", count: 2 })?
     json.Write(writer, codec.Value.Null)?
     json.Write(writer, codec.Value.Number { text: " 3\n " })?

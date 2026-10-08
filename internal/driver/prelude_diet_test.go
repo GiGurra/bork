@@ -15,7 +15,7 @@ func TestPreludeDiet(t *testing.T) {
 import "bork/json"
 use codec.Defaults
 type Config = { count: Int } derive (codec.Decode, codec.Encode)
-fn main() { println(json.Decode[Config](json.Encode(Config { count: 2 })), json.Render(codec.Value.Null), json.Parse("null")) }`, ""},
+fn main() { println(json.Decode[Config](match (json.Encode(Config { count: 2 })) { text: String => text; _: json.JsonError => "" }), json.Render(codec.Value.Null), json.Parse("null")) }`, ""},
 		{"byte conversion methods", `import "bork/encoding"
 fn main() { println([].toBytes(), [toByte(65)].toBytes().toList(), encoding.ParseUtf8(encoding.Utf8("hé"))) }`, ""},
 		{"user byte functions", `fn bytes(n: Int): Int { n }

@@ -110,7 +110,7 @@ All listener functions return `Server | IoError`. Their final options share thes
 | `WaitAny(servers: List[Server]) uses net: Ok \| IoError` | Wait until any listener stops or its scope is cancelled. |
 | `WaitAll(servers: List[Server]) uses net: Ok \| IoError` | Wait for every listener to stop or its scope to be cancelled. |
 | `Text(status: Status, body: String): Response` | Pure; plain-text Content-Type. |
-| `JsonReply(status: Status, body: String): Response` | Pure; JSON Content-Type; body is already encoded text. |
+| `JsonReply(status: Status, body: String \| json.JsonError): Response` | Pure; rendered JSON gets JSON Content-Type; an encoding error produces a plain-text 500 with a clear message. |
 | `Segments(path: String): List[String]` | Pure; split a path into nonempty components. |
 
 | Type | Fields |
