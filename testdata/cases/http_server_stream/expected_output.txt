@@ -1,4 +1,5 @@
 raw true
+retained closed cancelled true
 sse headers 200 Option.Some("text/event-stream")
 sse first 646174613a2066697273740a0a
 sse second 646174613a207365636f6e640a0a

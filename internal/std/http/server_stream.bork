@@ -230,7 +230,6 @@ fn serveStream(exchange: serverExchange, listener: Scope, handler: StreamHandler
   if r.Context().Err() != nil { return }
   switch outcome.(type) {
   case DeadlineExceeded: http.Error(w, "request deadline exceeded", 504)
-  case Cancelled: return
   default: http.Error(w, "stream handler failed", 500)
   }
 }

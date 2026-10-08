@@ -52,6 +52,37 @@ fn binary(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope) uses net 
 fn wait(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope) uses clock + state: http.StreamOutcome {
   delay(rs, 100000)?
 }
+fn duplex(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope) uses net + clock + state: http.StreamOutcome {
+  for {
+    match (http.Read(req.body, 2)) {
+      bytes: Bytes => {
+        _ = http.Write(writer, bytes)?
+        http.Flush(writer)?
+      }
+      _: http.Eof => break
+      error: http.BodyTooLarge => return error
+      error: http.DeadlineExceeded => return error
+      error: Cancelled => return error
+      error: IoError => return error
+    }
+  }
+}
+type Retained = { reader: Option[http.BodyReader], writer: Option[http.BodyWriter] }
+fn retain(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope, app: Scope in held, held: Channel[Retained]) uses net + clock + state: http.StreamOutcome {
+  reader = attach(req.body, app)
+  output = attach(writer, app)
+  match (held.send(app, Retained { reader: .Some(reader), writer: .Some(output) })) { _: Ok => {}, error => panic(toString(error)) }
+  http.BeginResponse(writer, 204, {:})?
+}
+fn failed(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope) uses net + clock + state: http.StreamOutcome {
+  if (req.path == "/cancelled") { return Cancelled { reason: "application cancelled" } }
+  if (req.path == "/deadline") { return http.DeadlineExceeded { message: "application deadline" } }
+  if (req.path == "/committed") {
+    _ = http.Write(writer, encoding.Utf8("partial"))?
+    http.Flush(writer)?
+  }
+  IoError { path: req.path, message: "application failure" }
+}
 fn rawChecks(addr: String) uses io + net + clock: Bool unsafe go {
   import "bufio"
   import "bytes"
@@ -76,6 +107,32 @@ fn rawChecks(addr: String) uses io + net + clock: Bool unsafe go {
   body, err := io.ReadAll(response.Body)
   response.Body.Close()
   if err != nil || !bytes.Equal(body, []byte{0,255,97,98}) { panic("binary stream changed") }
+  for _, path := range []string{"/cancelled", "/failed", "/deadline", "/committed"} {
+    response, err := client.Get("http://"+addr+path)
+    if err != nil { panic(err) }
+    body, err := io.ReadAll(response.Body)
+    response.Body.Close()
+    if path == "/committed" {
+      if response.StatusCode != 200 || string(body) != "partial" || err == nil { panic("committed failure did not abort response") }
+    } else {
+      expected := 500
+      if path == "/deadline" { expected = 504 }
+      if response.StatusCode != expected || err != nil { panic("uncommitted failure status") }
+    }
+  }
+  duplex, err := net.DialTimeout("tcp", addr, time.Second)
+  if err != nil { panic(err) }
+  defer duplex.Close()
+  duplex.SetDeadline(time.Now().Add(time.Second))
+  fmt.Fprintf(duplex, "POST /duplex HTTP/1.1\r\nHost: %s\r\nContent-Length: 4\r\n\r\nab", addr)
+  streamed, err := http.ReadResponse(bufio.NewReader(duplex), nil)
+  if err != nil { panic(err) }
+  prefix := make([]byte, 2)
+  if _, err := io.ReadFull(streamed.Body, prefix); err != nil || string(prefix) != "ab" { panic("full-duplex prefix") }
+  fmt.Fprint(duplex, "cd")
+  suffix, err := io.ReadAll(streamed.Body)
+  streamed.Body.Close()
+  if err != nil || string(suffix) != "cd" { panic("full-duplex remainder") }
   // Reject without waiting for the declared remainder of an oversized body.
   conn, err := net.DialTimeout("tcp", addr, time.Second)
   if err != nil { panic(err) }
@@ -134,13 +191,26 @@ fn flood(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope, stopped: A
 }
 fn main() {
   scope app {
+    held = channel[Retained](app, 1)
     gate = channel[Bool](app, 0)
     listener = server(http.ListenStreamRoutes("127.0.0.1:0", app, [
       .{ pattern: "POST /count/{id}", handler: count },
+      .{ pattern: "POST /duplex", handler: duplex },
+      .{ pattern: "GET /retain", handler: (req, writer, rs) => retain(req, writer, rs, app, held) },
+      .{ pattern: "GET /cancelled", handler: failed },
+      .{ pattern: "GET /failed", handler: failed },
+      .{ pattern: "GET /deadline", handler: failed },
+      .{ pattern: "GET /committed", handler: failed },
       .{ pattern: "GET /binary", handler: binary },
       .{ pattern: "GET /events", handler: (req, writer, rs) => events(req, writer, rs, gate) },
       ], maxBodyBytes: 4))
     println("raw", rawChecks(http.Address(listener)))
+    retained = response(http.GetStream("http://" + http.Address(listener) + "/retain", app))
+    _ = http.Read(retained.body)
+    stored = match (held.receive(app)) { value: Retained => value, error => panic(toString(error)) }
+    retainedReader = match (stored.reader) { .Some(value) => value, .None => panic("missing retained reader") }
+    retainedWriter = match (stored.writer) { .Some(value) => value, .None => panic("missing retained writer") }
+    println("retained closed", kind(http.Read(retainedReader)), match (http.Write(retainedWriter, encoding.Utf8("late"))) { _: Cancelled => true, _ => false })
     stream = response(http.GetStream("http://" + http.Address(listener) + "/events", app))
     println("sse headers", stream.status, http.HeaderOf(stream.headers, "Content-Type"))
     println("sse first", kind(http.Read(stream.body)))
