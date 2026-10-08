@@ -2,20 +2,27 @@
 // at the signed 64-bit limits. Use 0.seconds() for a zero duration.
 type Duration = { nanos: Int }
 
+// nanos converts an integer to a duration, saturating at the signed limits.
 fn (n: Int) nanos(): Duration { Duration { nanos: n } }
+// micros converts an integer to a duration, saturating at the signed limits.
 fn (n: Int) micros(): Duration { n.nanos().multiply(1000) }
+// millis converts an integer to a duration, saturating at the signed limits.
 fn (n: Int) millis(): Duration { n.nanos().multiply(1000000) }
+// seconds converts an integer to a duration, saturating at the signed limits.
 fn (n: Int) seconds(): Duration { n.nanos().multiply(1000000000) }
+// minutes converts an integer to a duration, saturating at the signed limits.
 fn (n: Int) minutes(): Duration { n.nanos().multiply(60000000000) }
+// hours converts an integer to a duration, saturating at the signed limits.
 fn (n: Int) hours(): Duration { n.nanos().multiply(3600000000000) }
 
-// add and subtract saturate instead of wrapping at the duration limits.
+// add sums two durations, saturating at the signed limits.
 fn (duration: Duration) add(other: Duration): Duration unsafe go {
   a, b := duration.nanos, other.nanos
   if b > 0 && a > 9223372036854775807-b { return Duration{nanos: 9223372036854775807} }
   if b < 0 && a < -9223372036854775808-b { return Duration{nanos: -9223372036854775808} }
   return Duration{nanos: a+b}
 }
+// subtract computes the difference, saturating at the signed limits.
 fn (duration: Duration) subtract(other: Duration): Duration unsafe go {
   a, b := duration.nanos, other.nanos
   if b < 0 && a > 9223372036854775807+b { return Duration{nanos: 9223372036854775807} }
@@ -35,13 +42,16 @@ fn (duration: Duration) multiply(factor: Int): Duration unsafe go {
   }
   return Duration{nanos: a*b}
 }
+// ShowDuration formats durations with readable time units.
 instance ShowDuration: Show[Duration] {
   fn show(value: Duration): String { durationText(value) }
 }
+// OrdDuration compares signed durations by their nanosecond counts.
 instance OrdDuration: Ord[Duration] {
   fn compare(a: Duration, b: Duration): Int { if (a.nanos < b.nanos) { -1 } else if (a.nanos > b.nanos) { 1 } else { 0 } }
 }
 
+// durationText formats a duration with the Go time formatter.
 fn durationText(value: Duration): String unsafe go {
   import "time"
   return time.Duration(value.nanos).String()

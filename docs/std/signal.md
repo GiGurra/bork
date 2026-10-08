@@ -70,7 +70,6 @@ owner closes.
 
 ```bork
 import "bork/signal"
-import "bork/time"
 
 fn configure(app: Scope) uses io + state: signal.Policy | signal.Error {
   signal.Configure(app,

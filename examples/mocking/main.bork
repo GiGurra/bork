@@ -74,7 +74,7 @@ test "an upstream answering 503 is down, since the time it was checked" {
   mock time.Now() { noon }
   gets = mock http.Get(url, s, timeout, maxBodyBytes) { http.Overloaded { response: http.Text(503, ""), retryAfter: Option.None } }
   assertEqual(checkAll(["https://a.example"]), [Health.Down { url: "https://a.example", status: 503, at: noon }])
-  assertEqual(gets.calls(), ["http.Get(\"https://a.example\", <scope>, 2000, 16777216)"])
+  assertEqual(gets.calls(), ["http.Get(\"https://a.example\", <scope>, 2s, 16777216)"])
 }
 
 test "every task sees the test's mocks" {

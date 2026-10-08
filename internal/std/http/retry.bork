@@ -53,8 +53,12 @@ fn OpenRetryBudget(s: Scope, capacity: RetryCount, refill: Refill, clock: Option
 fn drawRetryJitter(ceiling: Duration) uses random: Duration {
   if (ceiling.nanos == 9223372036854775807) {
     // Map the negative half of Int to 0..MaxInt64 without overflowing.
-    drawn = rand.IntBetween(-9223372036854775808, 0)
-    (drawn + 9223372036854775807 + 1).nanos()
+    lower = -9223372036854775808
+    upper = 0
+    if (rand.Above(upper, lower)) {
+      drawn = rand.IntBetween(lower, upper)
+      (drawn + 9223372036854775807 + 1).nanos()
+    } else { 0.nanos() }
   } else {
     upper = ceiling.nanos + 1
     if (rand.Above(upper, 0)) { rand.IntBetween(0, upper).nanos() } else { 0.nanos() }

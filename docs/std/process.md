@@ -247,7 +247,6 @@ is killed and Run gives `Cancelled` with the scope's reason:
 
 ```bork
 import "bork/process"
-import "bork/time"
 
 fn bounded() uses io + state + clock: process.Result | IoError | Cancelled {
   scope limited {

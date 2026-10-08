@@ -327,7 +327,7 @@ import "bork/http"
 
 fn main() {
   scope app {
-    limit = http.Admission { maxInFlight: 64, maxQueued: 32, queueTimeout: 25.millis(), retryAfter: 100.millis()}
+    limit = http.Admission { maxInFlight: 64, maxQueued: 32, queueTimeout: 25.millis(), retryAfter: 100.millis() }
     match (http.Listen("127.0.0.1:0", app, (req, rs) => http.Text(200, "ok"), admission: .Some(limit))) {
       server: http.Server => println(http.AdmissionState(server))
       error: IoError => eprintln(error.message)

@@ -10,9 +10,9 @@ import "bork/net"
 
 // serve echoes lines back until the client closes, then reports it.
 fn serve(conn: net.Connection, s: Scope, closed: Channel[String]) uses net + state + clock: Ok | IoError | Cancelled {
-  match (net.ReadLine(conn, 1000)) {
+  match (net.ReadLine(conn, 1.seconds())) {
     line: String => {
-      _ = net.WriteLine(conn, "echo " + line, 1000)?
+      _ = net.WriteLine(conn, "echo " + line, 1.seconds())?
       serve(conn, s, closed)
     }
     _: net.Eof => {
@@ -29,15 +29,15 @@ fn serve(conn: net.Connection, s: Scope, closed: Channel[String]) uses net + sta
 }
 
 fn roundTrip(conn: net.Connection, line: String) uses net + state + clock: String | IoError | Cancelled {
-  _ = net.WriteLine(conn, line, 1000)?
-  match (net.ReadLine(conn, 1000)) {
+  _ = net.WriteLine(conn, line, 1.seconds())?
+  match (net.ReadLine(conn, 1.seconds())) {
     reply: String => reply
     other: net.Eof | IoError | ParseError | Cancelled => toString(other)
   }
 }
 
 fn handOff(n: Int, address: String, app: Scope, closed: Channel[String]) uses io + net + state + clock: Ok | IoError | Cancelled {
-  conn = net.Dial(address, app, 1000)?
+  conn = net.Dial(address, app, 1.seconds())?
   println(roundTrip(conn, s"warm-up ${n}")?)
   scope session {
     mine = move(conn, session)

@@ -9,8 +9,8 @@ import "bork/net"
 fn demo(s: Scope) uses io + net + state + clock: Ok | IoError | Cancelled {
   receiver = net.Bind("127.0.0.1:0", s)?
   sender = net.Bind("127.0.0.1:0", s)?
-  _ = net.Send(sender, net.SocketAddress(receiver), encoding.Utf8("hello"), 1000)?
-  packet = net.Receive(receiver, 1000)?
+  _ = net.Send(sender, net.SocketAddress(receiver), encoding.Utf8("hello"), 1.seconds())?
+  packet = net.Receive(receiver, 1.seconds())?
   println(encoding.ParseUtf8(packet.data))
   match (net.SplitAddress("missing-port")) {
     _: ParseError => println("invalid address")
@@ -76,8 +76,8 @@ operations also charge `clock`. A Listen handler also contributes its effects.
 import "bork/net"
 
 fn echo(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError | Cancelled {
-  match (net.ReadLine(conn, 1000)) {
-    line: String => { _ = net.WriteLine(conn, line, 1000)?; checkpoint(s) }
+  match (net.ReadLine(conn, 1.seconds())) {
+    line: String => { _ = net.WriteLine(conn, line, 1.seconds())?; checkpoint(s) }
     _: net.Eof => checkpoint(s)
     error: IoError => error
     error: ParseError => IoError { path: net.RemoteAddress(conn), message: error.message }
@@ -87,9 +87,9 @@ fn echo(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError |
 
 fn demo(s: Scope) uses io + net + state + clock: Ok | IoError | Cancelled {
   server = net.Listen("127.0.0.1:0", s, echo)?
-  client = net.Dial(net.Address(server), s, 1000)?
-  _ = net.WriteLine(client, "hello", 1000)?
-  println(net.ReadLine(client, 1000))
+  client = net.Dial(net.Address(server), s, 1.seconds())?
+  _ = net.WriteLine(client, "hello", 1.seconds())?
+  println(net.ReadLine(client, 1.seconds()))
 }
 
 fn main() {

@@ -1,6 +1,6 @@
 import "bork/http"
 fn main() {
   scope s {
-    println(http.Listen("127.0.0.1:0", s, (req, rs) => http.Text(200, "ok"), 0, -1))
+    println(http.Listen("127.0.0.1:0", s, (req, rs) => http.Text(200, "ok"), 0.seconds(), -1))
   }
 }

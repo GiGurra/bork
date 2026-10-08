@@ -61,6 +61,15 @@ func (g *gen) goBodyAliases(fd *syntax.FuncDecl) string {
 				panic(err)
 			}
 			generated = canonical.String()
+			// The Go body supplies its own type arguments after the selector.
+			if len(check.TypeArgs(typ)) > 0 {
+				switch typ := typ.(type) {
+				case *check.Record:
+					generated = typeName(typ.Name, typ.Pkg).Name
+				case *check.Sealed:
+					generated = typeName(typ.Name, typ.Pkg).Name
+				}
+			}
 		} else if class := pkg.ClassNamed(member); class != nil {
 			generated = className(class).Name
 		} else if fn := pkg.Funcs[member]; fn != nil {
