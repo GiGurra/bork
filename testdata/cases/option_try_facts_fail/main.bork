@@ -1,0 +1,18 @@
+pred positive(x: Int) { x > 0 }
+pred above(x: Int, threshold: Int) { x > threshold }
+fn need(x: Int where positive): Int { x }
+fn needAbove(x: Int where above(threshold), threshold: Int): Int { x }
+fn unproven(x: Option[Int]): Int | Option[Int] {
+  n = x?
+  need(n)
+}
+fn nested(x: Option[List[Int]]): Int | Option[Int] {
+  xs = x?
+  n = xs.get(0)?
+  need(n)
+}
+fn wrongArgument(x: Option[Int where above(a)], a: Int, b: Int): Int | Option[Int] {
+  n = x?
+  needAbove(n, b)
+}
+fn main() {}
