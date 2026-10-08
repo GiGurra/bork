@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // cacheStore currently has no production callers. Its explicit root is used by
@@ -130,6 +132,10 @@ func (s cacheStore) lockName(key [sha256.Size]byte) string {
 	return filepath.Join("locks", "results-v2", fmt.Sprintf("%02x.lock", slot[0]))
 }
 func (s cacheStore) lock(root *os.Root, name string) (*os.File, error) {
+	return s.lockContext(context.Background(), root, name)
+}
+
+func (s cacheStore) lockContext(ctx context.Context, root *os.Root, name string) (*os.File, error) {
 	file, err := openCacheFile(root, name, os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
@@ -139,7 +145,23 @@ func (s cacheStore) lock(root *os.Root, name string) (*os.File, error) {
 		err = errInvalidCacheArtifact
 	}
 	if err == nil {
-		err = lockCacheFile(file)
+		if ctx == nil || ctx.Done() == nil {
+			err = lockCacheFile(file)
+		} else {
+			for {
+				if err = ctx.Err(); err != nil {
+					break
+				}
+				err = tryLockCacheFile(file)
+				if !cacheLockBusy(err) {
+					break
+				}
+				select {
+				case <-ctx.Done():
+				case <-time.After(10 * time.Millisecond):
+				}
+			}
+		}
 	}
 	if err != nil {
 		_ = file.Close()
