@@ -1,0 +1,13 @@
+type Failure = { code: Int }
+type Wrapped = { cause: Failure }
+fn source(): Int | Failure { Failure { code: 1 } }
+fn wrongResult(): Int | Wrapped { source()?{ _ => "bad" } }
+fn wrongArity(): Int | Wrapped { source()?{ () => Wrapped { cause: Failure { code: 1 } } } }
+fn wrongParam(): Int | Wrapped { source()?{ (e: String) => Wrapped { cause: Failure { code: 1 } } } }
+fn mapperReturn(): Int | Wrapped { source()?{ e => { return Wrapped { cause: e } } } }
+fn mapperTry(): Int | Wrapped { source()?{ e => { _ = source()?; Wrapped { cause: e } } } }
+fn mapperEffects(): Int | Wrapped { source()?{ e => { println("failure"); Wrapped { cause: e } } } }
+fn nonUnion(): Int | Wrapped { 1?{ _ => Wrapped { cause: Failure { code: 1 } } } }
+fn emptySource(): Ok | Failure { Failure { code: 1 } }
+fn droppedResult(): Ok { emptySource()?{ _ => "bad" } }
+fn main() {}

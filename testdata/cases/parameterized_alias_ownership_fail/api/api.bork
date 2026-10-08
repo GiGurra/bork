@@ -1,0 +1,3 @@
+type Box[T] = private { value: T }
+type Alias[T] = Box[T]
+fn Make[T](value: T): Alias[T] { Box { value: value } }

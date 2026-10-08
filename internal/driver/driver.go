@@ -9,12 +9,14 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/GiGurra/bork/internal/check"
@@ -241,7 +243,18 @@ func evaluatorWithTimeoutMemo(files []*syntax.File, info *check.Info, module *go
 
 func evaluatorWithTimeoutObserved(files []*syntax.File, info *check.Info, module *goModuleInputs, context *goContext, timeout time.Duration, memo *predicateMemo, usage *goUsage) check.Evaluator {
 	return func(queries []check.Query) ([]bool, error) {
-		observation := beginExecutionObservation(usage, context, "predicate", timeout)
+		// A zero timeout selects ordinary predicate generation and caching,
+		// but execution still has the same budget as explicit comptime work.
+		limit := timeout
+		if limit <= 0 {
+			limit = context.comptimeLimit()
+		}
+		signals, stop := signal.NotifyContext(stdcontext.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+		defer stop()
+		evaluationContext := *context
+		evaluationContext.commandContext = signals
+		context := &evaluationContext
+		observation := beginExecutionObservation(usage, context, "predicate", limit)
 		defer observation.finish()
 		var goSrc []byte
 		var err error
@@ -296,7 +309,7 @@ func evaluatorWithTimeoutObserved(files []*syntax.File, info *check.Info, module
 					release()
 				}
 			}()
-			key, reusable = predicateMemoKey(stagedDir, context, timeout, info.Embeds)
+			key, reusable = predicateMemoKey(stagedDir, context, limit, info.Embeds)
 			if reusable && (proofs != nil || persistent != nil) {
 				reusable = sessionProofStage(stagedDir, context)
 			}
@@ -344,31 +357,45 @@ func evaluatorWithTimeoutObserved(files []*syntax.File, info *check.Info, module
 		} else {
 			err = buildGoWithModeObserved(files, goSrc, exe, module, context, "predicate", observation, info.Embeds...)
 		}
+		if signals.Err() != nil {
+			return nil, fmt.Errorf("predicate evaluation interrupted")
+		}
 		if err != nil {
 			return nil, err
 		}
 		stderr := &boundedOutput{limit: 64 << 10}
-		deadline := stdcontext.Background()
-		if timeout > 0 {
-			var cancel stdcontext.CancelFunc
-			deadline, cancel = stdcontext.WithTimeout(deadline, timeout)
-			defer cancel()
-		}
+		deadline, cancel := stdcontext.WithTimeout(signals, limit)
+		defer cancel()
 		cmd := exec.CommandContext(deadline, exe)
 		cmd.WaitDelay = time.Second
 		configureEvaluationProcess(cmd)
+		cleaned := false
+		cleanupProcess := func() {
+			if !cleaned && cmd.Process != nil {
+				// Also contain descendants if the evaluator exits normally.
+				_ = cmd.Cancel()
+				cleaned = true
+			}
+		}
+		defer cleanupProcess()
 		cmd.Env = slices.Clone(context.processEnv)
 		cmd.Stderr = stderr
 		stdout := &boundedOutput{limit: max(64<<10, len(queries)*6)}
 		cmd.Stdout = stdout
 		observation.command(cmd, false)
 		err = cmd.Run()
+		executionErr := deadline.Err()
+		cleanupProcess()
+		stop()
 		out := stdout.data
-		if deadline.Err() != nil {
-			return nil, fmt.Errorf("predicate evaluation exceeded %s", timeout)
+		if errors.Is(executionErr, stdcontext.DeadlineExceeded) {
+			return nil, fmt.Errorf("predicate evaluation exceeded %s", limit)
+		}
+		if executionErr != nil {
+			return nil, fmt.Errorf("predicate evaluation interrupted")
 		}
 		if err != nil {
-			return nil, fmt.Errorf("a predicate failed: %s", strings.TrimSpace(stderr.String()))
+			return nil, fmt.Errorf("a predicate failed: %s", predicateFailure(stderr.String(), err))
 		}
 		lines := strings.Fields(string(out))
 		if len(lines) != len(queries) {
@@ -383,13 +410,31 @@ func evaluatorWithTimeoutObserved(files []*syntax.File, info *check.Info, module
 		if reusable && wellFormed {
 			memo.put(key, results)
 			if persistent != nil {
-				if current, ok := predicateMemoKey(stagedDir, context, timeout, info.Embeds); ok && current == key {
+				if current, ok := predicateMemoKey(stagedDir, context, limit, info.Embeds); ok && current == key {
 					persistent.write(key, results)
 				}
 			}
 		}
 		return results, nil
 	}
+}
+
+func predicateFailure(output string, err error) string {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	message := lines[0]
+	for _, line := range lines {
+		if strings.HasPrefix(line, "panic:") || strings.HasPrefix(line, "fatal error:") {
+			message = line
+			break
+		}
+	}
+	if message == "" {
+		message = err.Error()
+	}
+	if len(message) > 1024 {
+		message = strings.ToValidUTF8(message[:1024], "") + "…"
+	}
+	return message
 }
 
 // Emit compiles the package at path to Go source. A program must have

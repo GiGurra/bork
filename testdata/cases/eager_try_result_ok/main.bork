@@ -48,7 +48,7 @@ fn somePositive(flag: Bool): Option[Int where Positive] {
   if (Positive(value)) { Option.Some(value) } else { Option.None }
 }
 fn lazyForward(flag: Bool): Int | Problem where Approved {
-  lazy value: Int | Problem = { _ = source(flag, Problem { code: 1 })?; 1 }
+  lazy value: Int | Problem = { match (source(flag, Problem { code: 1 })) { _: Int => {}; problem: Problem => return problem }; 1 }
   value?
 }
 fn lazyReturn(flag: Bool): Int | Problem where Approved {
@@ -56,11 +56,11 @@ fn lazyReturn(flag: Bool): Int | Problem where Approved {
   value?
 }
 fn lazyOption(flag: Bool, x: Option[Int] where ConditionalOption(flag)): Option[Int] where ConditionalOption(flag) {
-  lazy value: Option[Int] where ConditionalOption(flag) = { n = x?; Option.Some(n) }
+  lazy value: Option[Int] where ConditionalOption(flag) = match (x) { Option.Some(n) => Option.Some(n); Option.None => x }
   value
 }
 fn lazyInline(flag: Bool): Int | Problem where Approved {
-  lazy value: (Int | Problem) where Allowed = { operand: Int | Problem = if (flag) { Problem { code: 1 } } else { 1 }; operand? }
+  lazy value: (Int | Problem) where Allowed = { operand: Int | Problem = if (flag) { Problem { code: 1 } } else { 1 }; return operand }
   value?
 }
 pred AnyExit(x: Int | Ok) { match (x) { n: Int => n > 0; _: Ok => true } }
@@ -68,7 +68,7 @@ fn emptyExit(): (Int | Ok) where AnyExit {}
 fn bareExit(): (Int | Ok) where AnyExit { return Ok }
 fn conditionalExit(flag: Bool): (Int | Ok) where AnyExit { if (flag) { return 1 } }
 fn emptyForward(): (Int | Ok) where AnyExit { _ = emptyExit()?; 1 }
-fn lazyEmpty(): (Int | Ok) where AnyExit { lazy value: Int | Ok = { _ = emptyExit()?; 1 }; value? }
+fn lazyEmpty(): (Int | Ok) where AnyExit { lazy value: Int | Ok = { match (emptyExit()) { _: Int => {}; exit: Ok => return exit }; 1 }; value? }
 fn bareUnit(): Ok where AnyExit { return }
 pred NumericExit(x: Int | Ok) { match (x) { _: Int => true; _: Ok => false } }
 fn alwaysExit(): (Int | Ok) where NumericExit { if (true) { return 1 } }

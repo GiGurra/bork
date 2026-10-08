@@ -32,8 +32,8 @@ fn parseBool(text: String): Bool | ParseError unsafe go {
   return ParseError{input: text, message: "expected true or false"}
 }
 
-// String methods. Lengths and indexes count bytes (UTF-8), except
-// runeCount(), runeAt(), and substring(), which count Unicode code points.
+// String indexes count Unicode code points, not grapheme clusters.
+// Only explicitly named byte* methods use UTF-8 byte offsets.
 
 // Returns the UTF-8 byte length.
 fn (s: String) byteLength(): Int unsafe go {
@@ -59,13 +59,23 @@ fn (s: String) endsWith(suffix: String): Bool unsafe go {
   import "strings"
   return strings.HasSuffix(s, suffix)
 }
-// indexOf finds the first occurrence of part in s.
+// indexOf returns the first occurrence as a zero-based code-point offset.
+// An empty part is found at zero; missing parts give None.
 fn (s: String) indexOf(part: String): Option[Int] unsafe go {
   import "strings"
+  import "unicode/utf8"
   i := strings.Index(s, part)
   if i < 0 {
     return Option_None[int64]{}
   }
+  return Option_Some[int64]{E0: int64(utf8.RuneCountInString(s[:i]))}
+}
+// byteIndexOf returns the first occurrence as a UTF-8 byte offset.
+// Use byteSubstring with this offset; an empty part is found at zero.
+fn (s: String) byteIndexOf(part: String): Option[Int] unsafe go {
+  import "strings"
+  i := strings.Index(s, part)
+  if i < 0 { return Option_None[int64]{} }
   return Option_Some[int64]{E0: int64(i)}
 }
 // Returns the string with Unicode letters converted to uppercase.
@@ -123,6 +133,20 @@ fn (s: String) substring(from: Int, to: Int): String | OutOfRange unsafe go {
     return OutOfRange{value: fmt.Sprintf("%d to %d", from, to), target: fmt.Sprintf("a String of %d runes", len(runes))}
   }
   return string(runes[from:to])
+}
+// byteSubstring slices UTF-8 bytes from from up to (not including) to.
+// It is OutOfRange unless 0 <= from <= to <= s.byteLength().
+// Both bounds must be on code-point boundaries; splitting UTF-8 is OutOfRange.
+fn (s: String) byteSubstring(from: Int, to: Int): String | OutOfRange unsafe go {
+  import "fmt"
+  import "unicode/utf8"
+  if from < 0 || to < from || to > int64(len(s)) {
+    return OutOfRange{value: fmt.Sprintf("%d to %d", from, to), target: fmt.Sprintf("a String of %d bytes", len(s))}
+  }
+  if from < int64(len(s)) && !utf8.RuneStart(s[from]) || to < int64(len(s)) && !utf8.RuneStart(s[to]) {
+    return OutOfRange{value: fmt.Sprintf("%d to %d", from, to), target: "UTF-8 code-point boundaries"}
+  }
+  return s[from:to]
 }
 // split always gives at least one part.
 fn (s: String) split(separator: String): List[String] where notEmpty unsafe go {

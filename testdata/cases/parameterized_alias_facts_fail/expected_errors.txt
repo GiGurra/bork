@@ -1,0 +1,4 @@
+main.bork:8:57: unproven promises that every element of its result is positive, but that is not proven for xs (keep only those that are: xs.filter(positive))
+main.bork:9:41: need requires x to be positive, but that is not proven for x (check it first with if (positive(x)) { ... }, or require it: x: Int where positive)
+main.bork:10:51: need requires x to be positive, but that is not proven for this value (give it a name and check it first)
+main.bork:11:51: nonemptyResult promises a result that is nonempty, but that is not proven for xs (check it first with if (nonempty(xs)) { ... }, or require it: xs: List[Int] where nonempty)

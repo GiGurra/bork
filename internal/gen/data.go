@@ -129,8 +129,8 @@ func (g *gen) copyField(root ast.Expr, rec *check.Record, path []string, value a
 	return stmts
 }
 
-// try lowers `x?` to a type switch that keeps one case and returns the
-// others from the function.
+// try keeps the success member and returns the other members. Generic
+// members use Bork membership predicates rather than Go type switches.
 func (g *gen) try(e *check.Try) ([]ast.Stmt, ast.Expr) {
 	info := &e.TryInfo
 	stmts, x := g.value(e.X)
@@ -138,6 +138,23 @@ func (g *gen) try(e *check.Try) ([]ast.Stmt, ast.Expr) {
 		return stmts, nil
 	}
 	x = g.convert(x, e.X.Type(), e.X.Type())
+	dynamic := needsMembership(info.Kept) || isUnion(info.Kept)
+	for _, m := range info.Rest {
+		dynamic = dynamic || needsMembership(m) || isUnion(m)
+	}
+	if info.Option == nil && dynamic {
+		kept, v := g.newTmp(), g.newTmp()
+		stmts = append(stmts, varDecl(kept, g.goType(info.Kept)), define(v, x))
+		success := &ast.TypeAssertExpr{X: v, Type: g.goType(info.Kept)}
+		failure := unreachable()
+		for i := len(info.Rest) - 1; i >= 0; i-- {
+			m := info.Rest[i]
+			value := &ast.TypeAssertExpr{X: v, Type: g.goType(m)}
+			failure = []ast.Stmt{&ast.IfStmt{Cond: g.memberOf(m, v), Body: &ast.BlockStmt{List: g.returning(value)}, Else: &ast.BlockStmt{List: failure}}}
+		}
+		stmts = append(stmts, &ast.IfStmt{Cond: g.memberOf(info.Kept, v), Body: &ast.BlockStmt{List: []ast.Stmt{assign(kept, success)}}, Else: &ast.BlockStmt{List: failure}})
+		return stmts, kept
+	}
 	kept, v := g.newTmp(), g.newTmp()
 	stmts = append(stmts, varDecl(kept, g.goType(info.Kept)))
 	sw := &ast.TypeSwitchStmt{
@@ -282,6 +299,11 @@ func and(conds []ast.Expr) ast.Expr {
 func (g *gen) disjointTypeCases(pats []*check.Pat) bool {
 	seen := map[string]bool{}
 	for _, p := range pats {
+		for _, m := range p.Members {
+			if needsMembership(m) {
+				return false
+			}
+		}
 		for _, typ := range g.typeCases(p) {
 			key := g.text(typ)
 			if seen[key] {
@@ -424,7 +446,7 @@ func (g *gen) patternTests(p *check.Pat, x ast.Expr) []ast.Expr {
 	case check.PatType:
 		var alts []ast.Expr
 		for _, m := range p.Members {
-			alts = append(alts, g.isType(g.goType(m), x))
+			alts = append(alts, g.memberOf(m, x))
 		}
 		test := alts[0]
 		for _, a := range alts[1:] {

@@ -18,5 +18,5 @@ fn main() {
   println(json.Decode[Box[String]]("{\"value\":\"ok\"}"))
   println(json.Encode(Box { value: 3 }))
   println(json.Decode[Special[Int]]("{\"value\":9}"))
-  println(json.Decode[Mode](json.Encode(Mode.Slow { delay: 2 })))
+  println(json.Decode[Mode](match (json.Encode(Mode.Slow { delay: 2 })) { text: String => text; error: json.JsonError => { println(error); return } }))
 }

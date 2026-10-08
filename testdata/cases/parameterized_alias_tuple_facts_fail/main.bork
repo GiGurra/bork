@@ -1,0 +1,8 @@
+type Same[T] = T
+type Pair[T] = Same[(T, Int)]
+pred positive(x: Int) { x > 0 }
+fn positivePair(x: Pair[Int where positive]): Int { x.0 }
+fn main() {
+  x: Pair[Int] = (-1, 0)
+  println(positivePair(x))
+}

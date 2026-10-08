@@ -1,0 +1,27 @@
+type Index[T] = Map[String, List[T]]
+type Items[T] = List[T]
+type Maybe[T] = Option[T]
+type Box[T] = { value: T }
+type Wrapped[T] = Box[List[T]]
+type Failure = { message: String }
+type Result[T] = T | Failure
+type Handler[T] = (T) uses io => String
+pred Positive(x: Int) { x > 0 }
+type Pos = Int where Positive
+type PositiveItems[T] = List[Pos]
+fn Need(x: Pos): Int { x }
+fn Source(x: Pos): Maybe[Pos] { Option.Some(x) }
+pred NotEmpty[T](xs: List[T]) { !xs.isEmpty() }
+type Nonempty[T] = List[T] where NotEmpty
+fn NonemptyLength[T](xs: Nonempty[T]): Int { xs.length() }
+type Callback[T] = (T) => String
+type ForwardCallback[T] = Callback[T]
+type Same[T] = T
+fn Apply[T](value: T, callback: ForwardCallback[T]): String { callback(value) }
+fn ApplySame[T](value: T, callback: Same[(T) => String]): String { callback(value) }
+type Pair[A, B] = (A, B)
+type LaterAlias[T] = Later[T]
+type Holder = { later: LaterAlias[Int] }
+type Later[T] = { value: T }
+pred Above(x: Int, threshold: Int) { x > threshold }
+fn NeedAbove(x: Int where Above(threshold), threshold: Int): Int { x }

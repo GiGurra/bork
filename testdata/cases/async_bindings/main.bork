@@ -30,9 +30,9 @@ fn main() {
     println(early)
     async(s) inferred = { if (true) { return 5 }; 6 }
     println(inferred)
-    async(s) propagate = { number = bad()?; number + 1 }
+    async(s) propagate: Int | Failed = match (bad()) { number: Int => number + 1; failure: Failed => failure }
     println(propagate)
-    async(s) optional: Option[Int] = { number = Option.Some(8)?; number + 1 }
+    async(s) optional: Option[Int] = match (Option.Some(8)) { Option.Some(number) => Option.Some(number + 1); Option.None => Option.None }
     println(optional)
     with (label: "captured") {
       async(s) name = named()

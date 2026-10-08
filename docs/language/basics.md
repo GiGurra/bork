@@ -89,7 +89,7 @@ fn main() {
 
 A function that returns nothing leaves out the result type, as `main` does.
 
-A value shared by the whole package is declared at the top level, as in `MaxRetries = 3` or `MaxRetries: Int = 3`. Its initializer must be pure: no effects or ambient values. It is computed once, the first time it is read, and is never computed if unused. A value read by `comptime` is instead evaluated during compilation and baked as data. `lazy MaxRetries = 3` means the same thing. Local bindings inside functions still evaluate eagerly.
+A value shared by the whole package is declared at the top level, as in `MaxRetries = 3` or `MaxRetries: Int = 3`. Its initializer must be pure: no effects or ambient values. It is computed once, the first time it is read, and is never computed if unused. A value read by `comptime` is instead evaluated during compilation and baked as data. `lazy MaxRetries = 3` means the same thing. Local bindings inside functions still evaluate eagerly. Inside a package binding, `lazy` or `async(s)` initializer, use `match` to handle a union or Option: `?` is rejected there, as in a lambda.
 
 Package values can refer to values declared later or in another file in the same package. Dependency cycles are compile errors, including through helper functions. An uppercase name is exported, as with functions and types. An annotation can require facts (`Limit: Int where positive = 3`); the initializer must prove them and reads retain those promises. A package initializer can itself use `comptime { ... }` and read other pure package values; see [compile-time evaluation](comptime.md).
 
@@ -386,7 +386,9 @@ PADDED TEXT
 
 Only strings with the `s` prefix interpolate. `toString(x)` gives the same text as printing `x`.
 
-String methods include `byteLength`, `runeCount`, `contains`, `startsWith`, `endsWith`, `indexOf`, `toUpper`, `toLower`, `capitalize` (upper-cases the first character), `trim`, `replaceAll`, `repeat`, `substring`, `split`, `fields`, `lines`, and `runeAt`. The ones that may find nothing say so in their result: `indexOf` and `runeAt` return an `Option`, and `substring` returns the text or an `OutOfRange`. To turn text into a value, use `parseInt`, `parseFloat`, or `parseBool`, which return the value or a `ParseError`.
+String indexes count Unicode code points: `indexOf` returns an offset that can be passed to `substring` or `runeAt`. Regex match offsets use the same units. Code points are not grapheme clusters: a letter followed by a combining accent counts as two. Byte operations are explicit: `byteLength`, `byteIndexOf` and `byteSubstring` use UTF-8 bytes. See [String indexing](../std/strings.md).
+
+String methods include `byteLength`, `runeCount`, `contains`, `startsWith`, `endsWith`, `indexOf`, `byteIndexOf`, `toUpper`, `toLower`, `capitalize` (upper-cases the first character), `trim`, `replaceAll`, `repeat`, `substring`, `byteSubstring`, `split`, `fields`, `lines`, and `runeAt`. The ones that may find nothing say so in their result: `indexOf` and `runeAt` return an `Option`, and `substring` returns the text or an `OutOfRange`. To turn text into a value, use `parseInt`, `parseFloat`, or `parseBool`, which return the value or a `ParseError`.
 
 ### Printing
 

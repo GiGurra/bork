@@ -887,6 +887,10 @@ func (c *checker) funcValue(e syntax.Expr, name string, fn *Func, want Type) Typ
 // lambda checks a lambda. want is the expected function type, if any,
 // which may have unknowns (see infer.go).
 func (c *checker) lambda(e *syntax.Lambda, want Type) Type {
+	return c.lambdaBody(e, want, false)
+}
+
+func (c *checker) lambdaBody(e *syntax.Lambda, want Type, mapper bool) Type {
 	wf, _ := want.(*FuncType)
 	quiet := false // the lambda is already reported
 	if wf != nil && len(wf.Params) != len(e.Params) {
@@ -917,7 +921,8 @@ func (c *checker) lambda(e *syntax.Lambda, want Type) Type {
 			}
 			t = Invalid
 		}
-		if t == Ok {
+		// A mapper can bind a payloadless failure solely to discard it.
+		if t == Ok && (!mapper || p.Name != "_") {
 			c.errorf(p.Pos, "parameter %s cannot have type Ok", p.Name)
 			t = Invalid
 		}
@@ -930,6 +935,9 @@ func (c *checker) lambda(e *syntax.Lambda, want Type) Type {
 		rw = wf.Result
 	}
 	c.lambdaDepth++
+	if mapper {
+		c.mapperLambdas++
+	}
 	outer := c.used
 	c.used = 0
 	var bt Type
@@ -941,6 +949,9 @@ func (c *checker) lambda(e *syntax.Lambda, want Type) Type {
 	ft.Effects = c.used
 	c.used = outer
 	c.lambdaDepth--
+	if mapper {
+		c.mapperLambdas--
+	}
 	switch {
 	case bt == Invalid:
 		ft.Result = Invalid

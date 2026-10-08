@@ -1,0 +1,2 @@
+main.bork:6:30: need requires x to be positive, but that is not proven for b (check it first with if (positive(b)) { ... })
+main.bork:15:30: need requires x to be positive, but that is not proven for b (check it first with if (positive(b)) { ... })

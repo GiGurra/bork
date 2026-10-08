@@ -1,4 +1,5 @@
 import codec "bork/codec"
+import codecs "bork/json"
 
 // Package http serves and sends HTTP requests:
 //
@@ -71,10 +72,19 @@ fn Text(status: Status, body: String): Response {
   .{ status: status, headers: { "Content-Type": ["text/plain; charset=utf-8"] }, body: body }
 }
 
-// JsonReply is a response with a JSON body (already rendered, as codecs.Encode
-// gives it).
-fn JsonReply(status: Status, body: String): Response {
-  .{ status: status, headers: { "Content-Type": ["application/json"] }, body: body }
+// JsonReply accepts rendered JSON or the result of json.Encode. Encoding
+// failures become a plain-text 500 response with the error message.
+fn JsonReply(status: Status, body: String | codecs.JsonError): Response {
+  match (body) {
+    text: String => .{ status: status, headers: { "Content-Type": ["application/json"] }, body: text }
+    error: codecs.JsonError => jsonEncodingFailure(error.message)
+  }
+}
+
+// Keep the fixed error status in the trusted implementation so importing
+// HTTP does not need a Go toolchain to evaluate ValidStatus(500).
+fn jsonEncodingFailure(message: String): Response unsafe go {
+  return Text(500, "JSON encoding failed: " + message)
 }
 
 // Segments are the non-empty parts of a path: "/users/42/" gives

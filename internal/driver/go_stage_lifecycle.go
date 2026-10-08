@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -27,15 +28,19 @@ func stageGoStable(base, key string, source []byte, module *goModuleInputs, embe
 	return stageGoStableWithHook(base, key, source, module, embeds, metadata, goModuleHook)
 }
 
-func stageGoStableWithHook(base, key string, source []byte, module *goModuleInputs, embeds []*check.Embedded, metadata goStageMetadata, hook goModuleHookFunc) (string, bool, func(), error) {
-	return stageGoStableAtWithHook(base, key, source, module, embeds, metadata, time.Now(), hook)
+func stageGoStableWithHook(base, key string, source []byte, module *goModuleInputs, embeds []*check.Embedded, metadata goStageMetadata, hook goModuleHookFunc, contexts ...context.Context) (string, bool, func(), error) {
+	return stageGoStableAtWithHook(base, key, source, module, embeds, metadata, time.Now(), hook, contexts...)
 }
 
 func stageGoStableAt(base, key string, source []byte, module *goModuleInputs, embeds []*check.Embedded, metadata goStageMetadata, now time.Time) (string, bool, func(), error) {
 	return stageGoStableAtWithHook(base, key, source, module, embeds, metadata, now, goModuleHook)
 }
 
-func stageGoStableAtWithHook(base, key string, source []byte, module *goModuleInputs, embeds []*check.Embedded, metadata goStageMetadata, now time.Time, hook goModuleHookFunc) (string, bool, func(), error) {
+func stageGoStableAtWithHook(base, key string, source []byte, module *goModuleInputs, embeds []*check.Embedded, metadata goStageMetadata, now time.Time, hook goModuleHookFunc, contexts ...context.Context) (string, bool, func(), error) {
+	var ctx context.Context
+	if len(contexts) > 0 {
+		ctx = contexts[0]
+	}
 	if _, ok := cacheHexDigest(key); !ok || metadata.Schema != goStageSchema || !validReceiptPath(metadata.Program) || !filepath.IsAbs(metadata.Program) || metadata.Mode == "" {
 		return "", false, nil, errInvalidCacheArtifact
 	}
@@ -59,7 +64,7 @@ func stageGoStableAtWithHook(base, key string, source []byte, module *goModuleIn
 		_ = root.Close()
 		return "", false, nil, err
 	}
-	slot, err := store.lock(root, strings.TrimPrefix(goStageLockPath(base, key), base+string(filepath.Separator)))
+	slot, err := store.lockContext(ctx, root, strings.TrimPrefix(goStageLockPath(base, key), base+string(filepath.Separator)))
 	if err != nil {
 		_ = root.Close()
 		return "", false, nil, err
@@ -71,7 +76,7 @@ func stageGoStableAtWithHook(base, key string, source []byte, module *goModuleIn
 			_ = root.Close()
 		}
 	}()
-	mutation, err := store.lock(root, "mutation.lock")
+	mutation, err := store.lockContext(ctx, root, "mutation.lock")
 	if err != nil {
 		return "", false, nil, err
 	}

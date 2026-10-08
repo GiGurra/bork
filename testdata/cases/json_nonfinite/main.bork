@@ -1,0 +1,37 @@
+import "bork/codec"
+import "bork/json"
+import "bork/math"
+import "bork/http"
+import "bork/encoding"
+use codec.Defaults
+
+type Reading = { samples: List[Float] } derive (codec.Encode, codec.Decode)
+fn rejected(result: String | json.JsonError): Bool { result is json.JsonError }
+fn valid(result: String | json.JsonError): Bool {
+  match (result) {
+    text: String => json.Parse(text) is codec.Value
+    _: json.JsonError => false
+  }
+}
+fn main() {
+  for (value in [math.NaN(), math.Inf(), -math.Inf()]) {
+    println(rejected(json.Encode(value)))
+    println(rejected(json.Encode([1.0, value])))
+    println(rejected(json.Encode({ "reading": value })))
+    println(rejected(json.Encode(Reading { samples: [value] })))
+    println(rejected(json.Pretty(codec.encode(value))))
+    println(encoding.EncodeCsv([Reading { samples: [value] }]) is encoding.CsvError)
+    response = http.JsonReply(201, json.Encode(value))
+    println(response.status == 500, response.body.startsWith("JSON encoding failed: "))
+    println(http.HeaderOf(response.headers, "Content-Type"))
+  }
+  for (token in ["NaN", "+Inf", "-Inf", "true", "1,2", "01", "1e", ""]) {
+    number = codec.Value.Number { text: token }
+    println(rejected(json.Render(number)), rejected(json.Render(codec.Value.Array { items: [number] })))
+  }
+  for (value in [0.0, -1.25, 1e100, 1e-100]) { println(valid(json.Encode(value))) }
+  println(valid(json.Render(codec.Value.Number { text: "123456789012345678901234567890" })))
+  println(valid(json.Render(codec.Value.Number { text: " 3\n " })))
+  response = http.JsonReply(201, json.Encode(Reading { samples: [1.5] }))
+  println(response.status, response.body)
+}

@@ -170,14 +170,44 @@ func (c *checker) openAt(t Type, te *syntax.TypeExpr) Type {
 // unannotatedFunc reports whether te is a function type written
 // without `uses`, or an alias of one.
 func (c *checker) unannotatedFunc(te *syntax.TypeExpr, depth int) bool {
-	switch {
-	case te.Func != nil:
-		return te.Func.Uses == nil
-	case len(te.Union) > 0 || len(te.Args) > 0 || len(te.Where) > 0 || depth > 20:
-		return false
+	type written struct {
+		typeExpr *syntax.TypeExpr
+		pkg      *Package
+		args     map[string]written
 	}
-	e := c.lookupType(te.Name)
-	return e != nil && e.decl.Kind == syntax.AliasType && c.unannotatedFunc(e.decl.Alias, depth+1)
+	savedPkg := c.pkg
+	defer func() { c.pkg = savedPkg }()
+	var visit func(written, int) bool
+	visit = func(w written, depth int) bool {
+		te := w.typeExpr
+		if te == nil || depth > 20 || len(te.Where) > 0 {
+			return false
+		}
+		if te.Func != nil {
+			return te.Func.Uses == nil
+		}
+		if te.Union != nil || te.Tuple != nil {
+			return false
+		}
+		if arg, ok := w.args[te.Name]; ok {
+			return len(te.Args) == 0 && visit(arg, depth+1)
+		}
+		c.pkg = w.pkg
+		e := c.lookupType(te.Name)
+		if e == nil || e.decl.Kind != syntax.AliasType || len(te.Args) != len(e.params) {
+			return false
+		}
+		args := map[string]written{}
+		for i, tp := range e.params {
+			args[tp.Name] = written{te.Args[i], w.pkg, w.args}
+		}
+		return visit(written{e.decl.Alias, e.pkg, args}, depth+1)
+	}
+	params := map[string]written{}
+	for name := range c.typeParams {
+		params[name] = written{}
+	}
+	return visit(written{te, c.pkg, params}, depth)
 }
 
 // chargeCall adds what a call of fn does to the effects of the code

@@ -1,5 +1,4 @@
 main.bork:3:15: type parameter T is declared twice
-main.bork:4:1: a type alias cannot have type parameters (yet); declare a record or sealed type
 main.bork:6:12: Pair needs 2 type argument(s), as in Pair[A, B]
 main.bork:7:14: Pair needs 2 type argument(s), as in Pair[A, B]
 main.bork:8:18: Int does not take type arguments
