@@ -90,20 +90,20 @@ func RuntimeMembershipParameters(info *Info) map[*TypeParam]bool {
 			}
 		}
 		for fn := range funcs {
-			// Test-mode wrappers call result and field predicates outside fn.Body.
-			// Their instantiated constraints can mention any of the caller's parameters.
-			predicates := runtimeInvariantPredicates(fn.Result, map[Type]bool{})
-			for _, member := range fn.ResultConstraints {
-				for _, con := range member.Constraints {
-					predicates = append(predicates, runtimeConstraintPredicates(con)...)
+			// Only foreign implementations get generated runtime contract wrappers.
+			// Instantiate each predicate so concrete constraints do not require an
+			// unrelated caller type parameter's membership environment.
+			if fn.Decl.GoBody != nil || fn.Decl.GoBind != nil {
+				calls := runtimeInvariantCalls(info, fn.Result, map[Type]bool{})
+				for _, member := range fn.ResultConstraints {
+					for _, con := range member.Constraints {
+						calls = append(calls, runtimeConstraintCalls(info, con, member.Type)...)
+					}
 				}
-			}
-			for _, pred := range predicates {
-				for _, p := range pred.TypeParams {
-					if needed[p] {
-						for _, caller := range fn.TypeParams {
-							mark(caller)
-						}
+				for _, inst := range calls {
+					propagate(inst.Func.TypeParams, inst.TypeArgs)
+					for _, d := range inst.Dicts {
+						dictionary(d)
 					}
 				}
 			}
@@ -133,53 +133,55 @@ func RuntimeMembershipParameters(info *Info) map[*TypeParam]bool {
 	return needed
 }
 
-func runtimeInvariantPredicates(t Type, seen map[Type]bool) []*Func {
+func runtimeInvariantCalls(info *Info, t Type, seen map[Type]bool) []*Instance {
 	if seen[t] {
 		return nil
 	}
 	seen[t] = true
-	var out []*Func
+	var calls []*Instance
 	for _, con := range TypeConstraints(t) {
-		out = append(out, runtimeConstraintPredicates(con)...)
+		calls = append(calls, runtimeConstraintCalls(info, con, t)...)
 	}
-	fields := func(fs []*Field) {
-		for _, f := range fs {
-			for _, con := range f.Constraints {
-				out = append(out, runtimeConstraintPredicates(con)...)
+	fields := func(fields []*Field) {
+		for _, field := range fields {
+			for _, con := range field.Constraints {
+				calls = append(calls, runtimeConstraintCalls(info, con, field.Type)...)
 			}
-			out = append(out, runtimeInvariantPredicates(f.Type, seen)...)
+			calls = append(calls, runtimeInvariantCalls(info, field.Type, seen)...)
 		}
 	}
 	switch t := t.(type) {
 	case *Record:
 		fields(t.Fields)
 	case *Sealed:
-		for _, v := range t.Variants {
-			for _, con := range v.Constraints {
-				out = append(out, runtimeConstraintPredicates(con)...)
+		for _, variant := range t.Variants {
+			for _, con := range variant.Constraints {
+				calls = append(calls, runtimeConstraintCalls(info, con, t)...)
 			}
-			fields(v.Fields)
+			fields(variant.Fields)
 		}
 	case *Union:
-		for _, m := range t.Members {
-			out = append(out, runtimeInvariantPredicates(m, seen)...)
+		for _, member := range t.Members {
+			calls = append(calls, runtimeInvariantCalls(info, member, seen)...)
 		}
 	case *List:
-		out = append(out, runtimeInvariantPredicates(t.Elem, seen)...)
+		calls = append(calls, runtimeInvariantCalls(info, t.Elem, seen)...)
 	case *Map:
-		out = append(out, runtimeInvariantPredicates(t.Key, seen)...)
-		out = append(out, runtimeInvariantPredicates(t.Value, seen)...)
+		calls = append(calls, runtimeInvariantCalls(info, t.Key, seen)...)
+		calls = append(calls, runtimeInvariantCalls(info, t.Value, seen)...)
 	}
-	return out
+	return calls
 }
 
-func runtimeConstraintPredicates(con *Constraint) []*Func {
-	var out []*Func
-	for _, alt := range con.Or {
-		out = append(out, runtimeConstraintPredicates(alt)...)
+func runtimeConstraintCalls(info *Info, con *Constraint, t Type) []*Instance {
+	var calls []*Instance
+	for _, alternative := range con.Or {
+		calls = append(calls, runtimeConstraintCalls(info, alternative, t)...)
 	}
-	if con.Pred != nil {
-		out = append(out, con.Pred)
+	for _, subject := range constraintSubjects(t, con.Path) {
+		if inst := con.InstanceFor(subject); inst != nil && info.PredicateDicts(con.Pkg, inst) {
+			calls = append(calls, inst)
+		}
 	}
-	return out
+	return calls
 }
