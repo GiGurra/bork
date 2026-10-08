@@ -378,7 +378,7 @@ func (g *gen) funcRef(inst *check.Instance, needs ...ast.Expr) ast.Expr {
 			dicts = append(dicts, g.dict(d))
 		}
 	}
-	if len(dicts) == 0 && len(needs) == 0 && !collapsedUnion(inst) && (len(inst.TypeArgs) == 0 || !hasTupleRepresentation(&check.FuncType{Params: inst.Params, Result: inst.Result})) {
+	if len(dicts) == 0 && len(needs) == 0 && !collapsedUnionSignature(inst) && (len(inst.TypeArgs) == 0 || !hasTupleRepresentation(&check.FuncType{Params: inst.Params, Result: inst.Result})) {
 		if hasTupleRepresentation(&check.FuncType{Params: inst.Params, Result: inst.Result}) {
 			return &ast.CallExpr{Fun: g.funcType(&check.FuncType{Params: inst.Params, Result: inst.Result}, nil), Args: []ast.Expr{fun}}
 		}

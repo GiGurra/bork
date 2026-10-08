@@ -1,0 +1,54 @@
+type E = {}
+type Receiver = {}
+type Box[T] = { witness: T }
+fn (b: Box[T]) number[T](x: T | Int): Int { f[T](x) }
+fn f[T](x: T | Int): Int {
+  match (x) {
+    n: Int => n
+    _: T => 99
+  }
+}
+fn k[A, B](x: A | B): String {
+  match (x) {
+    a: A => s"A $a"
+    b: B => s"B $b"
+  }
+}
+fn numericTry[T](x: T | Int): String | Int {
+  _ = x?
+  "success"
+}
+fn defaultInt[T](witness: T, x: T | Int = 4): Int { f[T](x) }
+fn defaultFloat[T](witness: T, x: T | Float32 = 1.25): String { k[T, Float32](x) }
+fn (r: Receiver) value[T](x: T | Int): Int { f[T](x) }
+fn witnessed[T](witness: T, x: T | Int): Int { f[T](x) }
+fn invoke(callback: (Int, Int) => Int, x: Int): Int { callback(0, x) }
+fn main() {
+  println(f[Int](1))
+  n = 2
+  println(f[Int](n))
+  println(f[String](3))
+  println(f[Int](x: -4))
+  println(defaultInt[Int](0))
+  println(defaultFloat[Float32](0.0))
+  println(defaultFloat[Float32](x: -2.5, witness: 0.0))
+  println(Receiver {}.value[Int](5))
+  saved: (Int, Int) => Int = witnessed
+  println(saved(0, 6))
+  println(invoke(witnessed, 7))
+  println(k[Int, Int](3))
+  println(k[Int8, Int8](-8))
+  println(k[Int16, Int16](-16))
+  println(k[Int32, Int32](-32))
+  println(k[Uint8, Uint8](8))
+  println(k[Uint16, Uint16](16))
+  println(k[Uint32, Uint32](32))
+  println(k[Uint64, Uint64](18446744073709551615))
+  println(k[Float32, Float32](1.25))
+  println(k[Float, Float](-1.5))
+  println(k[Rune, Rune]('x'))
+  println(f[Int](1 + 2))
+  method: (Box[Int], Int) => Int = Box.number
+  println(method(Box { witness: 0 }, 9))
+  println(numericTry[Int](8))
+}

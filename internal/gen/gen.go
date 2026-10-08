@@ -1129,7 +1129,7 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		if frame := g.passthrough(e.Inst.Func); frame != nil {
 			return stmts, g.nextRef(e.Inst, frame, needs)
 		}
-		if inst := e.Inst; inst.Func.Class != nil || len(inst.Dicts) > 0 || len(g.membershipParams(inst.Func.TypeParams)) > 0 || collapsedUnion(inst) || len(needs) > 0 || len(inst.TypeArgs) > 0 && hasTupleRepresentation(&check.FuncType{Params: inst.Params, Result: inst.Result}) {
+		if inst := e.Inst; inst.Func.Class != nil || len(inst.Dicts) > 0 || len(g.membershipParams(inst.Func.TypeParams)) > 0 || collapsedUnionSignature(inst) || len(needs) > 0 || len(inst.TypeArgs) > 0 && hasTupleRepresentation(&check.FuncType{Params: inst.Params, Result: inst.Result}) {
 			return stmts, g.funcRef(inst, needs...)
 		}
 		return nil, g.instance(e.Inst)
@@ -1570,6 +1570,22 @@ func collapsedUnion(inst *check.Instance) bool {
 	_, declared := inst.Func.Result.(*check.Union)
 	_, specialized := inst.Result.(*check.Union)
 	return declared && !specialized
+}
+
+// A function value exposes the specialized signature, so collapsed union
+// parameters need a wrapper just like collapsed results.
+func collapsedUnionSignature(inst *check.Instance) bool {
+	if collapsedUnion(inst) {
+		return true
+	}
+	for i, p := range inst.Func.Params {
+		_, declared := p.(*check.Union)
+		_, specialized := inst.Params[i].(*check.Union)
+		if declared && !specialized {
+			return true
+		}
+	}
+	return false
 }
 
 func (g *gen) instanceResult(inst *check.Instance, call ast.Expr) ast.Expr {
