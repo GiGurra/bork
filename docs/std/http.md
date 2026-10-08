@@ -32,13 +32,13 @@ Each incoming request gets its own scope; returning from the handler closes it. 
 
 ## Client API
 
-Names below belong to `http`. All client calls return `Result = Response | Overloaded | DeadlineExceeded | Cancelled | IoError`.
+Names below belong to `http`. All client calls return `Result = Response | Overloaded | BodyTooLarge | DeadlineExceeded | Cancelled | IoError`.
 
 | Signature | Meaning |
 | --- | --- |
-| `Get(url: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net + clock + state: Result` | GET and read the response. |
-| `Post(url: String, contentType: String, body: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net + clock + state: Result` | POST a body with a Content-Type header. |
-| `Send(method: String, url: String, headers: Headers, body: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net + clock + state: Result` | Send an arbitrary method and repeated headers. |
+| `Get(url: String, s: Scope, timeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216) uses net + clock + state: Result` | GET and read the response. |
+| `Post(url: String, contentType: String, body: String, s: Scope, timeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216) uses net + clock + state: Result` | POST a body with a Content-Type header. |
+| `Send(method: String, url: String, headers: Headers, body: String, s: Scope, timeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216) uses net + clock + state: Result` | Send an arbitrary method and repeated headers. |
 | `HeaderOf(headers: Headers, name: String): Option[String]` | Find the first header value without regard to case. |
 | `RetryAfter(headers: Headers, now: time.Instant): Option[time.Duration]` | Parse an overload hint with an explicit clock reading. |
 
@@ -49,7 +49,21 @@ Names below belong to `http`. All client calls return `Result = Response | Overl
 | `TimeoutMs` | Int in `0..9223372036854`; guard with `http.ValidTimeout`. |
 | `Response` | `{ status: Status, headers: Headers, body: String }` |
 | `Overloaded` | `{ retryAfter: Option[time.Duration], response: Response }` |
+| `BodyTooLarge` | `{ limit: BodyLimit }`; decoded response exceeds maxBodyBytes. |
 | `DeadlineExceeded` | `{ message: String }` |
+
+Eager calls read at most `maxBodyBytes` decoded response bytes plus one byte to detect overflow. The default is 16 MiB. The limit also applies after automatic gzip decompression and to 429/503 bodies. Exact-limit bodies succeed; zero accepts only empty bodies. Overflow returns `BodyTooLarge` and closes the body without returning a partial response. Content-Length is not trusted as a byte bound. Set a larger nonnegative limit explicitly when needed.
+
+For example, bound a download to 1 MiB and handle overflow separately:
+
+```bork
+import "bork/http"
+
+fn fetch(url: String, s: Scope) uses net + clock + state: String | http.BodyTooLarge | http.Overloaded | http.DeadlineExceeded | Cancelled | IoError {
+  response = http.Get(url, s, maxBodyBytes: 1048576)?
+  response.body
+}
+```
 
 A zero timeout adds no per-call deadline; the scope and its ancestors still cancel the call. A positive timeout caps it, including response-body reads. Completed 429/503 responses become `Overloaded`, retaining the body and headers; other HTTP statuses are ordinary `Response` values. Transport or request-construction failures are `IoError`. Cancellation and deadline expiry have their own result types. The library adds no automatic overload retry; Go's transport can replay eligible requests after connection failures and follows its normal redirect policy. Use Retry only when repeating the operation is safe.
 
@@ -240,7 +254,7 @@ Go detects HTTP/1 disconnects only after consuming the body, so unread-body wait
 
 ## Shared retries
 
-Retrying asserts that repeating the operation is safe. Only Overloaded is retried; responses, IoError, Cancelled and DeadlineExceeded return directly. Share one scope-owned RetryBudget per destination across callers.
+Retrying asserts that repeating the operation is safe. Only Overloaded is retried; responses, BodyTooLarge, IoError, Cancelled and DeadlineExceeded return directly. Share one scope-owned RetryBudget per destination across callers.
 
 ```bork
 import "bork/http"

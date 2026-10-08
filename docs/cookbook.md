@@ -317,7 +317,7 @@ fn healthy(s: Scope) uses net + clock + state: Bool {
 }
 fn main() { println("run with bork test recipe.bork") }
 test "an upstream is healthy" {
-  calls = mock http.Get(url, s, timeoutMs) { http.Text(200, "ok") }
+  calls = mock http.Get(url, s, timeoutMs, maxBodyBytes) { http.Text(200, "ok") }
   calls.expect(times: 1)
   scope s { assert(healthy(s)) }
 }

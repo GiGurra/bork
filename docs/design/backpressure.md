@@ -132,7 +132,7 @@ http.DeadlineExceeded { message: String }
 ```
 
 Get/Post/Send return Result, an alias for Response | Overloaded |
-DeadlineExceeded | Cancelled | IoError. The shared client implementation classifies completed 429 and 503
+BodyTooLarge | DeadlineExceeded | Cancelled | IoError. The shared client implementation classifies completed 429 and 503
 responses as Overloaded while preserving their complete status, headers and body
 in response. Other HTTP statuses remain Response; transport errors remain
 IoError. Scope cancellation becomes Cancelled. An expired explicit request

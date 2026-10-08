@@ -152,6 +152,7 @@ fn call(s: Scope, base: String, method: String, path: String, body: String = "")
     resp: http.Response => println(s"$label -> ${resp.status} ${resp.body}")
     e: IoError => println(s"$label -> error: ${e.message}")
     e: http.Overloaded => println(s"$label -> overloaded: ${e.response.status} ${e.response.body}")
+    e: http.BodyTooLarge => println(s"$label -> response exceeds ${e.limit} bytes")
     e: http.DeadlineExceeded => println(s"$label -> deadline: ${e.message}")
     e: Cancelled => println(s"$label -> cancelled: ${e.reason}")
   }

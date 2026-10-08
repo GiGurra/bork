@@ -7,6 +7,7 @@ fn kind(result: http.Result): String {
   match (result) {
     _: http.Overloaded => "overloaded"
     _: http.Response => "response"
+    _: http.BodyTooLarge => "too large"
     _: http.DeadlineExceeded => "deadline"
     _: Cancelled => "cancelled"
     _: IoError => "io"
@@ -56,7 +57,7 @@ fn main() {
   scope s {
     budget = fixedBudget(s, 10)
     calls = atom(0)
-    responses: List[http.Result] = [http.Text(200, "ok"), IoError { path: "", message: "network" }, Cancelled { reason: "operation cancelled" }, http.DeadlineExceeded { message: "operation timeout" }]
+    responses: List[http.Result] = [http.Text(200, "ok"), http.BodyTooLarge { limit: 1 }, IoError { path: "", message: "network" }, Cancelled { reason: "operation cancelled" }, http.DeadlineExceeded { message: "operation timeout" }]
     println("terminal", responses.map(response => kind(http.Retry(s, budget, attempt => { _ = update(calls, n => n + 1); response }, maxAttempts: 10, baseDelayMs: 0, maxDelayMs: 0))), current(calls))
     result = http.Retry(s, budget, attempt => { _ = update(calls, n => n + 1); busy() }, maxAttempts: 1, baseDelayMs: 0, maxDelayMs: 0)
     println("attempt cap", kind(result), current(calls))

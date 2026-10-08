@@ -26,6 +26,7 @@ fn check(url: String, s: Scope) uses net + clock + state: Health {
     }
     e: IoError => Health.Unreachable { url: url, message: e.message }
     e: http.Overloaded => Health.Down { url: url, status: e.response.status, at: time.Now() }
+    e: http.BodyTooLarge => Health.Unreachable { url: url, message: s"response exceeds ${e.limit} bytes" }
     e: http.DeadlineExceeded => Health.Unreachable { url: url, message: e.message }
     e: Cancelled => Health.Unreachable { url: url, message: e.reason }
   }
@@ -71,13 +72,13 @@ fn main() {
 test "an upstream answering 503 is down, since the time it was checked" {
   noon = time.Instant { unixNanos: 1_760_000_000_000_000_000 }
   mock time.Now() { noon }
-  gets = mock http.Get(url, s, timeoutMs) { http.Overloaded { response: http.Text(503, ""), retryAfter: Option.None } }
+  gets = mock http.Get(url, s, timeoutMs, maxBodyBytes) { http.Overloaded { response: http.Text(503, ""), retryAfter: Option.None } }
   assertEqual(checkAll(["https://a.example"]), [Health.Down { url: "https://a.example", status: 503, at: noon }])
-  assertEqual(gets.calls(), ["http.Get(\"https://a.example\", <scope>, 2000)"])
+  assertEqual(gets.calls(), ["http.Get(\"https://a.example\", <scope>, 2000, 16777216)"])
 }
 
 test "every task sees the test's mocks" {
-  gets = mock http.Get(url, s, timeoutMs) {
+  gets = mock http.Get(url, s, timeoutMs, maxBodyBytes) {
     if (url.contains("down")) { http.Text(500, "") } else { http.Text(200, "") }
   }
   gets.expect(times: 20)
@@ -90,9 +91,9 @@ test "every task sees the test's mocks" {
 }
 
 test "a nested block changes the mock, and the outer one comes back" {
-  mock http.Get(url, s, timeoutMs) { http.Text(200, "") }
+  mock http.Get(url, s, timeoutMs, maxBodyBytes) { http.Text(200, "") }
   {
-    mock http.Get(url, s, timeoutMs) { IoError { path: "", message: "connection refused" } }
+    mock http.Get(url, s, timeoutMs, maxBodyBytes) { IoError { path: "", message: "connection refused" } }
     assertEqual(checkAll(["https://a"]).map(describe), ["unreachable: https://a"])
   }
   assertEqual(checkAll(["https://a"]).map(describe), ["up: https://a"])
@@ -104,8 +105,8 @@ test "a mock can pass calls on to the real function" {
       server: http.Server => {
         local = "http://" + http.Address(server)
         // Only the outside world is faked; the local server is real.
-        mock http.Get(url, s2, timeoutMs) {
-          if (url.startsWith(local)) { http.Get(url, s2, timeoutMs) } else { http.Text(200, "") }
+        mock http.Get(url, s2, timeoutMs, maxBodyBytes) {
+          if (url.startsWith(local)) { http.Get(url, s2, timeoutMs, maxBodyBytes) } else { http.Text(200, "") }
         }
         assertEqual(checkAll([local + "/down", "https://elsewhere"]).map(h => describe(h).replaceAll(local, "local")), ["down (503): local/down", "up: https://elsewhere"])
         cancel(s)

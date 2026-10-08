@@ -173,7 +173,7 @@ fn healthy(url: String, s: Scope) uses net + clock + state: Bool {
 }
 
 test "health check uses the requested URL" {
-  gets = mock http.Get(url, s, timeoutMs) { http.Text(200, "ok") }
+  gets = mock http.Get(url, s, timeoutMs, maxBodyBytes) { http.Text(200, "ok") }
   gets.expect(times: 1)
   gets.expectWhere(call => call.url == "https://service.example/health", times: 1)
   scope s {
