@@ -54,7 +54,7 @@ fn errorFacts(): Int | Absent {
   } }
 }
 fn lazyWrapped(n: Int): String | Wrapped {
-  lazy text = load(n)?{ e => Wrapped { operation: "lazy", cause: e } }
+  lazy text: String | Wrapped = match (load(n)) { text: String => text; e: Missing | Busy => Wrapped { operation: "lazy", cause: e } }
   text
 }
 fn empty(): Int | Ok { Ok }

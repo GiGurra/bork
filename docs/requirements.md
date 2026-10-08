@@ -265,7 +265,7 @@ r: SignUp | JsonError | DecodeError = json.Decode(line)   // DecodeError { path:
 - **`T where p and q(args)`** constrains parameters, results (also single members of a union result: `Int where positive | NotPositive`), record fields, constrained aliases (`type Port = Int where between(1, 65535)`), and typed bindings. Predicate arguments are constants or parameter names (`hi: Int where atLeast(lo)`).
 - **Fact sources:** a predicate call in an `if` condition (in the branch it guards), guards that end in `return` or `panic` (for the code after them), `&&` and `||` (for their right side), `!`, a function's own requirements, a callee's promised result (also through `?` and `match` on a validated union, where the fact holds only for the promising member), field declarations, typed bindings, successful bound type-pattern predicates, and `trust p(x)`.
 - **Facts are found by identity.** A fact about `x` also holds for `y = x`, and for field paths like `u.age`. Repeated pure calls and computed expressions share facts when their resolved operation, runtime types, and input identities match. This is structural identity, not an arithmetic theorem.
-- **Promised results are verified** against every reachable path of the body. Guards resolved from literal-backed eager bindings and independent record/copy fields prune impossible `if` arms and short-circuit operands. Unknown guards and runtime lazy/async cells retain all possible returns, including `?` failures; deciding a guard never executes a predicate or helper. Typed float rounding is preserved, and overflowing integer intermediates remain unknown (bork-m25mqh).
+- **Promised results are verified** against every reachable path of the body. Guards resolved from literal-backed eager bindings and independent record/copy fields prune impossible `if` arms and short-circuit operands. Unknown guards retain all possible returns, including ordinary function `?` failures; runtime lazy/async cells retain all possible initializer returns; deciding a guard never executes a predicate or helper. Typed float rounding is preserved, and overflowing integer intermediates remain unknown (bork-m25mqh).
 - **Requirements on constants are decided by running the predicate at compile time**, using the program's own code (including `unsafe go`): `transfer(0)` fails the build with "positive(0) is false". This works for any predicate, and for literals made of constants too: `xs: List[Int] = []; xs.first()` fails with "notEmpty([]) is false", `greet(User { name: "bob", age: 12 })` with "adult(User { name: "bob", age: 12 }) is false".
 - **Generic predicates:** `pred notEmpty[T](xs: List[T]) { !xs.isEmpty() }` applies to every list. The prelude has it, with `fn (xs: List[T] where notEmpty) first[T](): T`, which needs no `Option`; `prepend`, `append`, and `split` promise `notEmpty` results.
 - **OR:** `x: Int where positive or zero` needs one of the alternatives; `and` and `or` mix only with parentheses (`(positive or zero) and small`). A `||` condition gives an OR fact. An OR obligation may be proven by different alternatives on different branches, and a known OR fact is used by cases: a goal that follows from each alternative follows from the fact.
@@ -3475,9 +3475,10 @@ watch and hover contexts, invalid operands and unsupported syntax.
 
 `lazy name = expr` defers one initializer until its first read, memoizes its
 result and keeps the static type T. Local bindings are implemented, including
-concurrent readers, cached panics, scoped captures and initializer-local return/?.
-An Option ? needs an annotated lazy result type; union ? and explicit return
-can contribute to an inferred result. Lazy record fields provide a passable lazy
+concurrent readers, cached panics, scoped captures and initializer-local returns.
+`?` is rejected inside lazy/async initializers, including lazy field recipes and package bindings;
+use `match` to handle outcomes explicitly. Explicit return can contribute to an
+inferred result. Lazy record fields provide a passable lazy
 value through `type Lazy[T] = { lazy value: T }`. Pure sibling-dependent defaults
 are computed fields: construction creates their cells, copies invalidate affected
 dependencies, and structural equality, Show, encoding and writable schemas omit
@@ -3495,7 +3496,7 @@ now, keeps type T, and awaits on read. Unread tasks follow ordinary scope
 cancellation, joining and panic reporting. The cell retains its owning scope
 and captured lifetimes, even for scalar results; eagerly resolved data follows
 its ordinary lifetime rules. Both lazy and async initializers are local result
-boundaries for return/?.
+boundaries for explicit return; `?` is rejected.
 
 ### Generators and lazy sequences (implemented)
 

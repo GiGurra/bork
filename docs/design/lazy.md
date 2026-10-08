@@ -49,9 +49,10 @@ There is no public force-state API: whether the result is cached is an
 implementation detail, not a predicate or an input to program behavior.
 
 The initializer is a function boundary returning T. A block initializer can
-use `return` and `?` under that result type; neither returns from the enclosing
-function. An Option `?` needs an explicit result annotation because its failure
-returns a specialized None; ordinary union `?` can infer its failure alternatives.
+use explicit `return` under that result type; it returns from the initializer.
+`?` is rejected in lazy initializers, including lazy field recipes and package
+value initializers (with or without the `lazy` modifier). Use `match`
+to handle each outcome explicitly, as in a lambda.
 `break`, `continue` and `yield` cannot cross this boundary. Scopes and
 owners created inside it obey ordinary unwinding. Returning a handle belonging
 to an initializer-local scope is rejected, as with an ordinary function.

@@ -451,6 +451,13 @@ func (c *checker) try(e *syntax.Try) Type {
 	}
 	ctx := c.initializerContext
 	inDeferred := ctx != nil && ctx.depth == c.lambdaDepth
+	if inDeferred && ctx.rejectTry {
+		if xt != Invalid {
+			c.errorf(e.Pos, "? cannot be used in a %s (it would return from the enclosing function); use match", ctx.name)
+			c.deferredTryFix(e, xt)
+		}
+		return Invalid
+	}
 	if c.lambdaDepth > 0 && !inDeferred {
 		if xt != Invalid {
 			c.errorf(e.Pos, "? cannot be used in a lambda (it would return from the enclosing function); use match")
@@ -566,6 +573,63 @@ func (c *checker) wrappedTry(e *syntax.Try, xt, result Type, inDeferred bool) Ty
 	}
 	c.info.tries[e] = info
 	return info.Kept
+}
+
+func (c *checker) deferredTryFix(e *syntax.Try, typ Type) {
+	for _, file := range c.files {
+		if file.Path != e.Pos.File {
+			continue
+		}
+		name := "value"
+		var sourceText strings.Builder
+		for _, source := range c.files {
+			sourceText.WriteString(source.Source)
+		}
+		for strings.Contains(sourceText.String(), name) {
+			name += "_"
+		}
+		arms := name + " => " + name
+		switch typ := typ.(type) {
+		case *Union:
+			if c.matchTypeVisible(typ.Members[0]) {
+				arms = name + ": " + TypeText(typ.Members[0], c.pkg) + " => " + name + "; _ => todo()"
+			}
+		case *Sealed:
+			if IsOption(typ) {
+				arms = "Option.Some(" + name + ") => " + name + "; Option.None => todo()"
+			}
+		}
+		var start diag.Pos
+		operand := e.X
+		// Field defaults are cloned before checking; locate their source node.
+		for _, span := range file.ExpressionSpans {
+			if original, ok := span.Expr.(*syntax.Try); ok && original.Pos == e.Pos {
+				operand = original.X
+				break
+			}
+		}
+		for _, span := range file.ExpressionSpans {
+			if span.Expr == operand && (start.File == "" || sourcePositionCompare(span.Start, start) < 0) {
+				start = span.Start
+			}
+		}
+		if start.File == "" {
+			return
+		}
+		end := e.Pos
+		end.Col++
+		if e.Wrap != nil {
+			end = e.End
+		}
+		c.diags.Suggest(e.Pos, "type.error", end, diag.Fix{
+			Message: "replace ? with match and handle each outcome", RequiresInput: true,
+			Edits: []diag.TextEdit{
+				{Start: start, End: start, Replacement: "match ("},
+				{Start: e.Pos, End: end, Replacement: ") { " + arms + " }"},
+			},
+		})
+		return
+	}
 }
 
 // Reading and matching a private record stays public; only construction and

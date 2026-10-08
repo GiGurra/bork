@@ -26,11 +26,11 @@ fn main() {
   println(early)
   lazy inferred = { if (true) { return 5 }; 6 }
   println(inferred)
-  lazy propagate: Int | Failed = { number = bad()?; number + 1 }
+  lazy propagate: Int | Failed = match (bad()) { number: Int => number + 1; failure: Failed => failure }
   println(propagate)
-  lazy inferredUnion = { number = bad()?; number + 1 }
+  lazy inferredUnion: Int | Failed = match (bad()) { number: Int => number + 1; failure: Failed => failure }
   println(inferredUnion)
-  lazy optional: Option[Int] = { number = Option.Some(8)?; number + 1 }
+  lazy optional: Option[Int] = match (Option.Some(8)) { Option.Some(number) => Option.Some(number + 1); Option.None => Option.None }
   println(optional)
 
   with (label: "captured") {
