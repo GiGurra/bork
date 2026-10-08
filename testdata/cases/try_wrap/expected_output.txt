@@ -1,0 +1,22 @@
+save failed
+OK
+Wrapped { operation: "load", cause: Missing { id: 1 } }
+Wrapped { operation: "load", cause: Busy { retries: 2 } }
+10
+Absent { id: 9 }
+operand
+success
+ok
+operand
+mapper
+Wrapped { operation: "logged", cause: Missing { id: 1 } }
+fallback
+Busy { retries: 2 }
+7
+Absent { id: 1 }
+Absent { id: 7 }
+Wrapped { operation: "lazy", cause: Missing { id: 1 } }
+Absent { id: 0 }
+11
+9
+Wrapped { operation: "head", cause: Missing { id: 1 } }

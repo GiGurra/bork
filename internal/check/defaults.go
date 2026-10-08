@@ -31,7 +31,7 @@ func (c *checker) ensureDefaults(fn *Func) {
 	saved := *c
 	c.pkg, c.fn, c.inPrelude = fn.Pkg, nil, fn.Prelude
 	c.scopes = []map[string]*local{{}}
-	c.typeParams, c.lambdaDepth, c.have = nil, 0, nil
+	c.typeParams, c.lambdaDepth, c.mapperLambdas, c.have = nil, 0, 0, nil
 	c.session = nil // the defaults' calls are inferred on their own
 	c.typeParams = map[string]*TypeParam{}
 	for _, tp := range fn.TypeParams {
@@ -308,7 +308,7 @@ func (c *checker) ensureFieldDefault(field *Field) {
 	saved := *c
 	c.pkg, c.fn, c.inPrelude = field.Pkg, nil, field.Prelude
 	c.scopes = []map[string]*local{{}}
-	c.typeParams, c.lambdaDepth, c.have = nil, 0, nil
+	c.typeParams, c.lambdaDepth, c.mapperLambdas, c.have = nil, 0, 0, nil
 	c.session = nil
 	defer func() {
 		shared, solved, mapKeys := c.sharedDefaults, c.solved, c.mapKeyChecks

@@ -7,6 +7,19 @@ import (
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
+// bindingValue records an explicit annotation for direct ? initializers,
+// including deferred and package bindings. Inferred and carried types do not
+// select a different success member.
+func (c *checker) bindingValue(s *syntax.Binding, want Type) Type {
+	if x, ok := s.Value.(*syntax.Try); ok && s.Type != nil && want != nil {
+		if c.tryAnnotations == nil {
+			c.tryAnnotations = map[*syntax.Try]Type{}
+		}
+		c.tryAnnotations[x] = want
+	}
+	return c.exprWant(s.Value, want)
+}
+
 // bindRebinding installs a sequential local binding after its initializer has
 // been checked against the preceding environment. Simultaneous declarations
 // (parameters and patterns) use bind, which also rejects duplicate names.

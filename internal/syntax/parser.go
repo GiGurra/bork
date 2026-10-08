@@ -1720,7 +1720,34 @@ func (p *parser) postfix(x Expr, start diag.Pos) Expr {
 				x = &Selector{Pos: name.Pos, X: x, Name: name.Text}
 			}
 		case p.at(Quest):
-			x = &Try{Pos: p.next().Pos, X: x}
+			t := &Try{Pos: p.next().Pos, X: x}
+			if p.at(LBrace) && !p.noRecordLit {
+				if p.tok().Pos.Line != t.Pos.Line || p.tok().Pos.Col != t.Pos.Col+1 {
+					end := t.Pos
+					end.Col++
+					p.diags.AddCode(t.Pos, "syntax.try_mapper_spacing", "a failure mapper must attach to ?: write ?{ e => value }")
+					p.diags.Suggest(t.Pos, "syntax.try_mapper_spacing", p.tok().End, diag.Fix{
+						Message: "attach the failure mapper to ?", Edits: []diag.TextEdit{
+							{Start: end, End: end, Replacement: "{"},
+							{Start: p.tok().Pos, End: p.tok().End, Replacement: ""},
+						},
+					})
+				}
+				p.next()
+				p.skipNewlines()
+				saved := p.noRecordLit
+				p.noRecordLit = false
+				if p.at(TIdent) || p.at(Underscore) || p.at(LParen) {
+					t.Wrap = p.lambda().(*Lambda)
+				} else {
+					p.errorf(p.tok().Pos, "?{ ... } needs a one-parameter lambda: e => value")
+					panic(bailout{})
+				}
+				p.noRecordLit = saved
+				p.skipNewlines()
+				t.End = p.expect(RBrace, "after the ? failure mapper").End
+			}
+			x = t
 		case p.at(LBrace) && isTypePath(x) && !p.noRecordLit:
 			x = p.recordLit(x)
 		default:
@@ -2331,7 +2358,7 @@ func (p *parser) mapLit() Expr {
 // lambda parses `x => body` or `(params) => body`.
 func (p *parser) lambda() Expr {
 	l := &Lambda{Pos: p.tok().Pos}
-	if p.at(TIdent) {
+	if p.at(TIdent) || p.at(Underscore) {
 		t := p.next()
 		l.Params = []*Param{{Pos: t.Pos, Name: t.Text}}
 	} else {

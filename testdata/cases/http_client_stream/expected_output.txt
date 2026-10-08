@@ -1,0 +1,32 @@
+headers 200 Option.Some(["one", "two"])
+binary 00ff 616263 eof
+limit bytes 00ff6162
+limit limit:4 limit:4
+exact 00ff616263 eof
+zero empty eof
+zero nonempty limit:0
+gzip 61626364 limit:4
+budget forwarded true
+trace forwarded Option.Some("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+overload 503 Option.Some("2") 00ff616263
+redirect 200 00ff616263
+early headers 200 Option.Some("stream")
+timeout body deadline
+abandoned cancelled
+cancel read cancelled
+upload 68696869 eof 3
+producer failure io
+producer panic io
+producer cleanup panic io
+producer close true
+upload abandoned 413
+source closed cancelled
+upload timeout true
+timed source closed cancelled
+producer attached cancelled
+capture ready 7265616479
+captured producer joined cancelled
+buffered rejection 413
+early response body true
+upload response attached true
+attached 00ff616263

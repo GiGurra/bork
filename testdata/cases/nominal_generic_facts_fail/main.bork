@@ -1,0 +1,30 @@
+pred positive(x: Int) { x > 0 }
+pred above(x: Int, limit: Int) { x > limit }
+type Box[T] = { value: T }
+type PairBox[T] = { first: T, second: T }
+type Factory[T] = { seed: T, produce: () => T }
+type Marker[T] = {}
+type Chain[T] = { value: T, next: Option[Chain[T]] }
+fn need(x: Int where positive): Int { x }
+fn unwrap[T](box: Box[T]): T { box.value }
+fn choose[T](a: Box[T], b: Box[T], pickFirst: Bool): T { if pickFirst { a.value } else { b.value } }
+fn first[T](box: PairBox[T]): T { box.first }
+fn produce[T](factory: Factory[T]): T { factory.produce() }
+fn opaque[T](known: T, hidden: Marker[T]): T unsafe go { return known }
+fn recursive[T](chain: Chain[T]): T { chain.value }
+fn missing(x: Box[Int]): Int { need(unwrap(x)) }
+fn mixed(a: Box[Int where positive], b: Box[Int], flag: Bool): Int { need(choose(a, b, flag)) }
+fn fields(x: PairBox[Int]): Int {
+  if positive(x.first) { need(first(x)) } else { 0 }
+}
+fn wrong(limit: Int, other: Int, x: Box[Int where above(limit)]): Int {
+  value: Int where above(other) = unwrap(x)
+  value
+}
+fn callback(factory: Factory[Int]): Int {
+  if positive(factory.seed) { need(produce(factory)) } else { 0 }
+}
+fn phantom(x: Int where positive, marker: Marker[Int]): Int { need(opaque(x, marker)) }
+fn cycle(chain: Chain[Int]): Int {
+  if positive(chain.value) { need(recursive(chain)) } else { 0 }
+}

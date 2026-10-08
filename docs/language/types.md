@@ -24,6 +24,11 @@ fn main() {
 - `==` compares records by their contents.
 - Printing a record shows its type name and fields, much as it is written in code.
 
+When every field has a closed, eager default, the compiler checks the completed
+default value against the type's whole-value invariant at its declaration. This
+also applies to sealed variant defaults and concrete generic specializations.
+Partial defaults and lazy/computed recipes are checked when a value is built.
+
 Record fields and sealed variants can be separated by commas, newlines, or
 semicolons. Leading, repeated, and trailing semicolons are accepted, even in
 empty bodies. Blocks also accept these semicolons, but use newlines or
@@ -371,6 +376,39 @@ fn main() {
   println(basket)
 }
 ```
+
+Aliases can take type parameters to name a repeated shape:
+
+```bork
+type Index[T] = Map[String, List[T]]
+type Missing = {}
+type Result[T] = T | Missing
+
+fn first[T](items: List[T]): Result[T] {
+  match items.get(0) {
+    Option.Some(value) => value
+    Option.None => Missing {}
+  }
+}
+
+fn main() {
+  index: Index[Int] = { "numbers": [1, 2] }
+  println(index, first([3]))
+}
+```
+
+Supply every type argument when using an alias: `Index[Int]`. An alias is
+transparent: it has the identity, construction rules and effects of the type
+it expands to, with no wrapper or conversion. Union members keep their order,
+so `Result[T]` keeps `T` as the success type for `?`. Alias cycles are errors.
+For an alias of a record or sealed type, write explicit arguments on its
+constructor head, such as `Alias[Int] { value: 1 }`, or use `.{ value: 1 }`
+with an expected type.
+
+Facts follow their positions in the expansion. For `type Items[T] = List[T]`,
+`Items[Int where positive]` requires positive elements, just like
+`List[Int where positive]`. Expanding a fact into an unsupported position,
+such as a `Map` key or value, is still an error.
 
 ## Records with rules
 

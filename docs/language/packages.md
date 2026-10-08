@@ -127,6 +127,27 @@ fn main() {
 }
 ```
 
+A generic `Show` instance must work for every instantiation. It cannot test
+membership in a type parameter inside a union, either directly or through a
+helper or callback. For example, matching `_: T` in a `T | Error` field is a
+compile error: implicit rendering cannot retain that membership information.
+Match a concrete error member and use a wildcard for the remaining values,
+or give success and failure separate sealed variants:
+
+```bork
+type Error = {}
+type Box[T] = { value: T | Error }
+instance showBox[T]: Show[Box[T]] {
+  fn show(box: Box[T]): String {
+    match box.value {
+      _: Error => "error"
+      _ => "success"
+    }
+  }
+}
+fn main() { println(Box[Int | String] { value: Error {} }) }
+```
+
 ## Derived instances
 
 `derive` asks the compiler to write an instance. A class owner can also provide a [derivation template](derivation.md) for a custom class. `codec.Decode` and `codec.Encode` from [bork/codec](../std/codec.md) turn records and sealed types into and out of JSON, CSV rows, command-line options, environment variables, and SQL rows. Select `use codec.Defaults` for standard primitive and container instances.

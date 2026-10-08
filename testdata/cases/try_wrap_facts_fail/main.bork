@@ -1,0 +1,15 @@
+type Failure = { code: Int }
+type Wrapped = { code: Int }
+pred positive(x: Int) { x > 0 }
+pred approved(x: Wrapped) { x.code > 0 }
+fn source(flag: Bool): Int | Failure { if flag { Failure { code: 0 } } else { 1 } }
+fn badReturn(flag: Bool): Int | Wrapped where approved {
+  source(flag)?{ e => Wrapped { code: e.code } }
+}
+fn badField(flag: Bool): Int | Wrapped {
+  source(flag)?{ e => {
+    n: Int where positive = e.code
+    Wrapped { code: n }
+  } }
+}
+fn main() {}

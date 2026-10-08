@@ -842,8 +842,10 @@ type SelectArm struct {
 // Try is `x?`: keep the leftmost member of x's type, and return every
 // other member from the enclosing function.
 type Try struct {
-	Pos diag.Pos // position of '?'
-	X   Expr
+	Pos  diag.Pos // position of '?'
+	X    Expr
+	Wrap *Lambda  // optional failure mapper in ?{ e => value }
+	End  diag.Pos // end of the mapper braces, when present
 }
 
 // Pattern is a match pattern.

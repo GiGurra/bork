@@ -1,0 +1,112 @@
+==================
+Contextual propagation and control-head braces
+==================
+fn f() {
+ source()?{ error => Wrapped { cause: error } }.field
+ option?{ _ => Missing {} }
+ source()?{ (error: Failure) => { log(error); Wrapped { cause: error } } }
+ match x? { _ => 1 }
+ match x?{ _ => 1 }
+ match (x?{ e => Wrapped { cause: e } }) { _ => 1 }
+ if x?{ true }
+ for x?{ break }
+}
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (selector_expression
+        (try_expression
+          (call_expression
+            (qualified_name
+              (identifier)))
+          (failure_mapper
+            (lambda_expression
+              (identifier)
+              (record_expression
+                (qualified_name
+                  (identifier))
+                (record_literal
+                  (identifier)
+                  (qualified_name
+                    (identifier)))))))
+        (identifier))
+      (try_expression
+        (qualified_name
+          (identifier))
+        (failure_mapper
+          (record_expression
+            (qualified_name
+              (identifier))
+            (record_literal))))
+      (try_expression
+        (call_expression
+          (qualified_name
+            (identifier)))
+        (failure_mapper
+          (lambda_expression
+            (lambda_parameter
+              (identifier)
+              (type
+                (qualified_name
+                  (identifier))))
+            (block
+              (call_expression
+                (qualified_name
+                  (identifier))
+                (argument
+                  (qualified_name
+                    (identifier))))
+              (record_expression
+                (qualified_name
+                  (identifier))
+                (record_literal
+                  (identifier)
+                  (qualified_name
+                    (identifier))))))))
+      (match_expression
+        (try_expression
+          (qualified_name
+            (identifier)))
+        (match_arm
+          (pattern)
+          (number)))
+      (match_expression
+        (try_expression
+          (qualified_name
+            (identifier)))
+        (match_arm
+          (pattern)
+          (number)))
+      (match_expression
+        (parenthesized_expression
+          (try_expression
+            (qualified_name
+              (identifier))
+            (failure_mapper
+              (lambda_expression
+                (identifier)
+                (record_expression
+                  (qualified_name
+                    (identifier))
+                  (record_literal
+                    (identifier)
+                    (qualified_name
+                      (identifier))))))))
+        (match_arm
+          (pattern)
+          (number)))
+      (if_expression
+        (try_expression
+          (qualified_name
+            (identifier)))
+        (block
+          (boolean)))
+      (for_expression
+        (try_expression
+          (qualified_name
+            (identifier)))
+        (block)))))

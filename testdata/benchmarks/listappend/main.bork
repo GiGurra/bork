@@ -1,0 +1,23 @@
+fn buildList(n: Int): List[Int] {
+  out: List[Int] = []
+  for (i = 0; i < n; i = i + 1) { out = out.append(i) }
+  out
+}
+
+fn buildFiltered(n: Int): List[Int] {
+  out: List[Int] = []
+  for (i = 0; i < n; i = i + 1) {
+    out = if (i % 2 == 0) { out.append(i) } else { out }
+  }
+  out
+}
+
+// The helper keeps the ordinary immutable call outside the carried loop.
+fn appendCopy(xs: List[Int], x: Int): List[Int] { xs.append(x) }
+fn buildCopy(n: Int): List[Int] {
+  out: List[Int] = []
+  for (i = 0; i < n; i = i + 1) { out = appendCopy(out, i) }
+  out
+}
+
+fn main() { println(buildList(5), buildFiltered(5), buildCopy(5)) }

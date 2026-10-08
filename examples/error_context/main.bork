@@ -1,0 +1,16 @@
+type ReadError = { message: String }
+type LoadError = { path: String, cause: ReadError }
+
+fn read(path: String): String | ReadError {
+  if path == "config" { "port=8080" } else { ReadError { message: "not found" } }
+}
+
+fn load(path: String): String | LoadError {
+  text = read(path)?{ error => LoadError { path: path, cause: error } }
+  text.trim()
+}
+
+fn main() uses io {
+  println(load("config"))
+  println(load("missing"))
+}

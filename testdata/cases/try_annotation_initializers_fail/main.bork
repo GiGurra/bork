@@ -1,0 +1,13 @@
+type Hit = { value: Int }
+type Miss = {}
+fn cached(hit: Bool): Hit | Miss {
+  if hit { Hit { value: 7 } } else { Miss {} }
+}
+packageMiss: Miss = cached(true)?{ found => {
+  _ = found.value
+  Miss {}
+} }
+fn deferred(hit: Bool): Miss {
+  lazy miss: Miss = cached(hit)?{ _ => Miss {} }
+  miss
+}

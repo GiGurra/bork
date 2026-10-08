@@ -1,0 +1,20 @@
+pred positive(x: Int) { x > 0 }
+fn need(x: Int where positive): Int { x }
+fn direct(xs: List[Int]): Int {
+  for a in xs {
+    if positive(a) {
+      for b in xs { _ = need(b) }
+    }
+  }
+  0
+}
+fn aliased(xs: List[Int]): Int {
+  ys = xs
+  for a in xs {
+    if positive(a) {
+      for b in ys { _ = need(b) }
+    }
+  }
+  0
+}
+fn main() { println(direct([1, 0]), aliased([1, 0])) }

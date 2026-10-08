@@ -4,7 +4,7 @@ fn bad(flag: Bool): Int | Problem { if (flag) { Problem { code: 0 } } else { 1 }
 fn approvedSource(): Int | Problem where Approved { 1 }
 type Box = { lazy value: Int | Problem }
 fn fieldFailure(flag: Bool): Int | Problem where Approved {
-  box = Box { value: { _ = bad(flag)?; 1 } }
+  box = Box { value: { match (bad(flag)) { _: Int => {}; problem: Problem => return problem }; 1 } }
   box.value?
 }
 fn fieldReturn(flag: Bool): Int | Problem where Approved {
@@ -19,12 +19,12 @@ pred NumericExit(x: Int | Ok) { match (x) { _: Int => true; _: Ok => false } }
 fn emptyExit(): Int | Ok {}
 type ExitBox = { lazy value: Int | Ok }
 fn fieldEmpty(): (Int | Ok) where NumericExit {
-  box = ExitBox { value: { _ = emptyExit()?; 1 } }
+  box = ExitBox { value: { match (emptyExit()) { _: Int => {}; exit: Ok => return exit }; 1 } }
   box.value?
 }
 type GenericBox[T] = { lazy value: Int | T | Problem }
 fn genericFailure[T](value: T, flag: Bool): Int | T | Problem where Approved {
-  box = GenericBox[T] { value: { operand: Int | T | Problem = if (flag) { value } else { 1 }; operand? } }
+  box = GenericBox[T] { value: { operand: Int | T | Problem = if (flag) { value } else { 1 }; return operand } }
   box.value?
 }
 fn main() {}

@@ -1,0 +1,80 @@
+type Hit = { value: Int }
+type Miss = {}
+type Note = { value: Int }
+
+fn cached(hit: Bool): Hit | Miss {
+  if hit { Hit { value: 7 } } else { Miss {} }
+}
+
+fn invert(hit: Bool) uses io: Miss | Hit {
+  miss: Miss = cached(hit)?
+  println("kept miss")
+  miss
+}
+fn wrapped(hit: Bool): Miss | Note {
+  miss: Miss = cached(hit)?{ found => Note { value: found.value } }
+  miss
+}
+fn multi(n: Int): String | Int | Bool {
+  if n == 0 { "text" } else if n == 1 { 7 } else { true }
+}
+fn middle(n: Int): Int | String | Bool {
+  value: Int = multi(n)?
+  value + 100
+}
+fn middleWrapped(n: Int): Int | Note {
+  value: Int = multi(n)?{ error => match error {
+    text: String => Note { value: text.byteLength() }
+    flag: Bool => Note { value: if flag { 1 } else { 0 } }
+  } }
+  value + 100
+}
+fn defaultSelection(n: Int): String | Int | Bool {
+  value = multi(n)?
+  value.toUpper()
+}
+pred positive(n: Int) { n > 0 }
+fn validated(ok: Bool): String | Int where positive {
+  if ok { 7 } else { "missing" }
+}
+fn needsPositive(n: Int where positive): Int { n }
+fn keptFacts(ok: Bool): Int | String {
+  n: Int where positive = validated(ok)?
+  needsPositive(n)
+}
+fn mappedFacts(ok: Bool): Int | Note {
+  n: Int where positive = validated(ok)?{ text => Note { value: text.byteLength() } }
+  needsPositive(n)
+}
+fn option(): Int | Note {
+  n: Int = [9].get(0)?{ _ => Note { value: 0 } }
+  n
+}
+fn containers(text: Bool): List[String] | List[Int] {
+  if text { ["ok"] } else { [3] }
+}
+fn selectedContainer(text: Bool): List[Int] | List[String] {
+  values: List[Int] = containers(text)?
+  values.map(n => n + 1)
+}
+fn main() uses io {
+  println(invert(true))
+  println(invert(false))
+  println(wrapped(true))
+  println(wrapped(false))
+  println(middle(0))
+  println(middle(1))
+  println(middle(2))
+  println(middleWrapped(0))
+  println(middleWrapped(1))
+  println(middleWrapped(2))
+  println(defaultSelection(0))
+  println(defaultSelection(1))
+  println(keptFacts(true))
+  println(keptFacts(false))
+  println(mappedFacts(true))
+  println(mappedFacts(false))
+  println(option())
+  println(selectedContainer(true))
+  println(selectedContainer(false))
+}

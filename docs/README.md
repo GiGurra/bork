@@ -20,6 +20,7 @@ Each page covers one area in plain terms, with code you can run. Follow the Prev
 | [Basics](language/basics.md) | Names, rebinding, functions, control flow, loops, tail calls, and printing |
 | [Types](language/types.md) | Records, sealed types, unions, `Option`, `Ok`, and generics |
 | [Matching and errors](language/matching.md) | `match`, patterns, exhaustiveness, and `?` |
+| [Adding error context](language/errors.md) | Wrapping failures at a single `?` |
 | [Collections](language/collections.md) | Lists, maps, lazy sequences, bytes, and parallel list operations |
 | [Facts](language/facts.md) | Predicates, `where`, and what the compiler proves |
 | [Effects](language/effects.md) | `uses`, pure functions, and ambient values |

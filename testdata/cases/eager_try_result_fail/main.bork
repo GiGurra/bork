@@ -44,7 +44,7 @@ fn hidesFailure(flag: Bool): Int | Failed { _ = bad(flag)?; 1 }
 fn needsSuccess(x: (Int | Failed) where Success): Int { 1 }
 fn derived(flag: Bool): Int { needsSuccess(hidesFailure(flag)) }
 fn lazyFailure(flag: Bool): Int | Problem where Approved {
-  lazy value: Int | Problem = { _ = problem(flag)?; 1 }
+  lazy value: Int | Problem = { match (problem(flag)) { _: Int => {}; failure: Problem => return failure }; 1 }
   value?
 }
 fn lazyReturn(flag: Bool): Int | Problem where Approved {
@@ -63,7 +63,7 @@ fn noElse(flag: Bool): Int | Ok { if (flag) { return 1 } }
 fn emptyFailure(): (Int | Ok) where NumericOk { _ = empty()?; 1 }
 fn bareFailure(): (Int | Ok) where NumericOk { _ = bareReturn()?; 1 }
 fn noElseFailure(flag: Bool): (Int | Ok) where NumericOk { _ = noElse(flag)?; 1 }
-fn lazyEmptyFailure(): (Int | Ok) where NumericOk { lazy value: Int | Ok = { _ = empty()?; 1 }; value? }
+fn lazyEmptyFailure(): (Int | Ok) where NumericOk { lazy value: Int | Ok = { match (empty()) { _: Int => {}; exit: Ok => return exit }; 1 }; value? }
 pred RejectOk(x: Int | Ok) { false }
 fn bareUnit(): Ok where RejectOk { return }
 fn genericFailure[T](value: T, flag: Bool): Int | T | Problem where Approved {

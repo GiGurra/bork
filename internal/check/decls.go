@@ -18,6 +18,7 @@ type typeEntry struct {
 	resolved  bool
 	prelude   bool
 	pkg       *Package // the declaring package
+	params    []*TypeParam
 	// The where clause of a constrained alias (type Port = Int where ...).
 	constraints     []*Constraint
 	constraintsDone bool
@@ -110,15 +111,12 @@ func (c *checker) declareType(td *syntax.TypeDecl, prelude bool) {
 		seen[d.Name] = true
 		params = append(params, &TypeParam{Name: d.Name, Decl: d})
 	}
+	e.params = params
 	switch td.Kind {
 	case syntax.RecordType:
 		e.typ = &Record{Name: td.Name, Decl: td, Prelude: prelude, Pkg: c.pkg, TypeParams: params, insts: newInstanceSet()}
 	case syntax.SealedType:
 		e.typ = &Sealed{Name: td.Name, Decl: td, Prelude: prelude, Pkg: c.pkg, TypeParams: params, insts: newInstanceSet()}
-	case syntax.AliasType:
-		if len(td.TypeParams) > 0 {
-			c.errorf(td.Pos, "a type alias cannot have type parameters (yet); declare a record or sealed type")
-		}
 	case syntax.GoType:
 		if len(td.TypeParams) > 0 {
 			c.bindErr(td.Pos, "an opaque Go type cannot have type parameters")
@@ -154,7 +152,7 @@ func (c *checker) resolveDecl(e *typeEntry) Type {
 	defer func() { c.pkg, c.inPrelude = savedPkg, savedPrelude }()
 	// A generic type's parameters are visible in its fields.
 	savedParams := c.typeParams
-	if ps := typeParamsOf(e.typ); len(ps) > 0 {
+	if ps := e.params; len(ps) > 0 {
 		c.typeParams = map[string]*TypeParam{}
 		for _, p := range ps {
 			c.typeParams[p.Name] = p
@@ -199,11 +197,7 @@ func (c *checker) resolveDecl(e *typeEntry) Type {
 			c.errorf(td.Pos, "sealed type %s needs at least one variant", td.Name)
 		}
 	case syntax.AliasType:
-		if len(td.TypeParams) > 0 {
-			e.typ = Invalid // reported when declared
-		} else {
-			e.typ = c.resolveType(td.Alias)
-		}
+		e.typ = c.resolveType(td.Alias)
 	}
 	e.resolving = false
 	e.resolved = true
@@ -386,12 +380,15 @@ func (c *checker) resolveTypeInner(t *syntax.TypeExpr) Type {
 		}
 		return &Map{Key: key, Value: value}
 	}
-	if e := c.lookupType(t.Name); e != nil && e.decl.Kind != syntax.AliasType {
-		params := typeParamsOf(e.typ)
+	if e := c.lookupType(t.Name); e != nil {
+		params := e.params
 		if len(params) == 0 {
 			if len(t.Args) > 0 {
 				c.errorf(t.Pos, "%s does not take type arguments", t.Name)
 				return Invalid
+			}
+			if e.decl.Kind == syntax.AliasType {
+				return c.resolveDecl(e)
 			}
 			return e.typ
 		}
@@ -411,6 +408,9 @@ func (c *checker) resolveTypeInner(t *syntax.TypeExpr) Type {
 				return Invalid
 			}
 		}
+		if e.decl.Kind == syntax.AliasType {
+			return subst(c.resolveDecl(e), bindParams(params, args))
+		}
 		return instantiate(e.typ, args)
 	}
 	if len(t.Args) > 0 {
@@ -419,12 +419,6 @@ func (c *checker) resolveTypeInner(t *syntax.TypeExpr) Type {
 	}
 	if typ, ok := basicTypes[t.Name]; ok {
 		return typ
-	}
-	if e := c.lookupType(t.Name); e != nil {
-		if e.decl.Kind == syntax.AliasType {
-			return c.resolveDecl(e)
-		}
-		return e.typ
 	}
 	c.unknownType(t.Pos, t.Name)
 	return Invalid
