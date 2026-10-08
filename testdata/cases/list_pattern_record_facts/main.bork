@@ -1,0 +1,37 @@
+pred positive(x: Int) { x > 0 }
+pred atLeast(x: Int, lo: Int) { x >= lo }
+type Row = { value: Int where positive }
+type Range = { lo: Int, hi: Int where atLeast(lo) }
+type Outer = { range: Range }
+type Batch = { lo: Int, values: List[Int where atLeast(lo)] }
+type Choice = sealed { Value { lo: Int, hi: Int where atLeast(lo) }, Empty }
+fn need(x: Int where positive): Int { x }
+fn take(lo: Int, hi: Int where atLeast(lo)): Int { hi }
+fn all(lo: Int, xs: List[Int where atLeast(lo)]): Int { xs.length() }
+fn row(xs: List[Row]): Int {
+  match xs { [Row { value }, ...] => need(value), [] => 0 }
+}
+fn rows(xs: List[List[Row]]): Int {
+  match xs { [[Row { value }, ...], ...] => need(value), _ => 0 }
+}
+fn range(xs: List[Range]): Int {
+  match xs { [Range { lo, hi }, ...] => take(lo, hi), [] => 0 }
+}
+fn nested(xs: List[Outer]): Int {
+  match xs { [Outer { range: Range { lo, hi } }, ...] => take(lo, hi), [] => 0 }
+}
+fn variant(xs: List[Choice]): Int {
+  match xs { [.Value { lo, hi }, ...] => take(lo, hi), _ => 0 }
+}
+fn aliased(xs: List[Range]): Int {
+  match xs { [Range { lo, hi }, ...] => { lower = lo; take(lower, hi) }, [] => 0 }
+}
+fn batch(xs: List[Batch]): Int {
+  match xs { [Batch { lo, values: [value, ...rest] }, ...] => take(lo, value) + all(lo, rest), _ => 0 }
+}
+fn main() {
+  println(row([Row { value: 1 }]), rows([[Row { value: 2 }]]))
+  println(range([Range { lo: 3, hi: 4 }]), nested([Outer { range: Range { lo: 5, hi: 6 } }]))
+  println(variant([Choice.Value { lo: 7, hi: 8 }]), aliased([Range { lo: 9, hi: 10 }]))
+  println(batch([Batch { lo: 1, values: [2, 3] }]))
+}

@@ -21,7 +21,3 @@ fn missing(xs: List[Int]): Int {
 fn wrong(limit: Int, other: Int, xs: List[Int where above(limit)]): Int {
   match xs { [value, ...] => { checked: Int where above(other) = value; checked }, [] => 0 }
 }
-type Row = { value: Int where positive }
-fn rows(xs: List[List[Row]]): Int {
-  match xs { [[Row { value }, ...], ...] => need(value), _ => 0 }
-}

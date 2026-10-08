@@ -358,6 +358,18 @@ fn main() {
 
 Type arguments are usually worked out from the values. When there is nothing to work them out from, write them: `Tree[Int].Leaf`, or `xs: List[Int] = []`.
 
+Union members can coincide after specialization. For example, `T | Int` becomes `Int` when `T` is `Int`. This also works inside callback signatures and container elements, including when a generic function is saved as a function value.
+
+```bork
+fn apply[T](witness: T, callback: (T | Int) => Int, value: T | Int): Int {
+  callback(value)
+}
+
+fn main() {
+  println(apply[Int](0, n => n + 1, 2))
+}
+```
+
 A type parameter can require a type class, as in `fn largest[T: Ord](xs: List[T])`. See [packages](packages.md#type-classes).
 
 ## Type aliases
