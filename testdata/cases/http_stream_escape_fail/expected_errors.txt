@@ -1,0 +1,1 @@
+main.bork:4:3: function escape cannot return this value: it belongs to scope temporary, which ends on line 9

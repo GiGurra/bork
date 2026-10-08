@@ -1,0 +1,147 @@
+import "bork/http"
+import "bork/encoding"
+
+type Remote = resource
+fn remote(s: Scope) uses net + state: Remote unsafe go {
+  import "compress/gzip"
+  import "io"
+  import "net/http"
+  import "net/http/httptest"
+  srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    switch r.URL.Path {
+    case "/empty": return
+    case "/gzip":
+      w.Header().Set("Content-Encoding", "gzip")
+      compressed := gzip.NewWriter(w)
+      compressed.Write([]byte("abcde"))
+      compressed.Close()
+    case "/meta":
+      w.Header().Set("X-Budget", r.Header.Get("Bork-Timeout-Ns"))
+      w.Header().Set("X-Trace", r.Header.Get("traceparent"))
+    case "/wait":
+      w.Header().Set("X-Test", "stream")
+      w.WriteHeader(200)
+      w.(http.Flusher).Flush()
+      <-r.Context().Done()
+    case "/reject":
+      http.NewResponseController(w).EnableFullDuplex()
+      w.WriteHeader(413)
+      w.(http.Flusher).Flush()
+      io.Copy(io.Discard, r.Body)
+    case "/uploadwait":
+      io.Copy(io.Discard, r.Body)
+    case "/echo":
+      io.Copy(w, r.Body)
+    case "/503":
+      w.Header().Set("Retry-After", "2")
+      w.WriteHeader(503)
+      w.Write([]byte{0, 255, 97, 98, 99})
+    case "/redirect":
+      w.Header().Set("Location", "/binary")
+      w.WriteHeader(307)
+    default:
+      w.Header().Add("X-Many", "one")
+      w.Header().Add("X-Many", "two")
+      w.Write([]byte{0, 255, 97, 98, 99})
+    }
+  }))
+  return Remote{handle: srv.URL, owner: s.Own(func() { srv.Close() })}
+}
+fn url(server: Remote): String unsafe go { return server.handle.(string) }
+fn response(result: http.StreamResult): http.StreamResponse {
+  match (result) { value: http.StreamResponse => value, error => panic(toString(error)) }
+}
+fn kind(result: http.ReadResult): String {
+  match (result) {
+    data: Bytes => encoding.Hex(data)
+    _: http.Eof => "eof"
+    error: http.BodyTooLarge => s"limit:${error.limit}"
+    _: http.DeadlineExceeded => "deadline"
+    _: Cancelled => "cancelled"
+    _: IoError => "io"
+  }
+}
+fn main() {
+  scope app {
+    server = remote(app)
+    base = url(server)
+    result = response(http.GetStream(base, app))
+    println("headers", result.status, result.headers.get("X-Many"))
+    println("binary", kind(http.Read(result.body, 2)), kind(http.Read(result.body, 3)), kind(http.Read(result.body)))
+    limited = response(http.GetStream(base, app, maxBodyBytes: .Some(4)))
+    println("limit bytes", kind(http.Read(limited.body)))
+    println("limit", kind(http.Read(limited.body)), kind(http.Read(limited.body)))
+    exact = response(http.GetStream(base, app, maxBodyBytes: .Some(5)))
+    println("exact", kind(http.Read(exact.body)), kind(http.Read(exact.body)))
+    empty = response(http.GetStream(base + "/empty", app, maxBodyBytes: .Some(0)))
+    println("zero empty", kind(http.Read(empty.body)))
+    zero = response(http.GetStream(base, app, maxBodyBytes: .Some(0)))
+    println("zero nonempty", kind(http.Read(zero.body)))
+    zipped = response(http.GetStream(base + "/gzip", app, maxBodyBytes: .Some(4)))
+    println("gzip", kind(http.Read(zipped.body)), kind(http.Read(zipped.body)))
+    meta = response(http.SendStream("GET", base + "/meta", { "Bork-Timeout-Ns": ["bad"], "traceparent": ["00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"] }, app, timeoutMs: 1000))
+    budget = parseInt(http.HeaderOf(meta.headers, "X-Budget").getOr("bad"))
+    println("budget forwarded", match (budget) { nanos: Int => nanos > 0 && nanos <= 1000000000, _ => false })
+    println("trace forwarded", http.HeaderOf(meta.headers, "X-Trace"))
+    http.Close(meta.body)
+    overloaded = response(http.GetStream(base + "/503", app))
+    println("overload", overloaded.status, http.HeaderOf(overloaded.headers, "Retry-After"), kind(http.Read(overloaded.body)))
+    redirected = response(http.GetStream(base + "/redirect", app))
+    println("redirect", redirected.status, kind(http.Read(redirected.body)))
+    timed = response(http.GetStream(base + "/wait", app, timeoutMs: 50))
+    println("early headers", timed.status, http.HeaderOf(timed.headers, "X-Test"))
+    println("timeout body", kind(http.Read(timed.body)))
+    abandoned = response(http.GetStream(base + "/wait", app))
+    http.Close(abandoned.body)
+    http.Close(abandoned.body)
+    println("abandoned", kind(http.Read(abandoned.body)))
+    scope request {
+      pending = response(http.GetStream(base + "/wait", request))
+      task = fork(request, () => http.Read(pending.body))
+      cancel(request)
+      println("cancel read", kind(await(task)))
+    }
+    calls = atom(0)
+    upload = http.OpenBody(app, producer => {
+      count = update(calls, n => n + 1)
+      if (count <= 2) { encoding.Utf8("hi") } else { http.Eof {} }
+    })
+    uploaded = response(http.SendStream("POST", base + "/echo", {:}, app, body: .Some(upload)))
+    println("upload", kind(http.Read(uploaded.body)), kind(http.Read(uploaded.body)), current(calls))
+    failed = http.OpenBody(app, producer => IoError { path: "source", message: "broken" })
+    println("producer failure", kind(http.Read(failed)))
+    panicBody = http.OpenBody(app, producer => panic("producer panic"))
+    println("producer panic", kind(http.Read(panicBody)))
+    scope producer {
+      infinite = http.OpenBody(producer, work => encoding.Utf8("pending"))
+      http.Close(infinite)
+    }
+    println("producer close", true)
+    scope request {
+      source = response(http.GetStream(base + "/wait", app))
+      rejected = response(http.SendStream("POST", base + "/reject", {:}, request, body: .Some(source.body), timeoutMs: 1000))
+      println("upload abandoned", rejected.status)
+      http.Close(rejected.body)
+      println("source closed", kind(http.Read(source.body)))
+    }
+    scope request {
+      source = response(http.GetStream(base + "/wait", app))
+      match (http.SendStream("POST", base + "/uploadwait", {:}, request, body: .Some(source.body), timeoutMs: 50)) {
+        _: http.DeadlineExceeded => println("upload timeout", true)
+        error => panic(toString(error))
+      }
+      println("timed source closed", kind(http.Read(source.body)))
+    }
+    attachedProducer = scope temporary {
+      body = http.OpenBody(temporary, work => encoding.Utf8("attached"))
+      attach(body, app)
+    }
+    println("producer attached", kind(http.Read(attachedProducer)))
+    http.Close(attachedProducer)
+    outer = scope temporary {
+      stream = response(http.GetStream(base, temporary))
+      attach(stream.body, app)
+    }
+    println("attached", kind(http.Read(outer)))
+  }
+}

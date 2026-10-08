@@ -89,6 +89,47 @@ The invalid URL takes the IoError branch:
 request construction failed
 ```
 
+## Streaming client bodies
+
+Use `GetStream` or `SendStream` to receive headers before the complete body arrives. `StreamResponse` has `status: Status`, `headers: Headers`, and `body: BodyReader`. All HTTP statuses, including 429/503, remain StreamResponse values; inspect status and use RetryAfter explicitly. Streaming calls do not retry uploads or buffer overload bodies.
+
+| Signature | Meaning |
+| --- | --- |
+| `GetStream(url: String, s: Scope, timeoutMs: TimeoutMs = 0, maxBodyBytes: Option[BodyLimit] = .None)` | GET; return `StreamResult`. |
+| `SendStream(method: String, url: String, headers: Headers, s: Scope, body: Option[BodyReader] in s = .None, timeoutMs: TimeoutMs = 0, maxBodyBytes: Option[BodyLimit] = .None)` | Send an optional binary upload stream; return `StreamResult`. |
+| `Read(body: BodyReader, size: ReadSize = 4096)` | Read up to size immutable bytes; return `ReadResult`. |
+| `Close(body: BodyReader)` | Abandon a stream early; safe more than once. |
+| `OpenBody(s: Scope, next: (Scope) => ReadResult in s)` | Create a producer-backed upload with no queued chunks. Adds the callback's effects. |
+
+These functions use `net + clock + state`, except Close uses `net + state`. `ReadSize` is an Int in `1..16777216`, checked with ValidReadSize. `ReadResult = Bytes | Eof | BodyTooLarge | DeadlineExceeded | Cancelled | IoError`; `StreamResult = StreamResponse | BodyTooLarge | DeadlineExceeded | Cancelled | IoError`.
+
+Read returns available bytes, which may be smaller than size. Concurrent reads serialize; chunk boundaries do not correspond to application messages. Eof and errors are terminal. Bytes are binary: use `encoding.Utf8` to encode text and `encoding.ParseUtf8` when a complete text value has been assembled. Individual chunks may split a UTF-8 character.
+
+The stream closes on Eof, failure, explicit Close, or last-owner scope cleanup. Scope cancellation interrupts blocked reads. A timeout covers headers and all subsequent body reads; returning headers does not reset it. Attach/move follow ordinary resource ownership, while the original total timeout continues. The optional maxBodyBytes bounds total decoded response bytes; no total limit is imposed by default, so long-lived event streams can continue. Read still bounds each allocation by size. At the configured limit, the next Read probes for overflow: exact-limit EOF succeeds and extra bytes return BodyTooLarge.
+
+OpenBody runs its callback sequentially in a child scope and blocks on consumer backpressure between chunks. Return Bytes for data, Eof to finish, or a typed failure. Closing the body cancels that child scope and waits for producer cleanup; callbacks must cooperate with that scope's cancellation. Captured resources must outlive s. SendStream consumes and closes its supplied upload body, including on failure or abandonment, so a blocked source read cannot retain its forwarding worker. Nonreplayable upload bodies follow Go's redirect rules: 307/308 cannot replay them; eligible 301/302/303 redirects may change the method to GET.
+
+```bork
+import "bork/http"
+import "bork/encoding"
+
+fn chunks(url: String, app: Scope) uses io + net + clock + state: Ok | http.BodyTooLarge | http.DeadlineExceeded | Cancelled | IoError {
+  response = http.GetStream(url, app, maxBodyBytes: .Some(1048576))?
+  for {
+    match (http.Read(response.body)) {
+      bytes: Bytes => println(encoding.Hex(bytes))
+      _: http.Eof => break
+      error: http.BodyTooLarge => return error
+      error: http.DeadlineExceeded => return error
+      error: Cancelled => return error
+      error: IoError => return error
+    }
+  }
+}
+```
+
+See [http_stream_client](../../examples/http_stream_client/main.bork) for a runnable local download into an fs.File and incremental upload. A producer can adapt other resources, such as net.Read, by mapping their EOF/error results to ReadResult; no shared fs/net stream trait is required.
+
 ## Server API
 
 All listener functions return `Server | IoError`. Their final options share these types and defaults:

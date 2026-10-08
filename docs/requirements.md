@@ -1278,6 +1278,10 @@ BodyTooLarge, DeadlineExceeded, Cancelled, or IoError, with safe Retry-After par
 Eager Get/Post/Send calls bound decoded response bytes with maxBodyBytes
 (default 16 MiB); exact-limit bodies succeed and oversized bodies are closed
 without returning a partial Response.
+GetStream/SendStream expose scope-owned binary response readers and optional
+total limits; Read bounds chunk allocations, and OpenBody supplies producer
+uploads with backpressure. Total timeouts continue through response consumption.
+See [streaming client bodies](std/http.md#streaming-client-bodies).
 Shared HTTP retry budgets charge clock + state for creation and operation effects plus clock + random + state for explicit retries. Initial attempts are free; retries atomically consume a shared, lazily refilled token, preserve Retry-After minimums, and stop when waits cannot fit the scope deadline. Budgets and injected clocks have checked scope lifetimes, and last-owner closure cancels waits and active attempt scopes. See [HTTP documentation](std/http.md#shared-retries) and [the backpressure design](design/backpressure.md).
 
 ### Partially overlapping scopes: owned child scopes
