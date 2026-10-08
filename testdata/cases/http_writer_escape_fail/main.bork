@@ -1,0 +1,11 @@
+import "bork/http"
+
+fn make(s: Scope) uses net: http.BodyWriter unsafe go {
+  return http.BodyWriter{handle: nil, owner: s.Own(func() {})}
+}
+fn escape() uses net: http.BodyWriter {
+  scope temporary {
+    make(temporary)
+  }
+}
+fn main() { _ = escape() }

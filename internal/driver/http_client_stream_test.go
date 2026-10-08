@@ -13,6 +13,14 @@ import (
 // Exercise binary HTTP streaming and producer shutdown under the race detector
 // using the actual generated implementation.
 func TestHTTPClientStreamRace(t *testing.T) {
+	testHTTPStreamRace(t, "http_client_stream")
+}
+
+func TestHTTPServerStreamRace(t *testing.T) {
+	testHTTPStreamRace(t, "http_server_stream")
+}
+
+func testHTTPStreamRace(t *testing.T, fixture string) {
 	if !testRaceEnabled {
 		t.Skip("generated race executable is covered by go test -race")
 	}
@@ -20,7 +28,7 @@ func TestHTTPClientStreamRace(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds and runs a Go race executable")
 	}
-	path := filepath.Join("..", "..", "testdata", "cases", "http_client_stream")
+	path := filepath.Join("..", "..", "testdata", "cases", fixture)
 	files, _, source, err := emit(path)
 	if err != nil {
 		t.Fatal(err)

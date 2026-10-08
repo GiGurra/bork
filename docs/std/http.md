@@ -164,6 +164,52 @@ Listen routes every request to one handler. ListenRoutes and ListenTLS accept me
 
 `http.Handler` permits all five effects. A function starting a routed listener therefore declares all five, even when its handlers are pure. Middleware is an ordinary `(http.Handler) => http.Handler` function.
 
+## Streaming server bodies
+
+ListenStream accepts a `(StreamRequest, BodyWriter, Scope) => StreamOutcome`
+handler with open effects. ListenStreamRoutes accepts `List[StreamRoute]`, where
+`StreamRoute` has `pattern: String` and `handler: StreamHandler`. ListenStreamTLS
+adds certificate/key paths, like ListenTLS. Routed handlers allow all five effects.
+All three listeners retain the eager listener options, admission, propagation,
+deadlines and shutdown behavior.
+
+StreamRequest has the same metadata fields as Request, with `body: BodyReader`
+instead of String. `Read(request.body, size)` reads bounded binary chunks. The
+listener's maxBodyBytes bounds the total incoming body (default 16 MiB); overflow
+returns BodyTooLarge. Responses have no total byte limit. Each Write accepts an
+existing Bytes value and waits for transport backpressure without queuing chunks.
+
+| Operation | Result and effects |
+| --- | --- |
+| `BeginResponse(writer: BodyWriter, status: FinalStatus, headers: Headers)` | `StreamOutcome`; `net + clock + state`. FinalStatus is 200..599. Commits status and repeated headers once. |
+| `Write(writer: BodyWriter, data: Bytes)` | `Int \| DeadlineExceeded \| Cancelled \| IoError`; `net + clock + state`. Returns bytes written; an error may follow a partial write. |
+| `Flush(writer: BodyWriter)` | `StreamOutcome`; `net + clock + state`. Sends buffered response data immediately. |
+
+StreamOutcome is `Ok | BodyTooLarge | DeadlineExceeded | Cancelled | IoError`.
+Write or Flush without BeginResponse starts a 200 response. A repeated
+BeginResponse returns IoError. Informational 1xx responses are not exposed.
+Concurrent reads serialize per reader, and writes/flushes serialize per writer.
+Read chunks can split or combine application messages.
+
+Both resources belong to the supplied request scope. They are closed when the
+handler and its request tasks finish, even if attached elsewhere; attachment
+cannot prolong an HTTP exchange. Cancellation and deadlines interrupt blocked
+reads and writes. Handlers and request tasks must still cooperate with scope
+cancellation. Returning Ok finishes the response. Before headers are committed,
+BodyTooLarge becomes 413, DeadlineExceeded becomes 504, and other failures become
+500 where the connection permits. After commitment a failed outcome aborts the
+response; status and headers cannot be replaced. An unfinished incoming body is
+closed rather than drained, and the connection is closed.
+
+HTTP/1 streaming handlers may read and write incrementally in the same exchange.
+The client streaming API still completes or cancels its upload at response headers;
+use a separate capable client for a full-duplex exchange.
+
+For SSE, set Content-Type to text/event-stream, write UTF-8 event framing, then
+Flush. The [http_stream_server example](../../examples/http_stream_server/README.md)
+writes `data: first\n\n` and flushes it while the handler is still running.
+No heartbeat, reconnect policy or SSE parser is provided.
+
 ## Routes and checked input
 
 Decode body, query or path fields into derived records. Field facts are checked before the decoder returns a value. This example sends one valid path and one invalid path:

@@ -1,0 +1,237 @@
+import "bork/http"
+import "bork/encoding"
+
+fn server(result: http.Server | IoError): http.Server {
+  match (result) { value: http.Server => value, error: IoError => panic(error.message) }
+}
+fn response(result: http.StreamResult): http.StreamResponse {
+  match (result) { value: http.StreamResponse => value, error => panic(toString(error)) }
+}
+fn kind(result: http.ReadResult): String {
+  match (result) {
+    bytes: Bytes => encoding.Hex(bytes)
+    _: http.Eof => "eof"
+    _: http.BodyTooLarge => "limit"
+    _: http.DeadlineExceeded => "deadline"
+    _: Cancelled => "cancelled"
+    _: IoError => "io"
+  }
+}
+fn count(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope) uses net + clock + state: http.StreamOutcome {
+  total = atom(0)
+  for {
+    match (http.Read(req.body, 2)) {
+      bytes: Bytes => { _ = update(total, n => n + bytes.length()) }
+      _: http.Eof => break
+      error: http.BodyTooLarge => return error
+      error: http.DeadlineExceeded => return error
+      error: Cancelled => return error
+      error: IoError => return error
+    }
+  }
+  http.BeginResponse(writer, 200, { "X-Param": [req.params.get("id").getOr("none")], "X-Many": ["one", "two"] })?
+  _ = http.Write(writer, encoding.Utf8(toString(current(total))))?
+}
+fn events(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope, gate: Channel[Bool]) uses net + clock + state: http.StreamOutcome {
+  http.BeginResponse(writer, 200, { "Content-Type": ["text/event-stream"] })?
+  _ = http.Write(writer, encoding.Utf8("data: first\n\n"))?
+  http.Flush(writer)?
+  match (gate.receive(rs)) {
+    _: Bool => {}
+    error: Cancelled => return error
+    _: Closed => return IoError { path: "", message: "gate closed" }
+  }
+  _ = http.Write(writer, encoding.Utf8("data: second\n\n"))?
+  http.Flush(writer)?
+}
+fn binary(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope) uses net + clock + state: http.StreamOutcome {
+  bytes = match (encoding.ParseHex("00ff6162")) { data: Bytes => data, error: ParseError => panic(toString(error)) }
+  http.BeginResponse(writer, 200, { "Content-Type": ["application/octet-stream"] })?
+  _ = http.Write(writer, bytes)?
+}
+fn wait(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope) uses clock + state: http.StreamOutcome {
+  delay(rs, 100000)?
+}
+fn duplex(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope) uses net + clock + state: http.StreamOutcome {
+  for {
+    match (http.Read(req.body, 2)) {
+      bytes: Bytes => {
+        _ = http.Write(writer, bytes)?
+        http.Flush(writer)?
+      }
+      _: http.Eof => break
+      error: http.BodyTooLarge => return error
+      error: http.DeadlineExceeded => return error
+      error: Cancelled => return error
+      error: IoError => return error
+    }
+  }
+}
+type Retained = { reader: Option[http.BodyReader], writer: Option[http.BodyWriter] }
+fn retain(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope, app: Scope in held, held: Channel[Retained]) uses net + clock + state: http.StreamOutcome {
+  reader = attach(req.body, app)
+  output = attach(writer, app)
+  match (held.send(app, Retained { reader: .Some(reader), writer: .Some(output) })) { _: Ok => {}, error => panic(toString(error)) }
+  http.BeginResponse(writer, 204, {:})?
+}
+fn failed(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope) uses net + clock + state: http.StreamOutcome {
+  if (req.path == "/cancelled") { return Cancelled { reason: "application cancelled" } }
+  if (req.path == "/deadline") { return http.DeadlineExceeded { message: "application deadline" } }
+  if (req.path == "/committed") {
+    _ = http.Write(writer, encoding.Utf8("partial"))?
+    http.Flush(writer)?
+  }
+  IoError { path: req.path, message: "application failure" }
+}
+fn rawChecks(addr: String) uses io + net + clock: Bool unsafe go {
+  import "bufio"
+  import "bytes"
+  import "fmt"
+  import "net"
+  import "io"
+  import "net/http"
+  import "time"
+  client := &http.Client{Timeout: 2*time.Second}
+  for _, size := range []int{0, 4, 5, 4} {
+    response, err := client.Post("http://"+addr+"/count/key", "application/octet-stream", bytes.NewReader(make([]byte, size)))
+    if err != nil { panic(err) }
+    body, err := io.ReadAll(response.Body)
+    response.Body.Close()
+    expected := 200
+    if size > 4 { expected = 413 }
+    if err != nil || response.StatusCode != expected { panic(fmt.Sprintf("count %d: %d %s %v", size, response.StatusCode, body, err)) }
+    if size <= 4 && (string(body) != fmt.Sprint(size) || response.Header.Get("X-Param") != "key" || len(response.Header.Values("X-Many")) != 2) { panic("stream metadata or byte count") }
+  }
+  response, err := client.Get("http://"+addr+"/binary")
+  if err != nil { panic(err) }
+  body, err := io.ReadAll(response.Body)
+  response.Body.Close()
+  if err != nil || !bytes.Equal(body, []byte{0,255,97,98}) { panic("binary stream changed") }
+  for _, path := range []string{"/cancelled", "/failed", "/deadline", "/committed"} {
+    response, err := client.Get("http://"+addr+path)
+    if err != nil { panic(err) }
+    body, err := io.ReadAll(response.Body)
+    response.Body.Close()
+    if path == "/committed" {
+      if response.StatusCode != 200 || string(body) != "partial" || err == nil { panic("committed failure did not abort response") }
+    } else {
+      expected := 500
+      if path == "/deadline" { expected = 504 }
+      if response.StatusCode != expected || err != nil { panic("uncommitted failure status") }
+    }
+  }
+  duplex, err := net.DialTimeout("tcp", addr, time.Second)
+  if err != nil { panic(err) }
+  defer duplex.Close()
+  duplex.SetDeadline(time.Now().Add(time.Second))
+  fmt.Fprintf(duplex, "POST /duplex HTTP/1.1\r\nHost: %s\r\nContent-Length: 4\r\n\r\nab", addr)
+  streamed, err := http.ReadResponse(bufio.NewReader(duplex), nil)
+  if err != nil { panic(err) }
+  prefix := make([]byte, 2)
+  if _, err := io.ReadFull(streamed.Body, prefix); err != nil || string(prefix) != "ab" { panic("full-duplex prefix") }
+  fmt.Fprint(duplex, "cd")
+  suffix, err := io.ReadAll(streamed.Body)
+  streamed.Body.Close()
+  if err != nil || string(suffix) != "cd" { panic("full-duplex remainder") }
+  // Reject without waiting for the declared remainder of an oversized body.
+  conn, err := net.DialTimeout("tcp", addr, time.Second)
+  if err != nil { panic(err) }
+  defer conn.Close()
+  conn.SetDeadline(time.Now().Add(time.Second))
+  fmt.Fprintf(conn, "POST /count/key HTTP/1.1\r\nHost: %s\r\nContent-Length: 100\r\n\r\n12345", addr)
+  rejected, err := http.ReadResponse(bufio.NewReader(conn), nil)
+  if err != nil { panic(err) }
+  rejected.Body.Close()
+  if rejected.StatusCode != 413 { panic("stalled oversized request") }
+  return true
+}
+type Held = resource
+fn hold(addr: String, path: String, s: Scope) uses io + net + clock: Held unsafe go {
+  import "bufio"
+  import "fmt"
+  import "net"
+  import "net/http"
+  import "time"
+  conn, err := net.DialTimeout("tcp", addr, time.Second)
+  if err != nil { panic(err) }
+  conn.SetDeadline(time.Now().Add(5*time.Second))
+  if path == "/read" {
+    fmt.Fprintf(conn, "POST /read HTTP/1.1\r\nHost: %s\r\nContent-Length: 100\r\n\r\n", addr)
+  } else {
+    fmt.Fprintf(conn, "GET /flood HTTP/1.1\r\nHost: %s\r\n\r\n", addr)
+    if _, err := http.ReadResponse(bufio.NewReader(conn), nil); err != nil { panic(err) }
+  }
+  time.Sleep(30*time.Millisecond)
+  return Held{handle: conn, owner: s.Own(func() { conn.Close() })}
+}
+fn blockedRead(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope, stopped: Atom[Bool] in rs) uses net + clock + state: http.StreamOutcome {
+  onClose(rs, () => { _ = update(stopped, n => true) })
+  for {
+    match (http.Read(req.body)) {
+      _: Bytes => {}
+      _: http.Eof => break
+      error: http.BodyTooLarge => return error
+      error: http.DeadlineExceeded => return error
+      error: Cancelled => return error
+      error: IoError => return error
+    }
+  }
+}
+fn flood(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope, stopped: Atom[Bool] in rs) uses net + clock + state: http.StreamOutcome {
+  onClose(rs, () => { _ = update(stopped, n => true) })
+  chunk = encoding.Utf8("x".repeat(1048576))
+  for {
+    match (http.Write(writer, chunk)) {
+      _: Int => {}
+      error: http.DeadlineExceeded => return error
+      error: Cancelled => return error
+      error: IoError => return error
+    }
+  }
+}
+fn main() {
+  scope app {
+    held = channel[Retained](app, 1)
+    gate = channel[Bool](app, 0)
+    listener = server(http.ListenStreamRoutes("127.0.0.1:0", app, [
+      .{ pattern: "POST /count/{id}", handler: count },
+      .{ pattern: "POST /duplex", handler: duplex },
+      .{ pattern: "GET /retain", handler: (req, writer, rs) => retain(req, writer, rs, app, held) },
+      .{ pattern: "GET /cancelled", handler: failed },
+      .{ pattern: "GET /failed", handler: failed },
+      .{ pattern: "GET /deadline", handler: failed },
+      .{ pattern: "GET /committed", handler: failed },
+      .{ pattern: "GET /binary", handler: binary },
+      .{ pattern: "GET /events", handler: (req, writer, rs) => events(req, writer, rs, gate) },
+      ], maxBodyBytes: 4))
+    println("raw", rawChecks(http.Address(listener)))
+    retained = response(http.GetStream("http://" + http.Address(listener) + "/retain", app))
+    _ = http.Read(retained.body)
+    stored = match (held.receive(app)) { value: Retained => value, error => panic(toString(error)) }
+    retainedReader = match (stored.reader) { .Some(value) => value, .None => panic("missing retained reader") }
+    retainedWriter = match (stored.writer) { .Some(value) => value, .None => panic("missing retained writer") }
+    println("retained closed", kind(http.Read(retainedReader)), match (http.Write(retainedWriter, encoding.Utf8("late"))) { _: Cancelled => true, _ => false })
+    stream = response(http.GetStream("http://" + http.Address(listener) + "/events", app))
+    println("sse headers", stream.status, http.HeaderOf(stream.headers, "Content-Type"))
+    println("sse first", kind(http.Read(stream.body)))
+    match (gate.send(app, true)) { _: Ok => {}, error => panic(toString(error)) }
+    println("sse second", kind(http.Read(stream.body)))
+    println("sse end", kind(http.Read(stream.body)))
+    readStopped = atom(false)
+    writeStopped = atom(false)
+    scope serving {
+      active = server(http.ListenStreamRoutes("127.0.0.1:0", serving, [
+        .{ pattern: "/read", handler: (req, writer, rs) => blockedRead(req, writer, rs, readStopped) },
+        .{ pattern: "/flood", handler: (req, writer, rs) => flood(req, writer, rs, writeStopped) },
+        ], drainTimeoutMs: 1000))
+      _ = hold(http.Address(active), "/read", app)
+      _ = hold(http.Address(active), "/flood", app)
+    }
+    println("cancel blocked read/write", current(readStopped), current(writeStopped))
+    timed = server(http.ListenStream("127.0.0.1:0", app, wait, requestTimeoutMs: 50))
+    match (http.Get("http://" + http.Address(timed), app, timeoutMs: 1000)) {
+      value: http.Response => println("server timeout", value.status)
+      error => panic(toString(error))
+    }
+  }
+}

@@ -28,7 +28,11 @@ fn Read(body: BodyReader, size: ReadSize = 4096) uses net + clock + state: ReadR
   source.mu.Lock()
   defer source.mu.Unlock()
   if *source.terminal != nil { return *source.terminal }
-  finish := func(result any) any { *source.terminal = result; source.close(); return result }
+  finish := func(result any) any {
+    *source.terminal = result
+    if _, eof := result.(Eof); eof { source.end() } else { source.close() }
+    return result
+  }
   if err := source.ctx.Err(); err != nil { return finish(source.failure(err)) }
   if source.remaining != nil && *source.remaining == 0 {
     var probe [1]byte
