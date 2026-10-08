@@ -132,7 +132,7 @@ http.DeadlineExceeded { message: String }
 ```
 
 Get/Post/Send return Result, an alias for Response | Overloaded |
-DeadlineExceeded | Cancelled | IoError. The shared client implementation classifies completed 429 and 503
+BodyTooLarge | DeadlineExceeded | Cancelled | IoError. The shared client implementation classifies completed 429 and 503
 responses as Overloaded while preserving their complete status, headers and body
 in response. Other HTTP statuses remain Response; transport errors remain
 IoError. Scope cancellation becomes Cancelled. An expired explicit request
@@ -183,11 +183,11 @@ http.Retry(s, budget, operation, maxAttempts: 3,
            baseDelayMs: 20, maxDelayMs: 1000)
 ```
 
-Operation returns Response | Overloaded | DeadlineExceeded | Cancelled |
+Operation returns Response | Overloaded | BodyTooLarge | DeadlineExceeded | Cancelled |
 IoError, and receives the attempt scope. The helper charges operation effects
 plus clock, random and state. maxAttempts includes the initial attempt and is
 positive. Delays are nonnegative and proven to fit Go durations; maxDelayMs is
-at least baseDelayMs. There is no retry of IoError, DeadlineExceeded, Cancelled,
+at least baseDelayMs. There is no retry of BodyTooLarge, IoError, DeadlineExceeded, Cancelled,
 or ordinary HTTP status responses in the first version. Exhausting attempts or
 the shared budget returns the last Overloaded, without another attempt.
 

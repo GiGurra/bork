@@ -1,0 +1,21 @@
+under limit:4
+exact body:abcde
+above body:abcde
+zero empty body:
+zero body limit:0
+chunked limit:4
+gzip limit:64
+429 limit:4
+429 overload:429:abcde
+503 limit:4
+503 overload:503:abcde
+utf8 bytes limit:5
+post limit:4
+send limit:4
+default limit:16777216
+max int body:abcde
+probe timeout deadline
+probe scope deadline
+overflow limit:4
+overflow closed true
+truncated io

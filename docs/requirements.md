@@ -1275,7 +1275,10 @@ attachment extends pool ownership without moving existing tasks. Ordinary
 implicit pool. See [the package documentation](std/tasks.md). HTTP admission also limits work before body reads and queues waiters in bounded
 FIFO order, rejecting with 429/503 and Retry-After. AdmissionState exposes load.
 Clients return Response, Overloaded (retaining the original 429/503 response),
-DeadlineExceeded, Cancelled, or IoError, with safe Retry-After parsing.
+BodyTooLarge, DeadlineExceeded, Cancelled, or IoError, with safe Retry-After parsing.
+Eager Get/Post/Send calls bound decoded response bytes with maxBodyBytes
+(default 16 MiB); exact-limit bodies succeed and oversized bodies are closed
+without returning a partial Response.
 Shared HTTP retry budgets charge clock + state for creation and operation effects plus clock + random + state for explicit retries. Initial attempts are free; retries atomically consume a shared, lazily refilled token, preserve Retry-After minimums, and stop when waits cannot fit the scope deadline. Budgets and injected clocks have checked scope lifetimes, and last-owner closure cancels waits and active attempt scopes. See [HTTP documentation](std/http.md#shared-retries) and [the backpressure design](design/backpressure.md).
 
 ### Partially overlapping scopes: owned child scopes
@@ -1738,7 +1741,7 @@ import "bork/time"
 test "a slow upstream is reported" {
   noon = time.Instant { unixNanos: 1_760_000_000_000_000_000 }
   mock time.Now() { noon }
-  calls = mock http.Get(url, s, timeoutMs) { http.Text(503, "") }
+  calls = mock http.Get(url, s, timeoutMs, maxBodyBytes) { http.Text(503, "") }
 
   assertEqual(checkUpstream("https://status.example.com"), Health.Down { since: noon })
   assertEqual(calls.count(), 1)
@@ -1875,7 +1878,7 @@ checked as if it were that function's body:
 
 - **Types and facts.** The parameters have the target's types including their
   `where` facts (callers proved them), and the body must produce the target's
-  result type including its facts. `mock http.Get(url, s, timeoutMs) { http.Text(42, "") }`
+  result type including its facts. `mock http.Get(url, s, timeoutMs, maxBodyBytes) { http.Text(42, "") }`
   fails to compile, since `42` is not a `ValidStatus`, and a mock of `fn validate(raw: Int): Int where positive | NotPositive`
   that returns `0` is a compile error, so no mock can produce a value the
   checker assumed impossible. `trust` works as in any test code, and is checked
@@ -1962,11 +1965,11 @@ mock: an outer mock, or the real function. This is how a mock passes calls
 through, or wraps the real behaviour (a spy):
 
 ```
-mock http.Get(url, s, timeoutMs) {
+mock http.Get(url, s, timeoutMs, maxBodyBytes) {
   if (url.startsWith("https://weather.example.com/")) {
     http.Text(200, "{\"celsius\": 21}")
   } else {
-    http.Get(url, s, timeoutMs)    // the real http.Get (or an outer mock)
+    http.Get(url, s, timeoutMs, maxBodyBytes)    // the real http.Get (or an outer mock)
   }
 }
 ```

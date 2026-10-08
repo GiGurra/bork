@@ -1,8 +1,8 @@
 shared tokens 3 overloaded
 free next initial 4 overloaded
 concurrent true true
-terminal ["response", "io", "cancelled", "deadline"] 4
-attempt cap overloaded 5
+terminal ["response", "too large", "io", "cancelled", "deadline"] 5
+attempt cap overloaded 6
 eventual success response 3
 capped jitter overloaded [1000000, 2000000, 4000000, 4000000]
 negative jitter and maximum backoff overloaded

@@ -24,6 +24,7 @@ fn show(result: http.Result) uses io {
   match (result) {
     response: http.Response => println("response", response.status, response.body)
     overloaded: http.Overloaded => println("overload", overloaded.response.status, overloaded.response.body, overloaded.retryAfter, overloaded.response.headers.get("X-Reply"))
+    _: http.BodyTooLarge => println("too large")
     _: http.DeadlineExceeded => println("deadline")
     _: Cancelled => println("cancelled")
     _: IoError => println("transport")

@@ -1,0 +1,96 @@
+import "bork/http"
+
+type Remote = resource
+fn remote(s: Scope) uses net + state: Remote unsafe go {
+  import "compress/gzip"
+  import "io"
+  import "net/http"
+  import "net/http/httptest"
+  import "strings"
+  overflowDone := make(chan struct{})
+  srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    switch r.URL.Path {
+    case "/empty": return
+    case "/utf8": io.WriteString(w, "ååå")
+    case "/chunked":
+      w.WriteHeader(200)
+      w.(http.Flusher).Flush()
+      io.WriteString(w, "abcde")
+    case "/gzip":
+      w.Header().Set("Content-Encoding", "gzip")
+      zipped := gzip.NewWriter(w)
+      io.WriteString(zipped, strings.Repeat("x", 1024))
+      zipped.Close()
+    case "/429", "/503":
+      w.Header().Set("Retry-After", "1")
+      if r.URL.Path == "/429" { w.WriteHeader(429) } else { w.WriteHeader(503) }
+      io.WriteString(w, "abcde")
+    case "/default":
+      chunk := []byte(strings.Repeat("x", 4096))
+      for i := 0; i < 4096; i++ { if _, err := w.Write(chunk); err != nil { return } }
+      w.Write([]byte("x"))
+    case "/overflow":
+      io.WriteString(w, "abcde")
+      w.(http.Flusher).Flush()
+      <-r.Context().Done()
+      close(overflowDone)
+    case "/probe":
+      io.WriteString(w, "abcd")
+      w.(http.Flusher).Flush()
+      <-r.Context().Done()
+    case "/truncated":
+      w.Header().Set("Content-Length", "6")
+      io.WriteString(w, "abc")
+    default: io.WriteString(w, "abcde")
+    }
+  }))
+  return Remote{handle: struct { url string; overflowDone chan struct{} }{srv.URL, overflowDone}, owner: s.Own(func() { srv.Close() })}
+}
+fn url(server: Remote): String unsafe go { return server.handle.(struct { url string; overflowDone chan struct{} }).url }
+fn overflowClosed(server: Remote) uses clock + state: Bool unsafe go {
+  import "time"
+  select {
+  case <-server.handle.(struct { url string; overflowDone chan struct{} }).overflowDone: return true
+  case <-time.After(5*time.Second): return false
+  }
+}
+fn show(result: http.Result): String {
+  match (result) {
+    response: http.Response => s"body:${response.body}"
+    error: http.BodyTooLarge => s"limit:${error.limit}"
+    response: http.Overloaded => s"overload:${response.response.status}:${response.response.body}"
+    _: http.DeadlineExceeded => "deadline"
+    _: Cancelled => "cancelled"
+    _: IoError => "io"
+  }
+}
+fn main() {
+  scope app {
+    server = remote(app)
+    base = url(server)
+    println("under", show(http.Get(base, app, maxBodyBytes: 4)))
+    println("exact", show(http.Get(base, app, maxBodyBytes: 5)))
+    println("above", show(http.Get(base, app, maxBodyBytes: 6)))
+    println("zero empty", show(http.Get(base + "/empty", app, maxBodyBytes: 0)))
+    println("zero body", show(http.Get(base, app, maxBodyBytes: 0)))
+    println("chunked", show(http.Get(base + "/chunked", app, maxBodyBytes: 4)))
+    println("gzip", show(http.Get(base + "/gzip", app, maxBodyBytes: 64)))
+    for (status in ["429", "503"]) {
+      println(status, show(http.Get(base + "/" + status, app, maxBodyBytes: 4)))
+      println(status, show(http.Get(base + "/" + status, app, maxBodyBytes: 5)))
+    }
+    println("utf8 bytes", show(http.Get(base + "/utf8", app, maxBodyBytes: 5)))
+    println("post", show(http.Post(base, "text/plain", "upload", app, maxBodyBytes: 4)))
+    println("send", show(http.Send("GET", base, {:}, "", app, maxBodyBytes: 4)))
+    println("default", show(http.Get(base + "/default", app)))
+    println("max int", show(http.Get(base, app, maxBodyBytes: 9223372036854775807)))
+    println("probe timeout", show(http.Get(base + "/probe", app, timeoutMs: 50, maxBodyBytes: 4)))
+    scope request {
+      cancelAfter(request, 50)
+      println("probe scope", show(http.Get(base + "/probe", request, maxBodyBytes: 4)))
+    }
+    println("overflow", show(http.Get(base + "/overflow", app, timeoutMs: 1000, maxBodyBytes: 4)))
+    println("overflow closed", overflowClosed(server))
+    println("truncated", show(http.Get(base + "/truncated", app, maxBodyBytes: 10)))
+  }
+}
