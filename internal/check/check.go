@@ -962,6 +962,7 @@ type checker struct {
 	// typeParams holds the type parameters in scope.
 	typeParams map[string]*TypeParam
 	aliasFacts map[*TypeParam][]*Constraint
+	aliasTypes map[*TypeParam]Type
 	// lambdaDepth counts the lambdas being checked around the current
 	// expression.
 	comptimeContext    *comptimeContext

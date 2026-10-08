@@ -420,14 +420,14 @@ func fieldPathsOf(base Type, tp *TypeParam) []string {
 func (c *checker) aliasConstraints(e *typeEntry) []*Constraint {
 	if !e.constraintsDone {
 		e.constraintsDone = true
-		savedPkg, savedPrelude, savedParams, savedFacts := c.pkg, c.inPrelude, c.typeParams, c.aliasFacts
+		savedPkg, savedPrelude, savedParams, savedFacts, savedTypes := c.pkg, c.inPrelude, c.typeParams, c.aliasFacts, c.aliasTypes
 		c.pkg, c.inPrelude = e.pkg, e.prelude
-		c.typeParams, c.aliasFacts = map[string]*TypeParam{}, nil
+		c.typeParams, c.aliasFacts, c.aliasTypes = map[string]*TypeParam{}, nil, nil
 		for _, tp := range e.params {
 			c.typeParams[tp.Name] = tp
 		}
 		e.constraints = c.constraintsOf(e.decl.Alias, e.typ, nil)
-		c.pkg, c.inPrelude, c.typeParams, c.aliasFacts = savedPkg, savedPrelude, savedParams, savedFacts
+		c.pkg, c.inPrelude, c.typeParams, c.aliasFacts, c.aliasTypes = savedPkg, savedPrelude, savedParams, savedFacts, savedTypes
 	}
 	return e.constraints
 }
@@ -439,22 +439,27 @@ func (c *checker) genericAliasConstraints(e *typeEntry, written *syntax.TypeExpr
 		return nil
 	}
 	facts := map[*TypeParam][]*Constraint{}
+	types := map[*TypeParam]Type{}
 	for i, arg := range written.Args {
 		argType := c.info.writtenTypes[arg]
 		if argType == nil {
 			argType = c.resolveType(arg)
 		}
+		// Nested argument annotations belong to the generic declaration.
+		// Specialize them before attaching tuple facts to avoid mutating it.
+		argType = subst(argType, c.aliasTypes)
+		types[e.params[i]] = argType
 		facts[e.params[i]] = c.constraintsOf(arg, argType, scope)
 	}
-	savedPkg, savedPrelude, savedParams, savedFacts, savedApplied := c.pkg, c.inPrelude, c.typeParams, c.aliasFacts, c.appliedWhere
-	c.pkg, c.inPrelude, c.aliasFacts = e.pkg, e.prelude, facts
+	savedPkg, savedPrelude, savedParams, savedFacts, savedTypes, savedApplied := c.pkg, c.inPrelude, c.typeParams, c.aliasFacts, c.aliasTypes, c.appliedWhere
+	c.pkg, c.inPrelude, c.aliasFacts, c.aliasTypes = e.pkg, e.prelude, facts, types
 	c.typeParams, c.appliedWhere = map[string]*TypeParam{}, map[*syntax.TypeExpr]bool{}
 	for _, tp := range e.params {
 		c.typeParams[tp.Name] = tp
 	}
 	out := c.constraintsOf(e.decl.Alias, typ, scope)
 	c.unappliedIn(e.decl.Alias, "in a type alias")
-	c.pkg, c.inPrelude, c.typeParams, c.aliasFacts, c.appliedWhere = savedPkg, savedPrelude, savedParams, savedFacts, savedApplied
+	c.pkg, c.inPrelude, c.typeParams, c.aliasFacts, c.aliasTypes, c.appliedWhere = savedPkg, savedPrelude, savedParams, savedFacts, savedTypes, savedApplied
 	return out
 }
 

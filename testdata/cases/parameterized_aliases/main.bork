@@ -1,6 +1,7 @@
 import "example.com/genericaliases/api"
 type Nested[T] = api.Items[api.Maybe[T]]
 type Identity[T] = T
+type Pair[T] = api.Same[(T, Int)]
 fn identity[T](x: Identity[T]): T { x }
 fn indexedResult(): Int | Option[Int] {
   index: api.Index[Int] = { "numbers": [1] }
@@ -22,10 +23,13 @@ fn dependent(threshold: Int, x: Int where api.Above(threshold)): Int | Option[In
   n = xs.get(0)?
   api.NeedAbove(n, threshold)
 }
+fn tupleFacts(x: Pair[Int where api.Positive]): Int { api.Need(x.0) }
 fn guarded(x: Int): Int {
   match x { n: Identity[Int where api.Positive] => n, _ => 0 }
 }
 fn main() {
+  _: Pair[String] = ("plain", 0)
+  println(tupleFacts((18, 0)))
   explicit: api.Maybe[Int] = api.Maybe[Int].Some(17)
   println(explicit)
   pair: api.Pair[Int, String] = (13, "pair")
