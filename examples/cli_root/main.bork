@@ -6,7 +6,7 @@ use codec.Defaults
 type Global = { region: String = "west", verbose: Bool } derive (codec.Decode)
 type Deploy = { service: String, replicas: Int = 1 } derive (codec.Decode)
 
-fn main() {
+fn main(): Ok | process.ExitCode {
   commands = [cli.RootGroup[Global]("services", "Manage services", [
     cli.RootSubcommand[Global, Deploy]("deploy", "Deploy a service", (global, deploy, s) => {
       println(s"${global.region}: ${deploy.service} x ${deploy.replicas}, verbose=${global.verbose}")
@@ -14,7 +14,7 @@ fn main() {
   ])]
   match (cli.RunRoot[Global]("fleet", "Shared root flags", commands,
     flags: [.{ field: "region", env: "FLEET_REGION" }])) {
-    error: cli.Error => { eprintln(error.Render("fleet")); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("fleet") } }
     Ok => {}
   }
 }

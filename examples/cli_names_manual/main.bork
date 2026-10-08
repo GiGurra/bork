@@ -17,11 +17,11 @@ fn flags(): List[cli.Flag] {
     .{ field: "port", long: cli.Mapping.Named { name: "port" }, short: "p", env: "MANUAL_PORT" },
     .{ field: "token", env: "MANUAL_TOKEN" }]
 }
-fn main() {
+fn main(): Ok | process.ExitCode {
   match (cli.Run[Options]("manual", "Every name written by hand", (options, s) => {
     println(s"${options.host}:${options.port}, token set: ${options.token.isSome()}")
     }, flags: flags(), settings: settings())) {
-    error: cli.Error => { eprintln(error.Render("manual")); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("manual") } }
     Ok => {}
   }
 }

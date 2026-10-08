@@ -1,5 +1,4 @@
 import "bork/http"
-import "bork/process"
 
 fn handler(req: http.Request, requestScope: Scope): http.Response {
   match (req.path) {
@@ -8,17 +7,10 @@ fn handler(req: http.Request, requestScope: Scope): http.Response {
   }
 }
 
-fn main() {
+fn main(): Ok | IoError {
   scope app {
-    match (http.Listen("localhost:8080", app, handler: handler)) {
-      server: http.Server => {
-        println(s"Listening on http://${http.Address(server)}")
-        http.Wait(server)
-      }
-      error: IoError => {
-        eprintln(error.message)
-        process.Exit(1)
-      }
-    }
+    server = http.Listen("localhost:8080", app, handler: handler)?
+    println(s"Listening on http://${http.Address(server)}")
+    http.Wait(server)
   }
 }

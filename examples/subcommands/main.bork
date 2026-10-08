@@ -11,7 +11,7 @@ type Serve = {
   port: Int where validPort = 8080
 } derive (codec.Decode)
 type Echo = { words: List[String] } derive (codec.Decode)
-fn main() {
+fn main(): Ok | process.ExitCode {
   commands = [
     cli.Subcommand[Serve]("serve", "Serve a host", (options, s) => {
       onClose(s, () => { println("serve scope closed") })
@@ -22,7 +22,7 @@ fn main() {
       }, flags: [cli.Flag { field: "words", positional: true }])
   ]
   match (cli.RunCommands("app", "Typed subcommands", commands)) {
-    error: cli.Error => { eprintln(error.Render("app")); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("app") } }
     Ok => {}
   }
 }

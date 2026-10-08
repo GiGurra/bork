@@ -10,11 +10,11 @@ type Options = {
   trace: Option[Bool]
 } derive (codec.Decode)
 
-fn main() {
+fn main(): Ok | process.ExitCode {
   match (cli.Run[Options]("switches", "Bool defaults", (options, s) => {
     println(s"verbose=${options.verbose}, color=${options.color}, trace=${options.trace}")
   })) {
-    error: cli.Error => { eprintln(error.Render("switches")); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("switches") } }
     Ok => {}
   }
 }

@@ -14,11 +14,11 @@ fn flags(): List[cli.Flag] {
     .{ field: "resources", positional: true, choices: [.{ value: "web", description: "Web service" }, .{ value: "worker", description: "Background worker" }], keepOrder: true },
     .{ field: "output", files: true }]
 }
-fn main() {
+fn main(): Ok | process.ExitCode {
   match (cli.Run[Options]("deploy", "Deploy selected resources", (options, s) => {
     println(s"${options.environment}: ${options.resources}")
     }, flags: flags())) {
-    error: cli.Error => { eprintln(error.Render("deploy")); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("deploy") } }
     Ok => {}
   }
 }

@@ -21,7 +21,7 @@ type Options = {
   excited: Bool = false
 } derive (codec.Decode)
 
-fn main() {
+fn main(): Ok | process.ExitCode {
   result = cli.Run[Options]("greet", "Greet someone", (options, s) => {
     ending = if (options.excited) { "!" } else { "." }
     println(s"Hello, ${options.name}${ending}")
@@ -29,8 +29,7 @@ fn main() {
   match (result) {
     Ok => {}
     error: cli.Error => {
-      eprintln(error.Render("greet"))
-      process.Exit(2)
+      return process.ExitCode { code: 2, message: error.Render("greet") }
     }
   }
 }
@@ -60,7 +59,7 @@ Flags:
       --excited       Print an excited greeting. (default false)
   -h, --help          help for greet
 $ ./greet
-Error: .name: is missing
+error: Error: .name: is missing
 
 Try 'greet --help' for usage.
 $ echo $?
@@ -76,10 +75,11 @@ no configuration files. Run prints help and warnings; your program prints Error
 and chooses its exit code.
 
 `cli.Error` contains `errors: List[codec.DecodeError]`, each with path and message.
-`error.Render("greet")` formats field errors and adds a usage hint. Pass it to
-`eprintln` for stderr output. Use `eprintln(error)` to print the raw record,
-or `toString(error)` when you need its representation as a `String`. Call
-`process.Exit` after Run returns so the handler's scope cleanup has finished.
+`error.Render("greet")` formats field errors and adds a usage hint. Return it
+in `process.ExitCode { code: 2, message: error.Render("greet") }`. All scopes
+close before main reports the message to stderr with an `error:` prefix and
+exits with status 2. Returning `cli.Error` directly from `fn main(): Ok | cli.Error`
+uses its Show representation and status 1.
 
 ## Test explicit arguments
 

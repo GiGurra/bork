@@ -14,11 +14,11 @@ type Options = {
   verbose: Bool = false
 } derive (codec.Decode)
 fn settings(): cli.Settings { .{ autoShort: true, autoEnv: true, envPrefix: "NAMES" } }
-fn main() {
+fn main(): Ok | process.ExitCode {
   match (cli.Run[Options]("names", "Names derived from fields", (options, s) => {
     println(s"host ${options.serverHost}, port ${options.httpPort}, verbose ${options.verbose}")
     }, settings: settings())) {
-    error: cli.Error => { eprintln(error.Render("names")); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("names") } }
     Ok => {}
   }
 }

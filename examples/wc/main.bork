@@ -54,18 +54,17 @@ fn report(counts: List[FileCount]) uses io: Bool {
   found.length() == counts.length()
 }
 
-fn main() {
+fn main(): Ok | process.ExitCode {
   paths = process.Args()
   if (paths.isEmpty()) {
-    eprintln("usage: wc FILE...")
-    process.Exit(2)
+    return process.ExitCode { code: 2, message: "usage: wc FILE..." }
   }
   counts = scope s {
     tasks = paths.map(path => fork(s, () => FileCount { path: path, result: countFile(path) }))
     tasks.map(t => await(t))
   }
   if (!report(counts)) {
-    process.Exit(1)
+    return process.ExitCode { code: 1 }
   }
 }
 

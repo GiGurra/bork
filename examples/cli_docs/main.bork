@@ -9,11 +9,11 @@ type Options = {
   // Keep the connection open after a request.
   keepAlive: Bool = false
 } derive (codec.Decode)
-fn main() {
+fn main(): Ok | process.ExitCode {
   match (cli.Run[Options]("docs", "Field comments become help", (options, s) => {
     println(s"Connecting to ${options.host}; keep alive: ${options.keepAlive}")
     }, flags: [.{ field: "keepAlive", description: Option.Some("Reuse the connection.") }])) {
-    error: cli.Error => { eprintln(error.Render("docs")); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("docs") } }
     Ok => {}
   }
 }
