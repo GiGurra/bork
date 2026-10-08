@@ -8,7 +8,7 @@ import "bork/regex"
 fn main() {
   re = regex.Compile("^[a-z]+$")
   println(re.Matches("hello"), re.Matches("hello 123"))
-  match (regex.Parse("[")) {
+  match regex.Parse("[") {
     _: ParseError => println("invalid pattern")
     value: regex.Regex => println(value.Pattern())
   }
@@ -52,7 +52,7 @@ import "bork/regex"
 
 fn main() {
   text = "🙂åbc"
-  match (regex.Compile("b").Find(text)) {
+  match regex.Compile("b").Find(text) {
     Option.Some(found) => println(found.start, text.substring(found.start, found.end))
     Option.None => {}
   }
@@ -94,7 +94,7 @@ fn accepted(re: regex.Regex, text: String where regex.Matches(re)): String { tex
 fn main() {
   re = regex.Compile("^[a-z]+$")
   text = "hello"
-  if (regex.Matches(text, re)) { println(accepted(re, text)) }
+  if regex.Matches(text, re) { println(accepted(re, text)) }
 }
 ```
 

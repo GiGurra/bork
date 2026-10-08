@@ -9,7 +9,7 @@ use codec.Defaults
 pred positive(n: Int) { n > 0 }
 type UserPath = { id: Int where positive } derive (codec.Decode)
 fn user(req: http.Request, rs: Scope): http.Response {
-  match (http.PathAs[UserPath](req)) {
+  match http.PathAs[UserPath](req) {
     path: UserPath => http.Text(200, s"user ${path.id}")
     error: codec.DecodeError => http.Text(422, error.path + ": " + error.message)
   }
@@ -22,13 +22,13 @@ fn logged(handler: http.Handler): http.Handler {
 }
 fn main() {
   scope app with cleanupTimeout(5.seconds()) {
-    match (http.ListenRoutes(if (process.Args() == ["demo"]) { "127.0.0.1:0" } else { "localhost:8080" }, app, [
+    match http.ListenRoutes(if process.Args() == ["demo"] { "127.0.0.1:0" } else { "localhost:8080" }, app, [
       .{ pattern: "GET /users/{id}", handler: logged(user) },
       .{ pattern: "GET /health", handler: (req, rs) => http.Text(200, "ok") },
-    ])) {
+    ]) {
       server: http.Server => {
-        if (process.Args() == ["demo"]) {
-          match (http.Get("http://" + http.Address(server) + "/users/42", app)) {
+        if process.Args() == ["demo"] {
+          match http.Get("http://" + http.Address(server) + "/users/42", app) {
             response: http.Response => println(response.status, response.body)
             error => println(toString(error))
           }

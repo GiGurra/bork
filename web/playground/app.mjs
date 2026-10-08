@@ -2,8 +2,8 @@ import { CompilerClient, sourcePosition, sourceOffset } from './client.mjs';
 
 const examples = {
   hello: 'fn main() {\n  println("Hello from bork!")\n}\n',
-  facts: 'pred positive(x: Int) { x > 0 }\n\nfn describe(amount: Int where positive): String {\n  s"sent $amount"\n}\n\nfn transfer(amount: Int): String {\n  if (positive(amount)) { describe(amount) } else { "nothing to send" }\n}\n\nfn main() {\n  println(transfer(42))\n}\n',
-  unions: 'type User = { name: String }\ntype NotFound = { id: Int }\n\nfn find(id: Int): User | NotFound {\n  if (id == 1) { User { name: "Ada" } } else { NotFound { id: id } }\n}\n\nfn main() {\n  match (find(1)) {\n    user: User => println(user.name)\n    missing: NotFound => println(s"No user ${missing.id}")\n  }\n}\n',
+  facts: 'pred positive(x: Int) { x > 0 }\n\nfn describe(amount: Int where positive): String {\n  s"sent $amount"\n}\n\nfn transfer(amount: Int): String {\n  if positive(amount) { describe(amount) } else { "nothing to send" }\n}\n\nfn main() {\n  println(transfer(42))\n}\n',
+  unions: 'type User = { name: String }\ntype NotFound = { id: Int }\n\nfn find(id: Int): User | NotFound {\n  if id == 1 { User { name: "Ada" } } else { NotFound { id: id } }\n}\n\nfn main() {\n  match find(1) {\n    user: User => println(user.name)\n    missing: NotFound => println(s"No user ${missing.id}")\n  }\n}\n',
   effects: 'fn greeting() {\n  println("Hello!")\n}\n\nfn main() {\n  greeting()\n}\n',
   local: 'pred positive(x: Int) { x > 0 }\n\nfn describe(amount: Int where positive): String {\n  s"sent $amount"\n}\n\nfn main() {\n  println(describe(42))\n}\n',
 };

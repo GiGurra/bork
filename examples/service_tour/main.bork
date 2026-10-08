@@ -32,7 +32,7 @@ fn insert(db: sql.Connection in request, request: Scope, note: NewNote) uses io 
   tx = sql.Begin(db, request)?
   _ = sql.SQL"INSERT INTO notes(title) VALUES (${note.title})".Exec(tx)?
   rows = sql.SQL"SELECT id, title FROM notes WHERE id = last_insert_rowid()".Query[Note](tx)?
-  match (rows) {
+  match rows {
     [saved] => { sql.Commit(tx)?; saved }
     _ => sql.Error { operation: "insert", message: "expected one inserted note" }
   }
@@ -44,8 +44,8 @@ fn storageError(error: sql.Error | codec.DecodeError): http.Response {
 }
 
 fn create(db: sql.Connection in request, req: http.Request, request: Scope) uses io + net: http.Response {
-  match (http.Body[NewNote](req)) {
-    note: NewNote => match (insert(db, request, note)) {
+  match http.Body[NewNote](req) {
+    note: NewNote => match insert(db, request, note) {
       saved: Note => {
         log.Info("note created", { "id": saved.id })
         http.JsonReply(201, json.Encode(saved))
@@ -63,10 +63,10 @@ fn list(db: sql.Connection in request, request: Scope) uses io + net: List[Note]
 }
 
 fn route(db: sql.Connection in request, req: http.Request, request: Scope) uses io + net: http.Response {
-  match ((req.method, req.path)) {
+  match (req.method, req.path) {
     ("GET", "/health") => http.Text(200, "ok")
     ("POST", "/notes") => create(db, req, request)
-    ("GET", "/notes") => match (list(db, request)) {
+    ("GET", "/notes") => match list(db, request) {
       notes: List[Note] => http.JsonReply(200, json.Encode(notes))
       error: sql.Error | codec.DecodeError => storageError(error)
     }
@@ -91,7 +91,7 @@ fn serve() uses io + net + clock + state: Ok | env.ConfigError | sql.Error | IoE
 }
 
 fn show(label: String, result: http.Result) uses io {
-  match (result) {
+  match result {
     response: http.Response => println(s"$label -> ${response.status} ${response.body}")
     error => panic(toString(error))
   }
@@ -112,13 +112,13 @@ fn demo() uses io + net + clock + state: Ok | sql.Error | IoError {
 
 fn main(): Ok | process.ExitCode {
   log.Configure(log.Defaults().copy(timestamps: false))
-  result = match (process.Args()) {
+  result = match process.Args() {
     [] => demo()
     ["demo"] => demo()
     ["serve"] => serve()
     _ => { return process.ExitCode { code: 2, message: "usage: service_tour [demo|serve]" } }
   }
-  match (result) {
+  match result {
     Ok => {}
     error => { return process.ExitCode { code: 1, message: toString(error) } }
   }
@@ -129,7 +129,7 @@ fn makeRequest(method: String, path: String, body: String = ""): http.Request {
 }
 
 fn database(result: sql.Connection | sql.Error): sql.Connection {
-  match (result) { db: sql.Connection => db, error => panic(toString(error)) }
+  match result { db: sql.Connection => db, error => panic(toString(error)) }
 }
 
 test "direct handlers validate and store notes" {
@@ -153,18 +153,18 @@ test "direct handlers validate and store notes" {
 }
 
 test "configuration validates supplied environment values" {
-  loaded = env.LoadWith[Config]("TOUR", key => if (key == "TOUR_DATABASE") { Option.Some("") } else { Option.None })
-  match (loaded) { _: env.ConfigError => {}, _ => assert(false) }
+  loaded = env.LoadWith[Config]("TOUR", key => if key == "TOUR_DATABASE" { Option.Some("") } else { Option.None })
+  match loaded { _: env.ConfigError => {}, _ => assert(false) }
   assertEqual(env.LoadWith[Config]("TOUR", key => Option.None), Config {})
 }
 
 test "database startup failure does not open a listener" {
   scope fixture {
-    directory = match (fs.TempDir(fixture)) { value: fs.Directory => value, error => panic(toString(error)) }
+    directory = match fs.TempDir(fixture) { value: fs.Directory => value, error => panic(toString(error)) }
     scope app {
       missing = fs.Join([fs.DirectoryPath(directory), "missing", "notes.db"])
-      if (nonEmpty(missing)) {
-        match (start(Config { address: "127.0.0.1:0", database: missing }, app)) {
+      if nonEmpty(missing) {
+        match start(Config { address: "127.0.0.1:0", database: missing }, app) {
           _: sql.Error => {}
           _ => assert(false)
         }
@@ -175,7 +175,7 @@ test "database startup failure does not open a listener" {
 
 test "listener startup failure returns its error" {
   scope app {
-    match (start(Config { address: "bad address", database: ":memory:" }, app)) {
+    match start(Config { address: "bad address", database: ":memory:" }, app) {
       _: IoError => {}
       _ => assert(false)
     }
@@ -184,13 +184,13 @@ test "listener startup failure returns its error" {
 
 test "scope cleanup releases the listener" {
   address = scope app with cleanupTimeout(5.seconds()) {
-    match (start(Config { address: "127.0.0.1:0", database: ":memory:" }, app)) {
+    match start(Config { address: "127.0.0.1:0", database: ":memory:" }, app) {
       server: http.Server => http.Address(server)
       error => panic(toString(error))
     }
   }
   scope replacement {
-    match (http.Listen(address, replacement, handler: (req, rs) => http.Text(200, "ok"))) {
+    match http.Listen(address, replacement, handler: (req, rs) => http.Text(200, "ok")) {
       server: http.Server => assertEqual(http.Address(server), address)
       error => panic(toString(error))
     }
@@ -202,7 +202,7 @@ test "uncommitted writes roll back at scope exit" {
     db = database(sql.OpenSqlite(":memory:", app))
     assertEqual(setup(db), Ok)
     scope request {
-      match (sql.Begin(db, request)) {
+      match sql.Begin(db, request) {
         tx: sql.Transaction => { _ = sql.SQL"INSERT INTO notes(title) VALUES (${"discarded"})".Exec(tx) }
         error => panic(toString(error))
       }
@@ -242,7 +242,7 @@ test "setup failure returns before opening a listener" {
   }
   listeners.expect(times: 0)
   scope app {
-    match (start(Config { address: "127.0.0.1:0", database: ":memory:" }, app)) {
+    match start(Config { address: "127.0.0.1:0", database: ":memory:" }, app) {
       error: sql.Error => assertEqual(error, sql.Error { operation: "exec", message: "cannot create table" })
       _ => assert(false)
     }

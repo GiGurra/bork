@@ -112,9 +112,9 @@ Most work on lists is done with methods. There is also a `for` loop, with `break
 
 ```bork
 fn main() {
-  for (n in [1, 2, 3, 4, 5, 6]) {
-    if (n == 2) { continue }
-    if (n == 5) { break }
+  for n in [1, 2, 3, 4, 5, 6] {
+    if n == 2 { continue }
+    if n == 5 { break }
     println(n)
   }
 }

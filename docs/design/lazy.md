@@ -21,7 +21,7 @@ fields, computed sibling defaults and pure package bindings are implemented.
 ```bork fragment
 fn answer(): Int {
   lazy result: Int = expensiveComputation()
-  if (needAnswer()) { result } else { 0 }
+  if needAnswer() { result } else { 0 }
 }
 ```
 

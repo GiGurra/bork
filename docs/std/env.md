@@ -13,7 +13,7 @@ type Config = { host: String, httpPort: Int, token: Option[String] } derive (cod
 
 fn main() {
   values = { "APP_HOST": "localhost", "APP_HTTP_PORT": "8080" }
-  match (env.LoadWith[Config]("APP", name => values.get(name))) {
+  match env.LoadWith[Config]("APP", name => values.get(name)) {
     config: Config => println(config.host, config.httpPort, config.token)
     error: env.ConfigError => println(error.errors)
   }
@@ -53,10 +53,10 @@ type Config = { host: String, httpPort: Int where positive } derive (codec.Decod
 
 fn main() {
   values = { "APP_HTTP_PORT": "0" }
-  match (env.LoadWith[Config]("APP", name => values.get(name))) {
+  match env.LoadWith[Config]("APP", name => values.get(name)) {
     config: Config => println(config)
     error: env.ConfigError => {
-      for (problem in error.errors) { println(problem.path + ": " + problem.message) }
+      for problem in error.errors { println(problem.path + ": " + problem.message) }
     }
   }
 }
@@ -85,7 +85,7 @@ Use Get for optional values and Require for presence. If an empty value is inval
 import "bork/env"
 
 fn main() {
-  match (env.Require("APP_TOKEN")) {
+  match env.Require("APP_TOKEN") {
     token: String => println("token length", token.byteLength())
     missing: env.Missing => eprintln("missing " + missing.variable)
   }

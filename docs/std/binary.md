@@ -8,7 +8,7 @@ import "bork/binary"
 fn main() {
   data = [toByte(18), toByte(52)].toBytes()
   println(data.ReadUint16(0, binary.ByteOrder.BigEndian))
-  match (data.ReadUint32(0, binary.ByteOrder.BigEndian)) {
+  match data.ReadUint32(0, binary.ByteOrder.BigEndian) {
     error: binary.BinaryError => println(s"need ${error.required} bytes; have ${error.length}")
     value: Uint32 => println(value)
   }

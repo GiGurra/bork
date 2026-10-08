@@ -9,7 +9,7 @@ import "bork/encoding"
 fn demo() uses io: Ok | IoError | ParseError {
   packed = compress.Gzip(encoding.Utf8("hello"))?
   println(encoding.ParseUtf8(compress.Gunzip(packed)?)?)
-  match (compress.Gunzip(packed, maxBytes: 4)) {
+  match compress.Gunzip(packed, maxBytes: 4) {
     _: IoError => println("uncompressed data exceeds limit")
     _: Bytes => println("decompressed")
   }

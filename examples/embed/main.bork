@@ -6,7 +6,7 @@ fn main() {
   println(embed.ReadBytes("assets/query.sql"))
   assets = embed.Directory("assets")
   println(assets.Paths())
-  match (assets.Read("query.sql")) {
+  match assets.Read("query.sql") {
     data: Bytes => println(encoding.ParseUtf8(data))
     error: IoError => println(error)
   }

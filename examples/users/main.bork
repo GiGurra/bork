@@ -5,9 +5,9 @@ type NotFound = { id: Int }
 type DbError = { message: String }
 
 fn findUser(id: Int): User | NotFound | DbError {
-  if (id == 1) {
+  if id == 1 {
     User { name: "Ada", address: Address { city: "London" }, email: Option.None }
-  } else if (id < 0) {
+  } else if id < 0 {
     DbError { message: "negative id" }
   } else {
     NotFound { id: id }
@@ -21,7 +21,7 @@ fn moveUser(id: Int, city: String): User | NotFound | DbError {
 }
 
 fn describe(id: Int): String {
-  match (moveUser(id, "Oslo")) {
+  match moveUser(id, "Oslo") {
     u: User => s"${u.name} now lives in ${u.address.city}"
     NotFound { id: missing } => s"no user with id $missing"
     e: DbError => s"database error: ${e.message}"

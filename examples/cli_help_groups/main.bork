@@ -15,7 +15,7 @@ fn settings(): cli.Settings {
   .{ helpGroups: [.{ id: "operations", title: "Operations:" }, .{ id: "inspection", title: "Inspection:" }] }
 }
 fn main(): Ok | process.ExitCode {
-  match (cli.RunCommands("fleet", "Commands with help headings", commands(), settings: settings())) {
+  match cli.RunCommands("fleet", "Commands with help headings", commands(), settings: settings()) {
     Ok => {}
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("fleet") } }
   }

@@ -10,7 +10,7 @@ fn main() {
     events = signal.MockSubscription(app)
     _ = events.Emit(.Hangup)
     println(events.Next())
-    match (signal.Subscribe(app, [])) {
+    match signal.Subscribe(app, []) {
       error: signal.Error => println(error.message)
       _: signal.Subscription => println("subscribed")
     }
@@ -81,7 +81,7 @@ fn configure(app: Scope) uses io + state: signal.Policy | signal.Error {
 
 fn main() {
   scope app {
-    match (configure(app)) {
+    match configure(app) {
       _: signal.Policy => println("shutdown configured")
       error: signal.Error => eprintln(error.message)
     }

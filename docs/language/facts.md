@@ -38,11 +38,11 @@ fn perItem(total: Int, count: Int where positive): Int {
 }
 
 fn average(total: Int, count: Int): Int {
-  if (positive(count)) { perItem(total, count) } else { 0 }
+  if positive(count) { perItem(total, count) } else { 0 }
 }
 
 fn averageOrZero(total: Int, count: Int): Int {
-  if (count <= 0) { return 0 }
+  if count <= 0 { return 0 }
   perItem(total, count)
 }
 
@@ -104,7 +104,7 @@ type Name = String where nonBlank
 type Line = { item: Name, quantity: Quantity }
 
 fn lineFor(item: String, quantity: Int): Option[Line] {
-  if (nonBlank(item) && positive(quantity)) {
+  if nonBlank(item) && positive(quantity) {
     Line { item: item, quantity: quantity }
   } else {
     Option.None
@@ -131,7 +131,7 @@ pred positive(x: Int) { x > 0 }
 type NotPositive = { value: Int }
 
 fn checked(raw: Int): Int where positive | NotPositive {
-  if (raw > 0) { raw } else { NotPositive { value: raw } }
+  if raw > 0 { raw } else { NotPositive { value: raw } }
 }
 
 fn perItem(total: Int, count: Int where positive): Int {
@@ -158,7 +158,7 @@ The built-in predicate `notEmpty` is required by `first()`, which returns the fi
 ```bork
 fn smallest(xs: List[Int]): Option[Int] {
   sorted = xs.sorted()
-  if (notEmpty(sorted)) { sorted.first() } else { Option.None }
+  if notEmpty(sorted) { sorted.first() } else { Option.None }
 }
 
 fn main() {
@@ -271,7 +271,7 @@ A `trust` is checked when the tests run. Under `bork test`, every `trust` is eva
 
 Start with the value named by the diagnostic, and keep the proof close to it:
 
-1. **Guard the exact value.** Check `if (positive(count))` before passing `count`.
+1. **Guard the exact value.** Check `if positive(count)` before passing `count`.
    A check on another binding or a different computation proves that other value.
    Repeated pure expressions can share a proof, but the compiler does not infer
    general algebraic equivalence or reuse effectful observations.

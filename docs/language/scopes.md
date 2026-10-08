@@ -67,7 +67,7 @@ scopes own how long they remain active.
 
 ```bork
 fn fib(n: Int): Int {
-  if (n < 2) { n } else { fib(n - 1) + fib(n - 2) }
+  if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
 }
 
 fn main() {
@@ -191,7 +191,7 @@ fn main() {
       _ = numbers.send(s, 2)
       numbers.close()
     })
-    for (n in numbers.values(s)) {
+    for n in numbers.values(s) {
       println(n)
     }
     println(numbers.receive(s))
@@ -205,7 +205,7 @@ fn main() {
 Closed {}
 ```
 
-`channel[T](s, capacity)` makes a channel owned by the scope. `send` and `receive` wait in the scope they are given, and report `Closed` or `Cancelled` as values. `for (x in ch.values(s))` receives until the channel is closed, and `select` waits for whichever of several channel operations can happen first. [Channels](channels.md) covers them in full: capacities, closing, producers, `select`, timeouts, and patterns such as pipelines and fan-out.
+`channel[T](s, capacity)` makes a channel owned by the scope. `send` and `receive` wait in the scope they are given, and report `Closed` or `Cancelled` as values. `for x in ch.values(s)` receives until the channel is closed, and `select` waits for whichever of several channel operations can happen first. [Channels](channels.md) covers them in full: capacities, closing, producers, `select`, timeouts, and patterns such as pipelines and fan-out.
 
 ## Shared state
 
@@ -275,7 +275,7 @@ fn openChecked(path: String, app: Scope) uses io: fs.File | fs.Error {
 
 fn main() {
   scope app {
-    match (openChecked("notes.txt", app)) {
+    match openChecked("notes.txt", app) {
       file: fs.File => println(fs.Path(file))
       failure: fs.Error => println(failure)
     }
@@ -300,7 +300,7 @@ fn temporary(app: Scope) uses io: fs.File | fs.Error {
 
 fn main() {
   scope app {
-    match (temporary(app)) {
+    match temporary(app) {
       file: fs.File => println(fs.Path(file) != "")
       failure: fs.Error => println(failure)
     }
@@ -371,7 +371,7 @@ fn put(files: Channel[fs.File], file: fs.File in files, wait: Scope) uses state:
 fn main() {
   scope app {
     files = channel[fs.File](app, 1)
-    match (fs.TempFile(app)) {
+    match fs.TempFile(app) {
       file: fs.File => println(put(files, file, app))
       failure: fs.Error => println(failure)
     }
@@ -401,7 +401,7 @@ fn labeled(app: Scope) uses io: LabeledFile | fs.Error {
 
 fn main() {
   scope app {
-    match (labeled(app)) {
+    match labeled(app) {
       result: LabeledFile => println(result.label, fs.Path(result.file) != "")
       failure: fs.Error => println(failure)
     }

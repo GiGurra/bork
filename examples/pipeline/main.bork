@@ -5,7 +5,7 @@
 
 // numbers sends 1, 2, 3, ... until the channel is closed or s is cancelled.
 fn numbers(s: Scope, out: Channel[Int]) uses state: Ok | Closed | Cancelled {
-  for (n in Seq.range(1, 1_000_000_000)) {
+  for n in Seq.range(1, 1_000_000_000) {
     out.send(s, n)?
   }
   Ok
@@ -13,8 +13,8 @@ fn numbers(s: Scope, out: Channel[Int]) uses state: Ok | Closed | Cancelled {
 
 // primes passes on the numbers that are prime.
 fn primes(s: Scope, input: Channel[Int], out: Channel[Int]) uses state: Ok | Closed | Cancelled {
-  for (n in input.values(s)) {
-    if (isPrime(n)) {
+  for n in input.values(s) {
+    if isPrime(n) {
       out.send(s, n)?
     }
   }
@@ -28,7 +28,7 @@ fn isPrime(n: Int): Bool {
 // labels turns each number into a line of text.
 fn labels(s: Scope, input: Channel[Int], out: Channel[String]) uses state: Ok | Closed | Cancelled {
   count = atom(0)
-  for (n in input.values(s)) {
+  for n in input.values(s) {
     out.send(s, s"prime #${update(count, c => c + 1)}: $n")?
   }
   Ok
@@ -42,7 +42,7 @@ fn main() {
     candidates = forkProducer[Int](s, capacity: 4, work: out => numbers(s, out))
     found = forkProducer[Int](s, capacity: 4, work: out => primes(s, candidates, out))
     lines = forkProducer[String](s, capacity: 0, work: out => labels(s, found, out))
-    for (line in lines.values(s).take(8)) {
+    for line in lines.values(s).take(8) {
       println(line)
     }
     // numbers would count forever. When the scope ends it cancels the

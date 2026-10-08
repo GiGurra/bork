@@ -10,15 +10,15 @@ type Options = {
   keepAlive: Bool = false
 } derive (codec.Decode)
 fn main(): Ok | process.ExitCode {
-  match (cli.Run[Options]("docs", "Field comments become help", (options, s) => {
+  match cli.Run[Options]("docs", "Field comments become help", (options, s) => {
     println(s"Connecting to ${options.host}; keep alive: ${options.keepAlive}")
-    }, flags: [.{ field: "keepAlive", description: Option.Some("Reuse the connection.") }])) {
+    }, flags: [.{ field: "keepAlive", description: Option.Some("Reuse the connection.") }]) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("docs") } }
     Ok => {}
   }
 }
 test "comments and overrides reach help" {
-  match (cli.Parse[Options]("docs", "", ["--help"], [.{ field: "keepAlive", description: Option.Some("Reuse the connection.") }])) {
+  match cli.Parse[Options]("docs", "", ["--help"], [.{ field: "keepAlive", description: Option.Some("Reuse the connection.") }]) {
     help: cli.Help => {
       assert(help.text.contains("Address of the server to contact."))
       assert(help.text.contains("Reuse the connection."))

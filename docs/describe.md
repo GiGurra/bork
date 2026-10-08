@@ -4,7 +4,7 @@
 
 ```bork
 fn firstOrZero(xs: List[Int]): Int {
-  if (!notEmpty(xs)) { return 0 }
+  if !notEmpty(xs) { return 0 }
   xs.first()
 }
 ```

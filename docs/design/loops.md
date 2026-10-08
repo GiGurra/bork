@@ -3,7 +3,7 @@
 > **Status:** Implemented: all loop forms, loop-carried rebinding and direct self-tail-call lowering. Current docs: [basics](../language/basics.md) and [collections](../language/collections.md); precise tail-call limits: [grammar](../grammar.md).
 > Bork blocks below are design sketches; the linked current docs contain checked examples.
 
-Before this design, bork had one loop, `for (x in xs) { ... }` over a `List` or `Seq`, with
+Before this design, bork had one loop, `for x in xs { ... }` over a `List` or `Seq`, with
 `break` and `continue`. Other loops used recursion, and the generated Go did
 not eliminate tail calls. A recursive event loop, such as a server's `select`
 loop, a retry loop or a state machine, grows the goroutine stack on every
@@ -13,7 +13,7 @@ usual fix (a `while` loop that updates variables) cannot be written either.
 The implemented design adds two things:
 
 1. **Go-style loops** with the existing `for` keyword: `for { ... }`,
-   `for (cond) { ... }` and `for (init; cond; post) { ... }`. Loop-carried
+   `for cond { ... }` and `for init; cond; post { ... }`. Loop-carried
    state uses the same-block rebinding of bork-4exlxc (PR #349).
 2. **Tail call optimization in bork's code generator**: self tail calls are
    compiled to jumps. `uses tailrec` is an opt-in guarantee that fails
@@ -24,7 +24,7 @@ The implemented design adds two things:
 ```bork fragment
 fn sum(xs: List[Int]): Int {
   total = 0
-  for (x in xs) {
+  for x in xs {
     total = total + x
   }
   total
@@ -35,7 +35,7 @@ fn serve(s: Scope, jobs: Channel[Job], quit: Channel[Ok]) uses io + state: Ok | 
     match (select {
       job = jobs.receive(s) => job
       _ = quit.receive(s) => Stop {}
-    }?) {
+      }?) {
       job: Job => handle(job)
       _: Closed => break
       _: Stop => break
@@ -44,7 +44,7 @@ fn serve(s: Scope, jobs: Channel[Job], quit: Channel[Ok]) uses io + state: Ok | 
 }
 
 fn gcd(a: Int, b: Int) uses tailrec: Int {
-  if (b == 0) { a } else { gcd(b, a % b) }
+  if b == 0 { a } else { gcd(b, a % b) }
 }
 ```
 
@@ -85,9 +85,9 @@ What bork takes:
 ### Forms
 
 ```ebnf
-For        = "for" [ "(" LoopHeader ")" ] Block .
-LoopHeader = ( Ident | "_" ) "in" Expr                        (* existing: for (x in xs) *)
-           | Expr                                              (* while: for (i < n) *)
+For        = "for" [ LoopHeader | "(" LoopHeader ")" ] Block .
+LoopHeader = ( Ident | "_" ) "in" Expr                        (* existing: for x in xs *)
+           | Expr                                              (* while: for i < n *)
            | [ LoopInit { "," LoopInit } ] ";" [ Expr ] ";" [ Rebind { "," Rebind } ] .
 LoopInit   = Ident [ ":" Type ] "=" Expr .
 Rebind     = Ident "=" Expr .
@@ -95,15 +95,16 @@ LoopControl = "break" | "continue" .
 ```
 
 - `for { ... }` loops until `break`, `return`, `?` or a panic.
-- `for (cond) { ... }` checks the `Bool` condition before each iteration.
-- `for (i = 0; i < n; i = i + 1) { ... }` binds the header names (the
+- `for cond { ... }` checks the `Bool` condition before each iteration.
+- `for i = 0; i < n; i = i + 1 { ... }` binds the header names (the
   *init*), checks the condition before each iteration, and runs the *post*
   rebindings after each iteration and on `continue`. Each of the three parts
-  may be empty, as in Go: `for (;; i = i + 1)` is legal, though `for` and
-  `for (cond)` are the idiomatic forms when init and post are empty. The
-  formatter keeps the clauses as written, since it never changes tokens.
+  may be empty, as in Go: `for ; ; i = i + 1` is legal, though `for` and
+  `for cond` are the idiomatic forms when init and post are empty. The
+  formatter keeps the clauses as written; `--simplify` removes redundant
+  head parentheses.
 - Several header names are separated by commas, which Go's syntax can't do
-  (`for (lo = 0, hi = n; lo < hi; lo = lo + 1, hi = hi - 1)`). The init
+  (`for lo = 0, hi = n; lo < hi; lo = lo + 1, hi = hi - 1`). The init
   bindings run in order, as successive bindings do, so `lo = 0, hi = lo + n`
   works. The post rebindings compute the next iteration's values. They all
   see the values from before the post clause, as a simultaneous assignment
@@ -112,12 +113,13 @@ LoopControl = "break" | "continue" .
   A header name cannot already name a binding of an enclosing block: that
   would be nested shadowing, which PR #349 forbids. To carry an existing
   name, use it in a while loop. (`i = 0` before
-  `for (i < n) { ... i = i + 1 }` carries `i`, and `i` stays visible after.)
+  `for i < n { ... i = i + 1 }` carries `i`, and `i` stays visible after.)
 - Post rebindings may rebind header names and the names the loop carries
   from outside (next section).
-- `for (x in xs)` is unchanged.
+- `for x in xs` is unchanged.
 
-Parsing: after `for (`, an identifier or `_` followed by the contextual `in`
+Parsing: after `for` and an optional `(`, an identifier or `_` followed by
+the contextual `in`
 is a for-in. Otherwise the parser reads a binding list or an expression and
 looks at the next token: `;` means three-clause, `)` means while. `x = ...`
 cannot be an expression in bork, so a binding head is unambiguous. `for {` is
@@ -166,8 +168,8 @@ fn stats(xs: List[Int]): String {
   count = 0
   total = 0
   negatives = 0
-  for (x in xs) {
-    if (x < 0) {
+  for x in xs {
+    if x < 0 {
       negatives = negatives + 1
       continue
     }
@@ -192,8 +194,8 @@ Nested loops therefore carry through each level:
 
 ```bork fragment
 total = 0
-for (row in rows) {
-  for (x in row) {
+for row in rows {
+  for x in row {
     total = total + x
   }
 }
@@ -204,12 +206,12 @@ println(total)
 an `if`, inside `match` arms, and inside plain nested blocks, at any depth,
 when each of these is a *statement*. That means its value is not used: it is
 an expression statement of the loop body, or of a branch that qualifies in
-turn. Go programmers write `if (x > best) { best = x }`, and that works:
+turn. Go programmers write `if x > best { best = x }`, and that works:
 
 ```bork fragment
 best = 0
-for (x in xs) {
-  if (x > best) {
+for x in xs {
+  if x > best {
     best = x
   }
 }
@@ -222,7 +224,7 @@ that end in `return`, `break`, `continue`, `?` or a panic do not reach the
 join. They carry their own current values to where they go.
 
 Still errors, as under PR #349 outside loops: rebinding in an `if` or `match`
-whose value is used (`y = if (c) { total = 1; 2 } else { 3 }`), because the
+whose value is used (`y = if c { total = 1; 2 } else { 3 }`), because the
 rebinding would happen in the middle of an expression; in a scope or `with`
 block; in a lambda, `lazy`/`async` initializer or generator; and anywhere
 outside a loop body. The error for a branch whose value is used says to move
@@ -284,10 +286,10 @@ than Go 1.22, where only three-clause header variables are per iteration.
 
 ```bork fragment
 fs: List[() => Int] = []
-for (i = 0; i < 3; i = i + 1) {
+for i = 0; i < 3; i = i + 1 {
   fs = fs.append(() => i)
 }
-println(fs.map(f => f()))   // [0, 1, 2]
+println(fs.map(f => f())) // [0, 1, 2]
 ```
 
 ### Unused bindings
@@ -313,7 +315,7 @@ computed as a fixpoint over the loop's carried names, so `count = count + 1`
 alone does not keep `count` alive, and neither do two names that only feed
 each other (`a = b + 1; b = a`). Conditions, `break`/`continue` guards,
 arguments of calls, and reads after the loop are observations. As a result,
-`for (i = 0; ; i = i + 1) { if (done()) { break } }` is an error (`i` is never
+`for i = 0; ; i = i + 1 { if done() { break } }` is an error (`i` is never
 observed), where Go accepts it. The fix offers `for { ... }`. This is the
 same strictness PR #349 applies to every other binding.
 
@@ -322,9 +324,9 @@ Its rebindings inside the loop follow the rules above.
 
 ```bork fails
 count = 0
-for (x in xs) {
-  count = count + 1   // error: count is never observed: it is only read to
-}                     // compute its own next value, and not after the loop
+for x in xs {
+  count = count + 1 // error: count is never observed: it is only read to
+} // compute its own next value, and not after the loop
 ```
 
 The fix suggestions are those of PR #349. "Remove the binding" applies only
@@ -403,7 +405,7 @@ mapping. A breakpoint on the `for` line hits once per condition check.
 
 Per docs/syntax-changes.md: lexer (no new tokens), parser and AST
 (`For` gains `Init`, `Cond`, `Post` and a form tag), formatter (header spacing
-`for (i = 0; i < n; i = i + 1)`, and `for (;;)` without spaces), checker,
+`for i = 0; i < n; i = i + 1`, and `for ; ;`), checker,
 lowering, facts, lifetimes, unused analysis, effects, execution audit, code
 generation, describe (carried names and their head/after bindings), LSP
 (hover on a carried rebinding: "carried to the next iteration"; semantic
@@ -540,7 +542,7 @@ rebinding:
 ```bork fragment
 state: State = State.Idle
 for {
-  state = match (state) {
+  state = match state {
     State.Idle => awaitJob(s)?
     State.Running { job } => run(s, job)?
     State.Done => break

@@ -160,7 +160,7 @@ returns a new registration in a known scope:
   is pinned). The summary is computed in dependency order. Recursive functions
   without a summary yet are treated as not acquiring.
 - **The scope argument is simple:** a scope block's variable, a `Scope`
-  parameter or lambda parameter, or `b.scope`. `connect(if (x) { s } else { t
+  parameter or lambda parameter, or `b.scope`. `connect(if x { s } else { t
   })` or `connect(cfg.scope)` gives a borrowed value. That keeps the source of
   every handle a single runtime value that code generation can name.
 
@@ -177,7 +177,7 @@ Function values never acquire: their result has an unknown origin.
    lambda parameter, or have come out of a channel, an atom, a task or a call
    the checker cannot see into. The error suggests `attach(x, target)`, which
    works on borrowed values.
-3. **One source.** All of `x`'s origin handles name the same scope. `c = if (a)
+3. **One source.** All of `x`'s origin handles name the same scope. `c = if a
    { c1 } else { c2 }` with `c1` from `s` and `c2` from `t` cannot be moved:
    "c may belong to scope s or scope t". With both from `s`, the move ends both
    handles. Only the chosen one changes owner at runtime, so the other is

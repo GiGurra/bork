@@ -20,8 +20,8 @@ fn render(page: String): String | IoError {
 
 fn main() uses io {
   println(pages())
-  for (page in ["home", "about", "missing"]) {
-    match (render(page)) {
+  for page in ["home", "about", "missing"] {
+    match render(page) {
       text: String => println(text)
       error: IoError => println(s"$page: ${error.message}")
     }
@@ -29,8 +29,8 @@ fn main() uses io {
 }
 
 test "every embedded template renders" {
-  for (page in pages()) {
-    match (render(page)) {
+  for page in pages() {
+    match render(page) {
       text: String => assert(text.startsWith(page))
       _: IoError => assert(false)
     }

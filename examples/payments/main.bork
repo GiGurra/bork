@@ -16,10 +16,10 @@ type Invalid = { field: String, reason: String }
 
 // The boundary: raw values in, proven values (or a reason) out.
 fn parseAmount(raw: String): Cents | Invalid {
-  match (parseInt(raw)) {
-    n: Int => if (n <= 0) {
+  match parseInt(raw) {
+    n: Int => if n <= 0 {
       Invalid { field: "amount", reason: s"$n is not positive" }
-    } else if (n > 1_000_000) {
+    } else if n > 1_000_000 {
       Invalid { field: "amount", reason: s"$n is over the limit" }
     } else {
       n
@@ -30,7 +30,7 @@ fn parseAmount(raw: String): Cents | Invalid {
 
 fn parseAccount(field: String, raw: String): AccountId | Invalid {
   id = raw.trim()
-  if (nonEmpty(id)) { id } else { Invalid { field: field, reason: "missing" } }
+  if nonEmpty(id) { id } else { Invalid { field: field, reason: "missing" } }
 }
 
 // Relations between parameters: to must differ from from.
@@ -46,7 +46,7 @@ fn request(fromRaw: String, toRaw: String, amountRaw: String): Transfer | Invali
   from = parseAccount("from", fromRaw)?
   to = parseAccount("to", toRaw)?
   amount = parseAmount(amountRaw)?
-  if (to == from) {
+  if to == from {
     return Invalid { field: "to", reason: "cannot transfer to the same account" }
   }
   makeTransfer(from, to, amount)
@@ -55,7 +55,7 @@ fn request(fromRaw: String, toRaw: String, amountRaw: String): Transfer | Invali
 // The fee is promised to stay within the limit; the compiler checks
 // that every path keeps the promise.
 fn withFee(amount: Cents): Int where atMost(1_010_000) {
-  fee = if (atMost(amount, 10_000)) { 100 } else { amount / 100 }
+  fee = if atMost(amount, 10_000) { 100 } else { amount / 100 }
   total = amount + fee
   // amount is at most 1_000_000, so the fee is at most 10_000.
   trust atMost(total, 1_010_000)
@@ -63,7 +63,7 @@ fn withFee(amount: Cents): Int where atMost(1_010_000) {
 }
 
 fn describe(result: Transfer | Invalid): String {
-  match (result) {
+  match result {
     t: Transfer => s"${t.from} -> ${t.to}: ${t.amount} cents (${withFee(t.amount)} with fee)"
     Invalid { field, reason } => s"invalid $field: $reason"
   }
@@ -86,7 +86,7 @@ fn main() {
 // is checked too.
 
 test "valid requests become transfers" {
-  match (request("alice", "bob", "2500")) {
+  match request("alice", "bob", "2500") {
     t: Transfer => assertEqual(t.amount, 2500)
     Invalid { field } => panic(s"unexpected invalid $field")
   }

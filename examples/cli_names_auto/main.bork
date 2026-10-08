@@ -15,15 +15,15 @@ type Options = {
 } derive (codec.Decode)
 fn settings(): cli.Settings { .{ autoShort: true, autoEnv: true, envPrefix: "NAMES" } }
 fn main(): Ok | process.ExitCode {
-  match (cli.Run[Options]("names", "Names derived from fields", (options, s) => {
+  match cli.Run[Options]("names", "Names derived from fields", (options, s) => {
     println(s"host ${options.serverHost}, port ${options.httpPort}, verbose ${options.verbose}")
-    }, settings: settings())) {
+    }, settings: settings()) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("names") } }
     Ok => {}
   }
 }
 test "help lists the derived flag, short and env names" {
-  match (cli.Parse[Options]("names", "", ["--help"], settings: settings())) {
+  match cli.Parse[Options]("names", "", ["--help"], settings: settings()) {
     help: cli.Help => {
       assert(help.text.contains("-s, --server-host"))
       assert(help.text.contains("(env: NAMES_SERVER_HOST)"))
@@ -35,7 +35,7 @@ test "help lists the derived flag, short and env names" {
   }
 }
 test "derived short flags parse" {
-  match (cli.Parse[Options]("names", "", ["-s", "api.example", "-v"], settings: settings())) {
+  match cli.Parse[Options]("names", "", ["-s", "api.example", "-v"], settings: settings()) {
     options: Options => { assertEqual(options.serverHost, "api.example"); assert(options.verbose) }
     other => { panic(s"Expected options, got ${other}") }
   }

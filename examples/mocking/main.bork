@@ -18,8 +18,8 @@ type Health = sealed {
 
 // check asks url how it is, and notes when it found it down.
 fn check(url: String, s: Scope) uses net + clock + state: Health {
-  match (http.Get(url, s, timeout: 2.seconds())) {
-    r: http.Response => if (r.status < 500) {
+  match http.Get(url, s, timeout: 2.seconds()) {
+    r: http.Response => if r.status < 500 {
       Health.Up { url: url }
     } else {
       Health.Down { url: url, status: r.status, at: time.Now() }
@@ -41,7 +41,7 @@ fn checkAll(urls: List[String]) uses net + clock + state: List[Health] {
 }
 
 fn describe(h: Health): String {
-  match (h) {
+  match h {
     Health.Up { url } => s"up: $url"
     Health.Down { url, status } => s"down ($status): $url"
     Health.Unreachable { url } => s"unreachable: $url"
@@ -49,7 +49,7 @@ fn describe(h: Health): String {
 }
 
 fn upstream(req: http.Request, s: Scope): http.Response {
-  match (req.path) {
+  match req.path {
     "/up" => http.Text(200, "ok")
     _ => http.Text(503, "maintenance")
   }
@@ -57,7 +57,7 @@ fn upstream(req: http.Request, s: Scope): http.Response {
 
 fn main() {
   scope s {
-    match (http.Listen("127.0.0.1:0", s, handler: upstream)) {
+    match http.Listen("127.0.0.1:0", s, handler: upstream) {
       server: http.Server => {
         base = "http://" + http.Address(server)
         lines = checkAll([base + "/up", base + "/down"]).map(h => describe(h).replaceAll(base, "http://upstream"))
@@ -79,12 +79,12 @@ test "an upstream answering 503 is down, since the time it was checked" {
 
 test "every task sees the test's mocks" {
   gets = mock http.Get(url, s, timeout, maxBodyBytes) {
-    if (url.contains("down")) { http.Text(500, "") } else { http.Text(200, "") }
+    if url.contains("down") { http.Text(500, "") } else { http.Text(200, "") }
   }
   gets.expect(times: 20)
   gets.expectWhere(c => c.timeout != 2.seconds(), times: 0)
   mock time.Now() { time.Instant { unixNanos: 0 } }
-  urls = range(0, 20).map(i => if (i % 2 == 0) { s"https://up$i" } else { s"https://down$i" })
+  urls = range(0, 20).map(i => if i % 2 == 0 { s"https://up$i" } else { s"https://down$i" })
   results = checkAll(urls).map(describe)
   assertEqual(results.count(r => r.startsWith("up")), 10)
   assertEqual(results.count(r => r.startsWith("down")), 10)
@@ -101,12 +101,12 @@ test "a nested block changes the mock, and the outer one comes back" {
 
 test "a mock can pass calls on to the real function" {
   scope s {
-    match (http.Listen("127.0.0.1:0", s, handler: upstream)) {
+    match http.Listen("127.0.0.1:0", s, handler: upstream) {
       server: http.Server => {
         local = "http://" + http.Address(server)
         // Only the outside world is faked; the local server is real.
         mock http.Get(url, s2, timeout, maxBodyBytes) {
-          if (url.startsWith(local)) { http.Get(url, s2, timeout, maxBodyBytes) } else { http.Text(200, "") }
+          if url.startsWith(local) { http.Get(url, s2, timeout, maxBodyBytes) } else { http.Text(200, "") }
         }
         assertEqual(checkAll([local + "/down", "https://elsewhere"]).map(h => describe(h).replaceAll(local, "local")), ["down (503): local/down", "up: https://elsewhere"])
         cancel(s)

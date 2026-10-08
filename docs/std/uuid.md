@@ -7,7 +7,7 @@ import "bork/uuid"
 
 fn main() {
   println(uuid.Format(uuid.Nil()))
-  match (uuid.Parse("not-a-uuid")) {
+  match uuid.Parse("not-a-uuid") {
     _: ParseError => println("invalid UUID")
     id: uuid.Uuid => println(id)
   }
@@ -40,11 +40,11 @@ cannot be constructed directly. Values compare structurally and work as map keys
 import "bork/uuid"
 
 fn main() {
-  match (uuid.V4()) {
+  match uuid.V4() {
     id: uuid.Uuid => println(uuid.Version(id))
     error: IoError => eprintln(error.message)
   }
-  match (uuid.V7()) {
+  match uuid.V7() {
     id: uuid.Uuid => println(uuid.Version(id))
     error: IoError => eprintln(error.message)
   }

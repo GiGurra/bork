@@ -15,7 +15,7 @@ type NotFound = { id: Int }
 pred positive(x: Int) { x > 0 }
 
 fn findUser(id: Int where positive): User | NotFound {
-  if (id == 1) {
+  if id == 1 {
     User { name: "Ada", email: Option.None }
   } else {
     NotFound { id: id }
@@ -23,7 +23,7 @@ fn findUser(id: Int where positive): User | NotFound {
 }
 
 fn describe(id: Int where positive): String {
-  match (findUser(id)) {
+  match findUser(id) {
     User { name, email: .Some(value) } => s"$name <$value>"
     User { name } => name
     NotFound { id: missing } => s"no user with id $missing"
@@ -31,7 +31,7 @@ fn describe(id: Int where positive): String {
 }
 
 fn greet(id: Int) uses io {
-  if (positive(id)) { println(describe(id)) } else { println("ids start at 1") }
+  if positive(id) { println(describe(id)) } else { println("ids start at 1") }
 }
 
 fn main() {

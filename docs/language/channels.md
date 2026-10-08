@@ -62,7 +62,7 @@ In a function that returns these outcomes, `?` passes them on:
 
 ```bork
 fn sendAll(s: Scope, out: Channel[Int], values: List[Int]) uses state: Ok | Closed | Cancelled {
-  for (x in values) {
+  for x in values {
     out.send(s, x)?
   }
   Ok
@@ -98,7 +98,7 @@ fn main() {
     _ = words.send(s, "one")
     _ = words.send(s, "two")
     words.close()
-    for (word in words.values(s)) {
+    for word in words.values(s) {
       println(word)
     }
     println(words.toList(s))
@@ -143,7 +143,7 @@ Option.Some(1) Option.None
 
 ```bork
 fn squares(s: Scope, out: Channel[Int], count: Int) uses state: Ok | Closed | Cancelled {
-  for (n in Seq.range(1, count + 1)) {
+  for n in Seq.range(1, count + 1) {
     out.send(s, n * n)?
   }
   Ok
@@ -151,7 +151,7 @@ fn squares(s: Scope, out: Channel[Int], count: Int) uses state: Ok | Closed | Ca
 
 fn main() {
   scope s {
-    for (n in forkProducer[Int](s, 0, out => squares(s, out, 4)).values(s)) {
+    for n in forkProducer[Int](s, 0, out => squares(s, out, 4)).values(s) {
       println(n)
     }
   }
@@ -203,7 +203,7 @@ fn main() {
     _ = jobs.send(s, "test")
     for {
       _ = select {
-        j = jobs.receive(s) => match (j) {
+        j = jobs.receive(s) => match j {
           job: String => println(s"job $job")
           Closed => break
         }
@@ -284,15 +284,15 @@ fn main() {
   scope app {
     files = handoff[fs.File](app)
     worker = fork(app, () => {
-      for (file in files.values(app)) {
+      for file in files.values(app) {
         scope job {
           mine = move(file, job) // the worker owns it now
           println(fs.Path(mine) != "")
         } // and it closes here
       }
     })
-    for (_ in [1, 2]) {
-      match (fs.TempFile(app)) {
+    for _ in [1, 2] {
+      match fs.TempFile(app) {
         file: fs.File => { _ = files.handOver(app, file) } // app lets go of it
         failure: fs.Error => println(failure)
       }
@@ -305,7 +305,7 @@ fn main() {
 
 - `handoff[R](s)` or `handoff[R](s, capacity)` makes one in scope `s`. It carries resources only.
 - `h.handOver(s, r)` is a `move` of `r` to the handoff's scope, followed by a send. The compiler rejects any later use of `r`, or of anything holding it, and `r` must be movable there, as for `move`. It gives `Ok | Closed | Cancelled`. If it fails, nobody received `r`, so `r` is closed at once (unless it is attached to another scope).
-- `h.receive(s)` and `for (r in h.values(s))` give the receiver a hold of its own on the resource, which it may move: it belongs to the handoff's scope until the receiver moves it on, attaches it, or hands it over again. This works for a handoff held in a variable or parameter. Resources nobody received close with the handoff's scope.
+- `h.receive(s)` and `for r in h.values(s)` give the receiver a hold of its own on the resource, which it may move: it belongs to the handoff's scope until the receiver moves it on, attaches it, or hands it over again. This works for a handoff held in a variable or parameter. Resources nobody received close with the handoff's scope.
 - `tryReceive`, `close`, `length` and `capacity` work as they do for channels. A value from `tryReceive` is borrowed, and so is one received from a handoff that is not a plain name (`make().receive(s)`).
 - In a `select`, `c = h.receive(s) => ...` gives the arm's body a hold of its own, as `receive` does, and `h.handOver(s, r) => ...` hands `r` over only if that arm is the one that runs. Then `r` is handed over where its body starts. If another arm runs, or the `select` gives `Cancelled`, `r` is still the sender's, and that arm's body may use it. After the `select`, `r` may have been handed over, so it cannot be used. Naming the arm (`sent = h.handOver(s, r) => ...`) gives `Ok | Closed`; on `Closed`, `r` is released as for `handOver`.
 
@@ -315,7 +315,7 @@ import "bork/fs"
 fn main() {
   scope app {
     files = handoff[fs.File](app)
-    match (fs.TempFile(app)) {
+    match fs.TempFile(app) {
       file: fs.File => {
         _ = select {
           files.handOver(app, file) => println("handed over")
@@ -344,8 +344,8 @@ fn main() {
 | `make(chan T)`, `make(chan T, n)` | `channel[T](s)`, `channel[T](s, n)`: owned by scope `s` |
 | no unbounded channel | `unboundedChannel[T](s)` |
 | `ch <- x`, `<-ch` | `ch.send(s, x)`, `ch.receive(s)`, which give `Closed` or `Cancelled` as values |
-| `v, ok := <-ch` | `match (ch.receive(s)) { ... }` |
-| `for v := range ch` | `for (v in ch.values(s))` |
+| `v, ok := <-ch` | `match ch.receive(s) { ... }` |
+| `for v := range ch` | `for v in ch.values(s)` |
 | send on a closed channel panics | gives `Closed` |
 | closing twice panics | does nothing |
 | `select` with `case <-ctx.Done()` | `select` gives `Cancelled` by itself |

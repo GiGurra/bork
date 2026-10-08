@@ -16,15 +16,15 @@ fn flags(): List[cli.Flag] {
 }
 fn main(): Ok | process.ExitCode {
   // Hidden flags still parse, and accepted deprecated flags warn on stderr.
-  match (cli.Run[Options]("visibility", "Hidden and deprecated flags", (options, s) => {
+  match cli.Run[Options]("visibility", "Hidden and deprecated flags", (options, s) => {
     println(s"trace ${options.trace}, port ${options.oldPort.getOr(options.port)}")
-    }, flags: flags())) {
+    }, flags: flags()) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("visibility") } }
     Ok => {}
   }
 }
 test "hidden and deprecated flags are omitted from help" {
-  match (cli.Parse[Options]("visibility", "", ["--help"], flags: flags())) {
+  match cli.Parse[Options]("visibility", "", ["--help"], flags: flags()) {
     help: cli.Help => {
       assert(help.text.contains("--port"))
       assert(!help.text.contains("--trace"))
@@ -34,7 +34,7 @@ test "hidden and deprecated flags are omitted from help" {
   }
 }
 test "a failed deprecated flag keeps its warning with the error" {
-  match (cli.Parse[Options]("visibility", "", ["--old-port", "bad"], flags: flags())) {
+  match cli.Parse[Options]("visibility", "", ["--old-port", "bad"], flags: flags()) {
     error: cli.Error => {
       text = error.Render("visibility")
       assert(text.contains("Error: .oldPort:"))

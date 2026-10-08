@@ -8,7 +8,7 @@ fn run(s: Scope) uses io + state + clock: Ok | IoError | Cancelled | Closed {
     cancelAfter(limited, 200.millis())
     process.Run(limited, "sleep", ["10"])
   }
-  println(match (slow) {
+  println(match slow {
     _: process.Result => "finished in time"
     error: IoError => error.message
     stopped: Cancelled => s"timed out: ${stopped.reason}"
@@ -25,7 +25,7 @@ fn run(s: Scope) uses io + state + clock: Ok | IoError | Cancelled | Closed {
     cancel(limited)
     child.Wait()
   }
-  println(match (graceful) {
+  println(match graceful {
     _: process.Result => "finished in time"
     error: IoError => error.message
     _: Cancelled => "stopped after a graceful shutdown"

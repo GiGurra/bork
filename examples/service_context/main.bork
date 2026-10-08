@@ -6,17 +6,17 @@ propagated("traceparent") logged ambient trace: http.TraceParent
 fn traceText() needs trace: String { trace }
 fn root(): http.TraceParent {
   text = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-  if (http.ValidTraceParent(text)) { text } else { panic("invalid example root") }
+  if http.ValidTraceParent(text) { text } else { panic("invalid example root") }
 }
 fn server(result: http.Server | IoError): http.Server {
-  match (result) { value: http.Server => value, error => panic(toString(error)) }
+  match result { value: http.Server => value, error => panic(toString(error)) }
 }
 fn reply(result: http.Result): http.Response {
-  match (result) { value: http.Response => value, error => panic(toString(error)) }
+  match result { value: http.Response => value, error => panic(toString(error)) }
 }
 fn budget(headers: http.Headers): Int {
-  match (http.HeaderOf(headers, "Bork-Timeout-Ns")) {
-    Option.Some(value) => match (parseInt(value)) { n: Int => n, error => panic(toString(error)) }
+  match http.HeaderOf(headers, "Bork-Timeout-Ns") {
+    Option.Some(value) => match parseInt(value) { n: Int => n, error => panic(toString(error)) }
     Option.None => panic("missing deadline budget")
   }
 }
@@ -24,7 +24,7 @@ fn main() {
   scope app with cleanupTimeout(5.seconds()) {
     downstream = server(http.Listen("127.0.0.1:0", app, handler: (request, s) => {
       // Boundary labels forward automatically. Typed needs are bound explicitly.
-      match (http.TraceParentOf(request.headers)) {
+      match http.TraceParentOf(request.headers) {
         Option.Some(value) => {
           with (trace: value) {
             http.Text(200, traceText()).copy(headers: {
@@ -40,7 +40,7 @@ fn main() {
       result = reply(http.Get(target, s))
       http.Text(200, result.body).copy(headers: {
         "middle-budget": [toString(budget(request.headers))],
-        "downstream-budget": [match (http.HeaderOf(result.headers, "seen-budget")) {
+        "downstream-budget": [match http.HeaderOf(result.headers, "seen-budget") {
           Option.Some(value) => value
           Option.None => panic("missing downstream budget")
         }]
@@ -50,11 +50,11 @@ fn main() {
       cancelAfter(caller, 5.seconds())
       with (trace: root()) {
         result = reply(http.Get("http://" + http.Address(middle), caller))
-        middleBudget = budget({ "Bork-Timeout-Ns": [match (http.HeaderOf(result.headers, "middle-budget")) {
+        middleBudget = budget({ "Bork-Timeout-Ns": [match http.HeaderOf(result.headers, "middle-budget") {
           Option.Some(value) => value
           Option.None => panic("missing middle budget")
         }] })
-        downstreamBudget = budget({ "Bork-Timeout-Ns": [match (http.HeaderOf(result.headers, "downstream-budget")) {
+        downstreamBudget = budget({ "Bork-Timeout-Ns": [match http.HeaderOf(result.headers, "downstream-budget") {
           Option.Some(value) => value
           Option.None => panic("missing downstream budget")
         }] })

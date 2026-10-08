@@ -147,7 +147,7 @@ This is still checked. A function that needs a value can only be called from ins
 ambient locale: String
 
 fn greeting() needs locale?: String {
-  match (locale) {
+  match locale {
     Option.Some("sv") => "hej"
     _ => "hello"
   }
@@ -193,13 +193,13 @@ propagated("X-Request-Id") ambient requestId: String
 
 fn main() {
   scope app {
-    match (http.Listen("127.0.0.1:0", app, (request, s) => {
+    match http.Listen("127.0.0.1:0", app, (request, s) => {
       id = http.HeaderOf(request.headers, "X-Request-Id").getOr("missing")
       http.Text(200, id)
-    })) {
+    }) {
       server: http.Server => {
         with (requestId: "req-42") {
-          match (http.Get("http://" + http.Address(server), app)) {
+          match http.Get("http://" + http.Address(server), app) {
             response: http.Response => println(response.body)
             failure => println(failure)
           }

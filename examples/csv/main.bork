@@ -8,10 +8,10 @@ type Stock = { code: String, quantity: Int where positive, note: Option[String] 
 
 fn main() {
   // Field types decide parsing. The code remains "007".
-  match (encoding.DecodeCsv[Stock]("code,quantity\n007,3\n")) {
+  match encoding.DecodeCsv[Stock]("code,quantity\n007,3\n") {
     rows: List[Stock] => {
       println(rows)
-      match (encoding.EncodeCsv(rows)) {
+      match encoding.EncodeCsv(rows) {
         text: String => println(encoding.CsvRows(text))
         error: encoding.CsvError => println(error)
       }

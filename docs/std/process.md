@@ -9,7 +9,7 @@ fn demo(s: Scope) uses io + state: Ok | IoError | Cancelled {
   result = process.Run(s, "printf", ["hello\\n"])?
   println(result.StdoutText().trim())
   println(result.code)
-  match (process.Run(s, "false")?.Check()) {
+  match process.Run(s, "false")?.Check() {
     error: process.ExitError => println(error.message)
     _: process.Result => println("success")
   }
@@ -45,7 +45,7 @@ status and message even during signal shutdown. To choose a failure status, retu
 ```bork
 import "bork/process"
 fn main(): Ok | process.ExitCode {
-  if (process.Args().isEmpty()) {
+  if process.Args().isEmpty() {
     return process.ExitCode { code: 2, message: "usage: tool FILE" }
   }
   println("ready")
@@ -151,8 +151,8 @@ import "bork/process"
 
 fn follow(s: Scope) uses io + state: Ok | IoError | Cancelled {
   child = process.Start(s, "ping", ["-c", "3", "localhost"], stdout: .Pipe)?
-  for (item in child.Stdout().Lines()) {
-    match (item) {
+  for item in child.Stdout().Lines() {
+    match item {
       line: String => println(line)
       error: IoError => eprintln(error.message)
       stopped: Cancelled => eprintln(stopped.reason)

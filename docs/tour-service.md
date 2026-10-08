@@ -143,7 +143,7 @@ fn insert(db: sql.Connection in request, request: Scope, note: NewNote) uses io 
   tx = sql.Begin(db, request)?
   _ = sql.SQL"INSERT INTO notes(title) VALUES (${note.title})".Exec(tx)?
   rows = sql.SQL"SELECT id, title FROM notes WHERE id = last_insert_rowid()".Query[Note](tx)?
-  match (rows) {
+  match rows {
     [saved] => { sql.Commit(tx)?; saved }
     _ => sql.Error { operation: "insert", message: "expected one inserted note" }
   }
@@ -155,8 +155,8 @@ fn storageError(error: sql.Error | codec.DecodeError): http.Response {
 }
 
 fn create(db: sql.Connection in request, req: http.Request, request: Scope) uses io + net: http.Response {
-  match (http.Body[NewNote](req)) {
-    note: NewNote => match (insert(db, request, note)) {
+  match http.Body[NewNote](req) {
+    note: NewNote => match insert(db, request, note) {
       saved: Note => {
         log.Info("note created", { "id": saved.id })
         http.JsonReply(201, json.Encode(saved))
@@ -174,10 +174,10 @@ fn list(db: sql.Connection in request, request: Scope) uses io + net: List[Note]
 }
 
 fn route(db: sql.Connection in request, req: http.Request, request: Scope) uses io + net: http.Response {
-  match ((req.method, req.path)) {
+  match (req.method, req.path) {
     ("GET", "/health") => http.Text(200, "ok")
     ("POST", "/notes") => create(db, req, request)
-    ("GET", "/notes") => match (list(db, request)) {
+    ("GET", "/notes") => match list(db, request) {
       notes: List[Note] => http.JsonReply(200, json.Encode(notes))
       error: sql.Error | codec.DecodeError => storageError(error)
     }
@@ -202,7 +202,7 @@ fn serve() uses io + net + clock + state: Ok | env.ConfigError | sql.Error | IoE
 }
 
 fn show(label: String, result: http.Result) uses io {
-  match (result) {
+  match result {
     response: http.Response => println(s"$label -> ${response.status} ${response.body}")
     error => panic(toString(error))
   }
@@ -223,13 +223,13 @@ fn demo() uses io + net + clock + state: Ok | sql.Error | IoError {
 
 fn main(): Ok | process.ExitCode {
   log.Configure(log.Defaults().copy(timestamps: false))
-  result = match (process.Args()) {
+  result = match process.Args() {
     [] => demo()
     ["demo"] => demo()
     ["serve"] => serve()
     _ => { return process.ExitCode { code: 2, message: "usage: service_tour [demo|serve]" } }
   }
-  match (result) {
+  match result {
     Ok => {}
     error => { return process.ExitCode { code: 1, message: toString(error) } }
   }

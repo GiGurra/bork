@@ -5,20 +5,20 @@ import "bork/http"
 import "bork/tasks"
 import "bork/time"
 fn task(result: Task[String] | tasks.TaskLimitReached | Cancelled): Task[String] {
-  match (result) {
+  match result {
     value: Task[String] => value
     error => panic(toString(error))
   }
 }
 fn response(result: http.Result): String {
-  match (result) {
-    value: http.Response => if (value.status == 200) { "ok" } else { panic(toString(value)) }
+  match result {
+    value: http.Response => if value.status == 200 { "ok" } else { panic(toString(value)) }
     _: http.Overloaded => "overloaded"
     error => panic(toString(error))
   }
 }
 fn got(result: String | Closed | Cancelled): String {
-  match (result) {
+  match result {
     value: String => value
     error => panic(toString(error))
   }
@@ -33,13 +33,13 @@ fn main() {
     calls = atom(0)
     listener = http.Listen("127.0.0.1:0", app, handler: (request, s) => {
       count = update(active, n => n + 1)
-      _ = update(peak, n => if (count > n) { count } else { n })
+      _ = update(peak, n => if count > n { count } else { n })
       _ = started.send(app, true)
       _ = finish.receive(app)
       _ = update(active, n => n - 1)
       http.Text(200, "finished")
       }, admission: .Some(http.Admission { maxInFlight: 2, maxQueued: 2, queueTimeout: 1.minutes(), retryAfter: 0.seconds() }))
-    match (listener) {
+    match listener {
       server: http.Server => {
         url = "http://" + http.Address(server) + "/work"
         pool = tasks.Open(app, maxTasks: 6)
@@ -61,7 +61,7 @@ fn main() {
         _ = started.receive(app)
         _ = started.receive(app)
         println("shed", first, second)
-        match (http.AdmissionState(server)) {
+        match http.AdmissionState(server) {
           Option.Some(value) => println("bounded downstream", value.inFlight, "active", value.queued, "queued")
           Option.None => panic("admission not enabled")
         }

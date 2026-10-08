@@ -9,9 +9,9 @@ type Options = { name: String = "world" } derive (codec.Decode)
 fn greeting(name: String): String { s"Hello, $name!" }
 
 fn main(): Ok | process.ExitCode {
-  match (cli.Run[Options]("greet", "A greeting script", (options, s) => {
+  match cli.Run[Options]("greet", "A greeting script", (options, s) => {
     println(greeting(options.name))
-  })) {
+  }) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("greet") } }
     Ok => {}
   }

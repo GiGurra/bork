@@ -10,7 +10,7 @@ type Options = {
   resource: String
 } derive (codec.Decode)
 fn resources(request: cli.CompletionRequest, s: Scope): cli.Suggestions | cli.Error {
-  namespace = match (request.partial.Get[String]("namespace")) {
+  namespace = match request.partial.Get[String]("namespace") {
     value: String => value
     _: cli.Missing => "dev"
     error: codec.DecodeError => { return cli.Error { errors: [error] } }
@@ -24,27 +24,27 @@ fn flags(): List[cli.Flag] {
   [.{ field: "namespace", short: "n", env: "DEPLOY_NAMESPACE" }, .{ field: "config", configFile: true }]
 }
 fn main(): Ok | process.ExitCode {
-  match (cli.RunWith[Options]("deploy", "Deploy a resource with context-aware suggestions", (options, s) => {
+  match cli.RunWith[Options]("deploy", "Deploy a resource with context-aware suggestions", (options, s) => {
     println(s"${options.namespace}/${options.resource}")
-    }, completions: completions(), flags: flags())) {
+    }, completions: completions(), flags: flags()) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("deploy") } }
     Ok => {}
   }
 }
 test "a partial flag chooses resource suggestions" {
-  match (cli.ParseWith[Options]("deploy", "", ["__complete", "-n", "team", "--resource", "team-w"], completions: completions(), flags: flags())) {
+  match cli.ParseWith[Options]("deploy", "", ["__complete", "-n", "team", "--resource", "team-w"], completions: completions(), flags: flags()) {
     help: cli.Help => { assert(help.text == "team-web\tWeb service\nteam-worker\tBackground worker\n:4\n") }
     other => { panic(s"Expected completion, got ${other}") }
   }
 }
 test "omitted inputs use the completer's explicit fallback" {
-  match (cli.ParseWith[Options]("deploy", "", ["__completeNoDesc", "--resource", ""], completions: completions(), flags: flags().map(flag => flag.copy(env: "", envName: cli.Mapping.Disabled)))) {
+  match cli.ParseWith[Options]("deploy", "", ["__completeNoDesc", "--resource", ""], completions: completions(), flags: flags().map(flag => flag.copy(env: "", envName: cli.Mapping.Disabled))) {
     help: cli.Help => { assert(help.text == "dev-web\ndev-worker\n:4\n") }
     other => { panic(s"Expected completion, got ${other}") }
   }
 }
 test "help skips configuration and completers" {
-  match (cli.ParseWith[Options]("deploy", "", ["--help"], completions: completions(), flags: flags(), configFiles: ["missing.json"])) {
+  match cli.ParseWith[Options]("deploy", "", ["--help"], completions: completions(), flags: flags(), configFiles: ["missing.json"]) {
     help: cli.Help => { assert(help.text.contains("--resource")) }
     other => { panic(s"Expected help, got ${other}") }
   }
@@ -52,10 +52,10 @@ test "help skips configuration and completers" {
 
 test "reusing a command starts each query with fresh input" {
   leaf = cli.SubcommandWith[Options]("deploy", "", (options, s) => { panic("Completion must not run the handler") }, completions: completions(), flags: flags().map(flag => flag.copy(env: "", envName: cli.Mapping.Disabled)))
-  for (arguments in [["__completeNoDesc", "deploy", "-n", "team", "--resource", ""], ["__completeNoDesc", "deploy", "--resource", ""]]) {
-    match (cli.Dispatch("app", "", arguments, [leaf])) {
+  for arguments in [["__completeNoDesc", "deploy", "-n", "team", "--resource", ""], ["__completeNoDesc", "deploy", "--resource", ""]] {
+    match cli.Dispatch("app", "", arguments, [leaf]) {
       help: cli.Help => {
-        if (arguments.filter(word => word == "team").length() > 0) { assert(help.text == "team-web\nteam-worker\n:4\n") } else { assert(help.text == "dev-web\ndev-worker\n:4\n") }
+        if arguments.filter(word => word == "team").length() > 0 { assert(help.text == "team-web\nteam-worker\n:4\n") } else { assert(help.text == "dev-web\ndev-worker\n:4\n") }
       }
       other => { panic(s"Expected completion, got ${other}") }
     }

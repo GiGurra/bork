@@ -5,7 +5,7 @@
 
 // countdown sends n, n - 1, ..., 1. ? passes Closed or Cancelled on.
 fn countdown(s: Scope, out: Channel[Int], n: Int) uses state: Ok | Closed | Cancelled {
-  for (i in Seq.range(0, n)) {
+  for i in Seq.range(0, n) {
     out.send(s, n - i)?
   }
   Ok
@@ -16,13 +16,13 @@ fn main() {
     // An unbuffered channel: each send waits until a receiver takes it.
     greetings = channel[String](s)
     fork(s, () => {
-      for (name in ["Ada", "Grace", "Barbara"]) {
+      for name in ["Ada", "Grace", "Barbara"] {
         _ = greetings.send(s, s"hello, $name")
       }
       greetings.close()
     })
     // A for loop receives until the channel is closed.
-    for (greeting in greetings.values(s)) {
+    for greeting in greetings.values(s) {
       println(greeting)
     }
     // After that, receive reports Closed.
@@ -42,7 +42,7 @@ fn main() {
     // forkProducer runs a task that fills a new channel, and closes it when
     // the task returns.
     launches = forkProducer[Int](s, 0, out => countdown(s, out, 3))
-    for (n in launches.values(s)) {
+    for n in launches.values(s) {
       println(s"$n...")
     }
     println("liftoff")

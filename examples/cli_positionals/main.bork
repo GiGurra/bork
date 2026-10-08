@@ -17,28 +17,28 @@ fn flags(): List[cli.Flag] {
     .{ field: "files", position: Option.Some(2), files: true }]
 }
 fn main(): Ok | process.ExitCode {
-  match (cli.Run[Options]("files", "Process files with an ordered positional layout", (options, s) => {
+  match cli.Run[Options]("files", "Process files with an ordered positional layout", (options, s) => {
     println(s"${options.action} with ${options.workers} workers: ${options.files}")
-    }, flags: flags())) {
+    }, flags: flags()) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("files") } }
     Ok => {}
   }
 }
 test "indices determine argument order independently of record fields" {
-  match (cli.Parse[Options]("files", "", ["copy", "2", "one,two", " spaced ", ""], flags: flags())) {
+  match cli.Parse[Options]("files", "", ["copy", "2", "one,two", " spaced ", ""], flags: flags()) {
     options: Options => { assert(options.action == "copy"); assert(options.workers == 2); assert(options.files == ["one,two", " spaced ", ""]) }
     other => { panic(s"Expected options, got ${other}") }
   }
 }
 test "completion advances through positional slots" {
-  match (cli.Parse[Options]("files", "", ["__completeNoDesc", "copy", ""], flags: flags())) {
+  match cli.Parse[Options]("files", "", ["__completeNoDesc", "copy", ""], flags: flags()) {
     help: cli.Help => { assert(help.text == "1\n2\n4\n:4\n") }
     other => { panic(s"Expected completion, got ${other}") }
   }
 }
 test "command deprecation stays in diagnostic output" {
   command = cli.Subcommand[Options]("old", "Legacy processing", (options, s) => {}, flags: flags()).copy(deprecated: "use files")
-  match (cli.Dispatch("app", "", ["old", "--help"], [command])) {
+  match cli.Dispatch("app", "", ["old", "--help"], [command]) {
     help: cli.Help => { assert(!help.text.contains("deprecated")); assert(help.diagnostics.contains("use files")) }
     other => { panic(s"Expected help, got ${other}") }
   }

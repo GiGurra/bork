@@ -14,7 +14,7 @@ ordinary values are immutable; errors are values; resources belong to scopes.
 | Default and named arguments | `fn add(a: Int, b: Int = 1): Int { a + b }`; `add(2, b: 3)` |
 | Generic type/function | `List[Int]`; `fn identity[T](value: T): T { value }` |
 | Lambda | `value => value * 2`; `(a, b) => a + b` |
-| Conditional expression | `if (ready) { "yes" } else { "no" }` |
+| Conditional expression | `if ready { "yes" } else { "no" }` |
 | List/map/tuple | `[1, 2]`; `{ "Ada": 3 }`; `(3, "Ada")` |
 | Empty List/Map | `xs: List[Int] = []`; `counts: Map[String, Int] = {:}` |
 | Record/convenient construction | `Person { name: "Ada" }`; `.{ name: "Ada" }` when expected type is known |
@@ -60,11 +60,11 @@ and unconditional forms. `range(start, end)` excludes end.
 ```bork
 fn main() {
   total = 0
-  for (n in range(0, 4)) { total = total + n }
+  for n in range(0, 4) { total = total + n }
   println(total)
-  for (i = 0; i < 3; i = i + 1) { println(i) }
+  for i = 0; i < 3; i = i + 1 { println(i) }
   remaining = 2
-  for (remaining > 0) {
+  for remaining > 0 {
     println(remaining)
     remaining = remaining - 1
   }
@@ -91,7 +91,7 @@ type Missing = { name: String }
 type Reply = sealed { Found(User), Gone }
 
 fn find(name: String): User | Missing {
-  if (name == "Ada") { User { name: name } } else { Missing { name: name } }
+  if name == "Ada" { User { name: name } } else { Missing { name: name } }
 }
 
 fn greeting(name: String): String | Missing {
@@ -100,14 +100,14 @@ fn greeting(name: String): String | Missing {
 }
 
 fn main() {
-  match (greeting("Ada")) {
+  match greeting("Ada") {
     text: String => println(text)
     error: Missing => println(s"Unknown: ${error.name}")
   }
   reply = Reply.Found(User { name: "Ada" })
-  println(match (reply) { .Found(user) => user.name, .Gone => "gone" })
+  println(match reply { .Found(user) => user.name, .Gone => "gone" })
   option: Option[Int] = Option.Some(3)
-  println(match (option) { .Some(n) => n, .None => 0 })
+  println(match option { .Some(n) => n, .None => 0 })
 }
 ```
 
@@ -127,7 +127,7 @@ pred positive(n: Int) { n > 0 }
 fn average(total: Int, count: Int where positive): Int { total / count }
 
 fn printAverage(total: Int, count: Int) uses io {
-  if (positive(count)) { println(average(total, count)) } else { println("count must be positive") }
+  if positive(count) { println(average(total, count)) } else { println("count must be positive") }
 }
 
 fn main() { printAverage(10, 2) }
@@ -171,7 +171,7 @@ use codec.Defaults
 type User = { name: String } derive (codec.Decode, codec.Encode)
 
 fn main() {
-  match (json.Decode[User]("{\"name\":\"Ada\"}")) {
+  match json.Decode[User]("{\"name\":\"Ada\"}") {
     user: User => println(json.Encode(user))
     error: codec.DecodeError => println(error)
     error: json.JsonError => println(error)

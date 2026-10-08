@@ -11,8 +11,8 @@ Return a failure from `main` so all scopes close before the process exits. Use `
 ```bork
 import "bork/process"
 fn main(): Ok | process.ExitCode {
-  match (process.Args()) {
-    [text] => match (parseInt(text)) {
+  match process.Args() {
+    [text] => match parseInt(text) {
       n: Int => println(n)
       error: ParseError => {
         return process.ExitCode { code: 1, message: error.message }
@@ -31,7 +31,7 @@ On Linux or macOS, use the installed `cat` command to read inherited stdin. Save
 import "bork/process"
 fn main() {
   scope s {
-    match (process.Run(s, "cat", stdin: .Inherit)) {
+    match process.Run(s, "cat", stdin: .Inherit) {
       result: process.Result => println(result.StdoutText().trim())
       error => eprintln(toString(error))
     }
@@ -45,7 +45,7 @@ fn main() {
 
 ```bork
 fn main() {
-  for (i in range(0, 3)) { println(s"attempt ${i + 1}") }
+  for i in range(0, 3) { println(s"attempt ${i + 1}") }
 }
 ```
 
@@ -56,7 +56,7 @@ Rebind an existing name inside the loop to carry its new value to the next itera
 ```bork
 fn main() {
   total = 0
-  for (n in [2, 3, 5]) { total = total + n }
+  for n in [2, 3, 5] { total = total + n }
   println(total)
 }
 ```
@@ -67,7 +67,7 @@ Parsing returns a union. Handle both outcomes before using the number.
 
 ```bork
 fn main() {
-  match (parseInt("123")) {
+  match parseInt("123") {
     value: Int => println(value + 1)
     error: ParseError => eprintln(error.message)
   }
@@ -83,7 +83,7 @@ pred positive(n: Int) { n > 0 }
 fn double(n: Int where positive): Int { n * 2 }
 fn main() {
   n = 12
-  if (positive(n)) { println(double(n)) } else { eprintln("must be positive") }
+  if positive(n) { println(double(n)) } else { eprintln("must be positive") }
 }
 ```
 
@@ -93,7 +93,7 @@ Use `flatMap` to keep the success variants and discard failures deliberately.
 
 ```bork
 fn main() {
-  numbers = ["10", "bad", "20"].flatMap(text => match (parseInt(text)) {
+  numbers = ["10", "bad", "20"].flatMap(text => match parseInt(text) {
     n: Int => [n]
     _: ParseError => []
   })
@@ -108,8 +108,8 @@ Maps are immutable. `put` returns the updated map; an absent key is `Option.None
 ```bork
 fn main() {
   counts: Map[String, Int] = {:}
-  for (word in ["red", "blue", "red"]) {
-    n = match (counts.get(word)) { Option.Some(value) => value, Option.None => 0 }
+  for word in ["red", "blue", "red"] {
+    n = match counts.get(word) { Option.Some(value) => value, Option.None => 0 }
     counts = counts.put(word, n + 1)
   }
   println(counts.sorted())
@@ -157,7 +157,7 @@ import "bork/json"
 use codec.Defaults
 type Person = { name: String, age: Int } derive (codec.Encode, codec.Decode)
 fn main() {
-  text = match (json.Encode(Person { name: "Ada", age: 37 })) { text: String => text; error: json.JsonError => { eprintln(error.message); return } }
+  text = match json.Encode(Person { name: "Ada", age: 37 }) { text: String => text; error: json.JsonError => { eprintln(error.message); return } }
   println(text)
   decoded: Person | json.JsonError | codec.DecodeError = json.Decode(text)
   println(decoded)
@@ -175,7 +175,7 @@ use codec.Defaults
 pred port(n: Int) { n > 0 && n <= 65535 }
 type Config = { port: Int where port = 8080 } derive (codec.Decode)
 fn main() {
-  match (env.Load[Config]("APP")) {
+  match env.Load[Config]("APP") {
     config: Config => println(config.port)
     error: env.ConfigError => eprintln(toString(error))
   }
@@ -193,7 +193,7 @@ use codec.Defaults
 type Config = { host: String } derive (codec.Decode)
 fn main() { println("run with bork test recipe.bork") }
 test "loads a supplied host" {
-  loaded = env.LoadWith[Config]("APP", key => if (key == "APP_HOST") { Option.Some("localhost") } else { Option.None })
+  loaded = env.LoadWith[Config]("APP", key => if key == "APP_HOST" { Option.Some("localhost") } else { Option.None })
   assertEqual(loaded, Config { host: "localhost" })
 }
 ```
@@ -206,7 +206,7 @@ On Linux or macOS, this invokes `printf` directly, without a shell. Captured out
 import "bork/process"
 fn main() {
   scope s {
-    match (process.Run(s, "printf", ["hello\n"])) {
+    match process.Run(s, "printf", ["hello\n"]) {
       result: process.Result => {
         println(result.StdoutText().trim())
         println(result.code)
@@ -293,9 +293,9 @@ import "bork/process"
 use codec.Defaults
 type Options = { name: String } derive (codec.Decode)
 fn main(): Ok | process.ExitCode {
-  match (cli.Run[Options]("greet", "Print a greeting", (options, s) => {
+  match cli.Run[Options]("greet", "Print a greeting", (options, s) => {
     println(s"Hello, ${options.name}!")
-  })) {
+  }) {
     Ok => {}
     error: cli.Error => { return process.ExitCode { code: 2, message: toString(error) } }
   }
@@ -309,7 +309,7 @@ Run with `bork test recipe.bork`. The mock replaces the real function within thi
 ```bork
 import "bork/http"
 fn healthy(s: Scope) uses net + clock + state: Bool {
-  match (http.Get("https://upstream.example/health", s)) {
+  match http.Get("https://upstream.example/health", s) {
     response: http.Response => response.status == 200
     _ => false
   }
@@ -343,7 +343,7 @@ fn main() {
   counter = atom(0)
   scope s {
     tasks = range(0, 10).map(n => fork(s, () => { _ = update(counter, value => value + 1) }))
-    for (task in tasks) { await(task) }
+    for task in tasks { await(task) }
   }
   println(current(counter))
 }
@@ -362,7 +362,7 @@ fn main() {
       _ = values.send(s, 9)
       values.close()
     })
-    for (value in values.values(s)) { println(value) }
+    for value in values.values(s) { println(value) }
     await(producer)
   }
 }

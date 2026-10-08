@@ -4,9 +4,9 @@ fn main() {
   scope app {
     pool = tasks.Open(app, maxTasks: 1)
     gate = channel[Bool](app, 0)
-    match (tasks.TryFork(pool, app, () => { _ = gate.receive(app); "finished" })) {
+    match tasks.TryFork(pool, app, () => { _ = gate.receive(app); "finished" }) {
       task: Task[String] => {
-        match (tasks.TryFork(pool, app, () => println("second task"))) {
+        match tasks.TryFork(pool, app, () => println("second task")) {
           overloaded: tasks.TaskLimitReached => println(s"pool full: limit ${overloaded.limit}")
           cancelled: Cancelled => println(cancelled)
           _ => {}

@@ -10,7 +10,7 @@ use codec.Defaults
 type Server = { host: String, port: Int } derive (codec.Decode, codec.Encode)
 
 fn main() {
-  match (yaml.Decode[Server]("host: localhost\nport: 8080\n")) {
+  match yaml.Decode[Server]("host: localhost\nport: 8080\n") {
     server: Server => println(yaml.Encode(Server { host: server.host, port: 9090 }))
     error: yaml.Error => println(s"line ${error.line}, column ${error.column}: ${error.message}")
     error: codec.DecodeError => println(s"${error.path}: ${error.message}")
@@ -138,7 +138,7 @@ use codec.Defaults
 type Config = { port: Int } derive (codec.Decode)
 
 fn main() {
-  match (yaml.Decode[Config]("port: many\n")) {
+  match yaml.Decode[Config]("port: many\n") {
     config: Config => println(config.port)
     error: codec.DecodeError => println(error.path + ": " + error.message)
     error: yaml.Error => println(error.message)

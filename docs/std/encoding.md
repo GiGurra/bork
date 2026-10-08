@@ -9,7 +9,7 @@ fn main() {
   bytes = encoding.Utf8("hello")
   println(encoding.Hex(bytes))
   println(encoding.Base64(bytes))
-  match (encoding.ParseHex("zz")) {
+  match encoding.ParseHex("zz") {
     _: Bytes => println("valid hex")
     error: ParseError => println(error.message)
   }
@@ -65,10 +65,10 @@ type User = { name: String, age: Int, note: Option[String] } derive (codec.Encod
 
 fn main() {
   original = [User { name: "Ada", age: 37, note: .None }]
-  match (encoding.EncodeCsv(original)) {
+  match encoding.EncodeCsv(original) {
     text: String => {
       println(text.trim())
-      match (encoding.DecodeCsv[User](text)) {
+      match encoding.DecodeCsv[User](text) {
         users: List[User] => println(users == original)
         error => eprintln(toString(error))
       }

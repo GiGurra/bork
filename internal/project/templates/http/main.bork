@@ -1,7 +1,7 @@
 import "bork/http"
 
 fn handler(req: http.Request, requestScope: Scope): http.Response {
-  match (req.path) {
+  match req.path {
     "/health" => http.Text(200, "ok")
     _ => http.Text(404, "not found")
   }

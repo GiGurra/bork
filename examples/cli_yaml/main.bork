@@ -14,10 +14,10 @@ type Options = {
 } derive (codec.Decode)
 
 fn main(): Ok | process.ExitCode {
-  match (cli.Run[Options]("service", "YAML and JSON config overlays", (options, s) => {
+  match cli.Run[Options]("service", "YAML and JSON config overlays", (options, s) => {
     println(s"${options.name}: ${options.port}")
     println(options.tags)
-    }, flags: [.{ field: "config", configFile: true }], configFiles: ["base.yaml", "overlay.json"])) {
+    }, flags: [.{ field: "config", configFile: true }], configFiles: ["base.yaml", "overlay.json"]) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("service") } }
     Ok => {}
   }

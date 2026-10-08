@@ -28,7 +28,7 @@ fn demo() uses io + net: Ok | sql.Error | codec.DecodeError {
   }
 }
 fn main() {
-  match (demo()) {
+  match demo() {
     error: sql.Error => eprintln(s"${error.operation}: ${error.message}")
     error: codec.DecodeError => eprintln(s"${error.path}: ${error.message}")
     _ => {}
@@ -37,12 +37,12 @@ fn main() {
 test "commit persists and scope end rolls back" {
   scope app {
     opened = sql.OpenSqlite(":memory:", app)
-    match (opened) {
+    match opened {
       db: sql.Connection => {
         _ = sql.SQL"CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)".Exec(db)
         scope transaction {
           begun = sql.Begin(db, transaction)
-          match (begun) {
+          match begun {
             tx: sql.Transaction => {
               _ = sql.SQL"INSERT INTO users(name) VALUES (${"kept"})".Exec(tx)
               _ = sql.Commit(tx)
@@ -52,13 +52,13 @@ test "commit persists and scope end rolls back" {
         }
         scope transaction {
           begun = sql.Begin(db, transaction)
-          match (begun) {
+          match begun {
             tx: sql.Transaction => { _ = sql.SQL"INSERT INTO users(name) VALUES (${"discarded"})".Exec(tx) }
             _ => assert(false)
           }
         }
         result: List[Count] | sql.Error | codec.DecodeError = sql.SQL"SELECT count(*) AS count FROM users".Query[Count](db)
-        match (result) {
+        match result {
           rows: List[Count] => assertEqual(rows, [Count { count: 1 }])
           _ => assert(false)
         }

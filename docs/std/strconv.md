@@ -8,7 +8,7 @@ import "bork/strconv"
 fn main() {
   println(255.Hex(width: 4, uppercase: true, prefix: true))
   println("-0x_80".ParseInt8(base: 0))
-  match ("256".ParseByte()) {
+  match "256".ParseByte() {
     _: ParseError => println("outside byte range")
     value: Byte => println(value)
   }
@@ -96,11 +96,11 @@ support.
 import "bork/strconv"
 
 fn main() uses io {
-  match ("-0x_80".ParseInt8(base: 0)) {
+  match "-0x_80".ParseInt8(base: 0) {
     value: Int8 => println(value) // -128
     error: ParseError => println(error.message)
   }
-  match ("18446744073709551615".ParseUint64()) {
+  match "18446744073709551615".ParseUint64() {
     value: Uint64 => println(value.Hex()) // ffffffffffffffff
     error: ParseError => println(error.message)
   }

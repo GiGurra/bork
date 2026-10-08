@@ -9,7 +9,7 @@ fn main() {
   clock = time.FixedClock(time.Instant { unixNanos: 0 })
   println(time.Format(time.Read(clock), time.RFC3339()))
   println(time.FormatDuration(1500.millis()))
-  match (time.ParseDuration("oops")) {
+  match time.ParseDuration("oops") {
     _: ParseError => println("invalid duration")
     value: Duration => println(value)
   }
@@ -137,7 +137,7 @@ fn main() {
   scope app {
     ticks = time.Tick(app, 1.millis())
     deadline = time.After(app, 5.millis())
-    match (ticks.receive(app)) {
+    match ticks.receive(app) {
       _: time.Instant => println("tick")
       other => println(other)
     }

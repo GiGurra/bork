@@ -8,7 +8,7 @@ import "bork/encoding"
 
 fn main() {
   println(crypto.SHA256Hex(encoding.Utf8("hello")))
-  match (crypto.VerifyPassword("password", "not-a-hash")) {
+  match crypto.VerifyPassword("password", "not-a-hash") {
     error: crypto.Error => println(error.message)
     verified: Bool => println(verified)
   }
@@ -90,7 +90,7 @@ return false. Unkeyed hashes do not authenticate a message.
 import "bork/crypto"
 
 fn main() {
-  match (crypto.Token()) {
+  match crypto.Token() {
     token: String => println(token.byteLength())
     error: crypto.Error => eprintln(error.message)
   }

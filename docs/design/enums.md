@@ -33,22 +33,22 @@ type Color = sealed {
 } derive (enum.Enum, codec.Decode, codec.Encode)
 
 fn label(c: Color): String {
-  match (c) {
+  match c {
     .Red => "warm"
-    .DarkBlue, .Teal => "cool"
-    .Other(name) => s"unknown color ${name}"   // required: the point of the fallback
+      .DarkBlue, .Teal => "cool"
+    .Other(name) => s"unknown color ${name}" // required: the point of the fallback
   }
 }
 
 fn main() {
-  println(json.Decode[Color]("\"purple\""))            // Color.Other("purple")
-  println(json.Encode(Color.Other("purple")))           // "purple"
-  println(json.Encode(Color.DarkBlue))                  // "DARK_BLUE"
-  println(enum.values[Color]())                         // [Red, DarkBlue, Teal]
-  println(enum.byName[Color]("DARK_BLUE"))              // Some(DarkBlue)
-  println(enum.byName[Color]("Cyan"))                   // Some(Teal)
-  println(enum.name(Color.DarkBlue))                    // DARK_BLUE
-  println(enum.name(Color.Other("purple")))             // purple
+  println(json.Decode[Color]("\"purple\"")) // Color.Other("purple")
+  println(json.Encode(Color.Other("purple"))) // "purple"
+  println(json.Encode(Color.DarkBlue)) // "DARK_BLUE"
+  println(enum.values[Color]()) // [Red, DarkBlue, Teal]
+  println(enum.byName[Color]("DARK_BLUE")) // Some(DarkBlue)
+  println(enum.byName[Color]("Cyan")) // Some(Teal)
+  println(enum.name(Color.DarkBlue)) // DARK_BLUE
+  println(enum.name(Color.Other("purple"))) // purple
 }
 ```
 

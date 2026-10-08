@@ -16,7 +16,7 @@ fn demo(s: Scope) uses io: Ok | fs.Error {
 
 fn main() {
   result = scope s { demo(s) }
-  match (result) {
+  match result {
     _: Ok => println("done")
     error: fs.Error => println(fs.ErrorInfo(error))
   }

@@ -21,7 +21,7 @@ fn main() {
     range(1, 5).map(n => Entry[Int, Int] { key: n, value: n * n }).toMap()
   }
   config = comptime {
-    match (json.Decode[Config](build.ReadString("config.json"))) {
+    match json.Decode[Config](build.ReadString("config.json")) {
       value: Config => value
       error => panic(s"invalid build configuration: $error")
     }
