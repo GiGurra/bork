@@ -112,6 +112,51 @@ func (g *gen) parameterGoType(t check.Type, params []*check.TypeParam, args []ch
 	return g.goType(t)
 }
 
+// genericRepresentationChanges compares a declared generic ABI with its
+// checked specialization. Equal outer Go types can still contain union
+// members whose callback or container layouts differ.
+func (g *gen) genericRepresentationChanges(t check.Type, params []*check.TypeParam, args []check.Type) bool {
+	bound := check.SubstituteType(t, params, args)
+	if hasTupleRepresentation(bound) || g.text(g.parameterGoType(t, params, args)) != g.text(g.goType(bound)) {
+		return true
+	}
+	var children []check.Type
+	switch t := t.(type) {
+	case *check.Union:
+		children = t.Members
+	case *check.List:
+		children = []check.Type{t.Elem}
+	case *check.Map:
+		children = []check.Type{t.Key, t.Value}
+	case *check.Seq:
+		children = []check.Type{t.Elem}
+	case *check.FuncType:
+		children = append(append([]check.Type(nil), t.Params...), t.Result)
+	case *check.Record:
+		children = t.Args
+	case *check.Sealed:
+		children = t.Args
+	}
+	for _, child := range children {
+		if g.genericRepresentationChanges(child, params, args) {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *gen) instanceRepresentationChanges(inst *check.Instance) bool {
+	if inst.Func.Class != nil || len(inst.TypeArgs) == 0 {
+		return false
+	}
+	for _, t := range append(append([]check.Type(nil), inst.Func.Params...), inst.Func.Result) {
+		if g.genericRepresentationChanges(t, inst.Func.TypeParams, inst.TypeArgs) {
+			return true
+		}
+	}
+	return false
+}
+
 func (g *gen) instanceArgument(inst *check.Instance, i int, value ast.Expr) ast.Expr {
 	if inst.Func.Class != nil {
 		return value // dictMethod exposes the checked, specialized signature
@@ -119,7 +164,7 @@ func (g *gen) instanceArgument(inst *check.Instance, i int, value ast.Expr) ast.
 	if adapted := g.okResultArgument(inst, i, value); adapted != nil {
 		return adapted
 	}
-	if len(inst.TypeArgs) > 0 && hasTupleRepresentation(inst.Params[i]) {
+	if len(inst.TypeArgs) > 0 && g.genericRepresentationChanges(inst.Func.Params[i], inst.Func.TypeParams, inst.TypeArgs) {
 		return g.representationConversion(value, inst.Params[i], inst.Func.Params[i], g.goType(inst.Params[i]), g.parameterGoType(inst.Func.Params[i], inst.Func.TypeParams, inst.TypeArgs), inst.Func.TypeParams, inst.TypeArgs, true)
 	}
 	return value
@@ -193,8 +238,12 @@ type tupleConversion struct {
 func (g *gen) representationConversion(value ast.Expr, from, to check.Type, fromGo, toGo ast.Expr, params []*check.TypeParam, args []check.Type, toDeclaration bool) ast.Expr {
 	_, fromUnion := from.(*check.Union)
 	_, toUnion := to.(*check.Union)
-	needsUnionConversion := fromUnion && hasTupleRepresentation(from) || toUnion && hasTupleRepresentation(to)
-	if g.text(fromGo) == g.text(toGo) && !needsUnionConversion {
+	declared := from
+	if toDeclaration {
+		declared = to
+	}
+	needsConversion := g.genericRepresentationChanges(declared, params, args)
+	if g.text(fromGo) == g.text(toGo) && !needsConversion {
 		return value
 	}
 	key := tupleShapeKey(from) + "->" + tupleShapeKey(to) + ":" + g.text(fromGo) + "->" + g.text(toGo)
@@ -239,7 +288,7 @@ func (g *gen) representationConversion(value ast.Expr, from, to check.Type, from
 	} else {
 		declaredUnion, _ = from.(*check.Union)
 	}
-	if declaredUnion != nil && hasTupleRepresentation(declaredUnion) {
+	if declaredUnion != nil && needsConversion {
 		var body []ast.Stmt
 		for _, original := range declaredUnion.Members {
 			bound := check.SubstituteType(original, params, args)
@@ -247,14 +296,18 @@ func (g *gen) representationConversion(value ast.Expr, from, to check.Type, from
 			if toDeclaration {
 				a, b = bound, original
 			}
-			if !hasTupleRepresentation(a) && !hasTupleRepresentation(b) {
+			if !g.genericRepresentationChanges(original, params, args) {
 				continue
 			}
 			if _, expands := a.(*check.Union); expands {
 				continue // a type parameter's stored value already has its concrete representation
 			}
 			v, ok := ast.NewIdent("_member"), ast.NewIdent("_ok")
-			body = append(body, &ast.IfStmt{Init: &ast.AssignStmt{Lhs: []ast.Expr{v, ok}, Tok: token.DEFINE, Rhs: []ast.Expr{&ast.TypeAssertExpr{X: x, Type: repr(a, !toDeclaration)}}}, Cond: ok, Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{child(v, a, b)}}}}})
+			boxed := ast.Expr(x)
+			if !fromUnion {
+				boxed = &ast.CallExpr{Fun: ast.NewIdent("any"), Args: []ast.Expr{x}}
+			}
+			body = append(body, &ast.IfStmt{Init: &ast.AssignStmt{Lhs: []ast.Expr{v, ok}, Tok: token.DEFINE, Rhs: []ast.Expr{&ast.TypeAssertExpr{X: boxed, Type: repr(a, !toDeclaration)}}}, Cond: ok, Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{child(v, a, b)}}}}})
 		}
 		if toUnion {
 			body = append(body, &ast.ReturnStmt{Results: []ast.Expr{x}})
