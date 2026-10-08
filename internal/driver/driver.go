@@ -369,23 +369,29 @@ func evaluatorWithTimeoutObserved(files []*syntax.File, info *check.Info, module
 		cmd := exec.CommandContext(deadline, exe)
 		cmd.WaitDelay = time.Second
 		configureEvaluationProcess(cmd)
-		defer func() {
-			if cmd.Process != nil {
+		cleaned := false
+		cleanupProcess := func() {
+			if !cleaned && cmd.Process != nil {
 				// Also contain descendants if the evaluator exits normally.
 				_ = cmd.Cancel()
+				cleaned = true
 			}
-		}()
+		}
+		defer cleanupProcess()
 		cmd.Env = slices.Clone(context.processEnv)
 		cmd.Stderr = stderr
 		stdout := &boundedOutput{limit: max(64<<10, len(queries)*6)}
 		cmd.Stdout = stdout
 		observation.command(cmd, false)
 		err = cmd.Run()
+		executionErr := deadline.Err()
+		cleanupProcess()
+		stop()
 		out := stdout.data
-		if errors.Is(deadline.Err(), stdcontext.DeadlineExceeded) {
+		if errors.Is(executionErr, stdcontext.DeadlineExceeded) {
 			return nil, fmt.Errorf("predicate evaluation exceeded %s", limit)
 		}
-		if deadline.Err() != nil {
+		if executionErr != nil {
 			return nil, fmt.Errorf("predicate evaluation interrupted")
 		}
 		if err != nil {

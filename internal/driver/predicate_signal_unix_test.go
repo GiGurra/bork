@@ -29,6 +29,11 @@ func TestPredicateSignalHelper(t *testing.T) {
 	} else {
 		fakePredicateEvaluator(t, program, body)
 	}
+	if os.Getenv("BORK_PREDICATE_SIGNAL_STAGE") == "1" {
+		if err := os.WriteFile(marker+".ready", nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	_, err := evaluatorWithContext(program.files, program.info, program.module, program.context)(simplePredicateQuery(program))
 	if err == nil || !strings.Contains(err.Error(), "predicate evaluation interrupted") {
 		t.Fatalf("signal result: %v", err)
@@ -41,15 +46,36 @@ func TestPredicateSignalCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, phase := range []string{"build", "evaluation"} {
+	for _, phase := range []string{"stage", "build", "evaluation"} {
 		for _, sig := range []syscall.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP} {
 			t.Run(phase+"/"+sig.String(), func(t *testing.T) {
 				t.Parallel()
+				if phase == "stage" && !cacheTrimSupported() {
+					t.Skip("stable staging unsupported")
+				}
 				marker := filepath.Join(t.TempDir(), "eval")
 				cmd := exec.Command(executable, "-test.run=^TestPredicateSignalHelper$", "-test.count=1")
 				cmd.Env = append(os.Environ(), "BORK_PREDICATE_SIGNAL_MARKER="+marker)
 				if phase == "build" {
 					cmd.Env = append(cmd.Env, "BORK_PREDICATE_SIGNAL_BUILD=1")
+				}
+				stageBase := filepath.Join(t.TempDir(), "cache")
+				tempBase := t.TempDir()
+				if phase == "stage" {
+					if err := os.MkdirAll(stageBase, 0700); err != nil {
+						t.Fatal(err)
+					}
+					root, err := os.OpenRoot(stageBase)
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer func() { _ = root.Close() }()
+					lock, err := (cacheStore{}).lock(root, "mutation.lock")
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer func() { _ = lock.Close() }()
+					cmd.Env = append(cmd.Env, "BORKCACHE="+stageBase, "BORK_CACHE=on", "TMPDIR="+tempBase, "BORK_PREDICATE_SIGNAL_STAGE=1")
 				}
 				var output bytes.Buffer
 				cmd.Stdout = &output
@@ -69,7 +95,10 @@ func TestPredicateSignalCleanup(t *testing.T) {
 				deadline := time.Now().Add(30 * time.Second)
 				for {
 					if _, err := os.Stat(marker + ".ready"); err == nil {
-						break
+						locks, _ := filepath.Glob(filepath.Join(stageBase, "locks", "stage-v3", "*.lock"))
+						if phase != "stage" || len(locks) > 0 {
+							break
+						}
 					}
 					select {
 					case err := <-done:
@@ -81,13 +110,15 @@ func TestPredicateSignalCleanup(t *testing.T) {
 					}
 					time.Sleep(10 * time.Millisecond)
 				}
-				pid, err := os.ReadFile(marker + ".pid")
-				if err != nil {
-					t.Fatal(err)
-				}
-				evaluatorPID, err = strconv.Atoi(string(pid))
-				if err != nil {
-					t.Fatal(err)
+				if phase != "stage" {
+					pid, err := os.ReadFile(marker + ".pid")
+					if err != nil {
+						t.Fatal(err)
+					}
+					evaluatorPID, err = strconv.Atoi(string(pid))
+					if err != nil {
+						t.Fatal(err)
+					}
 				}
 				if err := cmd.Process.Signal(sig); err != nil {
 					t.Fatal(err)
@@ -99,6 +130,13 @@ func TestPredicateSignalCleanup(t *testing.T) {
 					}
 				case <-time.After(10 * time.Second):
 					t.Fatal("compiler did not finish after signal")
+				}
+				if phase == "stage" {
+					leftovers, _ := filepath.Glob(filepath.Join(tempBase, "bork-eval-*"))
+					if len(leftovers) > 0 {
+						t.Fatalf("staging signal left temp directories: %v", leftovers)
+					}
+					return
 				}
 				if err := syscall.Kill(evaluatorPID, 0); err != syscall.ESRCH {
 					t.Fatalf("evaluator %d survived: %v", evaluatorPID, err)
