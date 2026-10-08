@@ -252,11 +252,12 @@ The `?` operator passes a failure up to the caller. `find(id)?` means: if the re
 
 "Success" is the first member of the union. Every other member must be something the enclosing function is able to return, so `withdraw` has `NotFound` in its own result type.
 
-A direct binding annotation can select a different union member. In
+A direct annotation on an ordinary local binding can select a different union member. In
 `miss: CacheMiss = cache.get(key)?`, a `CacheMiss` continues after the binding;
 every other member, including a cache hit, returns immediately. The annotation
 must name a member to override the default. Without that annotation, return types
 and call-argument expectations keep the first-member rule.
+Package bindings and lazy or async initializers reject `?`; use `match` there.
 
 ```bork
 type Hit = { value: Int }
