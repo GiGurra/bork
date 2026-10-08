@@ -580,7 +580,8 @@ type gen struct {
 	usesMockIn       bool
 	// carryStates are the latches that a loop's After values are
 	// assigned through (see carried.go).
-	carryStates map[*check.Var]*ast.Ident
+	carryStates    map[*check.Var]*ast.Ident
+	listReuseCalls map[*check.Call]bool
 	// usesAmbients is set when the program publishes or reads logged
 	// or propagated ambient values (ambientRuntime). labelGuard, while
 	// a Go function's body is generated, is set if a with in it
@@ -1427,6 +1428,9 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		}
 		return stmts, g.builtinCall(e, xs)
 	case *check.Call:
+		if g.listReuseCalls[e] {
+			return g.reusedListCall(e)
+		}
 		if e.BuildRead != nil {
 			if !e.BuildRead.Captured {
 				panic("compiler bug: build input was not captured")
