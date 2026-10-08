@@ -19,6 +19,8 @@ func TestDeferredTryRejected(t *testing.T) {
 		{"lazy annotated", `fn f(text: String): Int | ParseError { lazy n: Int | ParseError = parseInt(text)?; n }`, "lazy initializer"},
 		{"async inferred", `fn f(text: String): Int | ParseError { scope s { async(s) n = parseInt(text)?; n } }`, "async initializer"},
 		{"async annotated", `fn f(text: String): Int | ParseError { scope s { async(s) n: Int | ParseError = parseInt(text)?; n } }`, "async initializer"},
+		{"lazy mapped failure", `fn f(text: String): Int | ParseError { lazy n = parseInt(text)?{ error => error }; n }`, "lazy initializer"},
+		{"async mapped failure", `fn f(text: String): Int | ParseError { scope s { async(s) n = parseInt(text)?{ error => error }; n } }`, "async initializer"},
 		{"existing value", `fn f(value: String): Int | ParseError { lazy n = parseInt(value)?; n }`, "lazy initializer"},
 		{"option", `fn f(x: Option[Int]): Option[Int] { lazy n: Option[Int] = x?; n }`, "lazy initializer"},
 		{"grouped comment", "fn f(text: String): Int | ParseError { lazy n = (parseInt( /* keep */ text))?; n }", "lazy initializer"},

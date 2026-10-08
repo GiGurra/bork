@@ -602,6 +602,9 @@ func (c *checker) deferredTryFix(e *syntax.Try, typ Type) {
 		}
 		end := e.Pos
 		end.Col++
+		if e.Wrap != nil {
+			end = e.End
+		}
 		c.diags.Suggest(e.Pos, "type.error", end, diag.Fix{
 			Message: "replace ? with match and handle each outcome", RequiresInput: true,
 			Edits: []diag.TextEdit{
