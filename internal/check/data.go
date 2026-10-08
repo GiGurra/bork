@@ -565,10 +565,12 @@ func (c *checker) deferredTryFix(e *syntax.Try, typ Type) {
 			continue
 		}
 		name := "value"
+		var sourceText strings.Builder
 		for _, source := range c.files {
-			for strings.Contains(source.Source, name) {
-				name += "_"
-			}
+			sourceText.WriteString(source.Source)
+		}
+		for strings.Contains(sourceText.String(), name) {
+			name += "_"
 		}
 		arms := name + " => " + name
 		switch typ := typ.(type) {
@@ -582,8 +584,16 @@ func (c *checker) deferredTryFix(e *syntax.Try, typ Type) {
 			}
 		}
 		var start diag.Pos
+		operand := e.X
+		// Field defaults are cloned before checking; locate their source node.
 		for _, span := range file.ExpressionSpans {
-			if span.Expr == e.X && (start.File == "" || sourcePositionCompare(span.Start, start) < 0) {
+			if original, ok := span.Expr.(*syntax.Try); ok && original.Pos == e.Pos {
+				operand = original.X
+				break
+			}
+		}
+		for _, span := range file.ExpressionSpans {
+			if span.Expr == operand && (start.File == "" || sourcePositionCompare(span.Start, start) < 0) {
 				start = span.Start
 			}
 		}

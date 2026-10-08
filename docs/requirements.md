@@ -3465,7 +3465,7 @@ watch and hover contexts, invalid operands and unsupported syntax.
 `lazy name = expr` defers one initializer until its first read, memoizes its
 result and keeps the static type T. Local bindings are implemented, including
 concurrent readers, cached panics, scoped captures and initializer-local returns.
-`?` is rejected inside lazy/async initializers, including lazy field recipes;
+`?` is rejected inside lazy/async initializers, including lazy field recipes and package bindings;
 use `match` to handle outcomes explicitly. Explicit return can contribute to an
 inferred result. Lazy record fields provide a passable lazy
 value through `type Lazy[T] = { lazy value: T }`. Pure sibling-dependent defaults

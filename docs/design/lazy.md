@@ -50,7 +50,8 @@ implementation detail, not a predicate or an input to program behavior.
 
 The initializer is a function boundary returning T. A block initializer can
 use explicit `return` under that result type; it returns from the initializer.
-`?` is rejected in lazy initializers, including lazy field recipes. Use `match`
+`?` is rejected in lazy initializers, including lazy field recipes and package
+value initializers (with or without the `lazy` modifier). Use `match`
 to handle each outcome explicitly, as in a lambda.
 `break`, `continue` and `yield` cannot cross this boundary. Scopes and
 owners created inside it obey ordinary unwinding. Returning a handle belonging

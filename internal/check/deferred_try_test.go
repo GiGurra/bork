@@ -13,6 +13,8 @@ import (
 
 func TestDeferredTryRejected(t *testing.T) {
 	for _, tc := range []struct{ name, source, boundary string }{
+		{"package implicit", `Value = parseInt("1")?`, "package value initializer"},
+		{"package explicit", `lazy Value = parseInt("1")?`, "package value initializer"},
 		{"lazy inferred", `fn f(text: String): Int | ParseError { lazy n = parseInt(text)?; n }`, "lazy initializer"},
 		{"lazy annotated", `fn f(text: String): Int | ParseError { lazy n: Int | ParseError = parseInt(text)?; n }`, "lazy initializer"},
 		{"async inferred", `fn f(text: String): Int | ParseError { scope s { async(s) n = parseInt(text)?; n } }`, "async initializer"},
@@ -22,6 +24,9 @@ func TestDeferredTryRejected(t *testing.T) {
 		{"grouped comment", "fn f(text: String): Int | ParseError { lazy n = (parseInt( /* keep */ text))?; n }", "lazy initializer"},
 		{"nested initializer", `fn f(text: String): Int | ParseError { lazy n = { lazy m = parseInt(text)?; m }; n }`, "lazy initializer"},
 		{"nested lambda", `fn f(text: String): Int | ParseError { lazy n = { g = () => parseInt(text)?; g() }; n }`, "lambda"},
+		{"field default", `type Box = { text: String; lazy value: Int | ParseError = parseInt(text)? }`, "lazy initializer"},
+		{"field copy", `type Box = { lazy value: Int | ParseError }
+fn f(text: String, box: Box): Box { box.copy(value: parseInt(text)?) }`, "lazy initializer"},
 		{"field recipe", `type Box = { lazy value: Int | ParseError }
 fn f(text: String): Box { Box { value: parseInt(text)? } }`, "lazy initializer"},
 	} {
