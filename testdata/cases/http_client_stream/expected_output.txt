@@ -17,10 +17,14 @@ cancel read cancelled
 upload 68696869 eof 3
 producer failure io
 producer panic io
+producer cleanup panic io
 producer close true
 upload abandoned 413
 source closed cancelled
 upload timeout true
 timed source closed cancelled
-producer attached 6174746163686564
+producer attached cancelled
+capture ready 7265616479
+captured producer joined cancelled
+upload response attached eof
 attached 00ff616263

@@ -1,5 +1,6 @@
 import "bork/http"
 import "bork/encoding"
+import "bork/fs"
 
 type Remote = resource
 fn remote(s: Scope) uses net + state: Remote unsafe go {
@@ -112,6 +113,11 @@ fn main() {
     println("producer failure", kind(http.Read(failed)))
     panicBody = http.OpenBody(app, producer => panic("producer panic"))
     println("producer panic", kind(http.Read(panicBody)))
+    cleanupPanic = http.OpenBody(app, producer => {
+      onClose(producer, () => panic("cleanup panic"))
+      IoError { path: "source", message: "broken" }
+    })
+    println("producer cleanup panic", kind(http.Read(cleanupPanic)))
     scope producer {
       infinite = http.OpenBody(producer, work => encoding.Utf8("pending"))
       http.Close(infinite)
@@ -137,6 +143,28 @@ fn main() {
       attach(body, app)
     }
     println("producer attached", kind(http.Read(attachedProducer)))
+    captured = scope temporary {
+      file = match (fs.TempFile(temporary)) { opened: fs.File => opened, error => panic(toString(error)) }
+      count = atom(0)
+      body = http.OpenBody(temporary, producer => {
+        n = update(count, i => i + 1)
+        if (n == 1) { encoding.Utf8("ready") } else {
+          match (delay(producer, 100000)) {
+            _: Ok => match (fs.ReadAll(file)) { bytes: Bytes => bytes, error: fs.Error => fs.ErrorInfo(error) }
+            stopped: Cancelled => stopped
+          }
+        }
+      })
+      println("capture ready", kind(http.Read(body)))
+      attach(body, app)
+    }
+    println("captured producer joined", kind(http.Read(captured)))
+    attachedUpload = scope temporary {
+      source = response(http.GetStream(base + "/wait", app))
+      reply = response(http.SendStream("POST", base + "/reject", {:}, temporary, body: .Some(source.body), timeoutMs: 1000))
+      attach(reply.body, app)
+    }
+    println("upload response attached", kind(http.Read(attachedUpload)))
     http.Close(attachedProducer)
     outer = scope temporary {
       stream = response(http.GetStream(base, temporary))
