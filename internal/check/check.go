@@ -967,10 +967,13 @@ type checker struct {
 	comptimeContext    *comptimeContext
 	initializerContext *initializerContext
 	lambdaDepth        int
-	assemblySerial     int
-	selectSerial       int
-	producer           *producerContext
-	loops              []*loopContext
+	// mapperLambdas counts immediate mapper bodies within lambdaDepth;
+	// they restrict control flow but do not defer calls or their mocks.
+	mapperLambdas  int
+	assemblySerial int
+	selectSerial   int
+	producer       *producerContext
+	loops          []*loopContext
 	// postClause is one more than the lambda depth of the loop post
 	// clause being checked, or 0: it cannot leave the loop.
 	postClause int

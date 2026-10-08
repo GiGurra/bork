@@ -491,3 +491,20 @@ fn Use(x: Choice[Int]): Int { match(x) { Choice[Int].Some(payload) => payload, .
 		t.Fatalf("tokens: Some=%d payload=%d", some, payload)
 	}
 }
+
+func TestSemanticTokensTryMapper(t *testing.T) {
+	src := `type Failure = { code: Int }
+type Wrapped = { cause: Failure }
+fn source(): Int | Failure { Failure { code: 1 } }
+fn wrapped(): Int | Wrapped { source()?{ error => Wrapped { cause: error } } }
+fn main() {}
+`
+	s, path := newTestServer(t, src)
+	result, err := s.semanticTokens(path, src, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tokens := decodeSemantic(t, src, result)
+	assertSemantic(t, tokens, "error", "parameter", "declaration", "readonly")
+	assertSemantic(t, tokens, "cause", "property", "readonly")
+}

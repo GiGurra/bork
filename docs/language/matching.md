@@ -265,6 +265,10 @@ fn main() {
 }
 ```
 
+To add context to the failure from one operation, attach a mapper:
+`find(id)?{ e => LoadFailed { id: id, cause: e } }`. See
+[Adding error context](errors.md) for complete examples and the typing rules.
+
 ## Matching on types
 
 When a value is a union, a type pattern picks out a member. One arm can take several members at once:
@@ -329,4 +333,4 @@ For unfinished code there is `todo()`, described under [development helpers](tes
 
 ---
 
-Previous: [Types](types.md) · Next: [Collections](collections.md) · [All pages](../README.md#the-language)
+Previous: [Types](types.md) · Next: [Adding error context](errors.md) · [All pages](../README.md#the-language)

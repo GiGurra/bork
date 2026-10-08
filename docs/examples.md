@@ -29,6 +29,7 @@ Each example's expected output is kept in [testdata/examples](../testdata/exampl
 
 | Example | What it shows | Run from repository root |
 | --- | --- | --- |
+| [error_context](../examples/error_context/main.bork) | Adding operation context to a failure with `?{ ... }` | `bork run examples/error_context` |
 | [enums](../examples/enums/main.bork) | Sealed enum values, wire names, lookup, and JSON integration | `bork run examples/enums` |
 | [derive_labels](../examples/derive_labels/README.md) | A custom class derived from field metadata, including a generic record | `bork run examples/derive_labels` |
 | [comptime](../examples/comptime/README.md) | A lookup table and a validated configuration file, both computed while compiling | `bork run examples/comptime` |

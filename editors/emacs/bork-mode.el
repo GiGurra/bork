@@ -122,6 +122,7 @@
            ((node-is "]") parent-bol 0)
            ((node-is ")") parent-bol 0)
            ((parent-is "block") parent-bol ,bork-indent-offset)
+           ((parent-is "failure_mapper") parent-bol ,bork-indent-offset)
            ((parent-is "tag_group") parent-bol ,bork-indent-offset)
            ((parent-is "record_type") parent-bol ,bork-indent-offset)
            ((parent-is "record_literal") parent-bol ,bork-indent-offset)

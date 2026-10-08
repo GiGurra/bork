@@ -267,9 +267,9 @@ func (c *checker) mockBody(s *syntax.MockStmt, target, test *Func) {
 	// so it keeps the promises of each (decode[Port] as decode[Int]).
 	// The body is a function of its own: a loop or generator around the
 	// mock statement is not its to break, continue, or yield to.
-	savedFn, savedUsed, savedDepth, savedTypeParams := c.fn, c.used, c.lambdaDepth, c.typeParams
+	savedFn, savedUsed, savedDepth, savedMappers, savedTypeParams := c.fn, c.used, c.lambdaDepth, c.mapperLambdas, c.typeParams
 	savedLoops, savedProducer := c.loops, c.producer
-	c.fn, c.used, c.lambdaDepth, c.loops, c.producer = fn, 0, 0, nil, nil
+	c.fn, c.used, c.lambdaDepth, c.mapperLambdas, c.loops, c.producer = fn, 0, 0, 0, nil, nil
 	c.useTypeParams(fn)
 	c.pushScope()
 	for _, n := range fn.Needs {
@@ -287,7 +287,7 @@ func (c *checker) mockBody(s *syntax.MockStmt, target, test *Func) {
 	}
 	bodyType := c.blockInScope(s.Body, want)
 	c.popScope()
-	c.fn, c.used, c.lambdaDepth, c.typeParams = savedFn, savedUsed, savedDepth, savedTypeParams
+	c.fn, c.used, c.lambdaDepth, c.mapperLambdas, c.typeParams = savedFn, savedUsed, savedDepth, savedMappers, savedTypeParams
 	c.loops, c.producer = savedLoops, savedProducer
 	name := writtenText(s.Target)
 	switch {

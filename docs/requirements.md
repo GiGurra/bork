@@ -2802,7 +2802,7 @@ keeping private representations such as HTTP certificate keys inaccessible.
 - **An annotation overrides the default.** `x: B = foo()?` keeps `B` and returns everything else, including what would otherwise be the main result. That is useful for early returns that are not errors (e.g. `miss: CacheMiss = cache.get(k)?` returns a cache hit early).
 - **`a?.b?.c` applies `?` at each step** (the Rust reading), not safe navigation.
 - **`?` also works on sealed types.** `Option[T]` is `Some[T] | None`, so `v = maybeUser?` keeps the value and returns `None`.
-- **Adding context (q's `Wrapf` semantics) is required.** Wrapping attaches to a single `?` and transforms what that `?` returns.
+- **Adding context:** `x?{ e => Wrapped { cause: e } }` attaches a failure mapper to a single `?`. The callback receives the remaining union members (one value at runtime); its trailing value is returned from the enclosing function, and must fit that function's result type and facts. The original failure need not fit. On `Option`, write `opt?{ _ => NotFound {} }`: `Some` keeps its payload, while `None` runs the mapper. The operand is evaluated once; only failure evaluates the mapper body, once. Captured facts, effects and lifetimes obey the ordinary rules. The mapper is checked as an ordinary lambda: explicit `return`, nested `?`, and outward loop control are rejected. A sole `Ok` failure can be discarded with `_`. The brace must attach as `?{`; a spaced `? {` outside control heads gets a diagnostic and fix. In an unparenthesized control head, a brace after `?` always starts the body; parenthesize a wrapped operand, as in `match (x?{ e => Wrapped { cause: e } }) { ... }`.
 - **Chaining is not a priority.** Clarity beats conciseness. Writing one step per line is fine.
 
 ```
@@ -2823,7 +2823,6 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 
 ### Open questions
 
-- **Wrap syntax**, e.g. `loadUser(id)?{ e => LoadFailed(id, e) }`, or something else?
 - **`?` inside lambdas** returns from the lambda, which makes the lambda's inferred return type a union. Is that what we want, or should `?` require a declared lambda return type?
 
 ## Language basics

@@ -114,8 +114,11 @@ Postfix    = Primary { [ "[" Type { "," Type } "]" ] "(" [ Args ] ")"
                      | "." ( Ident | IntLit )
                      | ".copy" "(" Update { Sep Update } [ Sep ] ")"
                      | ".into" "[" Type "]" "(" [ Update { Sep Update } [ Sep ] ] ")"
-                     | "?"
+                     | "?" [ TryMapper ] (* mapper brace must attach: ?{ *)
                      | RecordLit } .
+(* In an unparenthesized control head, a brace after ? starts the body.
+   Parenthesize a wrapped expression in a control head. *)
+TryMapper  = "{" ( Lambda | "_" "=>" Expr ) "}" .
 RecordLit  = "{" { EOL } { FieldInit Sep } [ FieldInit ] "}" .  (* after User, Box[Int], Shape[Int].Circle, ".", or "." Ident *)
 FieldInit  = Ident ":" Expr .
 Update     = Ident { "." Ident } ":" Expr .  (* u.copy(address.city: "Oslo") *)

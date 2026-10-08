@@ -1,0 +1,7 @@
+main.bork:4:46: ? failure mapper returns String, but wrongResult returns Int | Wrapped
+main.bork:5:45: ? failure mapper must take exactly one parameter
+main.bork:6:49: parameter e must be Failure here, found String
+main.bork:7:54: return cannot be used in a lambda; a lambda's value is its body's value
+main.bork:8:63: ? cannot be used in a lambda (it would return from the enclosing function); use match
+main.bork:10:33: ? needs a union or an Option, found Int
+main.bork:12:42: ? failure mapper returns String, but droppedResult returns Ok
