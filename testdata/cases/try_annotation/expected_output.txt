@@ -15,9 +15,6 @@ TEXT
 missing
 7
 Note { value: 7 }
-Miss {}
-Miss {}
 9
-Miss {}
 ["ok"]
 [4]

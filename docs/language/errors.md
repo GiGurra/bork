@@ -26,10 +26,11 @@ it binds `error`, evaluates the mapper's body, and returns its result from
 `load` immediately. The low-level `ReadError` need not appear in `load`'s
 result type. `LoadError` is an ordinary record; there is no special error type.
 
-A direct binding annotation selects the same member for wrapped and bare `?`.
+A direct annotation on an ordinary local binding selects the same member for wrapped and bare `?`.
 For example, `miss: CacheMiss = cache.get(key)?{ hit => Saved { value: hit } }`
 keeps `CacheMiss`; the mapper receives all other members, including the usual
 first member. Facts on the selected member remain available after the binding.
+Package bindings and lazy or async initializers reject `?`; use `match` there.
 
 The operand runs once. Success skips the mapper's body. Failure runs it once,
 including any calls that build context. Captures are available as in an ordinary
