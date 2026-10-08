@@ -24,7 +24,7 @@ after body error AdmissionLoad { inFlight: 0, queued: 0 }
 unknown route 404
 accepted 200 AdmissionLoad { inFlight: 0, queued: 0 }
 shutdown completed
-handler panic true
+handler panic 500
 after panic 200 AdmissionLoad { inFlight: 0, queued: 0 }
 cancel transfer race AdmissionLoad { inFlight: 0, queued: 0 }
 unread disconnect AdmissionLoad { inFlight: 1, queued: 1 }
