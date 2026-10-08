@@ -118,8 +118,7 @@ LoopControl = "break" | "continue" .
   from outside (next section).
 - `for x in xs` is unchanged.
 
-Parsing: after `for` and an optional `(`, an identifier or `_` followed by
-the contextual `in`
+Parsing: after `for (`, an identifier or `_` followed by the contextual `in`
 is a for-in. Otherwise the parser reads a binding list or an expression and
 looks at the next token: `;` means three-clause, `)` means while. `x = ...`
 cannot be an expression in bork, so a binding head is unambiguous. `for {` is
