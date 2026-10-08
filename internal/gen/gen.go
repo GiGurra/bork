@@ -1129,7 +1129,7 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		if frame := g.passthrough(e.Inst.Func); frame != nil {
 			return stmts, g.nextRef(e.Inst, frame, needs)
 		}
-		if inst := e.Inst; inst.Func.Class != nil || len(inst.Dicts) > 0 || len(g.membershipParams(inst.Func.TypeParams)) > 0 || collapsedUnion(inst) || len(needs) > 0 || len(inst.TypeArgs) > 0 && hasTupleRepresentation(&check.FuncType{Params: inst.Params, Result: inst.Result}) {
+		if inst := e.Inst; inst.Func.Class != nil || len(inst.Dicts) > 0 || len(g.membershipParams(inst.Func.TypeParams)) > 0 || collapsedUnion(inst) || len(needs) > 0 || g.instanceRepresentationChanges(inst) {
 			return stmts, g.funcRef(inst, needs...)
 		}
 		return nil, g.instance(e.Inst)
@@ -1575,6 +1575,9 @@ func collapsedUnion(inst *check.Instance) bool {
 func (g *gen) instanceResult(inst *check.Instance, call ast.Expr) ast.Expr {
 	if inst.Func.Class != nil {
 		return g.convert(call, inst.Result, inst.Result)
+	}
+	if len(inst.TypeArgs) > 0 && g.genericRepresentationChanges(inst.Func.Result, inst.Func.TypeParams, inst.TypeArgs) {
+		return g.representationConversion(call, inst.Func.Result, inst.Result, g.parameterGoType(inst.Func.Result, inst.Func.TypeParams, inst.TypeArgs), g.goType(inst.Result), inst.Func.TypeParams, inst.TypeArgs, false)
 	}
 	if collapsedUnion(inst) {
 		if len(inst.TypeArgs) > 0 && hasTupleRepresentation(inst.Result) {

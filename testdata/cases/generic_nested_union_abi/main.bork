@@ -1,0 +1,56 @@
+type E = {}
+type Box[T] = { value: T }
+fn call[T](witness: T, callback: (T | Int) => Int, value: T | Int): Int { callback(value) }
+fn make[T](witness: T): (T | Int) => Int {
+  value => match (value) {
+    n: Int => n
+    _: T => 99
+  }
+}
+fn list[T](witness: T, values: List[T | Int]): List[T | Int] { values }
+fn option[T](witness: T, value: Option[T | Int]): Option[T | Int] { value }
+fn map[T](witness: T, value: Map[String, T | Int]): Map[String, T | Int] { value }
+fn sequence[T](witness: T): Seq[T | Int] {
+  generate[T | Int] { yield witness }
+}
+fn unionCallback[T](witness: T): ((T | Int) => Int) | E { make[T](witness) }
+fn listCallbacks[T](witness: T, values: List[((T | Int) => Int) | E]): List[((T | Int) => Int) | E] { values }
+fn callbackFactory[T](witness: T, factory: () => (T | Int) => Int): Int {
+  callback = factory()
+  callback(10)
+}
+fn (box: Box[T]) call[T](callback: (T | Int) => Int, value: T | Int): Int { call[T](box.value, callback, value) }
+fn floatCall[T](witness: T, callback: (T | Float32) => Float32, value: T | Float32): Float32 { callback(value) }
+fn nested[T](witness: T, values: List[Option[T | Int]]): List[Option[T | Int]] { values }
+fn main() {
+  println(call[Int](0, n => n, 1))
+  println(call[Int](value: 2, callback: n => n + 1, witness: 0))
+  saved: (Int, (Int) => Int, Int) => Int = call
+  println(saved(0, n => n + 1, 3))
+  callback = make[Int](0)
+  println(callback(4))
+  println(list[Int](0, [5, 6]))
+  savedList: (Int, List[Int]) => List[Int] = list
+  println(savedList(0, [7, 8]))
+  println(option[Int](0, Option.Some(9)))
+  println(option[Int](0, Option.None))
+  println(map[Int](0, { "number": 10 }))
+  println(sequence[Int](11).toList())
+  match (unionCallback[Int](0)) {
+    f: (Int) => Int => println(f(12))
+    _: E => println("unexpected error")
+  }
+  callbacks: List[((Int) => Int) | E] = [(n: Int) => n, E {}]
+  listCallbacks[Int](0, callbacks).forEach(value => {
+    match (value) {
+      f: (Int) => Int => println(f(13))
+      _: E => println("error")
+    }
+  })
+  println(callbackFactory[Int](0, () => n => n + 4))
+  println(Box { value: 0 }.call(n => n + 1, 14))
+  method: (Box[Int], (Int) => Int, Int) => Int = Box.call
+  println(method(Box { value: 0 }, n => n + 1, 15))
+  println(floatCall[Float32](0.0, n => n + 0.5, 1.5))
+  println(nested[Int](0, [Option.Some(17), Option.None]))
+}
