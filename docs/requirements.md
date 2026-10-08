@@ -156,7 +156,7 @@ Go struct value with positional E0/E1 fields. See [design](design/tuples.md).
 ### Decided
 
 - **Records and sum types (ADTs) are the core data types.** Records are product types. Sum types are tagged unions whose variants can carry data.
-- **Generics in v0.1.** User code can declare generic types and functions, not just use built-in ones like `Option[T]` and `List[T]`.
+- **Generics in v0.1.** User code can declare generic types and functions, not just use built-in ones like `Option[T]` and `List[T]`. Transparent aliases can also take parameters (`type Index[T] = Map[String, List[T]]`), with explicit arguments at each use. Expansion preserves type identity, construction ownership, effects and union success order; cycles and incorrect arity are errors. Facts follow their expanded positions and retain the ordinary placement restrictions.
 - **Variance: planned, not in v0.1.** Scala-style declaration-site variance controls (covariant and contravariant type parameters) are planned for a later version. The syntax should leave room for them.
 - **Structural typing for interfaces and constraints.** A type satisfies an interface or generic constraint implicitly, by having the required shape (like Go). No `implements` declarations.
 - **Sealed types and traits are opt-in.** Marking a type sealed closes its set of variants to its own declaration. That is what makes exhaustive matching possible without a default case. Matching on an open (unsealed) type always needs a default case.
@@ -3209,7 +3209,7 @@ imported = settings.Box[String] { value: "value" }
   each usable alternative independently and recheck it.
 
 Acceptance covers constructor kinds, fieldless/defaulted variants, nested
-shorthand, concrete aliases (and rejection of parameterized aliases), imported
+shorthand, concrete and explicitly parameterized aliases, imported
 types and alias-exposed inaccessible owners, constrained-alias fix fallbacks,
 argument arity/kinds,
 conflicting context, bounds/argument facts, defaults and invariants, private

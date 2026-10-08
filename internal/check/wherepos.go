@@ -117,17 +117,20 @@ func (c *checker) hasFacts(t *syntax.TypeExpr) bool {
 		if t.Func != nil && (has(t.Func.Result) || slices.ContainsFunc(t.Func.Params, has)) {
 			return true
 		}
-		if t.Union == nil && t.Func == nil && len(t.Args) == 0 {
+		if t.Union == nil && t.Func == nil && t.Tuple == nil {
 			if c.typeParams[t.Name] != nil {
-				return false
+				return len(c.aliasFacts[c.typeParams[t.Name]]) > 0
 			}
 			// An alias, unless it is part of a cycle (an error already).
 			if e := c.lookupType(t.Name); e != nil && e.decl.Kind == syntax.AliasType && !visiting[e.decl] {
 				visiting[e.decl] = true
-				savedPkg, savedParams := c.pkg, c.typeParams
-				c.pkg, c.typeParams = e.pkg, nil
+				savedPkg, savedParams, savedFacts := c.pkg, c.typeParams, c.aliasFacts
+				c.pkg, c.typeParams, c.aliasFacts = e.pkg, map[string]*TypeParam{}, nil
+				for _, tp := range e.params {
+					c.typeParams[tp.Name] = tp
+				}
 				facts := has(e.decl.Alias)
-				c.pkg, c.typeParams = savedPkg, savedParams
+				c.pkg, c.typeParams, c.aliasFacts = savedPkg, savedParams, savedFacts
 				return facts
 			}
 		}
@@ -139,10 +142,20 @@ func (c *checker) hasFacts(t *syntax.TypeExpr) bool {
 // constrainedAlias returns the facts of the constrained alias that t
 // names, if it names one.
 func (c *checker) constrainedAlias(t *syntax.TypeExpr) []*Constraint {
-	if t.Union != nil || t.Func != nil || t.Tuple != nil || len(t.Args) > 0 {
+	if t.Union != nil || t.Func != nil || t.Tuple != nil {
 		return nil
 	}
+	if tp := c.typeParams[t.Name]; tp != nil {
+		return c.aliasFacts[tp]
+	}
 	if e := c.lookupType(t.Name); e != nil && e.decl.Kind == syntax.AliasType {
+		if len(e.params) > 0 {
+			typ := c.info.writtenTypes[t]
+			if typ == nil {
+				typ = c.resolveType(t)
+			}
+			return c.genericAliasConstraints(e, t, typ, nil)
+		}
 		return c.aliasConstraints(e)
 	}
 	return nil

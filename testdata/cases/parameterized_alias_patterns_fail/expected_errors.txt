@@ -1,0 +1,2 @@
+main.bork:4:47: nested constraints in type patterns are not supported yet; match the base type and then guard with the predicate
+main.bork:5:49: nested constraints in type patterns are not supported yet; match the base type and then guard with the predicate
