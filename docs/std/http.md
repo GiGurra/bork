@@ -46,6 +46,7 @@ Names below belong to `http`. All client calls return `Result = Response | Overl
 | --- | --- |
 | `Headers` | `Map[String, List[String]]`; preserves repeated values. Use `{:}` for no headers. |
 | `Status` | Int in `100..599`; guard dynamic values with `http.ValidStatus`. |
+| `BodyLimit` | Nonnegative Int; guard dynamic limits with `http.ValidBodyLimit`. |
 | `TimeoutMs` | Int in `0..9223372036854`; guard with `http.ValidTimeout`. |
 | `Response` | `{ status: Status, headers: Headers, body: String }` |
 | `Overloaded` | `{ retryAfter: Option[time.Duration], response: Response }` |

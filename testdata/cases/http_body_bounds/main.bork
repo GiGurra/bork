@@ -7,6 +7,7 @@ fn remote(s: Scope) uses net + state: Remote unsafe go {
   import "net/http"
   import "net/http/httptest"
   import "strings"
+  overflowDone := make(chan struct{})
   srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
     switch r.URL.Path {
     case "/empty": return
@@ -28,6 +29,11 @@ fn remote(s: Scope) uses net + state: Remote unsafe go {
       chunk := []byte(strings.Repeat("x", 4096))
       for i := 0; i < 4096; i++ { if _, err := w.Write(chunk); err != nil { return } }
       w.Write([]byte("x"))
+    case "/overflow":
+      io.WriteString(w, "abcde")
+      w.(http.Flusher).Flush()
+      <-r.Context().Done()
+      close(overflowDone)
     case "/probe":
       io.WriteString(w, "abcd")
       w.(http.Flusher).Flush()
@@ -38,9 +44,16 @@ fn remote(s: Scope) uses net + state: Remote unsafe go {
     default: io.WriteString(w, "abcde")
     }
   }))
-  return Remote{handle: srv.URL, owner: s.Own(func() { srv.Close() })}
+  return Remote{handle: struct { url string; overflowDone chan struct{} }{srv.URL, overflowDone}, owner: s.Own(func() { srv.Close() })}
 }
-fn url(server: Remote): String unsafe go { return server.handle.(string) }
+fn url(server: Remote): String unsafe go { return server.handle.(struct { url string; overflowDone chan struct{} }).url }
+fn overflowClosed(server: Remote) uses clock + state: Bool unsafe go {
+  import "time"
+  select {
+  case <-server.handle.(struct { url string; overflowDone chan struct{} }).overflowDone: return true
+  case <-time.After(5*time.Second): return false
+  }
+}
 fn show(result: http.Result): String {
   match (result) {
     response: http.Response => s"body:${response.body}"
@@ -76,6 +89,8 @@ fn main() {
       cancelAfter(request, 50)
       println("probe scope", show(http.Get(base + "/probe", request, maxBodyBytes: 4)))
     }
+    println("overflow", show(http.Get(base + "/overflow", app, timeoutMs: 1000, maxBodyBytes: 4)))
+    println("overflow closed", overflowClosed(server))
     println("truncated", show(http.Get(base + "/truncated", app, maxBodyBytes: 10)))
   }
 }

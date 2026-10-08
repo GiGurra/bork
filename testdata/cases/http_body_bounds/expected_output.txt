@@ -16,4 +16,6 @@ default limit:16777216
 max int body:abcde
 probe timeout deadline
 probe scope deadline
+overflow limit:4
+overflow closed true
 truncated io
