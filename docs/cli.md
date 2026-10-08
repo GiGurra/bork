@@ -79,7 +79,7 @@ bork check --json .     # one JSON object per diagnostic
 Compile-time predicate execution has the same 10-second limit as `comptime`
 work. A timeout or predicate panic fails checking at the bork source position;
 panic diagnostics show the message without the generated Go stack trace.
-Interrupting the compiler stops the evaluator and removes its temporary files.
+Interrupting the compiler stops the evaluator or its Go build and removes its temporary files. On supported Unix systems, cleanup also stops evaluator process-group descendants.
 
 It also warns about leftover development markers: `dbg(...)` calls and `todo()` placeholders. Warnings do not fail the check.
 

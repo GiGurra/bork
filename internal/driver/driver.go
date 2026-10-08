@@ -251,6 +251,9 @@ func evaluatorWithTimeoutObserved(files []*syntax.File, info *check.Info, module
 		}
 		signals, stop := signal.NotifyContext(stdcontext.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()
+		evaluationContext := *context
+		evaluationContext.commandContext = signals
+		context := &evaluationContext
 		observation := beginExecutionObservation(usage, context, "predicate", limit)
 		defer observation.finish()
 		var goSrc []byte
@@ -353,6 +356,9 @@ func evaluatorWithTimeoutObserved(files []*syntax.File, info *check.Info, module
 			}
 		} else {
 			err = buildGoWithModeObserved(files, goSrc, exe, module, context, "predicate", observation, info.Embeds...)
+		}
+		if signals.Err() != nil {
+			return nil, fmt.Errorf("predicate evaluation interrupted")
 		}
 		if err != nil {
 			return nil, err
