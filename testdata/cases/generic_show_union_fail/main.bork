@@ -1,0 +1,37 @@
+type E = {}
+type Direct[T] = { value: T | E }
+instance showDirect[T]: Show[Direct[T]] {
+  fn show(value: Direct[T]): String {
+    match (value.value) {
+      _: T => "success"
+      _: E => "error"
+    }
+  }
+}
+fn inspect[T](value: T | E): String {
+  match (value) {
+    _: T => "success"
+    _: E => "error"
+  }
+}
+type Indirect[T] = { value: T | E }
+instance showIndirect[T]: Show[Indirect[T]] {
+  fn show(value: Indirect[T]): String { inspect[T](value.value) }
+}
+type Saved[T] = { value: T | E }
+instance showSaved[T]: Show[Saved[T]] {
+  fn show(value: Saved[T]): String {
+    callback: (T | E) => String = inspect
+    callback(value.value)
+  }
+}
+type Nested[T] = sealed { Value(T | E), Empty }
+instance showNested[T]: Show[Nested[T]] {
+  fn show(value: Nested[T]): String {
+    match (value) {
+      Nested.Value(x) => inspect[T](x)
+      Nested.Empty => "empty"
+    }
+  }
+}
+fn main() { println(Direct[Int | String] { value: E {} }) }

@@ -1,0 +1,25 @@
+type E = {}
+type Holder[T] = { value: T | E }
+instance showHolder[T]: Show[Holder[T]] {
+  fn show(value: Holder[T]): String {
+    match (value.value) {
+      _: E => "error"
+      _ => "success"
+    }
+  }
+}
+type Result[T] = sealed { Value(T), Failed }
+instance showResult[T]: Show[Result[T]] {
+  fn show(value: Result[T]): String {
+    match (value) {
+      Result.Value(x) => s"value $x"
+      Result.Failed => "failed"
+    }
+  }
+}
+fn main() {
+  println(Holder[Int | String] { value: E {} })
+  println(Holder[Int | String] { value: "ok" })
+  println(Result[Int | String].Value("ok"))
+  println(Result[Int | String].Failed)
+}

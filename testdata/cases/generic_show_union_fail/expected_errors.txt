@@ -1,0 +1,4 @@
+main.bork:3:30: generic Show instance cannot inspect union membership of T: implicit rendering cannot preserve it; match concrete members instead, or use a sealed type
+main.bork:18:32: generic Show instance cannot inspect union membership of T: implicit rendering cannot preserve it; match concrete members instead, or use a sealed type
+main.bork:22:29: generic Show instance cannot inspect union membership of T: implicit rendering cannot preserve it; match concrete members instead, or use a sealed type
+main.bork:29:30: generic Show instance cannot inspect union membership of T: implicit rendering cannot preserve it; match concrete members instead, or use a sealed type

@@ -774,6 +774,7 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 					observe("lower")
 				}
 				c.lower(files)
+				c.checkShowMembership()
 				c.packageDependencyGraph()
 				if observe != nil {
 					observe("contracts")
