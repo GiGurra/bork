@@ -1,4 +1,4 @@
-Error: .name: must be slug
+error: Error: .name: must be slug
 Error: .port: must satisfy value > 0 (validPort)
 
 Try 'validate --help' for usage.

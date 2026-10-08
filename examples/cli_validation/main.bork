@@ -26,15 +26,14 @@ type Options = {
   // Print the result as YAML; excludes --json.
   yaml: Bool = false
 } where consistent derive (codec.Decode)
-fn main() {
+fn main(): Ok | process.ExitCode {
   // args.txt breaks two field rules, and both are reported. Rules relating
   // fields (maxReplicas, consistent) run once every field is valid on its own.
   match (cli.Run[Options]("validate", "Rules checked before the handler runs", (options, s) => {
     println(s"${options.name} on ${options.port} with ${options.minReplicas}-${options.maxReplicas} replicas")
   })) {
     error: cli.Error => {
-      eprintln(error.Render("validate"))
-      process.Exit(2)
+      return process.ExitCode { code: 2, message: error.Render("validate") }
     }
     Ok => {}
   }

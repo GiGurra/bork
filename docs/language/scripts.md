@@ -38,6 +38,12 @@ println(greet(name))
 
 A script may instead declare `fn main()`. Other declarations, including helpers, types, tests and pure `lazy` package values, still work. Combining `fn main()` with top-level statements is an error that names the main declaration and the first statement; move those statements into main or remove main. Scripts cannot be imported as packages. Compile each script as one root file. Explicit `lazy` package values follow the [package binding rules](basics.md): pure initializers, once on first read, checked facts, capitalization exports and cycle detection.
 
+Use an explicit `fn main(): Ok | E` when a script should propagate failures
+with `?`. Its scopes close before a failure prints as `error: <Show>` on stderr
+and exits with status 1. `process.ExitCode` chooses a custom failure status
+(1–255). Top-level statements use an implicit Ok-only main; they must handle
+failures locally rather than propagating them with `?`.
+
 The other commands work on a script with a shebang too:
 
 ```sh

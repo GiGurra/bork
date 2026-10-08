@@ -16,9 +16,9 @@ fn commands(): List[cli.Command] {
   status = cli.Subcommand[Status]("status", "Show cluster status", (options, s) => { println("Cluster ready") })
   [cli.Group("cluster", "Manage clusters", [deploy, status]).copy(aliases: ["k"])]
 }
-fn main() {
+fn main(): Ok | process.ExitCode {
   match (cli.RunCommands("fleet", "Manage a fleet", commands())) {
-    error: cli.Error => { eprintln(error.Render("fleet")); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("fleet") } }
     Ok => {}
   }
 }

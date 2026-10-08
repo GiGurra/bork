@@ -11,7 +11,7 @@ SIGTERM cancel every root scope with a cause naming the signal, propagated to
 nested scopes and tasks through ordinary cancellation. The first cancelling
 signal fixes the normal-return exit status at `128 + signal number` (130 for
 SIGINT, 143 for SIGTERM). Cleanup finishes before that exit. An explicit
-`process.Exit(code)` still exits with exactly that code; a panic keeps its
+`process.ExitNow(code)` still exits with exactly that code; a panic keeps its
 ordinary failure behavior.
 
 Copies received within 500 ms of the first cancelling signal count as the same

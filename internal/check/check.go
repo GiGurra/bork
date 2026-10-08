@@ -1190,8 +1190,9 @@ func (c *checker) checkFunc(fn *Func) {
 	}
 	c.ensureDefaults(fn)
 	c.bindNeeds(fn)
-	if fn.Decl.Name == "main" && (len(fn.Params) != 0 || fn.Result != Ok) {
-		c.errorf(fn.Decl.Pos, "main must take no parameters and return no value")
+	resultUnion, unionResult := fn.Result.(*Union)
+	if fn.Decl.Name == "main" && (len(fn.Params) != 0 || fn.Result != Ok && (!unionResult || resultUnion.Members[0] != Ok)) {
+		c.errorf(fn.Decl.Pos, "main must take no parameters and return Ok or a union beginning with Ok")
 	}
 	if fn.Decl.IsGo() {
 		// The Go code is checked by the Go compiler.
@@ -1687,6 +1688,9 @@ func (c *checker) ident(e *syntax.Ident, want Type) Type {
 		c.errorf(e.Pos, "%s is a type, not a value", e.Name)
 		return Invalid
 	}
+	if c.removedProcessExit(e) {
+		return Invalid
+	}
 	if why := c.notFound(e.Name); why != "" {
 		c.errorf(e.Pos, "%s", why)
 		return Invalid
@@ -1986,6 +1990,11 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 		return c.builtinCall(e, id.Name, b, want)
 	}
 	fn, ok := c.funcNamed(id.Name)
+	if !ok && c.removedProcessExit(id) {
+		pkg, _, _ := c.qualified(id.Name)
+		fn = pkg.Funcs["ExitNow"]
+		return c.callFunc(e, fn.Decl.Name, fn, e.Args, nil, e.TypeArgs, want)
+	}
 	if !ok && c.removedTaskCall(id) {
 		fn, _ = c.funcNamed("fork")
 		return c.callFunc(e, fn.Decl.Name, fn, e.Args, nil, e.TypeArgs, want)

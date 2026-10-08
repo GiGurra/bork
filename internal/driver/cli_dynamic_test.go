@@ -95,7 +95,7 @@ fn main() {
   println(options)
  }, completions: completions, flags: flags, configFiles: ["base.json"])
  match (cli.RunCommands("app", "", [cli.Group("cluster", "", [leaf])])) {
-  error: cli.Error => { println(error); process.Exit(1) }
+  error: cli.Error => { println(error); process.ExitNow(1) }
   Ok => {}
  }
 }

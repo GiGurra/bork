@@ -30,12 +30,38 @@ Ok
 This example uses the host's `printf` and `false` executables. No shell parses
 the arguments. A nonzero exit is a `Result`; `Check` turns it into `ExitError`.
 
+## Returning a process status
+
+`fn main(): Ok | E` may return failures or propagate them with `?`. After main's
+scopes close, a failure prints `error: <Show>` to stderr and exits with status 1.
+`Ok` exits with 0. When a cancelling signal caused shutdown, its status
+(130 for Interrupt, 143 for Terminate) takes precedence over an ordinary
+failure and suppresses error output. An explicit `ExitCode` keeps its chosen
+status and message even during signal shutdown. To choose a failure status, return
+`ExitCode { code: Int where ValidExitCode, message: String = "" }` from main.
+`ValidExitCode` requires 1 through 255. A nonempty message prints as
+`error: <message>`; an empty message prints nothing.
+
+```bork
+import "bork/process"
+fn main(): Ok | process.ExitCode {
+  if (process.Args().isEmpty()) {
+    return process.ExitCode { code: 2, message: "usage: tool FILE" }
+  }
+  println("ready")
+}
+```
+
+`Exit` was renamed to `ExitNow`; `bork check --json` provides a rename fix.
+`ExitNow` skips scope cleanup, including temporary-directory removal and
+child-process shutdown. Returning from main closes scopes on every path.
+
 ## API
 
 | Signature | Meaning |
 | --- | --- |
 | `Args() uses io: List[String]` | Return arguments without the program name. |
-| `Exit(code: Int) uses io: Never` | Exit immediately without closing scopes. |
+| `ExitNow(code: Int) uses io: Never` | Terminate immediately, skipping all scope cleanup. Prefer returning from main. |
 | `Run(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input in s = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: time.Duration = time.Duration { nanos: 0 }) uses io + state: Result \| IoError \| Cancelled` | Start a child and wait for its result. |
 | `Start(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input in s = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: time.Duration = time.Duration { nanos: 0 }) uses io + state: Process \| IoError \| Cancelled` | Start a scope-owned child. |
 | `(child: Process) Wait() uses io + state: Result \| IoError \| Cancelled` | Wait for the same immutable result on each call. |

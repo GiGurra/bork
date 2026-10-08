@@ -16,11 +16,11 @@ fn flags(): List[cli.Flag] {
     .{ field: "workers", position: Option.Some(1), choices: [.{ value: "1" }, .{ value: "2" }, .{ value: "4" }] },
     .{ field: "files", position: Option.Some(2), files: true }]
 }
-fn main() {
+fn main(): Ok | process.ExitCode {
   match (cli.Run[Options]("files", "Process files with an ordered positional layout", (options, s) => {
     println(s"${options.action} with ${options.workers} workers: ${options.files}")
     }, flags: flags())) {
-    error: cli.Error => { eprintln(error.Render("files")); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("files") } }
     Ok => {}
   }
 }

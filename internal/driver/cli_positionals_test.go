@@ -42,7 +42,7 @@ fn main() {
  numbers = cli.Subcommand[Numbers]("numbers", "JSON elements", (options, s) => { println(options) }, flags: [.{ field: "values", position: Option.Some(1) }, .{ field: "head", position: Option.Some(0) }])
  scalars = cli.Subcommand[Scalars]("scalars", "Two scalars", (options, s) => { println(options) }, flags: [.{ field: "first", position: Option.Some(0), choices: [.{ value: "alpha" }] }, .{ field: "second", position: Option.Some(1), choices: [.{ value: "beta" }] }])
  match (cli.RunCommands("app", "", [deploy, numbers, scalars])) {
-  error: cli.Error => { println(error); process.Exit(1) }
+  error: cli.Error => { println(error); process.ExitNow(1) }
   Ok => {}
  }
 }
@@ -165,7 +165,7 @@ fn main() {
  } }
  legacy = cli.Group("legacy", "Obsolete group", [current]).copy(deprecated: "choose current")
  match (cli.RunCommands("app", "", [old, current, manual, legacy])) {
-  error: cli.Error => { println(error); process.Exit(1) }
+  error: cli.Error => { println(error); process.ExitNow(1) }
   Ok => {}
  }
 }

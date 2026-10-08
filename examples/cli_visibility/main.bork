@@ -14,12 +14,12 @@ fn flags(): List[cli.Flag] {
   [.{ field: "trace", hidden: true },
     .{ field: "oldPort", deprecated: "use --port instead" }]
 }
-fn main() {
+fn main(): Ok | process.ExitCode {
   // Hidden flags still parse, and accepted deprecated flags warn on stderr.
   match (cli.Run[Options]("visibility", "Hidden and deprecated flags", (options, s) => {
     println(s"trace ${options.trace}, port ${options.oldPort.getOr(options.port)}")
     }, flags: flags())) {
-    error: cli.Error => { eprintln(error.Render("visibility")); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("visibility") } }
     Ok => {}
   }
 }

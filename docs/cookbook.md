@@ -6,20 +6,19 @@ For a complete HTTP and database application, follow the [service tour](tour-ser
 
 ## Exit on an error
 
-Use an explicit match in `main`; `?` belongs in a function that returns the failure. Successful completion exits with 0, usage errors with 2, and this operational failure with 1. Run with `bork run recipe.bork -- 42`.
+Return a failure from `main` so all scopes close before the process exits. Use `?` with `fn main(): Ok | E` to propagate errors, or return `process.ExitCode` to choose a status. Successful completion exits with 0, usage errors with 2, and this operational failure with 1. Run with `bork run recipe.bork -- 42`.
 
 ```bork
 import "bork/process"
-fn main() {
+fn main(): Ok | process.ExitCode {
   match (process.Args()) {
     [text] => match (parseInt(text)) {
       n: Int => println(n)
       error: ParseError => {
-        eprintln(error.message)
-        process.Exit(1)
+        return process.ExitCode { code: 1, message: error.message }
       }
     }
-    _ => { eprintln("usage: recipe NUMBER"); process.Exit(2) }
+    _ => { return process.ExitCode { code: 2, message: "usage: recipe NUMBER" } }
   }
 }
 ```
@@ -285,7 +284,7 @@ fn main() {
 
 ## Build a small CLI
 
-Save as `recipe.bork`; run with `bork run recipe.bork -- --name Ada`, or add `--help`. For larger command-line tasks, see the [CLI cookbook](std/cli-cookbook.md). The CLI validates the derived record before calling the handler. Format an error with `toString` before passing it to `eprintln`.
+Save as `recipe.bork`; run with `bork run recipe.bork -- --name Ada`, or add `--help`. For larger command-line tasks, see the [CLI cookbook](std/cli-cookbook.md). The CLI validates the derived record before calling the handler. Return an `ExitCode` with a message to report a usage error after cleanup.
 
 ```bork
 import "bork/cli"
@@ -293,12 +292,12 @@ import "bork/codec"
 import "bork/process"
 use codec.Defaults
 type Options = { name: String } derive (codec.Decode)
-fn main() {
+fn main(): Ok | process.ExitCode {
   match (cli.Run[Options]("greet", "Print a greeting", (options, s) => {
     println(s"Hello, ${options.name}!")
   })) {
     Ok => {}
-    error: cli.Error => { eprintln(toString(error)); process.Exit(2) }
+    error: cli.Error => { return process.ExitCode { code: 2, message: toString(error) } }
   }
 }
 ```

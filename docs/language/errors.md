@@ -1,5 +1,17 @@
 # Adding error context
 
+A program can declare `fn main(): Ok | E` and propagate failures with `?`.
+Scopes close normally before the failure is rendered through Show as
+`error: <Show>` on stderr; the process then exits with status 1. Returning Ok
+exits with status 0. For a custom failure status, return
+[`process.ExitCode`](../std/process.md#returning-a-process-status).
+
+```bork
+fn main(): Ok | ParseError {
+  println(parseInt("42")?)
+}
+```
+
 Attach a mapper to one `?` when a caller needs to know which operation failed:
 
 ```bork

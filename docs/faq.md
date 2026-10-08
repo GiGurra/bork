@@ -156,17 +156,12 @@ fn main() { println(answer()?) }
 ? would return Failure from main, but main returns Ok
 ```
 
-The enclosing function must be able to return propagated failure types. main returns Ok, so translate failure values there into messages and, when needed, a nonzero process.Exit. In helpers, the first union member is success.
+The enclosing function must declare the propagated failure types. An unannotated main returns Ok; write `fn main(): Ok | Failure` to allow `?`. The first union member is success.
 
 ```bork
 type Failure = { message: String }
 fn answer(): Int | Failure { Failure { message: "no answer" } }
-fn main() {
-  match (answer()) {
-    value: Int => println(value)
-    error: Failure => eprintln(error)
-  }
-}
+fn main(): Ok | Failure { println(answer()?) }
 ```
 
 ## Why does printing require uses io?
@@ -356,7 +351,12 @@ fn main() { eprintln(Failure { message: "failed" }) }
 
 ## How do I return a nonzero exit code?
 
-Match the failure in main, print it, and call `process.Exit(code)` after any
-handler scope has closed. A cli.Error return alone does not choose an exit
-status. The [CLI recipe](std/cli-cookbook.md) shows the
-complete application, help output and missing-field exit status.
+Return a failure from `fn main(): Ok | E`. All scopes close, then the failure
+prints as `error: <Show>` on stderr and the process exits with status 1. Return
+`process.ExitCode { code: 2, message: "usage: tool FILE" }` from
+`fn main(): Ok | process.ExitCode` to choose a status from 1 through 255.
+An omitted or empty message prints nothing. Successful `Ok` exits with 0.
+The [CLI recipe](std/cli-cookbook.md) shows a complete application.
+
+`process.ExitNow(code)` terminates immediately and skips all scope cleanup.
+Use it only when immediate termination is intentional.
