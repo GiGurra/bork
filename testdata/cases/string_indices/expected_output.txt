@@ -1,0 +1,35 @@
+1 b Option.Some(b)
+2 b
+Option.Some(0) Option.None
+1 2 true
+2 3 true
+2 b Option.Some(b)
+6 b
+Option.Some(0) Option.None
+2 3 true
+3 4 true
+2 b Option.Some(b)
+3 b
+Option.Some(0) Option.None
+2 3 true
+3 4 true
+0 2 true
+2 4 true
+4 6 true
+0 0 true
+1 1 true
+2 2 true
+Option.Some(0) Option.Some(0) Option.None
+🙂å 🙂å
+true true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+2 2
