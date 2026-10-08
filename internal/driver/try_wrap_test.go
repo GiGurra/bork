@@ -67,3 +67,42 @@ fn main() uses io { println(wrapped()) }
 		}
 	}
 }
+
+func TestTryMapperHermetic(t *testing.T) {
+	for _, test := range []struct {
+		name, body string
+		code       int
+	}{
+		{"immediate", `assertEqual(remote(), 42)`, 0},
+		{"nested lambda", `call = () => remote(); assertEqual(call(), 42)`, 1},
+		{"nested lazy", `lazy value = remote(); assertEqual(value, 42)`, 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			source := `type Failure = {}
+fn source(): Ok | Failure { Failure {} }
+fn remote() uses net: Int unsafe go { return 1 }
+fn main() {}
+test "wrapped" {
+  {
+    mock remote() { 42 }
+    source()?{ _ => { ` + test.body + ` } }
+  }
+}
+`
+			for name, text := range map[string]string{"main.bork": source, "bork.mod": "module wraphermetic\nunsafe \"wraphermetic\"\n"} {
+				if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var out strings.Builder
+			code, err := Test(dir, &out, TestOptions{Hermetic: true})
+			if err != nil || code != test.code {
+				t.Fatalf("hermetic test returned %d, %v: %s", code, err, out.String())
+			}
+			if (test.code == 1) != strings.Contains(out.String(), "not hermetic") {
+				t.Fatalf("unexpected hermetic result: %s", out.String())
+			}
+		})
+	}
+}

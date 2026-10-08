@@ -935,6 +935,9 @@ func (c *checker) lambdaBody(e *syntax.Lambda, want Type, mapper bool) Type {
 		rw = wf.Result
 	}
 	c.lambdaDepth++
+	if mapper {
+		c.mapperLambdas++
+	}
 	outer := c.used
 	c.used = 0
 	var bt Type
@@ -946,6 +949,9 @@ func (c *checker) lambdaBody(e *syntax.Lambda, want Type, mapper bool) Type {
 	ft.Effects = c.used
 	c.used = outer
 	c.lambdaDepth--
+	if mapper {
+		c.mapperLambdas--
+	}
 	switch {
 	case bt == Invalid:
 		ft.Result = Invalid
