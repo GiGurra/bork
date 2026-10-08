@@ -1,0 +1,33 @@
+import "bork/regex"
+fn main() {
+  for (text in ["åbc", "🙂åbc", "ábc"]) {
+    match (text.indexOf("b")) {
+      Option.Some(index) => println(index, text.substring(index, index + 1), text.runeAt(index))
+      Option.None => println("missing")
+    }
+    match (text.byteIndexOf("b")) {
+      Option.Some(index) => println(index, text.byteSubstring(index, index + 1))
+      Option.None => println("missing")
+    }
+    println(text.indexOf(""), text.indexOf("missing"))
+    for (found in regex.Compile("b|c").FindAll(text)) {
+      println(found.start, found.end, text.substring(found.start, found.end) == found.value)
+    }
+  }
+  text = "🙂åá🙂å"
+  for (found in regex.Compile("🙂å|á").FindAll(text)) {
+    println(found.start, found.end, text.substring(found.start, found.end) == found.value)
+  }
+  for (found in regex.Compile("").FindAll("🙂å")) {
+    println(found.start, found.end, "🙂å".substring(found.start, found.end) == found.value)
+  }
+  println("".indexOf(""), "".byteIndexOf(""), "".indexOf("x"))
+  println("🙂å".substring(0, 2), "🙂å".byteSubstring(0, 6))
+  println("🙂å".byteSubstring(6, 6) == "", "🙂å".substring(2, 2) == "")
+  println("🙂å".byteSubstring(-1, 1) is OutOfRange)
+  println("🙂å".byteSubstring(2, 1) is OutOfRange)
+  println("🙂å".byteSubstring(0, 7) is OutOfRange)
+  println("🙂å".byteSubstring(0, 9223372036854775807) is OutOfRange)
+  println("🙂å".substring(0, 3) is OutOfRange)
+  println("🙂å".runeCount(), "á".runeCount())
+}
