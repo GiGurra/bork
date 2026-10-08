@@ -148,9 +148,12 @@ func (v *Var) displayName() string {
 // the part of that member at Path (".value"), the field Field.
 type VarSource struct {
 	Subject Expr
-	Member  Type
-	Path    string
-	Field   *Field
+	// Owner identifies the particular record element that contains Field.
+	// It is used only for proofs, including sibling predicate arguments.
+	Owner  Expr
+	Member Type
+	Path   string
+	Field  *Field
 	// ElementsOnly marks a list suffix, which keeps element facts but
 	// need not satisfy predicates on the original list itself.
 	ElementsOnly bool

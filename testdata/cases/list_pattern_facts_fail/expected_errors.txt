@@ -4,4 +4,3 @@ main.bork:13:39: needList requires xs to be nonempty, but that is not proven for
 main.bork:16:57: needList requires xs to be nonempty, but that is not proven for rest (check it first with if (nonempty(rest)) { ... })
 main.bork:19:35: need requires x to be positive, but that is not proven for value (check it first with if (positive(value)) { ... })
 main.bork:22:66: checked must be above(other), but that is not proven for value (check it first with if (above(value, other)) { ... })
-main.bork:26:50: need requires x to be positive, but that is not proven for value (check it first with if (positive(value)) { ... })

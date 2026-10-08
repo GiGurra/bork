@@ -1,0 +1,7 @@
+main.bork:14:81: need requires x to be positive, but that is not proven for b (check it first with if (positive(b)) { ... })
+main.bork:17:60: take requires hi to be atLeast(lo), but that is not proven for hi (check it first with if (atLeast(hi, lo)) { ... })
+main.bork:20:101: take requires hi to be atLeast(lo), but that is not proven for hi (check it first with if (atLeast(hi, lo)) { ... })
+main.bork:23:49: take requires hi to be atLeast(lo), but that is not proven for hi (check it first with if (atLeast(hi, other)) { ... })
+main.bork:26:82: take requires hi to be atLeast(lo), but that is not proven for value (check it first with if (atLeast(value, lo)) { ... })
+main.bork:26:99: all requires every element of xs to be atLeast(lo), but that is not proven for rest (keep only those that are: rest.filter(x => atLeast(x, lo)))
+main.bork:29:70: needList requires xs to be nonempty, but that is not proven for rest (check it first with if (nonempty(rest)) { ... })

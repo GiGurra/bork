@@ -136,6 +136,11 @@ The suffix does not inherit predicates about the original list itself, such as
 being nonempty: removing its first element may leave an empty list. A predicate
 checked on one bound element proves facts only about that value.
 
+Record and variant fields inside list patterns retain their declared invariants
+too. For example, destructuring `[Range { lo, hi }, ...]` retains a field promise
+that `hi` is at least its sibling `lo`. Each matched element has its own field
+identities, so that promise does not relate `hi` to a bound from another element.
+
 Patterns nest, so a field can be matched against another pattern:
 
 ```bork
