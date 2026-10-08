@@ -3,4 +3,4 @@ main.bork:5:54: http.OpenRetryBudget requires refill to be http.ValidRefill, but
 main.bork:7:77: http.Retry requires maxAttempts to be http.PositiveRetryCount, but http.PositiveRetryCount(0) is false
 main.bork:8:76: http.Retry requires baseDelay to be http.ValidTimeout, but http.ValidTimeout(Duration { nanos: -1000000 }) is false
 main.bork:9:98: http.Retry requires maxDelay to be http.AtLeastBase(baseDelay), but that is not proven for this value (give it a name and check it first)
-bork/http/retry.bork:67:205: http.Retry requires maxDelay to be http.AtLeastBase(baseDelay), but that is not proven for this value (give it a name and check it first)
+bork/http/retry.bork:71:205: http.Retry requires maxDelay to be http.AtLeastBase(baseDelay), but that is not proven for this value (give it a name and check it first)
