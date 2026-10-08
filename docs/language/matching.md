@@ -130,6 +130,12 @@ such as `Option.Some` on one line, or put the dot at the end of the previous
 line. In expressions, leading-dot methods still continue the previous value,
 including inside lists and constructor or call arguments.
 
+List patterns retain facts about every element. For a `List[Int where positive]`,
+both `head` and the elements of `rest` in `[head, ...rest]` are positive.
+The suffix does not inherit predicates about the original list itself, such as
+being nonempty: removing its first element may leave an empty list. A predicate
+checked on one bound element proves facts only about that value.
+
 Patterns nest, so a field can be matched against another pattern:
 
 ```bork

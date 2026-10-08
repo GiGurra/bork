@@ -843,7 +843,7 @@ func (l *lowerer) patVars(p *Pat, subject Expr) {
 	if p.Bind != "" {
 		v := &Var{Label: l.info.assemblyNames[p.bindNode], Name: p.Bind, Pos: bindPos(p.bindNode), Type: p.BindType, Kind: VarPattern, Unused: l.info.unused[p.bindNode] || p.Bind == "_"}
 		if src := l.info.patSources[p.bindNode]; src != nil {
-			v.Source = &VarSource{Subject: subject, Member: src.Member, Path: src.Path, Field: src.Field}
+			v.Source = &VarSource{Subject: subject, Member: src.Member, Path: src.Path, Field: src.Field, ElementsOnly: src.ElementsOnly}
 		}
 		if p.Bind == "_" {
 			v.GoName = fmt.Sprintf("_discard_%d_%d", v.Pos.Line, v.Pos.Col)

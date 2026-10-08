@@ -1586,7 +1586,7 @@ func (f *factChecker) proveCases(x Expr, ob obligation, e env, depth int) (bool,
 				}
 			}
 		case VarPattern, VarLoop:
-			if src := d.Source; src != nil {
+			if src := d.Source; src != nil && (!src.ElementsOnly || strings.HasPrefix(ob.path, ".[]")) {
 				inner := ob
 				inner.path = src.Path + ob.path
 				var ok bool
@@ -2557,9 +2557,16 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 						add(src.Field.Constraints, f.recordFieldArgs(owner, src.Field))
 					}
 				}
-				out = append(out, within(f.declared(src.Subject, e, depth+1), src.Path)...)
+				project := func(facts []known) {
+					for _, k := range within(facts, src.Path) {
+						if !src.ElementsOnly || strings.HasPrefix(k.path, ".[]") {
+							out = append(out, k)
+						}
+					}
+				}
+				project(f.declared(src.Subject, e, depth+1))
 				if src.Member != nil {
-					out = append(out, within(f.declaredMember(src.Subject, src.Member), src.Path)...)
+					project(f.declaredMember(src.Subject, src.Member))
 				}
 			}
 		}
@@ -3158,9 +3165,8 @@ func (f *factChecker) key(x Expr) string {
 			}
 			return fmt.Sprintf("b:%p", d)
 		default:
-			// A universal element path projects list facts, but does not
-			// identify the individual value bound by a loop.
-			if src := d.Source; src != nil && !strings.Contains(src.Path, ".[]") && (src.Member == nil || src.Path != "") {
+			// Universal element paths carry facts, not value identities.
+			if src := d.Source; src != nil && !src.ElementsOnly && !strings.Contains(src.Path, ".[]") && (src.Member == nil || src.Path != "") {
 				if k := f.aliasKey(src.Subject); k != "" {
 					return k + src.Path
 				}
