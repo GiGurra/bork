@@ -38,3 +38,23 @@ test "return contracts carry membership" {
   assertEqual(foreignContract[Int | String](E {}), 2)
   assertEqual(foreignContract[Int | String]("ok"), 1)
 }
+
+type Checked[T] = { value: T | E, success: Bool }
+class Accept[T] { fn accept(value: T): Bool }
+instance acceptChecked[U]: Accept[Checked[U]] {
+  fn accept(box: Checked[U]): Bool {
+    match box.value {
+      _: U => box.success
+      _: E => !box.success
+    }
+  }
+}
+pred accepted[V: Accept](value: V) { accept(value) }
+fn foreignDictionary[T](value: T | E): Checked[T] where accepted unsafe go {
+  _, failed := value.(E)
+  return Checked[T]{value: value, success: !failed}
+}
+test "contract dictionaries carry union membership" {
+  assertEqual(foreignDictionary[Int | String](E {}).success, false)
+  assertEqual(foreignDictionary[Int | String]("ok").success, true)
+}

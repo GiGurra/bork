@@ -56,8 +56,8 @@ func (g *gen) recordLit(e *check.RecordLit) ([]ast.Stmt, ast.Expr) {
 			value = g.convert(xs[i], field.Value.Type(), field.Field.Type)
 			i++
 		}
-		if hasTupleRepresentation(field.Field.Type) && field.Thunk == nil {
-			if original, params, args := tupleFieldDeclaration(owner, field.Field); original != nil {
+		if field.Thunk == nil {
+			if original, params, args := tupleFieldDeclaration(owner, field.Field); original != nil && g.genericRepresentationChanges(original.Type, params, args) {
 				value = g.representationConversion(value, field.Field.Type, original.Type, g.goType(field.Field.Type), g.parameterGoType(original.Type, params, args), params, args, true)
 			}
 		}
@@ -115,17 +115,17 @@ func (g *gen) copyField(root ast.Expr, rec *check.Record, path []string, value a
 	field := rec.Field(path[0])
 	lhs := &ast.SelectorExpr{X: root, Sel: name(field.Name)}
 	if len(path) == 1 {
-		if !field.Lazy && hasTupleRepresentation(field.Type) {
-			if original, params, args := tupleFieldDeclaration(rec, field); original != nil {
+		if !field.Lazy {
+			if original, params, args := tupleFieldDeclaration(rec, field); original != nil && g.genericRepresentationChanges(original.Type, params, args) {
 				value = g.representationConversion(value, field.Type, original.Type, g.goType(field.Type), g.parameterGoType(original.Type, params, args), params, args, true)
 			}
 		}
 		return []ast.Stmt{&ast.AssignStmt{Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN, Rhs: []ast.Expr{value}}}
 	}
 	child := g.newTmp()
-	stmts := []ast.Stmt{define(child, g.fieldRead(root, field))}
+	stmts := []ast.Stmt{define(child, g.tupleFieldRead(root, rec, field))}
 	stmts = append(stmts, g.copyField(child, field.Type.(*check.Record), path[1:], value)...)
-	stmts = append(stmts, &ast.AssignStmt{Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN, Rhs: []ast.Expr{g.fieldResolved(child, field)}})
+	stmts = append(stmts, &ast.AssignStmt{Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN, Rhs: []ast.Expr{g.tupleFieldResolved(child, rec, field)}})
 	return stmts
 }
 

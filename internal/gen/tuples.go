@@ -441,27 +441,38 @@ func tupleFieldDeclaration(owner check.Type, field *check.Field) (original *chec
 
 func (g *gen) tupleFieldRead(root ast.Expr, owner check.Type, field *check.Field) ast.Expr {
 	value := g.fieldRead(root, field)
-	if hasTupleRepresentation(field.Type) {
-		if original, params, args := tupleFieldDeclaration(owner, field); original != nil {
-			return g.representationConversion(value, original.Type, field.Type, g.parameterGoType(original.Type, params, args), g.goType(field.Type), params, args, false)
-		}
+	if original, params, args := tupleFieldDeclaration(owner, field); original != nil && g.genericRepresentationChanges(original.Type, params, args) {
+		return g.representationConversion(value, original.Type, field.Type, g.parameterGoType(original.Type, params, args), g.goType(field.Type), params, args, false)
 	}
 	return value
 }
 
-func (g *gen) tupleFieldCell(thunk *check.Lambda, metadata *check.LazyDescription, owner check.Type, field *check.Field) ast.Expr {
-	if hasTupleRepresentation(field.Type) {
-		if original, params, args := tupleFieldDeclaration(owner, field); original != nil {
-			source := thunk.Type().(*check.FuncType)
-			target := &check.FuncType{Result: original.Type}
-			callback := g.representationConversion(g.lambda(thunk), source, target, g.goType(source), g.parameterGoType(target, params, args), params, args, true)
-			g.usesLazy = true
-			constructor := "_lazyNew"
-			if g.evalMode && metadata != nil && metadata.Effects == "nothing" {
-				constructor = "_lazyConstNew"
-			}
-			return &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent(constructor), Index: g.parameterGoType(original.Type, params, args)}, Args: []ast.Expr{callback}}
+// A copied parent is updated in its checked representation, then stored using
+// the field's declared representation (including the lazy cell's type).
+func (g *gen) tupleFieldResolved(value ast.Expr, owner check.Type, field *check.Field) ast.Expr {
+	if original, params, args := tupleFieldDeclaration(owner, field); original != nil && g.genericRepresentationChanges(original.Type, params, args) {
+		typ := g.parameterGoType(original.Type, params, args)
+		value = g.representationConversion(value, field.Type, original.Type, g.goType(field.Type), typ, params, args, true)
+		if !field.Lazy {
+			return value
 		}
+		g.usesLazy = true
+		return &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent("_lazyResolved"), Index: typ}, Args: []ast.Expr{value}}
+	}
+	return g.fieldResolved(value, field)
+}
+
+func (g *gen) tupleFieldCell(thunk *check.Lambda, metadata *check.LazyDescription, owner check.Type, field *check.Field) ast.Expr {
+	if original, params, args := tupleFieldDeclaration(owner, field); original != nil && g.genericRepresentationChanges(original.Type, params, args) {
+		source := thunk.Type().(*check.FuncType)
+		target := &check.FuncType{Result: original.Type}
+		callback := g.representationConversion(g.lambda(thunk), source, target, g.goType(source), g.parameterGoType(target, params, args), params, args, true)
+		g.usesLazy = true
+		constructor := "_lazyNew"
+		if g.evalMode && metadata != nil && metadata.Effects == "nothing" {
+			constructor = "_lazyConstNew"
+		}
+		return &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent(constructor), Index: g.parameterGoType(original.Type, params, args)}, Args: []ast.Expr{callback}}
 	}
 	return g.fieldCell(thunk, metadata)
 }

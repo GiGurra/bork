@@ -156,7 +156,7 @@ Go struct value with positional E0/E1 fields. See [design](design/tuples.md).
 ### Decided
 
 - **Records and sum types (ADTs) are the core data types.** Records are product types. Sum types are tagged unions whose variants can carry data.
-- **Generics in v0.1.** User code can declare generic types and functions, not just use built-in ones like `Option[T]` and `List[T]`. Specializing a union can collapse duplicate members, including unions nested in callbacks and container elements. Direct calls, saved function values, and method references preserve the specialized signature.
+- **Generics in v0.1.** User code can declare generic types and functions, not just use built-in ones like `Option[T]` and `List[T]`. Specializing a union can collapse duplicate members, including unions nested in callbacks and container elements. Direct calls, saved function values, and method references preserve the specialized signature. Generic record and sealed-variant construction, field reads, copies, and lazy/computed fields also preserve specialized field representations.
 - **Variance: planned, not in v0.1.** Scala-style declaration-site variance controls (covariant and contravariant type parameters) are planned for a later version. The syntax should leave room for them.
 - **Structural typing for interfaces and constraints.** A type satisfies an interface or generic constraint implicitly, by having the required shape (like Go). No `implements` declarations.
 - **Sealed types and traits are opt-in.** Marking a type sealed closes its set of variants to its own declaration. That is what makes exhaustive matching possible without a default case. Matching on an open (unsealed) type always needs a default case.

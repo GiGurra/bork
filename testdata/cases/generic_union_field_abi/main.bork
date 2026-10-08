@@ -1,0 +1,58 @@
+type E = {}
+type Inner[T] = { callback: (T) => Int }
+type Nested[T] = { inner: Inner[T | Int] }
+type LazyInner[T] = { lazy value: T }
+type LazyNested[T] = { lazy inner: LazyInner[T | Int] }
+type Mixed[T] = { value: ((T | Int) => Int) | E }
+type Box[T] = { callback: (T | Int) => Int }
+type Lazy[T] = { lazy callback: (T | Int) => Int }
+type Value[T] = { value: T | Int }
+type Callbacks[T] = { values: List[Option[(T | Int) => Int]] }
+type Choice[T] = sealed { Some { callback: (T | Int) => Int }, None }
+type LazyChoice[T] = sealed { Some { lazy callback: (T | Int) => Int }, None }
+type FloatBox[T] = { callback: (T | Float32) => Float32 }
+type Outer = { lazy box: Box[Int] }
+type Computed[T] = { base: Int, lazy callback: (T | Int) => Int = n => base }
+fn build() uses io: (Int) => Int { println("build"); n => n + 1 }
+fn identity[T](witness: T, box: Box[T]): Box[T] { box }
+fn main() {
+  box: Box[Int] = Box { callback: n => n + 1 }
+  println(identity[Int](0, box).callback(2))
+  println(box.copy(callback: n => n + 2).callback(2))
+  match box { Box { callback } => println(callback(4)) }
+  lazy: Lazy[Int] = Lazy { callback: n => n + 3 }
+  println(lazy.callback(3))
+  println(lazy.copy(callback: n => n + 4).callback(3))
+  callbacks: Callbacks[Int] = Callbacks { values: [Option.Some(n => n + 1)] }
+  callbacks.values.forEach(value => { match value { Option.Some(f) => println(f(7)), Option.None => println(0) } })
+  choice: Choice[Int] = Choice.Some { callback: n => n + 1 }
+  match choice { Choice.Some { callback } => println(callback(8)), Choice.None => println(0) }
+  lazyChoice: LazyChoice[Int] = LazyChoice.Some { callback: n => n + 1 }
+  match lazyChoice { LazyChoice.Some { callback } => println(callback(9)), LazyChoice.None => println(0) }
+  value: Value[Int] = Value { value: 11 }
+  println(value.value)
+  println(value.copy(value: 12).value)
+  floatBox: FloatBox[Float32] = FloatBox { callback: n => n + 0.5 }
+  println(floatBox.callback(1.5))
+  outer = Outer { box: box }
+  changed = outer.copy(box.callback: n => n + 1)
+  println(changed.box.callback(12))
+  println(outer.box.callback(13))
+  computed: Computed[Int] = Computed { base: 15 }
+  println(computed.callback(0))
+  println(computed.copy(base: 16).callback(0))
+  delayed: Lazy[Int] = Lazy { callback: build() }
+  println("before")
+  println(delayed.callback(16))
+  println(delayed.callback(17))
+  mixed: Mixed[Int] = Mixed { value: (n: Int) => n + 1 }
+  match mixed.value { f: (Int) => Int => println(f(18)), _: E => println(0) }
+  failed: Mixed[Int] = mixed.copy(value: E {})
+  match failed.value { _: (Int) => Int => println(0), _: E => println("error") }
+  nested: Nested[Int] = Nested { inner: Inner { callback: n => n + 1 } }
+  println(nested.copy(inner.callback: n => n + 2).inner.callback(20))
+  println(nested.inner.callback(20))
+  lazyNested: LazyNested[Int] = LazyNested { inner: LazyInner { value: 23 } }
+  println(lazyNested.copy(inner.value: 24).inner.value)
+  println(lazyNested.inner.value)
+}
