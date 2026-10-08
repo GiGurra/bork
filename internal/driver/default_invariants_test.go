@@ -26,6 +26,11 @@ pred hasMarker(label: Label) { label.text.contains("!") }`, ""},
 pred hasMarker(label: Label) { label.text.contains("!") }`, "defaults of Label require the completed value to be hasMarker"},
 		{"good sealed", `type Span = sealed { Closed { lo: Int = 3, hi: Int = 5 } } where ordered
 pred ordered(r: Span) { match (r) { .Closed { lo, hi } => lo <= hi } }`, ""},
+		{"lazy defaults stay deferred", `type Range = { lazy lo: Int = 5, hi: Int = 3 } where ordered
+pred ordered(r: Range) { r.lo <= r.hi }`, ""},
+		{"generic sealed specialization", `type Span[T] = sealed { Closed { lo: Int = 5, hi: Int = 3, values: List[T] = [] } } where ordered
+pred ordered[T](r: Span[T]) { match (r) { .Closed { lo, hi, values: _ } => lo <= hi } }
+fn unused(r: Span[String]) { _ = r }`, "defaults of Span[String] require the completed value to be ordered"},
 		{"generic specialization", `type Range[T] = { lo: Int = 5, hi: Int = 3, values: List[T] = [] } where ordered
 pred ordered[T](r: Range[T]) { r.lo <= r.hi }
 fn unused(r: Range[String]) { _ = r }`, "defaults of Range[String] require the completed value to be ordered"},
