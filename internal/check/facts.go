@@ -2561,13 +2561,16 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 			add(d.Invariant, f.ownParams())
 			if src := d.Source; src != nil && depth < maxDepth {
 				if src.Field != nil {
-					owner := src.Subject
-					steps := strings.Split(strings.TrimPrefix(src.Path, "."), ".")
-					for _, step := range steps[:len(steps)-1] {
-						if owner == nil {
-							break
+					owner := src.Owner
+					if owner == nil {
+						owner = src.Subject
+						steps := strings.Split(strings.TrimPrefix(src.Path, "."), ".")
+						for _, step := range steps[:len(steps)-1] {
+							if owner == nil {
+								break
+							}
+							owner = f.project(owner, step)
 						}
-						owner = f.project(owner, step)
 					}
 					if owner != nil {
 						add(src.Field.Constraints, f.recordFieldArgs(owner, src.Field))
@@ -3181,6 +3184,11 @@ func (f *factChecker) key(x Expr) string {
 			}
 			return fmt.Sprintf("b:%p", d)
 		default:
+			if src := d.Source; src != nil && src.Owner != nil && src.Field != nil {
+				if k := f.aliasKey(src.Owner); k != "" {
+					return k + "." + src.Field.Name
+				}
+			}
 			// Universal element paths carry facts, not value identities.
 			if src := d.Source; src != nil && !src.ElementsOnly && !strings.Contains(src.Path, ".[]") && (src.Member == nil || src.Path != "") {
 				if k := f.aliasKey(src.Subject); k != "" {

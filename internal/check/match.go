@@ -45,7 +45,8 @@ type Pat struct {
 	bindNode any
 	// Var is the variable of the bound name in the typed tree, set
 	// when the tree is built (see lower.go).
-	Var *Var
+	Var    *Var
+	source *patSource
 	// Lit is the value of a PatLit (a number, string, or bool constant).
 	Lit constant.Value
 	// Variant is the variant of a PatVariant.
@@ -128,9 +129,9 @@ func (c *checker) patSources(p *Pat, subject syntax.Expr, path string, field *Fi
 	if path == "" && p.Kind == PatType {
 		member = p.Narrowed()
 	}
+	p.source = &patSource{Subject: subject, Path: path, Field: field, Member: member}
 	if p.Bind != "" {
-		src := &patSource{Subject: subject, Path: path, Field: field, Member: member}
-		c.info.patSources[p.bindNode] = src
+		c.info.patSources[p.bindNode] = p.source
 	}
 	var fields []*Field
 	switch {
