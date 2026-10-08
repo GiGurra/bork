@@ -1,0 +1,43 @@
+import "bork/http"
+import "bork/encoding"
+
+fn events(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope, gate: Channel[Bool]) uses net + clock + state: http.StreamOutcome {
+  http.BeginResponse(writer, 200, { "Content-Type": ["text/event-stream"] })?
+  _ = http.Write(writer, encoding.Utf8("data: first\n\n"))?
+  http.Flush(writer)?
+  match (gate.receive(rs)) {
+    _: Bool => {}
+    error: Cancelled => return error
+    _: Closed => return IoError { path: "events", message: "gate closed" }
+  }
+  _ = http.Write(writer, encoding.Utf8("data: second\n\n"))?
+  http.Flush(writer)?
+}
+fn demo(app: Scope) uses io + net + clock + state: http.StreamOutcome {
+  gate = channel[Bool](app, 0)
+  server = http.ListenStream("127.0.0.1:0", app, (req, writer, rs) => events(req, writer, rs, gate))?
+  response = http.GetStream("http://" + http.Address(server), app)?
+  println("status", response.status)
+  match (http.Read(response.body)) {
+    bytes: Bytes => println("first", encoding.Hex(bytes))
+    error => panic(toString(error))
+  }
+  // The handler waits until the client has read the first flushed event.
+  match (gate.send(app, true)) { _: Ok => {}, error => panic(toString(error)) }
+  for {
+    match (http.Read(response.body)) {
+      bytes: Bytes => println("next", encoding.Hex(bytes))
+      _: http.Eof => break
+      error: http.BodyTooLarge => return error
+      error: http.DeadlineExceeded => return error
+      error: Cancelled => return error
+      error: IoError => return error
+    }
+  }
+}
+fn main() {
+  match (scope app { demo(app) }) {
+    _: Ok => {}
+    error => eprintln(toString(error))
+  }
+}

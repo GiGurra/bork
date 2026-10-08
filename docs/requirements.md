@@ -1282,6 +1282,10 @@ GetStream/SendStream expose scope-owned binary response readers and optional
 total limits; Read bounds chunk allocations, and OpenBody supplies producer
 uploads with backpressure. Total timeouts continue through response consumption.
 See [streaming client bodies](std/http.md#streaming-client-bodies).
+Streaming server listeners expose request-scoped binary readers and response writers,
+with explicit final headers and Flush for SSE. They preserve admission, budgets,
+propagation and shutdown; cancellation interrupts blocked transport reads/writes.
+See [streaming server bodies](std/http.md#streaming-server-bodies).
 Shared HTTP retry budgets charge clock + state for creation and operation effects plus clock + random + state for explicit retries. Initial attempts are free; retries atomically consume a shared, lazily refilled token, preserve Retry-After minimums, and stop when waits cannot fit the scope deadline. Budgets and injected clocks have checked scope lifetimes, and last-owner closure cancels waits and active attempt scopes. See [HTTP documentation](std/http.md#shared-retries) and [the backpressure design](design/backpressure.md).
 
 ### Partially overlapping scopes: owned child scopes

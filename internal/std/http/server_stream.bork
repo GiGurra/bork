@@ -1,0 +1,236 @@
+type StreamRequest = {
+  method: String,
+  path: String,
+  query: String,
+  params: Map[String, String],
+  headers: Headers,
+  body: BodyReader,
+}
+type BodyWriter = resource
+type StreamOutcome = Ok | BodyTooLarge | DeadlineExceeded | Cancelled | IoError
+type StreamHandler = (StreamRequest, BodyWriter, Scope) uses io + net + clock + random + state => StreamOutcome
+type StreamRoute = { pattern: String, handler: StreamHandler }
+pred ValidFinalStatus(code: Int) { code >= 200 && code <= 599 }
+type FinalStatus = Int where ValidFinalStatus
+
+// ListenStream handles bodies incrementally in each request's scope. Shared
+// listener bounds, admission and deadline options have the same eager defaults.
+fn ListenStream(addr: String, s: Scope, handler: (StreamRequest, BodyWriter, Scope) => StreamOutcome, drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = .None, requestTimeoutMs: TimeoutMs = 0) uses net + clock + state: Server | IoError unsafe go {
+  return start(addr, s, nil, []StreamRoute{{pattern: "/", handler: handler}}, _borkNone[Certificate](), drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs)
+}
+fn ListenStreamRoutes(addr: String, s: Scope, routes: List[StreamRoute], drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = .None, requestTimeoutMs: TimeoutMs = 0) uses io + net + clock + random + state: Server | IoError unsafe go {
+  return start(addr, s, nil, routes, _borkNone[Certificate](), drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs)
+}
+fn ListenStreamTLS(addr: String, s: Scope, routes: List[StreamRoute], certFile: String, keyFile: String, drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = .None, requestTimeoutMs: TimeoutMs = 0) uses io + net + clock + random + state: Server | IoError unsafe go {
+  pair := LoadCertificate(certFile, keyFile)
+  if failure, failed := pair.(IoError); failed { return failure }
+  return start(addr, s, nil, routes, _borkSome(pair.(Certificate)), drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs)
+}
+
+// BeginResponse commits final status and headers once. Write/Flush without it
+// commit an empty-header 200 response. Informational responses are not exposed.
+fn BeginResponse(writer: BodyWriter, status: FinalStatus, headers: Headers) uses net + clock + state: StreamOutcome unsafe go {
+  return writer.handle.(*_borkResourceHandle).Value.(struct {
+    begin func(int64, _Map[string, []string]) any
+    write func(_Bytes) any
+    flush func() any
+  }).begin(status, headers)
+}
+// Write sends binary data; failures can follow partial writes. Concurrent
+// writes serialize and are interrupted by request cancellation/deadline.
+fn Write(writer: BodyWriter, data: Bytes) uses net + clock + state: Int | DeadlineExceeded | Cancelled | IoError unsafe go {
+  return writer.handle.(*_borkResourceHandle).Value.(struct {
+    begin func(int64, _Map[string, []string]) any
+    write func(_Bytes) any
+    flush func() any
+  }).write(data)
+}
+fn Flush(writer: BodyWriter) uses net + clock + state: StreamOutcome unsafe go {
+  return writer.handle.(*_borkResourceHandle).Value.(struct {
+    begin func(int64, _Map[string, []string]) any
+    write func(_Bytes) any
+    flush func() any
+  }).flush()
+}
+
+type serverExchange = resource
+fn serveStream(exchange: serverExchange, listener: Scope, handler: StreamHandler, maxBodyBytes: BodyLimit) uses io + net + clock + random + state unsafe go {
+  import "context"
+  import "errors"
+  import "io"
+  import "net/http"
+  import "sort"
+  import "strings"
+  import "sync"
+  import "sync/atomic"
+  import "time"
+  raw := exchange.handle.(struct { writer http.ResponseWriter; request *http.Request; pattern string })
+  w, r := raw.writer, raw.request
+  rs := _borkScopeWith(r.Context())
+  rs.deadlineParent = listener
+  ctx := _borkScopeContext(rs)
+  expired := func() bool {
+    deadline, found := ctx.Deadline()
+    return errors.Is(context.Cause(ctx), context.DeadlineExceeded) || (found && !deadline.After(time.Now()))
+  }
+  failure := func(err error) any {
+    if expired() || errors.Is(err, context.DeadlineExceeded) { return DeadlineExceeded{message: err.Error()} }
+    if ctx.Err() != nil { return Cancelled{reason: context.Cause(ctx).Error()} }
+    var limit *http.MaxBytesError
+    if errors.As(err, &limit) { return BodyTooLarge{limit: maxBodyBytes} }
+    return IoError{path: r.URL.Path, message: err.Error()}
+  }
+  controller := http.NewResponseController(w)
+  // HTTP/1 normally drains uploads before writing. Streaming explicitly permits
+  // incremental reads and writes in the same handler instead.
+  if err := controller.EnableFullDuplex(); err != nil && r.ProtoMajor == 1 {
+    _borkScopeAbort(rs)
+    http.Error(w, "streaming is unsupported", 500)
+    return
+  }
+  deadline, _ := ctx.Deadline()
+  if err := controller.SetReadDeadline(deadline); err != nil {
+    _borkScopeAbort(rs)
+    http.Error(w, "request body cancellation is unsupported", 500)
+    return
+  }
+  if err := controller.SetWriteDeadline(deadline); err != nil {
+    _borkScopeAbort(rs)
+    http.Error(w, "response body cancellation is unsupported", 500)
+    return
+  }
+  var bodyDone atomic.Bool
+  bodyDone.Store(r.Body == http.NoBody)
+  stopped := make(chan struct{})
+  stop := context.AfterFunc(ctx, func() {
+    if !bodyDone.Load() { controller.SetReadDeadline(time.Now()) }
+    controller.SetWriteDeadline(time.Now())
+    close(stopped)
+  })
+  readerHandle := _borkNewResourceHandle(nil, rs)
+  writerHandle := _borkNewResourceHandle(nil, rs)
+  var closeReaderOnce sync.Once
+  closeReader := func() {
+    closeReaderOnce.Do(func() {
+      readerHandle.Close()
+      if !bodyDone.Load() { controller.SetReadDeadline(time.Now()) }
+      r.Body.Close()
+      if ctx.Err() == nil { controller.SetReadDeadline(deadline) }
+    })
+  }
+  reset := func() {
+    if !stop() { <-stopped }
+    controller.SetReadDeadline(time.Time{})
+    controller.SetWriteDeadline(time.Time{})
+  }
+  defer func() {
+    _borkScopeAbort(rs)
+    closeReader()
+    writerHandle.Close()
+    reset()
+  }()
+  body := http.MaxBytesReader(w, r.Body, maxBodyBytes)
+  readFailure := func(err error) any {
+    if ctx.Err() != nil || expired() { return failure(err) }
+    if cause := context.Cause(readerHandle.Context()); cause != nil { return Cancelled{reason: cause.Error()} }
+    return failure(err)
+  }
+  readerHandle.Value = struct {
+    reader io.ReadCloser
+    ctx context.Context
+    failure func(error) any
+    close func()
+    end func()
+    mu *sync.Mutex
+    remaining *int64
+    limit int64
+    terminal *any
+  }{body, readerHandle.Context(), readFailure, closeReader, func() { bodyDone.Store(true); closeReader() }, new(sync.Mutex), nil, maxBodyBytes, new(any)}
+  reader := BodyReader{handle: readerHandle, owner: rs.Own(closeReader)}
+  var mu sync.Mutex
+  started := false
+  check := func() any {
+    if expired() { return DeadlineExceeded{message: "request deadline exceeded"} }
+    if ctx.Err() != nil { return Cancelled{reason: context.Cause(ctx).Error()} }
+    if cause := context.Cause(writerHandle.Context()); cause != nil { return Cancelled{reason: cause.Error()} }
+    return nil
+  }
+  writerHandle.Value = struct {
+    begin func(int64, _Map[string, []string]) any
+    write func(_Bytes) any
+    flush func() any
+  }{
+    begin: func(status int64, headers _Map[string, []string]) any {
+      mu.Lock()
+      defer mu.Unlock()
+      if failed := check(); failed != nil { return failed }
+      if started { return IoError{path: r.URL.Path, message: "response already started"} }
+      _borkMapEach(headers, func(name string, values []string) bool {
+        for _, value := range values { w.Header().Add(name, value) }
+        return true
+      })
+      started = true
+      w.WriteHeader(int(status))
+      return _borkOk()
+    },
+    write: func(data _Bytes) any {
+      mu.Lock()
+      defer mu.Unlock()
+      if failed := check(); failed != nil { return failed }
+      started = true
+      count, err := w.Write(_borkBytesData(data))
+      if err != nil { return failure(err) }
+      return int64(count)
+    },
+    flush: func() any {
+      mu.Lock()
+      defer mu.Unlock()
+      if failed := check(); failed != nil { return failed }
+      started = true
+      if err := controller.Flush(); err != nil { return failure(err) }
+      return _borkOk()
+    },
+  }
+  writer := BodyWriter{handle: writerHandle, owner: rs.Own(func() { writerHandle.Close() })}
+  keys, values := []string{}, [][]string{}
+  for name := range r.Header { keys = append(keys, name) }
+  sort.Strings(keys)
+  for _, name := range keys { values = append(values, append([]string(nil), r.Header[name]...)) }
+  names, params := []string{}, []string{}
+  for _, part := range strings.Split(raw.pattern, "/") {
+    if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") && part != "{$}" {
+      name := strings.TrimSuffix(strings.TrimSuffix(strings.TrimPrefix(part, "{"), "}"), "...")
+      names = append(names, name); params = append(params, r.PathValue(name))
+    }
+  }
+  outcome := handler(StreamRequest{method: r.Method, path: r.URL.Path, query: r.URL.RawQuery, params: _borkMapOf(names, params), headers: _borkMapOf(keys, values), body: reader}, writer, rs)
+  deadlineFailed := expired()
+  if !bodyDone.Load() { w.Header().Set("Connection", "close") }
+  _borkScopeClose(rs)
+  closeReader()
+  writerHandle.Close()
+  reset()
+  if started {
+    if _, ok := outcome.(_Ok); ok { return }
+    panic(http.ErrAbortHandler)
+  }
+  if deadlineFailed {
+    controller.SetWriteDeadline(time.Time{})
+    w.Header().Set("Connection", "close")
+    http.Error(w, "request deadline exceeded", 504)
+    return
+  }
+  if _, oversized := outcome.(BodyTooLarge); oversized {
+    controller.SetWriteDeadline(time.Time{})
+    w.Header().Set("Connection", "close")
+    http.Error(w, "request body exceeds configured limit", 413)
+    return
+  }
+  if _, ok := outcome.(_Ok); ok { return }
+  if r.Context().Err() != nil { return }
+  switch outcome.(type) {
+  case DeadlineExceeded: http.Error(w, "request deadline exceeded", 504)
+  case Cancelled: return
+  default: http.Error(w, "stream handler failed", 500)
+  }
+}
