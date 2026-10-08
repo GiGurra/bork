@@ -313,6 +313,14 @@ fn main() {
 application uses, including boundaries; a trusted fact on an untested path
 still depends on your reasoning.
 
+Generic helpers also forward facts through ordinary record fields. If
+`unwrap[T](box: Box[T]): T` returns `box.value`, a `Box[Int where positive]`
+supplies a positive result. The same applies to tuple and nested element facts.
+The proof requires the fact for every possible source of that type parameter,
+including other arguments and fields. Recursive or opaque records, union
+fields, and callbacks that produce the type parameter remain outside this
+inference; give such helpers a checked result promise when needed.
+
 ## What facts cost
 
 Proving a fact costs nothing at run time. Facts exist only during compilation, and the generated program does not carry them.

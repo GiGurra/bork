@@ -1,0 +1,29 @@
+pred positive(x: Int) { x > 0 }
+pred above(x: Int, limit: Int) { x > limit }
+type Box[T] = { value: T }
+type PairBox[T] = { first: T, second: T }
+type PosPair = (Int where positive, Int)
+fn need(x: Int where positive): Int { x }
+fn unwrap[T](box: Box[T]): T { box.value }
+fn wrap[T](value: T): Box[T] { Box { value: value } }
+fn choose[T](a: Box[T], b: Box[T], pickFirst: Bool): T { if pickFirst { a.value } else { b.value } }
+fn first[T](box: PairBox[T]): T { box.first }
+fn scalar(x: Box[Int where positive]): Int { need(unwrap(x)) }
+fn tuple(x: Box[PosPair]): Int { result = unwrap(x); need(result.0) }
+fn nested(x: Box[Box[Int where positive]]): Int { need(unwrap(unwrap(x))) }
+fn list(x: Box[List[Int where positive]]): Int {
+  match unwrap(x).head() { .Some(value) => need(value), .None => 0 }
+}
+fn both(a: Box[Int where positive], b: Box[Int where positive]): Int { need(choose(a, b, false)) }
+fn pair(x: PairBox[Int where positive]): Int { need(first(x)) }
+fn dependent(limit: Int, x: Box[Int where above(limit)]): Int {
+  value: Int where above(limit) = unwrap(x)
+  value
+}
+fn apply[T](box: Box[T], f: (T) => Int): Int { f(box.value) }
+fn callback(x: Box[Int where positive]): Int { apply(x, value => need(value)) }
+fn main() {
+  println(scalar(Box { value: 1 }), tuple(Box { value: (2, 0) }), nested(Box { value: Box { value: 3 } }))
+  println(list(Box { value: [4] }), both(Box { value: 5 }, Box { value: 6 }), pair(PairBox { first: 7, second: 8 }))
+  println(dependent(9, Box { value: 10 }), callback(Box { value: 11 }), need(wrap(12).value))
+}

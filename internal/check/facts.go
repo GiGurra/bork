@@ -1855,44 +1855,56 @@ func (f *factChecker) lambdaParam(la lambdaArg, ob obligation, e env, depth int)
 
 // typeParamPaths lists the paths at which values of the type parameter
 // tp occur in t. It fails if they occur where facts cannot follow them:
-// in a union, or as what a function value returns. (A function value's
-// parameters only take values of tp.)
+// in a union, a recursive or opaque record, or as what a function value
+// returns. (A function value's parameters only take values of tp.)
 func typeParamPaths(t Type, tp *TypeParam, path string) ([]string, bool) {
+	return typeParamPathsSeen(t, tp, path, map[*Record]bool{})
+}
+
+func typeParamPathsSeen(t Type, tp *TypeParam, path string, seen map[*Record]bool) ([]string, bool) {
+	follow := func(t Type, path string) ([]string, bool) {
+		return typeParamPathsSeen(t, tp, path, seen)
+	}
 	switch t := t.(type) {
 	case *TypeParam:
 		if t == tp {
 			return []string{path}, true
 		}
 	case *Seq:
-		return typeParamPaths(t.Elem, tp, path+".[]")
+		return follow(t.Elem, path+".[]")
 	case *List:
-		return typeParamPaths(t.Elem, tp, path+".[]")
+		return follow(t.Elem, path+".[]")
 	case *Map:
 		if mentions(t, tp) {
 			return nil, false // not followed into maps yet
 		}
 	case *Sealed:
 		if IsOption(t) {
-			return typeParamPaths(t.Args[0], tp, path+"."+t.Variant("Some").Fields[0].Name)
+			return follow(t.Args[0], path+"."+t.Variant("Some").Fields[0].Name)
 		}
 		if mentions(t, tp) {
 			return nil, false // not followed into other generic types yet
 		}
 	case *Record:
-		if t.Tuple {
-			var paths []string
-			for _, field := range t.Fields {
-				inner, ok := typeParamPaths(field.Type, tp, path+"."+field.Name)
-				if !ok {
-					return nil, false
-				}
-				paths = append(paths, inner...)
-			}
-			return paths, true
+		if !t.Tuple && !mentions(t, tp) {
+			return nil, true
 		}
-		if mentions(t, tp) {
+		if seen[t] || len(seen) >= maxDepth || t.Foreign != nil || t.GoMirror != nil {
 			return nil, false
 		}
+		seen[t] = true
+		defer delete(seen, t)
+		var paths []string
+		for _, field := range t.Fields {
+			inner, ok := follow(field.Type, path+"."+field.Name)
+			if !ok {
+				return nil, false
+			}
+			paths = append(paths, inner...)
+		}
+		// A nominal type can hide its values behind methods. No visible
+		// occurrences must not make it an absent source of this parameter.
+		return paths, t.Tuple || len(paths) > 0
 	case *Union:
 		if mentions(t, tp) {
 			return nil, false
