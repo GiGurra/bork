@@ -209,6 +209,10 @@ func TestExtractFunctionRejectsUnsupportedSelections(t *testing.T) {
 		"fn sum(x: Int): Int { [|local = x + 1|]; local }\nfn main() {}\n",
 		"fn sum(x: Int): Int { [|missing + x|] }\nfn main() {}\n",
 		"fn choose(value: Int | String, flag: Bool) uses io: Int | String { result: Int | String = [|if (flag) { value? } else { \"fallback\" }|]; println(\"after\"); result }\nfn main() {}\n",
+		`type Failure = {}
+type Wrapped = { cause: Failure }
+fn choose(value: Int | Failure): Int | Wrapped { [|value?{ e => Wrapped { cause: e } }|] }
+fn main() {}`,
 	} {
 		t.Run(fmt.Sprintf("selection-%d", i), func(t *testing.T) {
 			parallelProtocolFixture(t)

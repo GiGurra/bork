@@ -76,7 +76,7 @@ func (c *checker) ensurePackageBinding(binding *PackageBinding) Type {
 	c.packagePath = append(append([]*PackageBinding(nil), c.packagePath...), binding)
 	c.pkg, c.inPrelude = binding.Pkg, false
 	c.scopes = []map[string]*local{{}}
-	c.typeParams, c.lambdaDepth, c.have = nil, 0, nil
+	c.typeParams, c.lambdaDepth, c.mapperLambdas, c.have = nil, 0, 0, nil
 	c.session = nil
 	c.initializerContext, c.comptimeContext = nil, nil
 	c.used = 0

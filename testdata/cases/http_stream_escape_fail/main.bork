@@ -1,0 +1,11 @@
+import "bork/http"
+
+fn escape() uses net + clock + state: http.BodyReader {
+  scope temporary {
+    match (http.GetStream("http://127.0.0.1", temporary)) {
+      response: http.StreamResponse => response.body
+      error => panic(toString(error))
+    }
+  }
+}
+fn main() { _ = escape() }

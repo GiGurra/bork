@@ -5,7 +5,7 @@ fn source(flag: Bool): Int | Problem where Approved { if (flag) { Problem { code
 pred ConditionalOption(x: Option[Int], flag: Bool) { match (x) { Option.Some(_) => true; Option.None => flag } }
 type Box = { lazy value: Int | Problem }
 fn fieldForward(flag: Bool): Int | Problem where Approved {
-  box = Box { value: { _ = source(flag)?; 1 } }
+  box = Box { value: { match (source(flag)) { _: Int => {}; problem: Problem => return problem }; 1 } }
   box.value?
 }
 fn fieldReturn(flag: Bool): Int | Problem where Approved {
@@ -14,19 +14,19 @@ fn fieldReturn(flag: Bool): Int | Problem where Approved {
 }
 type PromisedBox = { lazy value: (Int | Problem) where Allowed }
 fn fieldInline(flag: Bool): (Int | Problem) where Allowed {
-  box = PromisedBox { value: { operand: Int | Problem = if (flag) { Problem { code: 1 } } else { 1 }; operand? } }
+  box = PromisedBox { value: { operand: Int | Problem = if (flag) { Problem { code: 1 } } else { 1 }; return operand } }
   box.value?
 }
 type OptionBox = { lazy value: Option[Int] }
 fn fieldOption(flag: Bool, x: Option[Int] where ConditionalOption(flag)): Option[Int] where ConditionalOption(flag) {
-  box = OptionBox { value: { n = x?; Option.Some(n) } }
+  box = OptionBox { value: match (x) { Option.Some(n) => Option.Some(n); Option.None => x } }
   box.value
 }
 pred AnyExit(x: Int | Ok) { match (x) { _: Int => true; _: Ok => true } }
 fn emptyExit(): Int | Ok {}
 type ExitBox = { lazy value: Int | Ok }
 fn fieldEmpty(): (Int | Ok) where AnyExit {
-  box = ExitBox { value: { _ = emptyExit()?; 1 } }
+  box = ExitBox { value: { match (emptyExit()) { _: Int => {}; exit: Ok => return exit }; 1 } }
   box.value?
 }
 fn main() {

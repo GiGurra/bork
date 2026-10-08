@@ -28,10 +28,13 @@ func stageGo(files []*syntax.File, source []byte, module *goModuleInputs, contex
 	if base, err := cacheRootDir(); err == nil && cacheTrimSupported() && !cacheDisabled() {
 		if root, err := goStageProgramRoot(files); err == nil {
 			key := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%x", root, mode, context.namespace)))
-			if dir, pinned, release, err := stageGoStableWithHook(base, fmt.Sprintf("%x", key), source, module, embeds, goStageMetadata{Schema: goStageSchema, Program: root, Mode: mode, Namespace: context.namespace}, context.moduleHook); err == nil {
+			if dir, pinned, release, err := stageGoStableWithHook(base, fmt.Sprintf("%x", key), source, module, embeds, goStageMetadata{Schema: goStageSchema, Program: root, Mode: mode, Namespace: context.namespace}, context.moduleHook, context.commandContext); err == nil {
 				return dir, pinned, func() { release(); _ = scheduleCacheTrim(base) }, nil
 			}
 		}
+	}
+	if context.commandContext != nil && context.commandContext.Err() != nil {
+		return "", false, nil, context.commandContext.Err()
 	}
 	dir, err := os.MkdirTemp("", "bork-build-*")
 	if err != nil {

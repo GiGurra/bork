@@ -1313,6 +1313,9 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 				hint := ""
 				if fn != nil && fn.Prelude && callee == "fork" {
 					hint = fmt.Sprintf("; to give a task of %s a resource of a shorter scope, attach it first: r2 = attach(r, %s)", scopeName(a), scopeName(a))
+					if param, ok := unhandle(short).(*Var); ok && param.Kind == VarParam && resourceOf(param.Type) == nil {
+						hint = fmt.Sprintf("; declare the captured parameter's lifetime: %s: %s in %s", param.Name, param.Type, scopeName(a))
+					}
 				}
 				l.errorf(b.Pos(), "%s may not live as long as scope %s (it depends on %s), but %s may keep it until %s closes%s", describe(b), scopeName(a), l.scopeText(short), callee, scopeName(a), hint)
 			}

@@ -29,6 +29,7 @@ Each example's expected output is kept in [testdata/examples](../testdata/exampl
 
 | Example | What it shows | Run from repository root |
 | --- | --- | --- |
+| [error_context](../examples/error_context/main.bork) | Adding operation context to a failure with `?{ ... }` | `bork run examples/error_context` |
 | [enums](../examples/enums/main.bork) | Sealed enum values, wire names, lookup, and JSON integration | `bork run examples/enums` |
 | [derive_labels](../examples/derive_labels/README.md) | A custom class derived from field metadata, including a generic record | `bork run examples/derive_labels` |
 | [comptime](../examples/comptime/README.md) | A lookup table and a validated configuration file, both computed while compiling | `bork run examples/comptime` |
@@ -66,6 +67,8 @@ Each example's expected output is kept in [testdata/examples](../testdata/exampl
 | [slow_downstream](../examples/slow_downstream/main.bork) | Bounded admission and a shared retry budget against a slow service | `bork run examples/slow_downstream` |
 | [sql](../examples/sql/main.bork) | SQLite connections and transactions owned by scopes | `bork run examples/sql` |
 | [http_multi](../examples/http_multi/main.bork) | API, metrics and debug listeners with one application lifetime | `bork run examples/http_multi` |
+| [http_stream_server](../examples/http_stream_server/README.md) | Incremental responses and flushed Server-Sent Events | `bork run examples/http_stream_server` |
+| [http_stream_client](../examples/http_stream_client/README.md) | Binary downloads and producer-backed uploads | `bork run examples/http_stream_client` |
 | [service_tour](../examples/service_tour/main.bork) | The [service tour](tour-service.md): environment configuration, validated JSON and SQLite | `bork run examples/service_tour -- demo` |
 
 ### Keep a service running

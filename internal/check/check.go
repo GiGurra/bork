@@ -477,10 +477,11 @@ func (info *Info) args(call *syntax.Call) []syntax.Expr {
 // A name bound inside the pattern (`Option.Some(v)`) has the
 // field path to it from the subject (".value"), and the Field.
 type patSource struct {
-	Subject syntax.Expr
-	Member  Type
-	Path    string
-	Field   *Field
+	Subject      syntax.Expr
+	Member       Type
+	Path         string
+	Field        *Field
+	ElementsOnly bool
 }
 
 // Program type-checks a program: the root package (whose import path is
@@ -774,6 +775,7 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 					observe("lower")
 				}
 				c.lower(files)
+				c.checkShowMembership()
 				c.packageDependencyGraph()
 				if observe != nil {
 					observe("contracts")
@@ -961,15 +963,22 @@ type checker struct {
 	inPrelude bool
 	// typeParams holds the type parameters in scope.
 	typeParams map[string]*TypeParam
+	aliasFacts map[*TypeParam][]*Constraint
+	aliasTypes map[*TypeParam]Type
 	// lambdaDepth counts the lambdas being checked around the current
 	// expression.
 	comptimeContext    *comptimeContext
 	initializerContext *initializerContext
-	lambdaDepth        int
-	assemblySerial     int
-	selectSerial       int
-	producer           *producerContext
-	loops              []*loopContext
+	// tryAnnotations selects a direct annotated binding initializer's kept member.
+	tryAnnotations map[*syntax.Try]Type
+	lambdaDepth    int
+	// mapperLambdas counts immediate mapper bodies within lambdaDepth;
+	// they restrict control flow but do not defer calls or their mocks.
+	mapperLambdas  int
+	assemblySerial int
+	selectSerial   int
+	producer       *producerContext
+	loops          []*loopContext
 	// postClause is one more than the lambda depth of the loop post
 	// clause being checked, or 0: it cannot leave the loop.
 	postClause int
@@ -1427,9 +1436,9 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 			t = c.deferredInitializer(s, declared)
 		} else if slot := c.carriedHere(s); declared == nil && slot != nil {
 			// A carried name keeps its type, which guides the new value.
-			t = c.exprWant(s.Value, slot.typ)
+			t = c.bindingValue(s, slot.typ)
 		} else {
-			t = c.exprWant(s.Value, declared)
+			t = c.bindingValue(s, declared)
 		}
 		if s.Type == nil {
 			var code, annotation string

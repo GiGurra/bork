@@ -1,0 +1,90 @@
+type Missing = { id: Int }
+type Busy = { retries: Int }
+type Wrapped = { operation: String, cause: Missing | Busy }
+type Absent = { id: Int }
+
+fn load(n: Int): String | Missing | Busy {
+  if n == 0 { "ok" } else if n == 1 { Missing { id: n } } else { Busy { retries: n } }
+}
+
+fn wrapped(n: Int): String | Wrapped {
+  text = load(n)?{ e => Wrapped { operation: "load", cause: e } }
+  text.toUpper()
+}
+
+fn option(n: Int): Int | Absent {
+  xs = [10, 20]
+  xs.get(n)?{ _ => Absent { id: n } }
+}
+
+fn logged(n: Int) uses io: String | Wrapped {
+  text = {
+    println("operand")
+    load(n)
+  }?{ e => {
+    println("mapper")
+    Wrapped { operation: "logged", cause: e }
+  } }
+  println("success")
+  text
+}
+
+fn replacement(n: Int): String {
+  load(n)?{ _ => "fallback" }
+}
+
+fn mappedUnion(n: Int): String | Missing | Busy {
+  load(n)?{ e => e }
+}
+
+pred positive(n: Int) { n > 0 }
+fn validated(flag: Bool): Int where positive | Missing {
+  if flag { 7 } else { Missing { id: 1 } }
+}
+fn needPositive(n: Int where positive): Int { n }
+fn validatedWrap(flag: Bool): Int | Absent {
+  n = validated(flag)?{ _ => Absent { id: 1 } }
+  needPositive(n)
+}
+fn validatedError(): Int | Missing { Missing { id: 7 } }
+fn errorFacts(): Int | Absent {
+  validatedError()?{ e => {
+    n: Int where positive = e.id
+    Absent { id: n }
+  } }
+}
+fn lazyWrapped(n: Int): String | Wrapped {
+  lazy text: String | Wrapped = match (load(n)) { text: String => text; e: Missing | Busy => Wrapped { operation: "lazy", cause: e } }
+  text
+}
+fn empty(): Int | Ok { Ok }
+fn emptyMapped(): Int | Absent { empty()?{ _ => Absent { id: 0 } } }
+fn chain(): Int | Absent { [10, 20].get(0)?{ _ => Absent { id: 0 } } + 1 }
+fn parenthesizedHead(n: Int): Int | Wrapped {
+  match (load(n)?{ e => Wrapped { operation: "head", cause: e } }) { _ => 9 }
+}
+
+fn emptySource(fail: Bool): Ok | Missing { if fail { Missing { id: 1 } } else { Ok } }
+fn save(fail: Bool) uses io { emptySource(fail)?{ _ => println("save failed") } }
+
+fn main() uses io {
+  save(false)
+  save(true)
+  println(wrapped(0))
+  println(wrapped(1))
+  println(wrapped(2))
+  println(option(0))
+  println(option(9))
+  println(logged(0))
+  println(logged(1))
+  println(replacement(1))
+  println(mappedUnion(2))
+  println(validatedWrap(true))
+  println(validatedWrap(false))
+  println(errorFacts())
+  println(lazyWrapped(1))
+  println(emptyMapped())
+  println(chain())
+  println(parenthesizedHead(0))
+  println(parenthesizedHead(1))
+}

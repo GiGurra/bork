@@ -354,6 +354,11 @@ its signature must describe the needed lifetime.
 ### A parameter that must outlive another
 
 `value: T in other` says that `value` stays usable at least as long as `other`.
+For a task that captures an atom parameter, declare `a: Atom[Int] in s` when
+starting work with `fork(s, ...)`. A callback parameter similarly uses
+`work: () => Int in s`. `attach` is for resource values; these parameters need
+a lifetime promise in the signature.
+
 For a channel, this lets a helper put a resource into it:
 
 ```bork

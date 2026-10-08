@@ -1,0 +1,11 @@
+import "bork/fs"
+type Failure = {}
+type Wrapped = { file: fs.File }
+fn source(): Int | Failure { Failure {} }
+fn escapes(path: String) uses io: Int | Wrapped | fs.Error {
+  scope s {
+    file = fs.Open(path, s)?
+    source()?{ _ => Wrapped { file: file } }
+  }
+}
+fn main() {}

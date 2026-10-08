@@ -1,0 +1,28 @@
+import "bork/codec"
+import "bork/json"
+use codec.Defaults
+pred positive(x: Int) { x > 0 }
+type Box[T] = { value: T } derive (codec.Decode, codec.Encode)
+type Strict[T] = { value: (Int where positive, T) }
+type PosPair = (Int where positive, Int)
+fn need(x: Int where positive): Int { x }
+fn boxed(x: Box[PosPair]): Int { need(x.value.0) }
+fn option(x: Option[PosPair]): Int {
+  match x { Option.Some(value) => need(value.0), Option.None => 0 }
+}
+fn nested(x: Box[List[PosPair]]): Int | Option[Int] {
+  pair = x.value.get(0)?
+  need(pair.0)
+}
+fn strict(x: Strict[String]): Int { need(x.value.0) }
+fn decoded(): Int | json.JsonError | codec.DecodeError {
+  pair = json.Decode[PosPair]("[4,0]")?
+  need(pair.0)
+}
+fn main() {
+  println(boxed(Box { value: (1, 0) }), option(Option.Some((2, 0))), nested(Box { value: [(3, 0)] }), decoded())
+  println(strict(Strict { value: (5, "valid") }))
+  println(json.Decode[PosPair]("[-1,0]"))
+  println(json.Decode[Box[(Int, Int)]]("{\"value\":[-1,0]}"))
+  println(json.Encode(Box { value: (6, 0) }))
+}

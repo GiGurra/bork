@@ -1,0 +1,6 @@
+import "example.com/aliasownership/api"
+fn main() {
+  _: api.Alias[Int] = api.Alias[Int] { value: 1 }
+  _: api.Alias[Int] = .{ value: 2 }
+  _ = api.Make(3).copy(value: 4)
+}

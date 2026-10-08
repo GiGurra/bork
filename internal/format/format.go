@@ -25,6 +25,7 @@ type item struct {
 	// (not after a '.'), which is spaced from its '('.
 	with        bool
 	patternTest bool
+	tryMapper   bool
 }
 
 type delimiter struct {
@@ -63,6 +64,12 @@ func SourceWithOptions(path string, src []byte, options Options) ([]byte, error)
 	}
 	for _, pos := range parsed.PatternTestOperators {
 		patternTests[pos] = true
+	}
+	tryMappers := map[diag.Pos]bool{}
+	for _, span := range parsed.ExpressionSpans {
+		if t, ok := span.Expr.(*syntax.Try); ok && t.Wrap != nil {
+			tryMappers[t.Pos] = true
+		}
 	}
 	loopIns := map[diag.Pos]bool{}
 	for _, pos := range parsed.IterationOperators {
@@ -105,7 +112,7 @@ func SourceWithOptions(path string, src []byte, options Options) ([]byte, error)
 		w := t.Kind == syntax.TIdent && t.Text == "with" && prev != syntax.Dot && prev != syntax.KwFn && prev != syntax.RParen
 		afterPatternTest := len(items) > 0 && items[len(items)-1].patternTest
 		chain := t.Kind == syntax.Dot && endsExpr(prev) && !afterPatternTest || prev == syntax.Dot && len(items) > 0 && !items[len(items)-1].contextDot
-		items = append(items, item{patternTest: patternTests[t.Pos], chain: chain, loopIn: loopIn, kind: t.Kind, text: text, start: start, end: offset(t.End), line: t.Pos.Line, unary: u, contextDot: t.Kind == syntax.Dot && (!endsExpr(prev) || afterPatternTest), with: w})
+		items = append(items, item{patternTest: patternTests[t.Pos], chain: chain, loopIn: loopIn, kind: t.Kind, tryMapper: tryMappers[t.Pos], text: text, start: start, end: offset(t.End), line: t.Pos.Line, unary: u, contextDot: t.Kind == syntax.Dot && (!endsExpr(prev) || afterPatternTest), with: w})
 		prev = t.Kind
 	}
 	for _, c := range comments {
@@ -245,6 +252,9 @@ func space(a, b item) bool {
 	if a.kind == syntax.Semi {
 		// Empty loop clauses: for (;;), for (; cond;).
 		return b.kind != syntax.Semi && b.kind != syntax.RParen
+	}
+	if a.tryMapper && b.kind == syntax.LBrace {
+		return false
 	}
 	if a.kind == syntax.LParen || a.kind == syntax.LBrack || a.kind == syntax.Not || a.unary {
 		return false

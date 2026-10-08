@@ -64,3 +64,20 @@ func (c *checker) validShow(ci *ClassInstance) bool {
 	}
 	return true
 }
+
+// Implicit Go rendering methods cannot accept the membership environment that
+// ordinary generic calls carry. Reject these renderers before generation.
+func (c *checker) checkShowMembership() {
+	needed := RuntimeMembershipParameters(c.info)
+	for _, ci := range c.info.ClassInstances {
+		if !IsShow(ci.Class) {
+			continue
+		}
+		for _, p := range ci.TypeParams {
+			if needed[p] {
+				c.errorf(ci.Decl.Type.Pos, "generic Show instance cannot inspect union membership of %s: implicit rendering cannot preserve it; match concrete members instead, or use a sealed type", p.Name)
+				break
+			}
+		}
+	}
+}

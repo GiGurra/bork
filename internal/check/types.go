@@ -241,6 +241,7 @@ func (r *Record) Instance(args []Type) *Record {
 	if t, ok := r.insts.byKey[key]; ok {
 		return t.(*Record)
 	}
+	args = cacheTypeArgs(args)
 	inst := &Record{Name: r.Name, Decl: r.Decl, Prelude: r.Prelude, Pkg: r.Pkg, Base: r, Args: args, Foreign: r.Foreign, GoGenerated: r.GoGenerated, GoMirror: r.GoMirror, GoFields: r.GoFields, GoTo: r.GoTo, GoFrom: r.GoFrom}
 	r.insts.byKey[key] = inst
 	r.insts.whenResolved(func() {
@@ -393,6 +394,48 @@ func argsKey(args []Type) string {
 		parts[i] = typeKey(a)
 	}
 	return strings.Join(parts, ",")
+}
+
+// Cached nominal instances share type shape, not the tuple facts of a use.
+// Keep their arguments separate from mutable source annotation metadata.
+func cacheTypeArgs(args []Type) []Type {
+	out := make([]Type, len(args))
+	for i, arg := range args {
+		out[i] = tupleFactShape(arg)
+	}
+	return out
+}
+
+func tupleFactShape(t Type) Type {
+	switch t := t.(type) {
+	case *Record:
+		if t.Tuple {
+			elems := make([]Type, len(t.Fields))
+			for i, field := range t.Fields {
+				elems[i] = tupleFactShape(field.Type)
+			}
+			return tupleType(elems)
+		}
+	case *List:
+		return &List{Elem: tupleFactShape(t.Elem)}
+	case *Seq:
+		return &Seq{Elem: tupleFactShape(t.Elem), Effects: t.Effects}
+	case *Map:
+		return &Map{Key: tupleFactShape(t.Key), Value: tupleFactShape(t.Value)}
+	case *FuncType:
+		ft := &FuncType{Result: tupleFactShape(t.Result), Effects: t.Effects}
+		for _, param := range t.Params {
+			ft.Params = append(ft.Params, tupleFactShape(param))
+		}
+		return ft
+	case *Union:
+		members := make([]Type, len(t.Members))
+		for i, member := range t.Members {
+			members[i] = tupleFactShape(member)
+		}
+		return newUnion(members)
+	}
+	return t
 }
 
 func typeKey(t Type) string {
@@ -568,6 +611,7 @@ func (s *Sealed) Instance(args []Type) *Sealed {
 	if t, ok := s.insts.byKey[key]; ok {
 		return t.(*Sealed)
 	}
+	args = cacheTypeArgs(args)
 	inst := &Sealed{Name: s.Name, Decl: s.Decl, Prelude: s.Prelude, Pkg: s.Pkg, Base: s, Args: args}
 	s.insts.byKey[key] = inst
 	s.insts.whenResolved(func() {

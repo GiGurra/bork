@@ -293,16 +293,27 @@ func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]T
 		return nil
 	}
 	out := append([]*Constraint(nil), c.info.shapeTypeFacts[t]...)
-	_, isParam := typ.(*TypeParam)
-	if t.Union == nil && len(t.Args) == 0 && !isParam {
+	if tp := c.typeParams[t.Name]; tp != nil && t.Union == nil && t.Func == nil && t.Tuple == nil && len(t.Args) == 0 {
+		out = append(out, c.aliasFacts[tp]...)
+	}
+	alias := false
+	if t.Union == nil && t.Func == nil && t.Tuple == nil && c.typeParams[t.Name] == nil {
 		if e := c.lookupType(t.Name); e != nil && e.decl.Kind == syntax.AliasType {
-			out = append(out, c.aliasConstraints(e)...)
+			if len(e.params) > 0 {
+				out = append(out, c.genericAliasConstraints(e, t, typ, scope)...)
+				alias = true
+			} else if _, isParam := typ.(*TypeParam); !isParam {
+				out = append(out, c.aliasConstraints(e)...)
+			}
 		}
 	}
 	for _, ref := range t.Where {
 		if con := c.constraint(ref, typ, scope); con != nil {
 			out = append(out, con)
 		}
+	}
+	if alias {
+		return out
 	}
 	// Constraints inside type arguments apply to the elements.
 	inner := func(cons []*Constraint, step string) {
@@ -332,7 +343,9 @@ func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]T
 	if base := genericBase(typ); base != nil && len(t.Args) == len(typeParamsOf(base)) {
 		args := TypeArgs(typ)
 		for i, tp := range typeParamsOf(base) {
-			cons := c.constraintsOf(t.Args[i], args[i], scope)
+			// Tuple annotations may record their field facts. Generic
+			// instances are shared, so annotate a copy of the argument.
+			cons := c.constraintsOf(t.Args[i], subst(args[i], nil), scope)
 			if len(cons) == 0 {
 				continue
 			}
@@ -409,12 +422,47 @@ func fieldPathsOf(base Type, tp *TypeParam) []string {
 func (c *checker) aliasConstraints(e *typeEntry) []*Constraint {
 	if !e.constraintsDone {
 		e.constraintsDone = true
-		savedPkg, savedPrelude := c.pkg, c.inPrelude
+		savedPkg, savedPrelude, savedParams, savedFacts, savedTypes := c.pkg, c.inPrelude, c.typeParams, c.aliasFacts, c.aliasTypes
 		c.pkg, c.inPrelude = e.pkg, e.prelude
+		c.typeParams, c.aliasFacts, c.aliasTypes = map[string]*TypeParam{}, nil, nil
+		for _, tp := range e.params {
+			c.typeParams[tp.Name] = tp
+		}
 		e.constraints = c.constraintsOf(e.decl.Alias, e.typ, nil)
-		c.pkg, c.inPrelude = savedPkg, savedPrelude
+		c.pkg, c.inPrelude, c.typeParams, c.aliasFacts, c.aliasTypes = savedPkg, savedPrelude, savedParams, savedFacts, savedTypes
 	}
 	return e.constraints
+}
+
+// Expand argument facts in the alias's lexical scope, applying the ordinary
+// position checks to its target rather than to the alias's argument list.
+func (c *checker) genericAliasConstraints(e *typeEntry, written *syntax.TypeExpr, typ Type, scope map[string]Type) []*Constraint {
+	if len(written.Args) != len(e.params) || typ == Invalid {
+		return nil
+	}
+	facts := map[*TypeParam][]*Constraint{}
+	types := map[*TypeParam]Type{}
+	for i, arg := range written.Args {
+		argType := c.info.writtenTypes[arg]
+		if argType == nil {
+			argType = c.resolveType(arg)
+		}
+		// Nested argument annotations belong to the generic declaration.
+		// Specialize them before attaching tuple facts to avoid mutating it.
+		argType = subst(argType, c.aliasTypes)
+		types[e.params[i]] = argType
+		facts[e.params[i]] = c.constraintsOf(arg, argType, scope)
+	}
+	savedPkg, savedPrelude, savedParams, savedFacts, savedTypes, savedApplied := c.pkg, c.inPrelude, c.typeParams, c.aliasFacts, c.aliasTypes, c.appliedWhere
+	c.pkg, c.inPrelude, c.aliasFacts, c.aliasTypes = e.pkg, e.prelude, facts, types
+	c.typeParams, c.appliedWhere = map[string]*TypeParam{}, map[*syntax.TypeExpr]bool{}
+	for _, tp := range e.params {
+		c.typeParams[tp.Name] = tp
+	}
+	out := c.constraintsOf(e.decl.Alias, typ, scope)
+	c.unappliedIn(e.decl.Alias, "in a type alias")
+	c.pkg, c.inPrelude, c.typeParams, c.aliasFacts, c.aliasTypes, c.appliedWhere = savedPkg, savedPrelude, savedParams, savedFacts, savedTypes, savedApplied
+	return out
 }
 
 func (c *checker) constraint(ref *syntax.PredRef, subject Type, scope map[string]Type) *Constraint {

@@ -4,26 +4,26 @@ pred Allowed(x: Int | Problem) { match (x) { n: Int => n > 0; p: Problem => Appr
 fn source(flag: Bool): Int | Problem where Approved { if (flag) { Problem { code: 1 } } else { 1 } }
 pred ConditionalOption(x: Option[Int], flag: Bool) { match (x) { Option.Some(_) => true; Option.None => flag } }
 fn asyncForward(flag: Bool): Int | Problem where Approved {
-  scope s { async(s) value: Int | Problem = { _ = source(flag)?; 1 }; value? }
+  scope s { async(s) value: Int | Problem = { match (source(flag)) { _: Int => {}; problem: Problem => return problem }; 1 }; value? }
 }
 fn asyncReturn(flag: Bool): Int | Problem where Approved {
   scope s { async(s) value: Int | Problem = { if (flag) { return Problem { code: 1 } }; 1 }; value? }
 }
 fn asyncInline(flag: Bool): Int | Problem where Approved {
-  scope s { async(s) value: (Int | Problem) where Allowed = { operand: Int | Problem = if (flag) { Problem { code: 1 } } else { 1 }; operand? }; value? }
+  scope s { async(s) value: (Int | Problem) where Allowed = { operand: Int | Problem = if (flag) { Problem { code: 1 } } else { 1 }; return operand }; value? }
 }
 fn asyncOption(flag: Bool, x: Option[Int] where ConditionalOption(flag)): Option[Int] where ConditionalOption(flag) {
-  scope s { async(s) value: Option[Int] where ConditionalOption(flag) = { n = x?; Option.Some(n) }; value }
+  scope s { async(s) value: Option[Int] where ConditionalOption(flag) = match (x) { Option.Some(n) => Option.Some(n); Option.None => x }; value }
 }
 pred Positive(n: Int) { n > 0 }
 fn needsPositive(n: Int where Positive): Int { n }
 fn ownerBoundary(): Int {
-  scope s { async(s) unused: Int | Problem = { _ = source(true)?; 1 }; _ = () => unused; 1 }
+  scope s { async(s) unused: Int | Problem = { match (source(true)) { _: Int => {}; problem: Problem => return problem }; 1 }; _ = () => unused; 1 }
 }
 pred AnyExit(x: Int | Ok) { match (x) { _: Int => true; _: Ok => true } }
 fn emptyExit(): Int | Ok {}
 fn asyncEmpty(): (Int | Ok) where AnyExit {
-  scope s { async(s) value: Int | Ok = { _ = emptyExit()?; 1 }; value? }
+  scope s { async(s) value: Int | Ok = { match (emptyExit()) { _: Int => {}; exit: Ok => return exit }; 1 }; value? }
 }
 pred NumericOnly(x: Int | Ok) { match (x) { _: Int => true; _: Ok => false } }
 fn ownedReturn(): (Int | Ok) where NumericOnly {

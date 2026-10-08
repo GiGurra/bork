@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"context"
 	"crypto/sha256"
 	"debug/buildinfo"
 	"encoding/json"
@@ -31,21 +32,24 @@ type goContext struct {
 	moduleHook goModuleHookFunc
 	// Tests can shorten comptime deadlines; a nonzero limit changes execution
 	// policy and must be included in any future evaluator reuse identity.
-	evalLimit    time.Duration
-	processEnv   []string
-	env          []string
-	tool         string
-	driver       string
-	self         string
-	values       map[string]string
-	err          error
-	driverErr    error
-	namesCache   bool
-	namespace    [sha256.Size]byte
-	toolDigest   [sha256.Size]byte
-	sdkDigest    [sha256.Size]byte
-	toolEvidence *goToolEvidence
-	validation   *goContextValidation
+	evalLimit time.Duration
+	// Evaluator builds share signal cancellation without changing the captured
+	// settings used by other compiler work.
+	commandContext context.Context
+	processEnv     []string
+	env            []string
+	tool           string
+	driver         string
+	self           string
+	values         map[string]string
+	err            error
+	driverErr      error
+	namesCache     bool
+	namespace      [sha256.Size]byte
+	toolDigest     [sha256.Size]byte
+	sdkDigest      [sha256.Size]byte
+	toolEvidence   *goToolEvidence
+	validation     *goContextValidation
 
 	// Tests retain the standalone ordinary recipe path for clean parity.
 	comptimeStandalone bool
@@ -209,6 +213,11 @@ func (ctx *goContext) command(args ...string) *exec.Cmd {
 		tool = "go"
 	}
 	cmd := exec.Command(tool, args...)
+	if ctx.commandContext != nil {
+		cmd = exec.CommandContext(ctx.commandContext, tool, args...)
+		cmd.WaitDelay = time.Second
+		configureEvaluationProcess(cmd)
+	}
 	cmd.Env = slices.Clone(ctx.env)
 	return cmd
 }

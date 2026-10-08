@@ -1,0 +1,18 @@
+pred positive(x: Int) { x > 0 }
+type Items[T] = List[T]
+type Index[T] = Map[String, T]
+type Box[T] = { value: T }
+type Container[T] = { items: List[T] }
+type Inside[T] = Container[T]
+type Handler[T] = (T) uses io => String
+fn arity(x: Items[Int, String]) {}
+fn missing(x: Items) {}
+fn mapFacts(x: Index[Int where positive]) {}
+fn insideFacts(x: Inside[Int where positive]) {}
+fn impure(x: Int) uses io: String { println(x); "ok" }
+fn effects() uses io {
+  handler: Handler[Int] = impure
+  callback: (Int) => String = handler
+  println(callback)
+}
+fn main() {}

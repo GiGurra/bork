@@ -19,7 +19,7 @@ func TestComputedFieldChecks(t *testing.T) {
 		{"known computed invariant", "pred valid(c:C){c.label==\"hi Joe\"}\ntype C={name:String,lazy label:String=s\"hi ${name}\"} where valid\nfn f():C{C{name:\"Joe\"}}", ""},
 		{"computed scope escape", "type C={callback:()=>Int,lazy value:Int=callback()}\nfn read(s:Scope):Int{1}\nfn make():C{scope s{C{callback:()=>read(s)}}}\nfn main(){}", "scope"},
 		{"computed generic promise", "pred positive(n:Int){n>0}\ntype C[T]={item:T,lazy repeated:T=item}\nfn make():C[Int]{C[Int where positive]{item:-1}}", "positive"},
-		{"computed option failure", "pred valid(x:Option[Int]){match(x){Option.Some(_)=>true,Option.None=>false}}\ntype C={source:Option[Int],lazy value:Option[Int] where valid={n=source?;Option.Some(n)}}\nfn make(x:Option[Int]):C{C{source:x}}", "valid"},
+		{"computed option failure", "pred valid(x:Option[Int]){match(x){Option.Some(_)=>true,Option.None=>false}}\ntype C={source:Option[Int],lazy value:Option[Int] where valid={match(source){Option.Some(n)=>Option.Some(n),Option.None=>Option.None}}}\nfn make(x:Option[Int]):C{C{source:x}}", "valid"},
 		{"computed comptime result", "type C={n:Int,lazy value:Int=n+1}\nfn main(){c=comptime{C{n:1}};println(c.n)}", "lazy cell"},
 		{"computed comptime capture", "type C={n:Int,lazy value:Int=n+1}\nfn main(){c=C{n:1};println(comptime{c.value})}", "cannot capture runtime value"},
 		{"nested computed comptime result", "type C={n:Int,lazy value:Int=n+1}\ntype D={child:C}\nfn main(){c=comptime{D{child:C{n:1}}};println(c.child.n)}", "lazy cell"},
