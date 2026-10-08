@@ -57,11 +57,7 @@ func (c *checker) patternTestLabels(p *Pat, fallback string) {
 		return
 	}
 	if p.Bind != "" {
-		if src := c.info.patSources[p.bindNode]; src != nil {
-			c.info.assemblyNames[p.bindNode] = writtenText(src.Subject) + src.Path
-		} else {
-			c.info.assemblyNames[p.bindNode] = fallback
-		}
+		c.info.assemblyNames[p.bindNode] = fallback
 	}
 	for _, field := range p.Fields {
 		c.patternTestLabels(field.Pat, fallback+"."+field.Name)
