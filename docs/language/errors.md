@@ -75,3 +75,7 @@ Parenthesize the wrapped expression instead:
 
 See [Matching and errors](matching.md#the--operator) for bare `?` and
 [an error-context example](../../examples/error_context/main.bork) you can run.
+
+---
+
+Previous: [Matching and errors](matching.md) · Next: [Collections](collections.md) · [All pages](../README.md#the-language)

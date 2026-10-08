@@ -330,4 +330,4 @@ For unfinished code there is `todo()`, described under [development helpers](tes
 
 ---
 
-Previous: [Types](types.md) · Next: [Collections](collections.md) · [All pages](../README.md#the-language)
+Previous: [Types](types.md) · Next: [Adding error context](errors.md) · [All pages](../README.md#the-language)
