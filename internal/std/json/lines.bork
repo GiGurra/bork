@@ -49,9 +49,8 @@ fn CreateLines(path: String, s: Scope) uses io: Writer | IoError unsafe go {
 }
 fn Write[T: codec.Encode](writer: Writer, value: T) uses io: Ok | JsonError | IoError {
   encoded = codec.encode[T](value)
-  validateNumbers(encoded)?
-  parsed = Parse(Render(encoded))?
-  writeLine(writer, Render(parsed))
+  parsed = Parse(Render(encoded)?)?
+  writeLine(writer, Render(parsed)?)
 }
 fn writeLine(writer: Writer, text: String) uses io: Ok | IoError unsafe go {
   import "os"

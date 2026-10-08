@@ -15,7 +15,7 @@ type ListDefault = { numbers: List[Int] = [] codec { omit: codec.Omit.Default } 
 type DefaultSome = { value: Option[Int] = Option.Some(4) codec { omit: codec.Omit.Default } } derive (codec.Decode, codec.Encode)
 type Mixed = sealed { Item { value: Int = 4 codec { omit: codec.Omit.Default } }, Empty } derive (codec.Decode, codec.Encode)
 fn round[T: codec.Decode + codec.Encode](value: T) uses io {
-  text = json.Encode(value)
+  text = match (json.Encode(value)) { text: String => text; error: json.JsonError => { println(error); return } }
   println(text)
   println(json.Decode[T](text))
   match (yaml.Encode(value)) {

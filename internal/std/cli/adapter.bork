@@ -52,7 +52,11 @@ fn inputFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchem
       path, _ = _borkOptionGet(value.configPath)
     }
     parentValue, hasParentDefault := _borkOptionGet(parentDefault)
-    if hasParentDefault { text = codecs.Render(parentValue) }
+    if hasParentDefault {
+      rendered := codecs.Render(parentValue)
+      if failure, failed := rendered.(codecs.JsonError); failed { return Error{errors: []codec.DecodeError{{path: field.name, message: failure.message}}} }
+      text = rendered.(string)
+    }
     // CLI switches default to false independently of the record decoder.
     defaultFalse := field.kind == "bool" && !field.optional && !field.hasDefault
     if defaultFalse && !hasParentDefault { text = "false" }

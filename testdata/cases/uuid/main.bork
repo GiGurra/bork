@@ -21,7 +21,7 @@ fn entropyFailures(v4: () uses random => uuid.Uuid | IoError, v7: () uses random
   second, ok7 := v7().(IoError)
   return []bool{ok4 && first.path == "uuid", ok7 && second.path == "uuid"}
 }
-fn exercise() uses io + random + clock + state: Ok | ParseError | IoError {
+fn exercise() uses io + random + clock + state: Ok | ParseError | IoError | json.JsonError {
   id = fixed()?
   println(id)
   println(toString(id))
@@ -43,7 +43,7 @@ fn exercise() uses io + random + clock + state: Ok | ParseError | IoError {
   println(first != second)
   later = uuid.V7()?
   println(uuid.Version(later) == 7)
-  println(json.Decode[uuid.Uuid](json.Encode(later)) == later)
+  println(json.Decode[uuid.Uuid](json.Encode(later)?) == later)
   println(entropyFailures(uuid.V4, uuid.V7))
   setup()
   println(env.Load[Settings]("BORK_UUID_"))

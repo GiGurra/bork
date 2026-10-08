@@ -204,10 +204,12 @@ fn Parse(text: String): codec.Value | JsonError unsafe go {
   return j
 }
 
-// Render writes a JSON value as compact text.
-fn Render(j: codec.Value): String unsafe go {
+// Render writes compact JSON, or JsonError for an invalid number token.
+// This includes nonfinite floats produced by codec.encode.
+fn Render(j: codec.Value): String | JsonError unsafe go {
   import "encoding/json"
   import "strings"
+  if failure, failed := validateNumbers(j).(JsonError); failed { return failure }
   var b strings.Builder
   var render func(j codec.Value)
   render = func(j codec.Value) {
@@ -258,7 +260,8 @@ fn Decode[T: codec.Decode](text: String): T | JsonError | codec.DecodeError {
   codec.decode[T](json)
 }
 
-// codec.Encode encodes a value and renders it as compact JSON text.
-fn Encode[T: codec.Encode](x: T): String {
+// Encode renders a typed value as compact JSON. Nonfinite floats, including
+// those in nested values, return JsonError rather than invalid JSON text.
+fn Encode[T: codec.Encode](x: T): String | JsonError {
   Render(codec.encode(x))
 }
