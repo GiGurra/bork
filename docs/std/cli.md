@@ -20,10 +20,10 @@ type Options = {
 
 fn main(): Ok | process.ExitCode {
   result = cli.Run[Options]("greet", "Greet someone", (options, s) => {
-    ending = if (options.excited) { "!" } else { "." }
+    ending = if options.excited { "!" } else { "." }
     println(s"Hello, ${options.name}${ending}")
   })
-  match (result) {
+  match result {
     Ok => {}
     error: cli.Error => {
       return process.ExitCode { code: 2, message: error.Render("greet") }
@@ -123,11 +123,11 @@ use codec.Defaults
 type Options = { name: String } derive (codec.Decode)
 
 fn main() {
-  match (cli.Parse[Options]("greet", "Greet someone", ["--name", "Ada"])) {
+  match cli.Parse[Options]("greet", "Greet someone", ["--name", "Ada"]) {
     options: Options => println(options.name)
     help: cli.Help => {
       println(help.text)
-      if (help.diagnostics != "") { eprintln(help.diagnostics) }
+      if help.diagnostics != "" { eprintln(help.diagnostics) }
     }
     error: cli.Error => eprintln(error)
   }
@@ -191,11 +191,11 @@ type Options = {
 } derive (codec.Decode)
 
 fn main() {
-  match (cli.Parse[Options]("greet", "Greet someone", ["--help"],
-    flags: [.{ field: "name", description: Option.Some("Recipient.") }])) {
+  match cli.Parse[Options]("greet", "Greet someone", ["--help"],
+    flags: [.{ field: "name", description: Option.Some("Recipient.") }]) {
     help: cli.Help => {
       println(help.text)
-      if (help.diagnostics != "") { eprintln(help.diagnostics) }
+      if help.diagnostics != "" { eprintln(help.diagnostics) }
     }
     error: cli.Error => eprintln(error)
     options: Options => println(options.name)
@@ -375,15 +375,15 @@ use codec.Defaults
 type Options = { name: String = "Ada" } derive (codec.Decode)
 
 fn main() {
-  match (cli.ParseDetailed[Options]("greet", "Greet someone", ["--name", "Grace"],
-    flags: [.{ field: "name", deprecated: "use --recipient instead" }])) {
+  match cli.ParseDetailed[Options]("greet", "Greet someone", ["--name", "Grace"],
+    flags: [.{ field: "name", deprecated: "use --recipient instead" }]) {
     parsed: cli.Parsed[Options] => {
       println(parsed.options.name)
-      for (warning in parsed.warnings) { eprintln(warning) }
+      for warning in parsed.warnings { eprintln(warning) }
     }
     help: cli.Help => {
       println(help.text)
-      if (help.diagnostics != "") { eprintln(help.diagnostics) }
+      if help.diagnostics != "" { eprintln(help.diagnostics) }
     }
     error: cli.Error => eprintln(error)
   }
@@ -421,7 +421,7 @@ fn main(): Ok | process.ExitCode {
   commands = [cli.RootSubcommand[Global, Deploy]("deploy", "Deploy a service", (global, deploy, s) => {
     println(s"${global.region}/${deploy.service}/${global.verbose}")
   })]
-  match (cli.RunRoot[Global]("fleet", "Shared flags", commands)) {
+  match cli.RunRoot[Global]("fleet", "Shared flags", commands) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("fleet") } }
     Ok => {}
   }
@@ -536,7 +536,7 @@ use codec.Defaults
 type Options = { port: Int = 8080 } derive (codec.Decode)
 
 fn main() {
-  match (cli.FindConfig("app")) {
+  match cli.FindConfig("app") {
     Option.Some(path) => println(cli.Parse[Options]("app", "Example", [], configFiles: [path]))
     Option.None => println(cli.Parse[Options]("app", "Example", []))
     error: cli.Error => println(error)
@@ -588,7 +588,7 @@ use codec.Defaults
 type Options = { port: Int = 8080 } derive (codec.Decode)
 
 fn main() {
-  match (cli.ParseResolved[Options]("app", "Example", ["--port", "9000"])) {
+  match cli.ParseResolved[Options]("app", "Example", ["--port", "9000"]) {
     resolved: cli.Resolved[Options] => {
       println(resolved.value.port)
       println(resolved.Source("port"))
@@ -633,7 +633,7 @@ fn main() {
   println(initial)
   // A caller can invoke this later when it wants to refresh configuration.
   refreshed = cli.Reload[Options]("app", "Example", arguments)
-  match (refreshed) {
+  match refreshed {
     resolved: cli.Resolved[Options] => println(resolved.value)
     error: cli.Error => println(error)
     help: cli.Help => println(help.text)
@@ -669,7 +669,7 @@ use codec.Defaults
 type Options = { port: Int = 8080 } derive (codec.Decode, codec.Encode)
 
 fn main() {
-  match (cli.Parse[Options]("app", "Example", ["--port", "9000"])) {
+  match cli.Parse[Options]("app", "Example", ["--port", "9000"]) {
     options: Options => {
       println(cli.Dump(options))
       println(cli.Dump(options, .Yaml))
@@ -808,11 +808,11 @@ fn main() {
     println(s"Hello, ${options.name}.")
   })
   commands = [cli.Group("people", "People commands", [greet.copy(aliases: ["g"])])]
-  match (cli.Dispatch("app", "Example application", ["people", "g", "--name", "Ada"], commands)) {
+  match cli.Dispatch("app", "Example application", ["people", "g", "--name", "Ada"], commands) {
     Ok => {}
     help: cli.Help => {
       println(help.text)
-      if (help.diagnostics != "") { eprintln(help.diagnostics) }
+      if help.diagnostics != "" { eprintln(help.diagnostics) }
     }
     error: cli.Error => eprintln(error)
   }
@@ -1042,7 +1042,7 @@ import "bork/cli"
 use codec.Defaults
 type Options = { namespace: String = "dev", resource: String } derive (codec.Decode)
 fn resources(request: cli.CompletionRequest, s: Scope): cli.Suggestions | cli.Error {
-  namespace = match (request.partial.Get[String]("namespace")) {
+  namespace = match request.partial.Get[String]("namespace") {
     value: String => value
     _: cli.Missing => "dev"
     error: codec.DecodeError => { return cli.Error { errors: [error] } }

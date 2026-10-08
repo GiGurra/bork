@@ -7,7 +7,7 @@ type Packed = { order: Int, boxes: Int }
 
 // jobs sends the orders, then returns, and forkProducer closes the channel.
 fn jobs(s: Scope, out: Channel[Order]) uses state: Ok | Closed | Cancelled {
-  for (id in Seq.range(1, 10)) {
+  for id in Seq.range(1, 10) {
     out.send(s, Order { id: id, items: id * 3 })?
   }
   Ok
@@ -16,7 +16,7 @@ fn jobs(s: Scope, out: Channel[Order]) uses state: Ok | Closed | Cancelled {
 // pack takes orders until there are none left. A receive gives each
 // order to exactly one worker.
 fn pack(s: Scope, orders: Channel[Order], out: Channel[Packed]) uses state: Ok | Closed | Cancelled {
-  for (order in orders.values(s)) {
+  for order in orders.values(s) {
     out.send(s, Packed { order: order.id, boxes: (order.items + 3) / 4 })?
   }
   Ok
@@ -30,7 +30,7 @@ fn main() {
     workers = [worker(), worker(), worker()]
     // One channel for all their results: fan in.
     packed = merge(s, workers).toList(s)
-    match (packed) {
+    match packed {
       results: List[Packed] => {
         // Which worker packs which order depends on timing; the totals do not.
         println(s"packed ${results.length()} orders")

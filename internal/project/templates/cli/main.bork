@@ -1,7 +1,7 @@
 import "bork/process"
 
 fn greeting(args: List[String]): String {
-  match (args) {
+  match args {
     [name] => s"Hello, $name!"
     [] => "Hello, bork!"
     _ => "usage: pass one name"

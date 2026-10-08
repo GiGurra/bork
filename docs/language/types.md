@@ -151,7 +151,7 @@ type Shape = sealed {
 }
 
 fn area(shape: Shape): Float {
-  match (shape) {
+  match shape {
     Shape.Circle { radius } => 3.14159 * radius * radius
     Shape.Rect { width, height } => width * height
     Shape.Empty => 0.0
@@ -213,9 +213,9 @@ type NotFound = { id: Int }
 type Forbidden = { reason: String }
 
 fn load(id: Int): String | NotFound | Forbidden {
-  if (id == 1) {
+  if id == 1 {
     "the document"
-  } else if (id < 0) {
+  } else if id < 0 {
     Forbidden { reason: "negative ids are reserved" }
   } else {
     NotFound { id: id }
@@ -313,7 +313,7 @@ See [codecs](../std/codec.md) and [Go interop](go-interop.md) for those APIs.
 type TooLong = { limit: Int }
 
 fn validate(name: String): Ok | TooLong {
-  if (name.byteLength() > 10) {
+  if name.byteLength() > 10 {
     return TooLong { limit: 10 }
   }
 }
@@ -343,7 +343,7 @@ fn swap[A, B](p: Pair[A, B]): Pair[B, A] {
 }
 
 fn size[T](tree: Tree[T]): Int {
-  match (tree) {
+  match tree {
     Tree.Leaf => 0
     Tree.Node { left, right } => size(left) + 1 + size(right)
   }

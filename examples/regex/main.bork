@@ -10,13 +10,13 @@ fn main() {
   re = regex.Compile("^[^@ ]+@[^@ ]+\\.[^@ ]+$")
   value = "hello@example.com"
   // Checking Matches proves the fact email requires.
-  if (regex.Matches(value, re)) { println(email(re, value)) }
+  if regex.Matches(value, re) { println(email(re, value)) }
   // (?P<word>...) is a named capture group.
   words = regex.Compile("(?P<word>[a-z]+)")
   println(words.Find("123 hello"))
   // Match offsets compose with String.substring, even after non-ASCII text.
   text = "🙂å hello"
-  match (words.Find(text)) {
+  match words.Find(text) {
     Option.Some(found) => println(text.substring(found.start, found.end))
     Option.None => {}
   }

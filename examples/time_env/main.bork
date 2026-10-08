@@ -11,13 +11,13 @@ use codec.Defaults
 pred validPort(n: Int) { n > 0 && n <= 65535 }
 type Config = { host: String, port: Int where validPort } derive (codec.Decode)
 fn report(result: Config | env.ConfigError, clock: time.Clock) uses io + clock {
-  match (result) {
+  match result {
     config: Config => println(s"${time.Format(time.Read(clock), time.RFC3339())}: ${config.host}:${config.port}")
     error: env.ConfigError => error.errors.forEach(issue => eprintln(s"${issue.path}: ${issue.message}"))
   }
 }
 fn main() {
-  if (process.Args().includes("live")) {
+  if process.Args().includes("live") {
     report(env.Load[Config]("APP"), time.SystemClock())
   } else {
     values = { "APP_HOST": "localhost", "APP_PORT": "8080" }
@@ -46,7 +46,7 @@ type Pair[A, B] = { first: A, second: B } derive (codec.Decode)
 test "generic fields use instantiated decoder parsing kinds" {
   values = { "APP_FIRST": "hello", "APP_SECOND": "42" }
   result: Pair[String, Int] | env.ConfigError = env.LoadWith("APP", name => values.get(name))
-  match (result) {
+  match result {
     pair: Pair[String, Int] => {
       assertEqual(pair.first, "hello")
       assertEqual(pair.second, 42)
@@ -62,7 +62,7 @@ type RequiredOptions = {
 } derive (codec.Decode)
 test "absent options still check every field fact" {
   result: RequiredOptions | env.ConfigError = env.LoadWith("APP", name => Option.None)
-  match (result) {
+  match result {
     errors: env.ConfigError => assertEqual(errors.errors.map(issue => issue.path), ["APP_FIRST", "APP_SECOND", "APP_PORT"])
     _ => assert(false)
   }
@@ -70,7 +70,7 @@ test "absent options still check every field fact" {
 test "generic Option fields may be absent" {
   values = { "APP_SECOND": "42" }
   result: Pair[Option[String], Int] | env.ConfigError = env.LoadWith("APP", name => values.get(name))
-  match (result) {
+  match result {
     pair: Pair[Option[String], Int] => assert(pair.first.isNone())
     _ => assert(false)
   }

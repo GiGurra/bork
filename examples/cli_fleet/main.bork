@@ -25,8 +25,8 @@ type Status = {} derive (codec.Decode)
 
 // Keep selector paths out of config documents, and add a reusable help hint.
 fn deploymentPolicy(previous: List[cli.FieldSpec], field: cli.FieldSpec): cli.FieldSpec {
-  if (field.configFile) { return field.copy(config: false) }
-  if (field.field == "replicas") { return field.copy(description: s"${field.description} Must be positive.") }
+  if field.configFile { return field.copy(config: false) }
+  if field.field == "replicas" { return field.copy(description: s"${field.description} Must be positive.") }
   field
 }
 fn settings(): cli.Settings {
@@ -39,7 +39,7 @@ fn flags(): List[cli.Flag] {
     .{ field: "resources", position: Option.Some(1) }]
 }
 fn partialText(request: cli.CompletionRequest, field: String, fallback: String): String | cli.Error {
-  match (request.partial.Get[String](field)) {
+  match request.partial.Get[String](field) {
     value: String => value
     _: cli.Missing => fallback
     error: codec.DecodeError => cli.Error { errors: [error] }
@@ -49,15 +49,15 @@ fn resourceNames(request: cli.CompletionRequest, s: Scope) uses io: cli.Suggesti
   // Partial inputs omit record defaults; fallback is the completer's decision.
   namespace = partialText(request, "namespace", "dev")?
   path = partialText(request, "catalog", "catalog.json")?
-  file = match (fs.Open(path, s)) {
+  file = match fs.Open(path, s) {
     value: fs.File => value
     error: fs.Error => { return cli.Error { errors: [.{ path: "catalog", message: s"${error}" }] } }
   }
-  text = match (fs.ReadAllText(file)) {
+  text = match fs.ReadAllText(file) {
     value: String => value
     error: fs.Error => { return cli.Error { errors: [.{ path: "catalog", message: s"${error}" }] } }
   }
-  catalog = match (json.Decode[Catalog](text)) {
+  catalog = match json.Decode[Catalog](text) {
     value: Catalog => value
     error: codec.DecodeError => { return cli.Error { errors: [error] } }
     error: json.JsonError => { return cli.Error { errors: [.{ path: "catalog", message: s"${error}" }] } }
@@ -79,13 +79,13 @@ fn commands(): List[cli.Command] {
   [cli.Group("cluster", "Manage clusters", [resources, status]).copy(aliases: ["k"])]
 }
 fn main(): Ok | process.ExitCode {
-  match (cli.RunCommands("fleet", "Manage a fleet", commands())) {
+  match cli.RunCommands("fleet", "Manage a fleet", commands()) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("fleet") } }
     Ok => {}
   }
 }
 test "nested aliases expose field docs and reusable policy" {
-  match (cli.Dispatch("fleet", "", ["help", "k", "r", "d"], commands())) {
+  match cli.Dispatch("fleet", "", ["help", "k", "r", "d"], commands()) {
     help: cli.Help => {
       assert(help.text.contains("FLEET_NAMESPACE"))
       assert(help.text.contains("Must be positive."))
@@ -95,7 +95,7 @@ test "nested aliases expose field docs and reusable policy" {
   }
 }
 test "static positional completion needs no catalog or config" {
-  match (cli.Dispatch("fleet", "", ["__completeNoDesc", "k", "r", "d", "--catalog", "missing.json", "--config", "missing.json", ""], commands())) {
+  match cli.Dispatch("fleet", "", ["__completeNoDesc", "k", "r", "d", "--catalog", "missing.json", "--config", "missing.json", ""], commands()) {
     help: cli.Help => { assert(help.text == "apply\ninspect\n:4\n") }
     other => { panic(s"Expected completion, got ${other}") }
   }

@@ -67,7 +67,7 @@ import "bork/test"
 
 pred positive(n: Int) { n > 0 }
 pred atMost(n: Int, limit: Int) { n <= limit }
-fn render(text: Bool): Int | String { if (text) { "hello" } else { 3 } }
+fn render(text: Bool): Int | String { if text { "hello" } else { 3 } }
 fn needsPositive(n: Int where positive): Int { n }
 
 test "a rendered number carries checked facts" {
@@ -166,7 +166,7 @@ A mock belongs to its test, and is seen by the tasks that test starts. Tests run
 import "bork/http"
 
 fn healthy(url: String, s: Scope) uses net + clock + state: Bool {
-  match (http.Get(url, s)) {
+  match http.Get(url, s) {
     response: http.Response => response.status == 200
     _ => false
   }

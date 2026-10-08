@@ -9,7 +9,7 @@ fn main() {
   flags: Byte = 240
   println(flags.OnesCount(), flags.LeadingZeros(), flags.TrailingZeros())
   println(flags.Extract(4, 4))
-  match (flags.TestBit(8)) {
+  match flags.TestBit(8) {
     _: OutOfRange => println("bit index outside byte")
     value: Bool => println(value)
   }

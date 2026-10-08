@@ -165,7 +165,7 @@ type Server = { host: String, port: Int where validPort = 8080, tags: List[Strin
 fn main() {
   println(json.Decode[Server]("{\"host\": \"example.com\"}"))
   println(json.Decode[Server]("{\"host\": \"example.com\", \"port\": 0}"))
-  match (json.Decode[Server]("{\"host\": \"a\", \"port\": 443}")) {
+  match json.Decode[Server]("{\"host\": \"a\", \"port\": 443}") {
     server: Server => println(json.Encode(server))
     failure => println(failure)
   }

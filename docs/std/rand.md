@@ -82,7 +82,7 @@ returned `next` to keep drawing; save an input to replay a draw.
 import "bork/rand"
 
 fn sample(lo: Int, hi: Int) uses random: Int | OutOfRange {
-  if (rand.Above(hi, lo)) {
+  if rand.Above(hi, lo) {
     rand.IntBetween(lo, hi)
   } else {
     OutOfRange { value: toString(hi), target: "upper bound above lower bound" }

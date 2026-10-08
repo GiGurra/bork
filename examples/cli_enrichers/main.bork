@@ -12,15 +12,15 @@ fn fieldDocs(previous: List[cli.FieldSpec], field: cli.FieldSpec): cli.FieldSpec
 }
 fn policy(): cli.Settings { .{ enrichers: [teamNames, fieldDocs] } }
 fn main(): Ok | process.ExitCode {
-  match (cli.Run[Options]("enrichers", "Compose reusable metadata policies", (options, s) => {
+  match cli.Run[Options]("enrichers", "Compose reusable metadata policies", (options, s) => {
     println(s"${options.host}:${options.port}")
-    }, settings: policy())) {
+    }, settings: policy()) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("enrichers") } }
     Ok => {}
   }
 }
 test "enrichers compose in declaration order" {
-  match (cli.Parse[Options]("enrichers", "", ["--help"], settings: policy())) {
+  match cli.Parse[Options]("enrichers", "", ["--help"], settings: policy()) {
     help: cli.Help => {
       assert(help.text.contains("--team-host"))
       assert(help.text.contains("Configure port; 1 fields precede it."))

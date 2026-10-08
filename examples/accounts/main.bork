@@ -18,27 +18,27 @@ type Command = sealed {
 }
 
 fn apply(account: Account, command: Command): Account | Refused {
-  match (account) {
-    Account.Open { owner, balance } => match (command) {
-      Command.Deposit { amount } => if (amount <= 0) {
+  match account {
+    Account.Open { owner, balance } => match command {
+      Command.Deposit { amount } => if amount <= 0 {
         Refused { reason: "deposits must be positive" }
       } else {
         Account.Open { owner: owner, balance: balance + amount }
       }
-      Command.Withdraw { amount } => if (amount > balance) {
+      Command.Withdraw { amount } => if amount > balance {
         Refused { reason: s"cannot withdraw $amount with a balance of $balance" }
       } else {
         Account.Open { owner: owner, balance: balance - amount }
       }
       Command.Freeze { reason } => Account.Frozen { owner: owner, balance: balance, reason: reason }
       Command.Unfreeze => Refused { reason: "the account is not frozen" }
-      Command.Close => if (balance == 0) {
+      Command.Close => if balance == 0 {
         Account.Closed { owner: owner }
       } else {
         Refused { reason: s"withdraw the remaining $balance first" }
       }
     }
-    Account.Frozen { owner, balance, reason } => match (command) {
+    Account.Frozen { owner, balance, reason } => match command {
       Command.Unfreeze => Account.Open { owner: owner, balance: balance }
       _ => Refused { reason: s"the account is frozen: $reason" }
     }
@@ -47,7 +47,7 @@ fn apply(account: Account, command: Command): Account | Refused {
 }
 
 fn describe(account: Account): String {
-  match (account) {
+  match account {
     Account.Open { owner, balance } => s"$owner: open, balance $balance"
     Account.Frozen { owner, reason } => s"$owner: frozen ($reason)"
     Account.Closed { owner } => s"$owner: closed"
@@ -57,7 +57,7 @@ fn describe(account: Account): String {
 // step applies a command and prints what happened. A refused command
 // leaves the account as it was.
 fn step(account: Account, command: Command) uses io: Account {
-  match (apply(account, command)) {
+  match apply(account, command) {
     next: Account => {
       println(s"  $command -> ${describe(next)}")
       next

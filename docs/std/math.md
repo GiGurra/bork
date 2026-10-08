@@ -8,7 +8,7 @@ import "bork/math"
 fn demo() uses io: Ok | ParseError | OutOfRange {
   amount = math.ParseDecimal("12.345")?
   println(amount.Round(2, math.Rounding.HalfEven)?.ToString())
-  match (math.Integer(1).Div(math.Integer(0))) {
+  match math.Integer(1).Div(math.Integer(0)) {
     error: math.MathError => println(error.message)
     value: math.BigInt => println(value)
   }
@@ -267,7 +267,7 @@ fn demo() uses io: Ok | ParseError | json.JsonError {
   amount = math.ParseDecimal("123.4500")?
   encoded = json.Encode(amount)?
   println(encoded)
-  match (json.Decode[math.Decimal](encoded)) {
+  match json.Decode[math.Decimal](encoded) {
     decoded: math.Decimal => println(decoded.ToString())
     error: codec.DecodeError => eprintln(error.message)
     error: json.JsonError => eprintln(error.message)

@@ -7,7 +7,7 @@ A bork script is one `.bork` file with statements at the top level or an explici
 import "bork/process"
 
 args = process.Args()
-name = if (notEmpty(args)) { args.first() } else { "world" }
+name = if notEmpty(args) { args.first() } else { "world" }
 println(s"Hello, $name!")
 ```
 

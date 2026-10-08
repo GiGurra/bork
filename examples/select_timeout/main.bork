@@ -27,7 +27,7 @@ fn ask(s: Scope, question: String, delay: Int, patience: Int) uses clock + state
 // paced runs one step per tick of a ticker, which stops when s ends.
 fn paced(s: Scope, steps: List[String]) uses io + clock + state: Ok | Closed | Cancelled {
   ticks = time.Tick(s, ms(10))
-  for (step in steps) {
+  for step in steps {
     _ = ticks.receive(s)?
     println(s"tick: $step")
   }

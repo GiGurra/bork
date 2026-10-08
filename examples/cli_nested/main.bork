@@ -12,7 +12,7 @@ type Options = {
 } derive (codec.Decode, codec.Encode)
 
 fn main() {
-  match (cli.Run[Options]("nested", "Nested database options", (options, s) => println(json.Encode(options)))) {
+  match cli.Run[Options]("nested", "Nested database options", (options, s) => println(json.Encode(options))) {
     Ok => {}
     error: cli.Error => eprintln(error.Render("nested"))
   }

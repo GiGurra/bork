@@ -29,7 +29,7 @@ fn add(a: Counts, b: Counts): Counts {
 }
 
 fn padLeft(text: String, width: Int) uses tailrec: String {
-  if (text.byteLength() >= width) { text } else { padLeft(" " + text, width) }
+  if text.byteLength() >= width { text } else { padLeft(" " + text, width) }
 }
 
 fn row(c: Counts, name: String): String {
@@ -37,18 +37,18 @@ fn row(c: Counts, name: String): String {
 }
 
 fn report(counts: List[FileCount]) uses io: Bool {
-  counts.forEach(fc => match (fc.result) {
+  counts.forEach(fc => match fc.result {
     c: Counts => println(row(c, fc.path))
     e: fs.Error => {
       detail = fs.ErrorInfo(e)
       eprintln(s"wc: ${detail.path}: ${detail.message}")
     }
   })
-  found = counts.flatMap(fc => match (fc.result) {
+  found = counts.flatMap(fc => match fc.result {
     c: Counts => [c]
     _: fs.Error => []
   })
-  if (found.length() > 1) {
+  if found.length() > 1 {
     println(row(found.fold(Counts { lines: 0, words: 0, bytes: 0 }, add), "total"))
   }
   found.length() == counts.length()
@@ -56,14 +56,14 @@ fn report(counts: List[FileCount]) uses io: Bool {
 
 fn main(): Ok | process.ExitCode {
   paths = process.Args()
-  if (paths.isEmpty()) {
+  if paths.isEmpty() {
     return process.ExitCode { code: 2, message: "usage: wc FILE..." }
   }
   counts = scope s {
     tasks = paths.map(path => fork(s, () => FileCount { path: path, result: countFile(path) }))
     tasks.map(t => await(t))
   }
-  if (!report(counts)) {
+  if !report(counts) {
     return process.ExitCode { code: 1 }
   }
 }

@@ -17,8 +17,8 @@ fn main() {
   println(invoice("123.45", "0.075"))
   a = math.ParseDecimal("1.0")
   b = math.ParseDecimal("1.00")
-  match (a) {
-    left: math.Decimal => match (b) {
+  match a {
+    left: math.Decimal => match b {
       right: math.Decimal => {
         println(left == right) // false: scale is part of ==
         println(left.SameValue(right)) // true: numeric comparison

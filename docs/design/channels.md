@@ -45,24 +45,24 @@ timer arms need. So the redesign replaces the runtime rather than patching it.
 
 ```bork fragment
 scope s {
-  jobs = channel[Job](s, 16)          // fixed buffer: send waits when 16 are queued
-  results = channel[Result](s)        // unbuffered: send waits for a receiver
-  log = unboundedChannel[String](s)   // grows; send never waits
+  jobs = channel[Job](s, 16) // fixed buffer: send waits when 16 are queued
+  results = channel[Result](s) // unbuffered: send waits for a receiver
+  log = unboundedChannel[String](s) // grows; send never waits
 
   fork(s, () => {
-    for (job in jobs.values(s)) {      // until jobs is closed
+    for job in jobs.values(s) { // until jobs is closed
       _ = results.send(s, run(job))
     }
   })
 
-  _ = jobs.send(s, job)?               // Ok | Closed | Cancelled
+  _ = jobs.send(s, job)? // Ok | Closed | Cancelled
   deadline = time.After(s, seconds(2))
 
   select {
-    r = results.receive(s) => handle(r)            // r: Result | Closed
+    r = results.receive(s) => handle(r) // r: Result | Closed
     jobs.send(s, next) => println("queued")
     _ = deadline.receive(s) => println("timed out")
-  }?                                   // the select gives R | Cancelled
+  }? // the select gives R | Cancelled
 }
 ```
 
@@ -153,7 +153,7 @@ Semantics, all decided under the channel's one lock:
 `select`.
 
 `values(s)` is a `Seq[T] uses state` that receives until the channel is
-closed, so `for (job in jobs.values(s)) { ... }` is Go's
+closed, so `for job in jobs.values(s) { ... }` is Go's
 `for job := range jobs`. It also ends when `s` is cancelled; code that must
 tell the two apart calls `checkpoint(s)?` after the loop. (A sequence cannot
 end with a value, and making every element `T | Cancelled` would make the
@@ -177,12 +177,12 @@ chance of forgetting the close:
 
 ```bork fragment
 squares = forkProducer[Int](s, 4, out => {
-  for (n in Seq.range(0, 10)) {
+  for n in Seq.range(0, 10) {
     out.send(s, n * n)?
   }
   Ok
 })
-for (x in squares.values(s)) { println(x) }
+for x in squares.values(s) { println(x) }
 ```
 
 `work`'s callback effects are charged to the caller, as for `fork`. `?`
@@ -287,10 +287,10 @@ give up waiting on one source but keep the others) is a `time.After` or
 
 ```bork fragment
 scope s {
-  cancelAfter(s, 5.seconds())                  // the whole exchange: implicit Cancelled
-  replyBy = time.After(s, millis(200))  // this request: an arm
+  cancelAfter(s, 5.seconds()) // the whole exchange: implicit Cancelled
+  replyBy = time.After(s, millis(200)) // this request: an arm
   match (select {
-    r = replies.receive(s) => r          // Reply | Closed
+    r = replies.receive(s) => r // Reply | Closed
     _ = replyBy.receive(s) => TimedOut {}
   }) {
     reply: Reply => handle(reply)
@@ -316,8 +316,8 @@ with tuples or positional variants.
    parameter uses`), so the handlers would have to be `uses nothing`: the
    current design's restriction, and the reason it needs an Event type.
 2. **Match over a positional result**, once tuples and positional variant
-   payloads land: `match (select(s, (numbers.recv(), texts.recv(),
-   after))) { .First(n) => ...; .Second(t) => ...; .Third(_) => ... }`.
+   payloads land: `match select(s, (numbers.recv(), texts.recv(),
+   after)) { .First(n) => ...; .Second(t) => ...; .Third(_) => ... }`.
    This needs a family of prelude types (`Selected2` ... `SelectedN`), and
    the arms name sources by position, far from where the sources are
    written; reordering the tuple silently swaps meanings when the payload
@@ -380,7 +380,7 @@ scope here.
 | Close twice | panic | no-op |
 | Cancellation | by convention: a `ctx.Done()` case in every select | every blocking operation takes a scope and gives `Cancelled` |
 | Nil channel | blocks forever (used to disable a case) | no nil; use `merge`, or a loop that drops the arm |
-| Range | `for x := range ch` | `for (x in ch.values(s))` |
+| Range | `for x := range ch` | `for x in ch.values(s)` |
 | Select | statement; `case`s; `default` | expression; arms are the ordinary calls; `_` arm; value is `R \| Cancelled` |
 | Timeout | `time.After` (timer lives until it fires), `context.WithTimeout` | `time.After(s, d)` (closed after firing, stopped with its scope), `withTimeout` / `cancelAfter` |
 | Ticker | `time.NewTicker`, must `Stop()` | `time.Tick(s, d)`, stopped with its scope |

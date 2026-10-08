@@ -12,7 +12,7 @@ fn demo(s: Scope) uses io + net + state + clock: Ok | IoError | Cancelled {
   _ = net.Send(sender, net.SocketAddress(receiver), encoding.Utf8("hello"), 1.seconds())?
   packet = net.Receive(receiver, 1.seconds())?
   println(encoding.ParseUtf8(packet.data))
-  match (net.SplitAddress("missing-port")) {
+  match net.SplitAddress("missing-port") {
     _: ParseError => println("invalid address")
     endpoint: net.Endpoint => println(endpoint)
   }
@@ -76,7 +76,7 @@ operations also charge `clock`. A Listen handler also contributes its effects.
 import "bork/net"
 
 fn echo(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError | Cancelled {
-  match (net.ReadLine(conn, 1.seconds())) {
+  match net.ReadLine(conn, 1.seconds()) {
     line: String => { _ = net.WriteLine(conn, line, 1.seconds())?; checkpoint(s) }
     _: net.Eof => checkpoint(s)
     error: IoError => error

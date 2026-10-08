@@ -17,13 +17,13 @@ fn commands(): List[cli.Command] {
   [cli.Group("cluster", "Manage clusters", [deploy, status]).copy(aliases: ["k"])]
 }
 fn main(): Ok | process.ExitCode {
-  match (cli.RunCommands("fleet", "Manage a fleet", commands())) {
+  match cli.RunCommands("fleet", "Manage a fleet", commands()) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("fleet") } }
     Ok => {}
   }
 }
 test "help routes through group and leaf aliases" {
-  match (cli.Dispatch("fleet", "", ["help", "k", "d"], commands())) {
+  match cli.Dispatch("fleet", "", ["help", "k", "d"], commands()) {
     help: cli.Help => {
       assert(help.text.contains("Deploy resources into a cluster namespace."))
       assert(help.text.contains("fleet cluster deploy"))
@@ -33,7 +33,7 @@ test "help routes through group and leaf aliases" {
   }
 }
 test "nested completion reuses leaf choices" {
-  match (cli.Dispatch("fleet", "", ["__completeNoDesc", "k", "d", "-n", "p"], commands())) {
+  match cli.Dispatch("fleet", "", ["__completeNoDesc", "k", "d", "-n", "p"], commands()) {
     help: cli.Help => { assert(help.text == "prod\n:4\n") }
     other => { panic(s"Expected completion, got ${other}") }
   }

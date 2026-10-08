@@ -28,15 +28,15 @@ type Config = { environments: Map[String, Service] } derive (codec.Decode)
 fn load(path: String) uses io: Ok | yaml.Error | IoError | codec.DecodeError {
   config = yaml.DecodeFile[Config](path)?
   config.environments.forEach((name, service) => println(s"$name: $service"))
-  match (config.environments.get("production")) {
+  match config.environments.get("production") {
     Option.Some(production) => println(yaml.Encode(Service { host: production.host, port: 9090, workers: production.workers, tags: production.tags })?.trim())
     Option.None => println("no production environment")
   }
 }
 
 fn main() {
-  match (process.Args()) {
-    [path, ...] => match (load(path)) {
+  match process.Args() {
+    [path, ...] => match load(path) {
       error: yaml.Error => println(s"${error.path}:${error.line}:${error.column}: ${error.message}")
       error: IoError | codec.DecodeError => println(error)
       Ok => {}

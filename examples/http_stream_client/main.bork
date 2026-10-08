@@ -5,7 +5,7 @@ import "bork/encoding"
 fn download(url: String, s: Scope, file: fs.File) uses io + net + clock + state: Ok | fs.Error | http.BodyTooLarge | http.DeadlineExceeded | Cancelled {
   response = http.GetStream(url, s, maxBodyBytes: .Some(1048576))?
   for {
-    match (http.Read(response.body)) {
+    match http.Read(response.body) {
       bytes: Bytes => { _ = fs.WriteTo(file, bytes)? }
       _: http.Eof => break
       error: http.BodyTooLarge => return error
@@ -17,7 +17,7 @@ fn download(url: String, s: Scope, file: fs.File) uses io + net + clock + state:
 }
 fn demo(s: Scope) uses io + net + clock + state: Ok | fs.Error | http.BodyTooLarge | http.DeadlineExceeded | Cancelled {
   server = http.Listen("127.0.0.1:0", s, (request, rs) => {
-    if (request.method == "POST") { http.Text(200, request.body) } else { http.Text(200, "hello from a stream") }
+    if request.method == "POST" { http.Text(200, request.body) } else { http.Text(200, "hello from a stream") }
   })?
   base = "http://" + http.Address(server)
   file = fs.TempFile(s)?
@@ -26,11 +26,11 @@ fn demo(s: Scope) uses io + net + clock + state: Ok | fs.Error | http.BodyTooLar
   chunks = atom(0)
   body = http.OpenBody(s, producer => {
     count = update(chunks, n => n + 1)
-    if (count == 1) { encoding.Utf8("hello ") } else if (count == 2) { encoding.Utf8("upload") } else { http.Eof {} }
+    if count == 1 { encoding.Utf8("hello ") } else if count == 2 { encoding.Utf8("upload") } else { http.Eof {} }
   })
   response = http.SendStream("POST", base, { "Content-Type": ["text/plain"] }, s, body: .Some(body))?
   for {
-    match (http.Read(response.body)) {
+    match http.Read(response.body) {
       bytes: Bytes => println(encoding.Hex(bytes))
       _: http.Eof => break
       error: http.BodyTooLarge => return error

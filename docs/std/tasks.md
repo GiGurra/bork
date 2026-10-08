@@ -9,9 +9,9 @@ fn main() {
   scope app {
     pool = tasks.Open(app, maxTasks: 1)
     gate = channel[Bool](app, 0)
-    match (tasks.TryFork(pool, app, () => { _ = gate.receive(app); "done" })) {
+    match tasks.TryFork(pool, app, () => { _ = gate.receive(app); "done" }) {
       task: Task[String] => {
-        match (tasks.TryFork(pool, app, () => "second")) {
+        match tasks.TryFork(pool, app, () => "second") {
           error: tasks.TaskLimitReached => println(s"full: ${error.limit}")
           other => println(other)
         }
@@ -56,7 +56,7 @@ as that scope, which the compiler checks.
 import "bork/tasks"
 
 fn openPool(s: Scope, limit: Int) uses state: tasks.Pool | OutOfRange {
-  if (tasks.ValidLimit(limit)) {
+  if tasks.ValidLimit(limit) {
     tasks.Open(s, limit)
   } else {
     OutOfRange { value: toString(limit), target: "positive task limit" }
@@ -65,7 +65,7 @@ fn openPool(s: Scope, limit: Int) uses state: tasks.Pool | OutOfRange {
 
 fn main() {
   println(scope app {
-    match (openPool(app, 0)) {
+    match openPool(app, 0) {
       _: OutOfRange => "invalid limit"
       _: tasks.Pool => "ready"
     }
@@ -88,7 +88,7 @@ fn main() {
   scope app {
     pool = tasks.Open(app, 1)
     cancel(app)
-    match (tasks.TryFork(pool, app, () => println("working"))) {
+    match tasks.TryFork(pool, app, () => println("working")) {
       _: Task[Ok] => println("admitted")
       error: tasks.TaskLimitReached => println(s"full: ${error.limit}")
       _: Cancelled => println("cancelled before admission")

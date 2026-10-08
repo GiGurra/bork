@@ -11,7 +11,7 @@ fn demo(s: Scope) uses io: Ok | fs.Error {
   _ = fs.WriteText(file, "hello")?
   data = fs.Read(fs.Path(file))?
   println(encoding.ParseUtf8(data))
-  match (fs.CreateNew(fs.Path(file), s)) {
+  match fs.CreateNew(fs.Path(file), s) {
     _: fs.Exists => println("already exists")
     other => println(other)
   }
@@ -112,8 +112,8 @@ leave partial output; an error does not imply that the file is unchanged.
 import "bork/fs"
 
 fn showLines(path: String) uses io {
-  for (item in fs.Lines(path)) {
-    match (item) {
+  for item in fs.Lines(path) {
+    match item {
       line: String => println(line)
       error: fs.Error => eprintln(fs.ErrorInfo(error).message)
     }

@@ -21,9 +21,9 @@ type Options = {
 fn main() {
   // Inspect help without loading configuration, requiring the token,
   // or running a handler. Displayed defaults are not guaranteed input syntax.
-  match (cli.Parse[Options]("help-values", "Options and environment variables", ["--help"], flags: [
+  match cli.Parse[Options]("help-values", "Options and environment variables", ["--help"], flags: [
     .{ field: "token", long: cli.Mapping.Disabled, env: "HELP_API_TOKEN" }
-  ])) {
+  ]) {
     help: cli.Help => { println(help.text) }
     other => { panic(s"Expected help, got ${other}") }
   }

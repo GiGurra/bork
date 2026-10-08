@@ -10,9 +10,9 @@ use codec.Defaults
 type User = { name: String, age: Int } derive (codec.Encode, codec.Decode)
 
 fn main() {
-  text = match (json.Encode(User { name: "Ada", age: 37 })) { text: String => text; error: json.JsonError => { eprintln(error.message); return } }
+  text = match json.Encode(User { name: "Ada", age: 37 }) { text: String => text; error: json.JsonError => { eprintln(error.message); return } }
   println(text)
-  match (json.Decode[User](text)) {
+  match json.Decode[User](text) {
     user: User => println(user.name, user.age)
     error => eprintln(toString(error))
   }
@@ -58,8 +58,8 @@ use codec.Defaults
 type User = { age: Int } derive (codec.Decode)
 
 fn main() {
-  for (text in ["{", "{\"age\":\"old\"}"]) {
-    match (json.Decode[User](text)) {
+  for text in ["{", "{\"age\":\"old\"}"] {
+    match json.Decode[User](text) {
       user: User => println(user.age)
       _: json.JsonError => println("invalid JSON syntax")
       error: codec.DecodeError => println(error.path + ": " + error.message)
@@ -90,7 +90,7 @@ import "bork/codec"
 import "bork/json"
 
 fn main() {
-  match (json.Parse("{\"users\":[{\"name\":\"Ada\",\"note\":null}]}")) {
+  match json.Parse("{\"users\":[{\"name\":\"Ada\",\"note\":null}]}") {
     value: codec.Value => println(json.At(value, ["users", 0, "name"]))
     error: json.JsonError => eprintln(error.message)
   }
@@ -124,7 +124,7 @@ fn write(path: String) uses io: Ok | IoError | json.JsonError {
 }
 
 fn consume(reader: json.Reader) uses io: Ok | IoError | json.LineError {
-  match (json.Next(reader)) {
+  match json.Next(reader) {
     .Some(value) => {
       println(json.Render(value))
       consume(reader)
@@ -143,9 +143,9 @@ fn read(path: String) uses io: Ok | IoError | json.LineError {
 }
 
 fn main() {
-  match (write("users.jsonl")) {
+  match write("users.jsonl") {
     _: Ok => {
-      match (read("users.jsonl")) {
+      match read("users.jsonl") {
         _: Ok => {}
         error => eprintln(toString(error))
       }

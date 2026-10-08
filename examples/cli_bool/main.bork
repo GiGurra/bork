@@ -11,16 +11,16 @@ type Options = {
 } derive (codec.Decode)
 
 fn main(): Ok | process.ExitCode {
-  match (cli.Run[Options]("switches", "Bool defaults", (options, s) => {
+  match cli.Run[Options]("switches", "Bool defaults", (options, s) => {
     println(s"verbose=${options.verbose}, color=${options.color}, trace=${options.trace}")
-  })) {
+  }) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("switches") } }
     Ok => {}
   }
 }
 
 test "an omitted switch is false" {
-  match (cli.Parse[Options]("switches", "", [])) {
+  match cli.Parse[Options]("switches", "", []) {
     options: Options => {
       assertEqual(options.verbose, false)
       assertEqual(options.color, true)

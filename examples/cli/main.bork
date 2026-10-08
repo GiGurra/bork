@@ -19,7 +19,7 @@ fn main(): Ok | process.ExitCode {
     println(s"Hello ${options.name} on port ${options.port}")
     println(options.tags)
     }, flags: [.{ field: "port", short: "p" }, .{ field: "config", configFile: true }])
-  match (result) {
+  match result {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("greet") } }
     Ok => {}
   }

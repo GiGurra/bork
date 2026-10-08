@@ -8,8 +8,8 @@ type Event = { seq: Int, kind: String }
 type Tally = { received: Int, errors: Int, inOrder: Bool }
 
 fn record(s: Scope, events: Channel[Event], count: Int) uses state: Ok | Closed | Cancelled {
-  for (i in Seq.range(0, count)) {
-    events.send(s, Event { seq: i, kind: if (i % 10 == 0) { "error" } else { "info" } })?
+  for i in Seq.range(0, count) {
+    events.send(s, Event { seq: i, kind: if i % 10 == 0 { "error" } else { "info" } })?
   }
   Ok
 }
@@ -26,7 +26,7 @@ fn main() {
     // The consumer drains what is queued, in order, then sees the close.
     tally = events.values(s).fold(Tally { received: 0, errors: 0, inOrder: true }, (t, event) => Tally {
       received: t.received + 1,
-      errors: if (event.kind == "error") { t.errors + 1 } else { t.errors },
+      errors: if event.kind == "error" { t.errors + 1 } else { t.errors },
       inOrder: t.inOrder && event.seq == t.received,
     })
     println(s"received ${tally.received}, ${tally.errors} errors, in order: ${tally.inOrder}")

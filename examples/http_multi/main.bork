@@ -29,7 +29,7 @@ fn listenAll(s: Scope, api: String, metrics: String, debug: String) uses io + ne
 fn serve() uses io + net + clock + random + state: Ok | IoError {
   scope app with cleanupTimeout(5.seconds()) {
     servers = listenAll(app, ":8080", "127.0.0.1:9090", "127.0.0.1:6060")?
-    for (server in servers) { println(s"listening on ${http.Address(server)}") }
+    for server in servers { println(s"listening on ${http.Address(server)}") }
     // Returns on Ctrl+C, or as soon as any listener stops on its own;
     // http.WaitAll would instead wait for every one of them.
     http.WaitAny(servers)
@@ -38,7 +38,7 @@ fn serve() uses io + net + clock + random + state: Ok | IoError {
 
 // call fetches one path from a running server.
 fn call(server: http.Server, path: String, s: Scope) uses net + clock + state: String {
-  match (http.Get(s"http://${http.Address(server)}$path", s)) {
+  match http.Get(s"http://${http.Address(server)}$path", s) {
     response: http.Response => s"$path -> ${response.status} ${response.body}"
     error => s"$path -> ${toString(error)}"
   }
@@ -60,7 +60,7 @@ fn demo() uses io + net + clock + random + state: Ok | IoError {
 }
 
 fn main(): Ok | process.ExitCode {
-  match (if (process.Args() == ["serve"]) { serve() } else { demo() }) {
+  match (if process.Args() == ["serve"] { serve() } else { demo() }) {
     error: IoError => {
       return process.ExitCode { code: 1, message: s"${error.path}: ${error.message}" }
     }
@@ -69,7 +69,7 @@ fn main(): Ok | process.ExitCode {
 }
 
 fn assertStatus(server: http.Server, path: String, s: Scope, expected: Int) uses net + clock + state {
-  match (http.Get(s"http://${http.Address(server)}$path", s)) {
+  match http.Get(s"http://${http.Address(server)}$path", s) {
     response: http.Response => assert(response.status == expected)
     error => panic(toString(error))
   }
@@ -77,9 +77,9 @@ fn assertStatus(server: http.Server, path: String, s: Scope, expected: Int) uses
 
 test "each listener serves only its own routes" {
   scope app {
-    match (listenAll(app, "127.0.0.1:0", "127.0.0.1:0", "127.0.0.1:0")) {
+    match listenAll(app, "127.0.0.1:0", "127.0.0.1:0", "127.0.0.1:0") {
       servers: List[http.Server] => {
-        match (servers) {
+        match servers {
           [api, metrics, debug] => {
             assertStatus(api, "/hello", app, 200)
             assertStatus(api, "/metrics", app, 404)
@@ -107,21 +107,21 @@ test "waiting on no servers returns at once" {
 test "a later startup failure cleans up earlier listeners" {
   scope app {
     apiAddress = scope reservation {
-      match (http.ListenRoutes("127.0.0.1:0", reservation, apiRoutes())) {
+      match http.ListenRoutes("127.0.0.1:0", reservation, apiRoutes()) {
         server: http.Server => http.Address(server)
         error: IoError => panic(toString(error))
       }
     }
-    match (http.ListenRoutes("127.0.0.1:0", app, metricsRoutes())) {
+    match http.ListenRoutes("127.0.0.1:0", app, metricsRoutes()) {
       metrics: http.Server => {
         scope startup {
-          match (listenAll(startup, apiAddress, http.Address(metrics), "127.0.0.1:0")) {
+          match listenAll(startup, apiAddress, http.Address(metrics), "127.0.0.1:0") {
             error: IoError => assert(error.path == http.Address(metrics))
             _ => panic("expected a metrics port clash")
           }
         }
         // Rebind while this process is alive to verify scope cleanup released API.
-        match (http.ListenRoutes(apiAddress, app, apiRoutes())) {
+        match http.ListenRoutes(apiAddress, app, apiRoutes()) {
           server: http.Server => assertStatus(server, "/hello", app, 200)
           error: IoError => panic(toString(error))
         }

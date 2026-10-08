@@ -13,7 +13,7 @@ fn main() {
   user = User { name: "Ada", age: 37 }
   tree = codec.encode(user)
   println(json.Render(tree))
-  match (codec.decode[User](tree)) {
+  match codec.decode[User](tree) {
     decoded: User => println(decoded.name, decoded.age)
     error: codec.DecodeError => eprintln(error.path + ": " + error.message)
   }
@@ -61,7 +61,7 @@ pred adult(n: Int) { n >= 18 }
 type User = { age: Int where adult } derive (codec.Decode)
 
 fn main() {
-  match (json.Decode[User]("{\"age\":17}")) {
+  match json.Decode[User]("{\"age\":17}") {
     user: User => println(user.age)
     error: codec.DecodeError => println(error.path + ": " + error.message)
     error: json.JsonError => println(error.message)
@@ -180,8 +180,8 @@ use codec.Defaults
 
 fn main() {
   println(json.Encode((3, "count")))
-  for (text in ["[3]", "[3, false]"]) {
-    match (json.Decode[(Int, String)](text)) {
+  for text in ["[3]", "[3, false]"] {
+    match json.Decode[(Int, String)](text) {
       pair: (Int, String) => println(pair)
       error: codec.DecodeError => println(error.path + ": " + error.message)
       error: json.JsonError => println(error.message)
@@ -237,7 +237,7 @@ instance tokenDecode: codec.Decode[Token] {
   metadata codec.FieldSchema = codec.FieldSchema { kind: "string", optional: false }
   metadata codec.DefaultInput[Token] = codec.Input[Token](token => codec.Value.String { value: token.text })
   fn decode(input: codec.Value): Token | codec.DecodeError {
-    match (input) {
+    match input {
       codec.Value.String { value } => Token { text: value }
       _ => codec.DecodeError { path: "", message: "expected a token string" }
     }
@@ -272,8 +272,8 @@ type Settings = { color: Choice, maybe: Option[Choice] } derive (codec.Decode)
 
 fn main() {
   println(codec.FieldInfo[Choice]().variants)
-  match (codec.Schema[Settings]()) {
-    Option.Some(schema) => for (field in schema.fields) {
+  match codec.Schema[Settings]() {
+    Option.Some(schema) => for field in schema.fields {
       println(field.name, field.kind, field.optional, field.variants)
     }
     Option.None => {}

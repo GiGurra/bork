@@ -67,7 +67,7 @@ If a `comptime` block panics, compilation fails with the message. That turns a m
 ```bork fails
 fn main() {
   port = comptime {
-    match (parseInt("80a")) {
+    match parseInt("80a") {
       n: Int => n
       e: ParseError => panic(s"bad port: ${e.input}")
     }

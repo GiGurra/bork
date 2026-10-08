@@ -21,7 +21,7 @@ fn main(): Ok | process.ExitCode {
       println(options.words)
       }, flags: [cli.Flag { field: "words", positional: true }])
   ]
-  match (cli.RunCommands("app", "Typed subcommands", commands)) {
+  match cli.RunCommands("app", "Typed subcommands", commands) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("app") } }
     Ok => {}
   }

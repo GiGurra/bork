@@ -7,8 +7,8 @@ fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
   child = process.Start(s, "/bin/sh", ["-c", script], stdout: .Pipe, stderr: .Stdout)?
   // Lines is a sequence: each line arrives as soon as the child writes it.
   // A read failure or cancellation is its last element.
-  for (item in child.Stdout().Lines()) {
-    match (item) {
+  for item in child.Stdout().Lines() {
+    match item {
       line: String => println(s"[child] $line")
       error: IoError => eprintln(error.message)
       stopped: Cancelled => eprintln(stopped.reason)
@@ -18,8 +18,8 @@ fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
   // NextLine reads one line at a time, then Closed at the end.
   greeter = process.Start(s, "/bin/sh", ["-c", "echo hello; echo world"], stdout: .Pipe)?
   output = greeter.Stdout()
-  for (call in [1, 2, 3]) {
-    println(match (output.NextLine()) {
+  for call in [1, 2, 3] {
+    println(match output.NextLine() {
       line: String => s"call $call: $line"
       _: Closed => s"call $call: end of output"
       error: IoError => error.message

@@ -26,8 +26,8 @@ fn demo() uses io + net: Ok | sql.Error | codec.DecodeError {
     counts = sql.SQL"SELECT count(*) AS count FROM $table".Query[Count](db)?
     println(s"table still exists; rows: ${counts.get(0).getOr(Count { count: 0 }).count}")
     // Each traversal renders and queries lazily while the connection is in scope.
-    for (result in query.Rows[User](db)) {
-      match (result) {
+    for result in query.Rows[User](db) {
+      match result {
         user: User => println(s"streamed name: ${user.name}")
         error: sql.Error => { return error }
         error: codec.DecodeError => { return error }
@@ -39,7 +39,7 @@ fn demo() uses io + net: Ok | sql.Error | codec.DecodeError {
   }
 }
 fn main() {
-  match (demo()) {
+  match demo() {
     error: sql.Error => eprintln(s"${error.operation}: ${error.message}")
     error: codec.DecodeError => eprintln(s"${error.path}: ${error.message}")
     _ => {}

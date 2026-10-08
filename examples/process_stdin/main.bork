@@ -17,7 +17,7 @@ fn run(s: Scope) uses io + state: Ok | IoError | Cancelled | Closed | fs.Error {
   // With .Pipe, write while the child runs, and close stdin when done.
   // Each reply is read before the next name is written.
   greeter = process.Start(s, "/bin/sh", ["-c", "while read -r name; do echo \"hello, $name\"; done; echo bye"], stdin: .Pipe, stdout: .Pipe)?
-  for (name in ["ada", "grace"]) {
+  for name in ["ada", "grace"] {
     greeter.Stdin().WriteText(s"$name\n")?
     println(greeter.Stdout().NextLine()?)
   }

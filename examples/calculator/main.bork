@@ -16,8 +16,8 @@ type SyntaxError = { at: Int, message: String }
 type DivisionByZero = { expr: Expr }
 
 fn skipSpaces(src: String, i: Int) uses tailrec: Int {
-  match (src.runeAt(i)) {
-    Option.Some(r) => if (r.isSpace()) { skipSpaces(src, i + 1) } else { i }
+  match src.runeAt(i) {
+    Option.Some(r) => if r.isSpace() { skipSpaces(src, i + 1) } else { i }
     Option.None => i
   }
 }
@@ -30,8 +30,8 @@ fn parseExpr(src: String, i: Int): Parsed | SyntaxError {
 
 fn parseExprRest(src: String, left: Parsed): Parsed | SyntaxError {
   at = skipSpaces(src, left.next)
-  match (src.runeAt(at)) {
-    Option.Some(r) => match (r) {
+  match src.runeAt(at) {
+    Option.Some(r) => match r {
       '+' => {
         right = parseTerm(src, at + 1)?
         parseExprRest(src, Parsed { expr: Expr.Add { left: left.expr, right: right.expr }, next: right.next })
@@ -54,8 +54,8 @@ fn parseTerm(src: String, i: Int): Parsed | SyntaxError {
 
 fn parseTermRest(src: String, left: Parsed): Parsed | SyntaxError {
   at = skipSpaces(src, left.next)
-  match (src.runeAt(at)) {
-    Option.Some(r) => match (r) {
+  match src.runeAt(at) {
+    Option.Some(r) => match r {
       '*' => {
         right = parseFactor(src, at + 1)?
         parseTermRest(src, Parsed { expr: Expr.Mul { left: left.expr, right: right.expr }, next: right.next })
@@ -73,15 +73,15 @@ fn parseTermRest(src: String, left: Parsed): Parsed | SyntaxError {
 // factor = number | "(" expr ")"
 fn parseFactor(src: String, i: Int): Parsed | SyntaxError {
   at = skipSpaces(src, i)
-  match (src.runeAt(at)) {
-    Option.Some(r) => if (r == '(') {
+  match src.runeAt(at) {
+    Option.Some(r) => if r == '(' {
       inner = parseExpr(src, at + 1)?
       close = skipSpaces(src, inner.next)
-      match (src.runeAt(close)) {
+      match src.runeAt(close) {
         Option.Some(')') => Parsed { expr: inner.expr, next: close + 1 }
         _ => SyntaxError { at: close, message: "expected )" }
       }
-    } else if (r.isDigit()) {
+    } else if r.isDigit() {
       parseNumber(src, at)
     } else {
       SyntaxError { at: at, message: s"unexpected ${toString(r)}" }
@@ -91,16 +91,16 @@ fn parseFactor(src: String, i: Int): Parsed | SyntaxError {
 }
 
 fn digitsEnd(src: String, i: Int) uses tailrec: Int {
-  match (src.runeAt(i)) {
-    Option.Some(r) => if (r.isDigit()) { digitsEnd(src, i + 1) } else { i }
+  match src.runeAt(i) {
+    Option.Some(r) => if r.isDigit() { digitsEnd(src, i + 1) } else { i }
     Option.None => i
   }
 }
 
 fn parseNumber(src: String, i: Int): Parsed | SyntaxError {
   end = digitsEnd(src, i)
-  match (src.substring(i, end)) {
-    digits: String => match (parseInt(digits)) {
+  match src.substring(i, end) {
+    digits: String => match parseInt(digits) {
       n: Int => Parsed { expr: Expr.Num { value: n }, next: end }
       e: ParseError => SyntaxError { at: i, message: s"bad number $digits: ${e.message}" }
     }
@@ -111,7 +111,7 @@ fn parseNumber(src: String, i: Int): Parsed | SyntaxError {
 fn parse(src: String): Expr | SyntaxError {
   parsed = parseExpr(src, 0)?
   end = skipSpaces(src, parsed.next)
-  if (end == src.runeCount()) {
+  if end == src.runeCount() {
     parsed.expr
   } else {
     SyntaxError { at: end, message: "unexpected input after the expression" }
@@ -119,14 +119,14 @@ fn parse(src: String): Expr | SyntaxError {
 }
 
 fn eval(e: Expr): Int | DivisionByZero {
-  match (e) {
+  match e {
     Expr.Num { value } => value
     Expr.Add { left, right } => eval(left)? + eval(right)?
     Expr.Sub { left, right } => eval(left)? - eval(right)?
     Expr.Mul { left, right } => eval(left)? * eval(right)?
     Expr.Div { left, right } => {
       divisor = eval(right)?
-      if (divisor == 0) {
+      if divisor == 0 {
         DivisionByZero { expr: e }
       } else {
         eval(left)? / divisor
@@ -136,7 +136,7 @@ fn eval(e: Expr): Int | DivisionByZero {
 }
 
 fn show(e: Expr): String {
-  match (e) {
+  match e {
     Expr.Num { value } => s"$value"
     Expr.Add { left, right } => s"(${show(left)} + ${show(right)})"
     Expr.Sub { left, right } => s"(${show(left)} - ${show(right)})"
@@ -146,8 +146,8 @@ fn show(e: Expr): String {
 }
 
 fn calculate(src: String): String {
-  match (parse(src)) {
-    e: Expr => match (eval(e)) {
+  match parse(src) {
+    e: Expr => match eval(e) {
       n: Int => s"${show(e)} = $n"
       d: DivisionByZero => s"${show(e)}: division by zero in ${show(d.expr)}"
     }

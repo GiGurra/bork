@@ -18,9 +18,9 @@ type Options = {
   limits: Option[Map[String, Int]] where PositiveLimits cli { collection: cli.Collection.KeyValue }
 } derive (codec.Decode, codec.Encode)
 fn main(): Ok | process.ExitCode {
-  match (cli.Run[Options]("collections", "CSV lists and key=value maps", (options, s) => {
+  match cli.Run[Options]("collections", "CSV lists and key=value maps", (options, s) => {
     println(json.Encode(options))
-  })) {
+  }) {
     Ok => {}
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("collections") } }
   }

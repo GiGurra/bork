@@ -7,7 +7,7 @@ access:
 ```bork
 fn main() {
   text = "🙂åbc"
-  match (text.indexOf("b")) {
+  match text.indexOf("b") {
     Option.Some(index) => println(index, text.substring(index, index + 1), text.runeAt(index))
     Option.None => {}
   }

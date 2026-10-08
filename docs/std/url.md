@@ -8,7 +8,7 @@ import "bork/url"
 fn main() {
   value = url.Url { scheme: "https", host: "example.com", path: "/search", query: { "q": ["bork language"] } }
   println(value.String())
-  match (url.Parse("https://example.com/%zz")) {
+  match url.Parse("https://example.com/%zz") {
     _: ParseError => println("invalid escape")
     parsed: url.Url => println(parsed.String())
   }

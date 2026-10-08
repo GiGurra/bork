@@ -15,31 +15,31 @@ fn flags(): List[cli.Flag] {
     .{ field: "output", files: true }]
 }
 fn main(): Ok | process.ExitCode {
-  match (cli.Run[Options]("deploy", "Deploy selected resources", (options, s) => {
+  match cli.Run[Options]("deploy", "Deploy selected resources", (options, s) => {
     println(s"${options.environment}: ${options.resources}")
-    }, flags: flags())) {
+    }, flags: flags()) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("deploy") } }
     Ok => {}
   }
 }
 test "static choices use Cobra protocol and skip requiredness" {
-  match (cli.Parse[Options]("deploy", "", ["__complete", "--environment", "p"], flags: flags())) {
+  match cli.Parse[Options]("deploy", "", ["__complete", "--environment", "p"], flags: flags()) {
     help: cli.Help => { assert(help.text == "prod\tProduction\n:4\n") }
     other => { panic(s"Expected completion, got ${other}") }
   }
 }
 test "strict choices validate normal input" {
-  match (cli.Parse[Options]("deploy", "", ["--environment", "invalid"], flags: flags())) {
+  match cli.Parse[Options]("deploy", "", ["--environment", "invalid"], flags: flags()) {
     error: cli.Error => { assert(error.errors.filter(item => item.path == ".environment").length() == 1) }
     other => { panic(s"Expected choices error, got ${other}") }
   }
 }
 test "completion can be disabled without disabling positionals" {
-  match (cli.Parse[Options]("deploy", "", ["web"], flags: flags(), settings: .{ completion: false })) {
+  match cli.Parse[Options]("deploy", "", ["web"], flags: flags(), settings: .{ completion: false }) {
     options: Options => { assert(options.resources == ["web"]) }
     other => { panic(s"Expected options, got ${other}") }
   }
-  match (cli.Parse[Options]("deploy", "", ["__complete", ""], flags: flags(), settings: .{ completion: false })) {
+  match cli.Parse[Options]("deploy", "", ["__complete", ""], flags: flags(), settings: .{ completion: false }) {
     error: cli.Error => { assert(error.errors.filter(item => item.message.contains("unknown command")).length() == 1) }
     other => { panic(s"Expected disabled completion error, got ${other}") }
   }
@@ -48,11 +48,11 @@ test "completion can be disabled without disabling positionals" {
 type Scalar = { target: String } derive (codec.Decode)
 test "scalar positional completion stops after its argument" {
   scalarFlags: List[cli.Flag] = [.{ field: "target", positional: true, choices: [.{ value: "alpha" }, .{ value: "beta" }] }]
-  match (cli.Parse[Scalar]("deploy", "", ["__complete", "b"], flags: scalarFlags)) {
+  match cli.Parse[Scalar]("deploy", "", ["__complete", "b"], flags: scalarFlags) {
     help: cli.Help => { assert(help.text == "beta\n:4\n") }
     other => { panic(s"Expected completion, got ${other}") }
   }
-  match (cli.Parse[Scalar]("deploy", "", ["__complete", "alpha", "b"], flags: scalarFlags)) {
+  match cli.Parse[Scalar]("deploy", "", ["__complete", "alpha", "b"], flags: scalarFlags) {
     help: cli.Help => { assert(help.text == ":4\n") }
     other => { panic(s"Expected exhausted positional completion, got ${other}") }
   }

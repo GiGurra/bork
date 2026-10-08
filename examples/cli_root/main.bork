@@ -12,8 +12,8 @@ fn main(): Ok | process.ExitCode {
       println(s"${global.region}: ${deploy.service} x ${deploy.replicas}, verbose=${global.verbose}")
     })
   ])]
-  match (cli.RunRoot[Global]("fleet", "Shared root flags", commands,
-    flags: [.{ field: "region", env: "FLEET_REGION" }])) {
+  match cli.RunRoot[Global]("fleet", "Shared root flags", commands,
+    flags: [.{ field: "region", env: "FLEET_REGION" }]) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("fleet") } }
     Ok => {}
   }

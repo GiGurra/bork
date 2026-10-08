@@ -241,8 +241,8 @@ no payload. It exposes no representation of a foreign private variant. For
 example, the Encode template's sealed branch has this structure:
 
 ```text
-comptime for (variant in shape.variants[T]()) {
-  match (variant.project(x)) {
+comptime for variant in shape.variants[T]() {
+  match variant.project(x) {
     Option.Some(payload) => {
       fields: List[codec.Field] = [comptime for (field in variant.fields)
         comptime if (!field.computed)

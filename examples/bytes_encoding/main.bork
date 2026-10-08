@@ -4,7 +4,7 @@ fn main() {
   payload = encoding.Utf8("hello, 世界")
   println(encoding.Hex(payload))
   println(encoding.Base64(payload))
-  match (encoding.ParseBase64(encoding.Base64(payload))) {
+  match encoding.ParseBase64(encoding.Base64(payload)) {
     decoded: Bytes => println(encoding.ParseUtf8(decoded))
     error: ParseError => println(error)
   }

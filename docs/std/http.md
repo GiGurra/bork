@@ -9,9 +9,9 @@ import "bork/http"
 
 fn main() {
   scope app {
-    match (http.Listen("127.0.0.1:0", app, (req, rs) => http.Text(200, "hello"))) {
+    match http.Listen("127.0.0.1:0", app, (req, rs) => http.Text(200, "hello")) {
       server: http.Server => {
-        match (http.Get("http://" + http.Address(server), app)) {
+        match http.Get("http://" + http.Address(server), app) {
           response: http.Response => println(response.status, response.body)
           error => eprintln(toString(error))
         }
@@ -75,7 +75,7 @@ import "bork/http"
 
 fn main() {
   scope app {
-    match (http.Get(":", app)) {
+    match http.Get(":", app) {
       _: IoError => println("request construction failed")
       result => println(toString(result))
     }
@@ -116,7 +116,7 @@ import "bork/encoding"
 fn chunks(url: String, app: Scope) uses io + net + clock + state: Ok | http.BodyTooLarge | http.DeadlineExceeded | Cancelled | IoError {
   response = http.GetStream(url, app, maxBodyBytes: .Some(1048576))?
   for {
-    match (http.Read(response.body)) {
+    match http.Read(response.body) {
       bytes: Bytes => println(encoding.Hex(bytes))
       _: http.Eof => break
       error: http.BodyTooLarge => return error
@@ -223,7 +223,7 @@ pred positive(n: Int) { n > 0 }
 type UserPath = { id: Int where positive } derive (codec.Decode)
 
 fn user(req: http.Request, rs: Scope): http.Response {
-  match (http.PathAs[UserPath](req)) {
+  match http.PathAs[UserPath](req) {
     path: UserPath => http.Text(200, s"user ${path.id}")
     error: codec.DecodeError => http.Text(422, error.path + ": " + error.message)
   }
@@ -231,10 +231,10 @@ fn user(req: http.Request, rs: Scope): http.Response {
 
 fn main() {
   scope app {
-    match (http.ListenRoutes("127.0.0.1:0", app, [.{ pattern: "GET /users/{id}", handler: user }])) {
+    match http.ListenRoutes("127.0.0.1:0", app, [.{ pattern: "GET /users/{id}", handler: user }]) {
       server: http.Server => {
-        for (id in ["42", "0"]) {
-          match (http.Get("http://" + http.Address(server) + "/users/" + id, app)) {
+        for id in ["42", "0"] {
+          match http.Get("http://" + http.Address(server) + "/users/" + id, app) {
             response: http.Response => println(response.status, response.body)
             error => eprintln(toString(error))
           }
@@ -290,7 +290,7 @@ fn serve(app: Scope) uses io + net + clock + random + state: Ok | IoError {
 
 fn main() {
   scope app with cleanupTimeout(5.seconds()) {
-    match (serve(app)) {
+    match serve(app) {
       _: Ok => {}
       error: IoError => eprintln(error.path + ": " + error.message)
     }
@@ -328,7 +328,7 @@ import "bork/http"
 fn main() {
   scope app {
     limit = http.Admission { maxInFlight: 64, maxQueued: 32, queueTimeout: 25.millis(), retryAfter: 100.millis() }
-    match (http.Listen("127.0.0.1:0", app, (req, rs) => http.Text(200, "ok"), admission: .Some(limit))) {
+    match http.Listen("127.0.0.1:0", app, (req, rs) => http.Text(200, "ok"), admission: .Some(limit)) {
       server: http.Server => println(http.AdmissionState(server))
       error: IoError => eprintln(error.message)
     }
@@ -374,11 +374,11 @@ fn main() {
     attempts = atom(0)
     result = http.Retry(app, budget, operation: attempt => {
       count = update(attempts, n => n + 1)
-      if (count == 1) {
+      if count == 1 {
         http.Overloaded { response: http.Text(503, "busy"), retryAfter: .None }
       } else { http.Text(200, "ok") }
       }, baseDelay: 0.seconds(), maxDelay: 0.seconds())
-    match (result) {
+    match result {
       response: http.Response => println(response.status, response.body)
       error => eprintln(toString(error))
     }
@@ -414,7 +414,7 @@ import "bork/http"
 
 fn main() {
   empty: List[Byte] = []
-  match (http.ParseCertificate(empty.toBytes(), empty.toBytes())) {
+  match http.ParseCertificate(empty.toBytes(), empty.toBytes()) {
     _: http.Certificate => println("valid certificate")
     _: IoError => println("invalid certificate")
   }

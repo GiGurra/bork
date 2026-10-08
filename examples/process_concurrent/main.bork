@@ -8,7 +8,7 @@ fn job(s: Scope, name: String, seconds: String) uses io + state: process.Process
 
 // count receives until the channel closes; a read failure ends it early.
 fn count(s: Scope, lines: Channel[String | IoError], seen: Int) uses state: Int {
-  match (lines.receive(s)) {
+  match lines.receive(s) {
     _: String => count(s, lines, seen + 1)
     _: IoError => seen
     _: Closed => seen
@@ -22,7 +22,7 @@ fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
   index = job(s, "index", "0.1")?
   report = job(s, "report", "0.2")?
   // Results print in the order we wait, though index finishes first.
-  for (child in [backup, index, report]) {
+  for child in [backup, index, report] {
     println(child.Wait()?.StdoutText().trim())
   }
   // TryWait does not block: None while the child runs. This one runs until

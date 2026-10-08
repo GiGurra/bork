@@ -10,7 +10,7 @@ fn demo() uses io: Ok | IoError {
   entries = [archive.Member { name: "hello.txt", data: encoding.Utf8("hello"), directory: false }]
   data = archive.Zip(entries)?
   println(archive.ReadZip(data)?.map(member => member.name))
-  match (archive.ReadZip(data, maxBytes: 4)) {
+  match archive.ReadZip(data, maxBytes: 4) {
     _: IoError => println("uncompressed data exceeds limit")
     _: List[archive.Member] => println("read archive")
   }

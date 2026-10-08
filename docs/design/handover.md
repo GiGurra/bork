@@ -50,19 +50,19 @@ compile error.
 ```bork fragment
 scope app {
   conns = handoff[Conn](app, 16)
-  for (i in Seq.range(0, workers)) {
+  for i in Seq.range(0, workers) {
     fork(app, () => {
-      for (c in conns.values(app)) {
+      for c in conns.values(app) {
         scope session {
-          owned = move(c, session)        // the worker owns it now
+          owned = move(c, session) // the worker owns it now
           serve(owned)
-        }                                 // closed here, not when app ends
+        } // closed here, not when app ends
       }
     })
   }
-  for (n in Seq.range(0, 100)) {
+  for n in Seq.range(0, 100) {
     conn = net.Dial(addr, app)?
-    conns.handOver(app, conn)?            // app lets go of it
+    conns.handOver(app, conn)? // app lets go of it
     // using conn here is an error: it was handed over to channel conns at line 14
   }
   conns.close()
@@ -102,7 +102,7 @@ the origin flows as for any acquisition. `tryReceive()` gives an
 `Option[R]`, and a variant's payload has no tracked origin, so what it
 gives is borrowed.
 
-`for (c in h.values(s)) { ... }` gives `c` a fresh handle per iteration,
+`for c in h.values(s) { ... }` gives `c` a fresh handle per iteration,
 created inside the loop body, so the body may move it. `values` used any
 other way (`toList`, passed on as a `Seq`) gives borrowed values.
 

@@ -26,19 +26,19 @@ fn flags(): List[cli.Flag] {
     .{ field: "apiToken", long: cli.Mapping.Disabled, envName: cli.Mapping.Disabled }]
 }
 fn main(): Ok | process.ExitCode {
-  match (cli.Run[Options]("mixed", "Derived and explicit names in one command", (options, s) => {
+  match cli.Run[Options]("mixed", "Derived and explicit names in one command", (options, s) => {
     // env.txt: the --server-host flag beats MIXED_SERVER_HOST, MIXED_LISTEN=7000
     // beats settings.json's port 6000, and MIXED_DEBUG is ignored because debug
     // has no env name.
     println(s"host ${options.serverHost}, port ${options.port}, debug ${options.debug}")
     println(s"api token from config: ${options.apiToken}")
-    }, flags: flags(), settings: settings())) {
+    }, flags: flags(), settings: settings()) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("mixed") } }
     Ok => {}
   }
 }
 test "help shows derived, renamed and hidden sources side by side" {
-  match (cli.Parse[Options]("mixed", "", ["--help"], flags: flags(), settings: settings())) {
+  match cli.Parse[Options]("mixed", "", ["--help"], flags: flags(), settings: settings()) {
     help: cli.Help => {
       assert(help.text.contains("-s, --server-host"))
       assert(help.text.contains("(env: MIXED_SERVER_HOST)"))
@@ -52,7 +52,7 @@ test "help shows derived, renamed and hidden sources side by side" {
   }
 }
 test "a config-only field has no flag" {
-  match (cli.Parse[Options]("mixed", "", ["--api-token", "x"], flags: flags(), settings: settings())) {
+  match cli.Parse[Options]("mixed", "", ["--api-token", "x"], flags: flags(), settings: settings()) {
     error: cli.Error => { assert(error.errors.filter(item => item.message.contains("unknown flag")).length() == 1) }
     other => { panic(s"Expected an unknown flag error, got ${other}") }
   }

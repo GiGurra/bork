@@ -45,7 +45,7 @@ lists and tuples; see [matching](language/matching.md).
 | `Result<T, E>` | `T \| E`; `?` propagates alternatives the enclosing function can return. |
 | `Some(x)`, `None` | `Option.Some(x)`, `Option.None`; variant owners are explicit unless the expected type permits `.Some(x)`. |
 | `enum` | `sealed` types with named or positional payloads. |
-| `match` | Exhaustive `match (value) { pattern => expression }`. |
+| `match` | Exhaustive `match value { pattern => expression }`. |
 | Ownership and borrow lifetimes | Scope-owned resources and checked resource lifetime contracts; ordinary immutable values can be shared. |
 | Generic `<T>` | Generic `[T]`, including `List[Int]` and `fn identity[T](value: T): T`. |
 
@@ -60,7 +60,7 @@ See [scopes](language/scopes.md) before returning resource-bearing values from h
 | `None` | `Option.None`, with an `Option[T]` type. |
 | Exceptions | Typed failure unions and exhaustive matching. |
 | Mutable lists/dictionaries | Immutable List/Map methods return new values. |
-| `for x in xs`, `range(n)`, `while condition` | `for (x in xs)`, `range(0, n)` (exclusive end), and `for (condition) { ... }`. |
+| `for x in xs`, `range(n)`, `while condition` | `for x in xs`, `range(0, n)` (exclusive end), and `for condition { ... }`. |
 | Keyword arguments `f(count=2)` | `f(count: 2)`. |
 | `f"Hello {name}"` | `s"Hello $name"` or `s"Hello ${expression}"`. |
 
@@ -79,7 +79,7 @@ fn main() {
   person = person.copy(name: "Grace")
   println(earlier(), person.name)
   total = 0
-  for (n in range(0, 4)) { total = total + n }
+  for n in range(0, 4) { total = total + n }
   println(total)
 }
 ```
@@ -93,16 +93,16 @@ constructors and types rather than assuming exceptions or null checks.
 type Missing = { name: String }
 
 fn lookup(name: String): Int | Missing {
-  if (name == "Ada") { 42 } else { Missing { name: name } }
+  if name == "Ada" { 42 } else { Missing { name: name } }
 }
 
 fn main() {
-  answer = match (lookup("Ada")) {
+  answer = match lookup("Ada") {
     value: Int => value
     error: Missing => { println(error.name); 0 }
   }
   optional = Option.Some(answer)
-  println(match (optional) { .Some(value) => value, .None => 0 })
+  println(match optional { .Some(value) => value, .None => 0 })
 }
 ```
 

@@ -116,7 +116,7 @@ fn configText() uses build: String {
 
 fn settings(): Config {
   comptime {
-    match (json.Decode[Config](configText())) {
+    match json.Decode[Config](configText()) {
       value: Config => value
       error => panic(s"invalid build config: $error")
     }
@@ -226,7 +226,7 @@ the constrained function, even if it happens to tolerate -1 at runtime.
 Preflight proof starts from closed capture values and checked declarations,
 never runtime guards or the enclosing function's entry assumptions. Build-time
 execution is unconditional even inside an unreachable runtime branch. For
-example, `x = 0; if (positive(x)) { comptime { requiresPositive(x) } }` must
+example, `x = 0; if positive(x) { comptime { requiresPositive(x) } }` must
 fail: the surrounding guard cannot justify the build-time call. Facts established
 by guards evaluated inside the block follow the ordinary branch rules.
 

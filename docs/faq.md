@@ -74,7 +74,7 @@ fn main() {
 ```bork fails
 fn main() {
   name = "Ada"
-  if (true) {
+  if true {
     name = "Grace"
     println(name)
   }
@@ -120,7 +120,7 @@ fn main() { greet() }
 ```bork fails
 type Failure = { message: String }
 fn answer(ok: Bool): Int | Failure {
-  if (ok) { 42 } else { Failure { message: "no answer" } }
+  if ok { 42 } else { Failure { message: "no answer" } }
 }
 fn main() { answer(false) }
 ```
@@ -134,10 +134,10 @@ Handle every alternative with match, or propagate failures from a helper whose r
 ```bork
 type Failure = { message: String }
 fn answer(ok: Bool): Int | Failure {
-  if (ok) { 42 } else { Failure { message: "no answer" } }
+  if ok { 42 } else { Failure { message: "no answer" } }
 }
 fn main() {
-  match (answer(false)) {
+  match answer(false) {
     value: Int => println(value)
     error: Failure => println(error.message)
   }
@@ -186,9 +186,9 @@ fn main() { greet() }
 ## Why does match need another arm?
 
 ```bork fails
-fn choose(ok: Bool): Int | String { if (ok) { 42 } else { "failed" } }
+fn choose(ok: Bool): Int | String { if ok { 42 } else { "failed" } }
 fn main() {
-  println(match (choose(false)) { n: Int => n })
+  println(match choose(false) { n: Int => n })
 }
 ```
 
@@ -199,9 +199,9 @@ match is not exhaustive: missing String
 Cover every alternative. Guarded arms can fail their guard, so include an unguarded fallback. A wildcard can cover intentionally equivalent remaining cases.
 
 ```bork
-fn choose(ok: Bool): Int | String { if (ok) { 42 } else { "failed" } }
+fn choose(ok: Bool): Int | String { if ok { 42 } else { "failed" } }
 fn main() {
-  println(match (choose(false)) { n: Int => toString(n), text: String => text })
+  println(match choose(false) { n: Int => toString(n), text: String => text })
 }
 ```
 
@@ -224,7 +224,7 @@ Check the predicate in a guard, require the fact in the helper parameter, or dec
 pred positive(n: Int) { n > 0 }
 fn half(n: Int where positive): Int { n / 2 }
 fn checked(n: Int): Int {
-  if (positive(n)) { half(n) } else { 0 }
+  if positive(n) { half(n) } else { 0 }
 }
 fn main() { println(checked(2)) }
 ```

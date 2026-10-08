@@ -33,7 +33,7 @@ type SignUp = {
 type Account = { id: Int, name: UserName, seats: Int } derive (codec.Encode)
 
 fn seatsOf(plan: Plan): Int {
-  match (plan) {
+  match plan {
     Plan.Free => 1
     Plan.Paid { seats: n } => n
   }
@@ -46,7 +46,7 @@ fn register(id: Int, req: SignUp): Account {
 
 fn handle(id: Int, line: String): String {
   r: SignUp | json.JsonError | codec.DecodeError = json.Decode(line)
-  match (r) {
+  match r {
     req: SignUp => s"ok    ${json.Encode(register(id, req))}"
     e: json.JsonError => s"bad   line ${toString(id)}: not JSON: ${e.message}"
     e: codec.DecodeError => s"bad   line ${toString(id)}: ${e.path}: ${e.message}"
@@ -55,7 +55,7 @@ fn handle(id: Int, line: String): String {
 
 // handleAll handles lines, numbering them from id.
 fn handleAll(lines: List[String], id: Int): List[String] {
-  match (lines) {
+  match lines {
     [line, ...rest] => prepend(handle(id, line), handleAll(rest, id + 1))
     [] => []
   }
@@ -68,13 +68,13 @@ fn readFile(path: String) uses io: String | fs.Error {
 }
 
 fn main(): Ok | process.ExitCode {
-  path = match (process.Args()) {
+  path = match process.Args() {
     [p] => p
     _ => {
       return process.ExitCode { code: 2, message: "usage: signup FILE" }
     }
   }
-  match (readFile(path)) {
+  match readFile(path) {
     text: String => (handleAll(text.lines(), 1)).forEach(line => println(line))
     e: fs.Error => {
       detail = fs.ErrorInfo(e)

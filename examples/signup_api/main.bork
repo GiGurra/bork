@@ -39,7 +39,7 @@ type Account = { name: UserName, seats: Int } derive (codec.Encode)
 type Problem = { path: String, message: String } derive (codec.Encode)
 
 fn seatsOf(plan: Plan): Int {
-  match (plan) {
+  match plan {
     Plan.Free => 1
     Plan.Paid { seats: n } => n
   }
@@ -52,7 +52,7 @@ fn register(req: SignUp): Account {
 
 fn signup(body: String): http.Response {
   r: SignUp | json.JsonError | codec.DecodeError = json.Decode(body)
-  match (r) {
+  match r {
     req: SignUp => http.JsonReply(201, json.Encode(register(req)))
     e: json.JsonError => http.JsonReply(400, json.Encode(Problem { path: "", message: e.message }))
     e: codec.DecodeError => http.JsonReply(422, json.Encode(Problem { path: e.path, message: e.message }))
@@ -63,7 +63,7 @@ fn signup(body: String): http.Response {
 // the request scope is cancelled, and delay gives Cancelled.
 fn slow(rs: Scope) uses clock + state: http.Response {
   cancelAfter(rs, 20.millis())
-  match (delay(rs, 2.seconds())) {
+  match delay(rs, 2.seconds()) {
     c: Cancelled => http.Text(503, s"gave up: ${c.reason}")
     _ => http.Text(200, "done")
   }
@@ -72,10 +72,10 @@ fn slow(rs: Scope) uses clock + state: http.Response {
 // route answers a request; rs is the request's scope, cancelled if the
 // client goes away.
 fn route(req: http.Request, rs: Scope) uses clock + state: http.Response {
-  match (http.Segments(req.path)) {
+  match http.Segments(req.path) {
     ["health"] => http.Text(200, "ok")
     ["slow"] => slow(rs)
-    ["signup"] => if (req.method == "POST") { signup(req.body) } else { http.Text(405, "use POST") }
+    ["signup"] => if req.method == "POST" { signup(req.body) } else { http.Text(405, "use POST") }
     _ => http.Text(404, "not found")
   }
 }
@@ -89,7 +89,7 @@ fn serve(addr: String) uses io + net + clock + state: Ok | IoError {
 }
 
 fn show(label: String, r: http.Result) uses io {
-  match (r) {
+  match r {
     resp: http.Response => println(s"$label -> ${toString(resp.status)} ${resp.body}")
     e: IoError => println(s"$label -> error: ${e.message}")
     e: http.Overloaded => println(s"$label -> overloaded: ${e.response.status} ${e.response.body}")
@@ -122,14 +122,14 @@ fn demo() uses io + net + clock + state: Ok | IoError {
 }
 
 fn main(): Ok | process.ExitCode {
-  result = match (process.Args()) {
+  result = match process.Args() {
     ["serve", addr] => serve(addr)
     ["demo"] => demo()
     _ => {
       return process.ExitCode { code: 2, message: "usage: signup_api serve ADDR | demo" }
     }
   }
-  match (result) {
+  match result {
     e: IoError => {
       return process.ExitCode { code: 1, message: s"signup_api: ${e.path}: ${e.message}" }
     }

@@ -8,7 +8,7 @@ fn work(s: Scope, n: Int) uses clock + state: Int | Cancelled {
 }
 
 fn elapsed(start: time.Instant) uses clock: String {
-  match (time.Between(start, time.Now())) {
+  match time.Between(start, time.Now()) {
     duration: time.Duration => time.FormatDuration(duration)
     _ => "duration out of range"
   }
@@ -20,14 +20,14 @@ fn main() {
   println(xs.parMap(n => n * n))
   benchmark = process.Args().includes("--benchmark")
   scope s {
-    if (benchmark) {
+    if benchmark {
       start = time.Now()
       serial = xs.map(n => work(s, n))
       println(s"serial: ${elapsed(start)} $serial")
     }
     parallelStart = time.Now()
     parallel = xs.parMapUntilIn[Int, Cancelled](s, work, workers: 4)
-    if (benchmark) {
+    if benchmark {
       println(s"parallel (4 workers): ${elapsed(parallelStart)} $parallel")
     } else { println(parallel) }
   }

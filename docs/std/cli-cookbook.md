@@ -23,10 +23,10 @@ type Options = {
 
 fn main(): Ok | process.ExitCode {
   result = cli.Run[Options]("greet", "Greet someone", (options, s) => {
-    ending = if (options.excited) { "!" } else { "." }
+    ending = if options.excited { "!" } else { "." }
     println(s"Hello, ${options.name}${ending}")
   })
-  match (result) {
+  match result {
     Ok => {}
     error: cli.Error => {
       return process.ExitCode { code: 2, message: error.Render("greet") }
@@ -94,12 +94,12 @@ use codec.Defaults
 type Options = { name: String } derive (codec.Decode)
 
 fn main() {
-  match (cli.Parse[Options]("greet", "Greet someone", ["--name", "Ada"])) {
+  match cli.Parse[Options]("greet", "Greet someone", ["--name", "Ada"]) {
     options: Options => assert(options.name == "Ada")
     error: cli.Error => panic(toString(error))
     help: cli.Help => panic(help.text)
   }
-  match (cli.Parse[Options]("greet", "Greet someone", [])) {
+  match cli.Parse[Options]("greet", "Greet someone", []) {
     error: cli.Error => assert(!error.errors.isEmpty())
     _ => panic("expected a missing-name error")
   }

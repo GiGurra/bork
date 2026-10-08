@@ -18,15 +18,15 @@ fn flags(): List[cli.Flag] {
     .{ field: "token", env: "MANUAL_TOKEN" }]
 }
 fn main(): Ok | process.ExitCode {
-  match (cli.Run[Options]("manual", "Every name written by hand", (options, s) => {
+  match cli.Run[Options]("manual", "Every name written by hand", (options, s) => {
     println(s"${options.host}:${options.port}, token set: ${options.token.isSome()}")
-    }, flags: flags(), settings: settings())) {
+    }, flags: flags(), settings: settings()) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("manual") } }
     Ok => {}
   }
 }
 test "only the named flags exist" {
-  match (cli.Parse[Options]("manual", "", ["--help"], flags: flags(), settings: settings())) {
+  match cli.Parse[Options]("manual", "", ["--help"], flags: flags(), settings: settings()) {
     help: cli.Help => {
       assert(help.text.contains("-a, --addr"))
       assert(help.text.contains("(env: MANUAL_ADDR)"))
@@ -38,7 +38,7 @@ test "only the named flags exist" {
   }
 }
 test "a field name is not a flag when automatic names are off" {
-  match (cli.Parse[Options]("manual", "", ["--host", "db.example"], flags: flags(), settings: settings())) {
+  match cli.Parse[Options]("manual", "", ["--host", "db.example"], flags: flags(), settings: settings()) {
     error: cli.Error => { assert(error.errors.filter(item => item.message.contains("unknown flag: --host")).length() == 1) }
     other => { panic(s"Expected an unknown flag error, got ${other}") }
   }

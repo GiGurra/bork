@@ -5,15 +5,15 @@ import "bork/process"
 use codec.Defaults
 type Options = { serverHost: String = "localhost", internalToken: String = "development" } derive (codec.Decode)
 fn main(): Ok | process.ExitCode {
-  match (cli.Run[Options]("env", "Opt into automatic environment bindings", (options, s) => {
+  match cli.Run[Options]("env", "Opt into automatic environment bindings", (options, s) => {
     println(s"Connecting to ${options.serverHost}")
-    }, flags: [.{ field: "internalToken", long: cli.Mapping.Disabled, envName: cli.Mapping.Disabled }], settings: .{ autoEnv: true, envPrefix: "BORK_EXAMPLE" })) {
+    }, flags: [.{ field: "internalToken", long: cli.Mapping.Disabled, envName: cli.Mapping.Disabled }], settings: .{ autoEnv: true, envPrefix: "BORK_EXAMPLE" }) {
     error: cli.Error => { return process.ExitCode { code: 2, message: error.Render("env") } }
     Ok => {}
   }
 }
 test "disabled sources keep record defaults" {
-  match (cli.Parse[Options]("env", "", [], [.{ field: "internalToken", long: cli.Mapping.Disabled, envName: cli.Mapping.Disabled }], settings: .{ autoEnv: true, envPrefix: "BORK_EXAMPLE" })) {
+  match cli.Parse[Options]("env", "", [], [.{ field: "internalToken", long: cli.Mapping.Disabled, envName: cli.Mapping.Disabled }], settings: .{ autoEnv: true, envPrefix: "BORK_EXAMPLE" }) {
     options: Options => { assertEqual(options.internalToken, "development") }
     other => { panic(s"Expected options, got ${other}") }
   }

@@ -23,7 +23,7 @@ type Count = { value: Int where positive } derive (Build)
 
 fn main() {
   println(build[Count](3))
-  match (build[Count](0)) {
+  match build[Count](0) {
     error: shape.ValidationError => println(s"rejected field: ${error.path}")
     value: Count => println(value)
   }
@@ -78,7 +78,7 @@ class Label[T] { fn label(value: T): String }
 
 derive instance label[T]: Label[T] {
   fn label(value: T): String {
-    comptime match (shape.kind[T]()) {
+    comptime match shape.kind[T]() {
       shape.Record => "record"
       _ => shape.fail(shape.name[T]() + ": only records are supported")
     }
@@ -122,7 +122,7 @@ proving the target facts.
 Package tag descriptors expose `package: String` as the canonical import path,
 `Type` as the concrete tag record type, and `value(): tag.Type` as the checked
 record value including defaults. They retain lexical references from the tag
-declaration. Use `comptime for (tag in field.tagGroups)` to consume them; the
+declaration. Use `comptime for tag in field.tagGroups` to consume them; the
 descriptors cannot escape into runtime values. Ordinary generic consumers can
 read encoded foreign field tags through `codec.RecordField.tags`.
 
@@ -201,8 +201,8 @@ class VariantName[T] { fn variantName(value: T): String }
 
 derive instance variantNames[T]: VariantName[T] {
   fn variantName(value: T): String {
-    comptime for (variant in shape.variants[T]()) {
-      match (variant.project(value)) {
+    comptime for variant in shape.variants[T]() {
+      match variant.project(value) {
         Option.Some(payload) => { _ = payload; return variant.name }
         Option.None => {}
       }

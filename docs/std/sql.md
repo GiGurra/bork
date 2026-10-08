@@ -18,12 +18,12 @@ fn demo() uses io + net: Ok | sql.Error | codec.DecodeError {
     name = "Ada"
     _ = sql.SQL"INSERT INTO users(name) VALUES ($name)".Exec(db)?
     users = sql.SQL"SELECT name FROM users".Query[User](db)?
-    for (user in users) { println(user.name) }
+    for user in users { println(user.name) }
   }
 }
 
 fn main() {
-  match (demo()) {
+  match demo() {
     _: Ok => {}
     error: sql.Error => eprintln(error.operation + ": " + error.message)
     error: codec.DecodeError => eprintln(error.path + ": " + error.message)
@@ -92,7 +92,7 @@ fn inspect(tableName: String, name: String): sql.Rendered | sql.Error {
 }
 
 fn main() {
-  match (inspect("users", "Ada")) {
+  match inspect("users", "Ada") {
     rendered: sql.Rendered => {
       println(rendered.query)
       println(rendered.params)
@@ -156,9 +156,9 @@ type Row = { count: Int } derive (codec.Decode)
 
 fn main() {
   scope app {
-    match (sql.OpenSqlite(":memory:", app)) {
+    match sql.OpenSqlite(":memory:", app) {
       db: sql.Connection => {
-        match (sql.SQL"SELECT 'many' AS count".Query[Row](db)) {
+        match sql.SQL"SELECT 'many' AS count".Query[Row](db) {
           rows: List[Row] => println(rows)
           error: codec.DecodeError => eprintln(error.path + ": " + error.message)
           error: sql.Error => eprintln(error.operation + ": " + error.message)
@@ -201,12 +201,12 @@ fn demo() uses io + net: Ok | sql.Error | codec.DecodeError {
       _ = sql.SQL"INSERT INTO users(name) VALUES (${"discarded"})".Exec(tx)?
     }
     rows = sql.SQL"SELECT count(*) AS count FROM users".Query[Count](db)?
-    for (row in rows) { println(row.count) }
+    for row in rows { println(row.count) }
   }
 }
 
 fn main() {
-  match (demo()) {
+  match demo() {
     _: Ok => {}
     error: sql.Error => eprintln(error.operation + ": " + error.message)
     error: codec.DecodeError => eprintln(error.path + ": " + error.message)
@@ -237,10 +237,10 @@ type Row = { count: Int } derive (codec.Decode)
 
 fn main() {
   scope app {
-    match (sql.OpenSqlite(":memory:", app)) {
+    match sql.OpenSqlite(":memory:", app) {
       db: sql.Connection => {
-        for (result in sql.SQL"SELECT 1 AS count UNION ALL SELECT 2 AS count".Rows[Row](db)) {
-          match (result) {
+        for result in sql.SQL"SELECT 1 AS count UNION ALL SELECT 2 AS count".Rows[Row](db) {
+          match result {
             row: Row => println(row.count)
             error: sql.Error => eprintln(error.message)
             error: codec.DecodeError => eprintln(error.path + ": " + error.message)
