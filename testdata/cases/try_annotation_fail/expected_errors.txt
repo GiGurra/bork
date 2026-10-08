@@ -1,0 +1,7 @@
+main.bork:5:24: ? would return Hit from droppedFailure, but droppedFailure returns Miss
+main.bork:9:19: value must be String, found Hit
+main.bork:10:3: function wrongAnnotation returns Hit | Miss, but its body produces String
+main.bork:13:27: ? failure mapper returns String, but wrongMapper returns Miss
+main.bork:17:47: argument 1 to acceptMiss must be Miss, found Hit
+main.bork:18:28: function returnContext returns Miss, but its body produces Hit
+main.bork:20:16: miss must be Miss, found Hit

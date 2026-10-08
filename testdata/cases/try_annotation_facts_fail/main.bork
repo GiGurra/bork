@@ -1,0 +1,7 @@
+pred positive(n: Int) { n > 0 }
+fn unvalidated(): String | Int { 0 }
+fn missingFacts(): Int | String {
+  n: Int where positive = unvalidated()?
+  n
+}
+fn main() {}

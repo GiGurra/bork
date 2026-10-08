@@ -968,7 +968,9 @@ type checker struct {
 	// expression.
 	comptimeContext    *comptimeContext
 	initializerContext *initializerContext
-	lambdaDepth        int
+	// tryAnnotations selects a direct annotated binding initializer's kept member.
+	tryAnnotations map[*syntax.Try]Type
+	lambdaDepth    int
 	// mapperLambdas counts immediate mapper bodies within lambdaDepth;
 	// they restrict control flow but do not defer calls or their mocks.
 	mapperLambdas  int
@@ -1433,9 +1435,9 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 			t = c.deferredInitializer(s, declared)
 		} else if slot := c.carriedHere(s); declared == nil && slot != nil {
 			// A carried name keeps its type, which guides the new value.
-			t = c.exprWant(s.Value, slot.typ)
+			t = c.bindingValue(s, slot.typ)
 		} else {
-			t = c.exprWant(s.Value, declared)
+			t = c.bindingValue(s, declared)
 		}
 		if s.Type == nil {
 			var code, annotation string

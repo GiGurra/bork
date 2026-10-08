@@ -85,7 +85,7 @@ func (c *checker) valueInitializer(s *syntax.Binding, want Type, boundary string
 		c.initializerContext = saved
 		c.lambdaDepth--
 	}()
-	t := c.exprWant(s.Value, want)
+	t := c.bindingValue(s, want)
 	if want == nil && len(ctx.returns) > 0 {
 		members := append([]Type{}, ctx.returns...)
 		if t != Never {

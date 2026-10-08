@@ -1,0 +1,23 @@
+type Hit = { value: Int }
+type Miss = {}
+fn cached(): Hit | Miss { Miss {} }
+fn droppedFailure(): Miss {
+  miss: Miss = cached()?
+  miss
+}
+fn wrongAnnotation(): Hit | Miss {
+  value: String = cached()?
+  value
+}
+fn wrongMapper(): Miss {
+  miss: Miss = cached()?{ _ => "wrong" }
+  miss
+}
+fn acceptMiss(value: Miss): Miss { value }
+fn argumentContext(): Hit | Miss { acceptMiss(cached()?) }
+fn returnContext(): Miss { cached()?{ _ => Miss {} } }
+fn nestedAnnotation(): Hit | Miss {
+  miss: Miss = { cached()? }
+  miss
+}
+fn main() {}
