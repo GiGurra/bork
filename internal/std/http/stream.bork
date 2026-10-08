@@ -224,9 +224,11 @@ fn sendStream(method: String, url: String, headers: Headers, s: Scope, body: Opt
   if _, ok := _borkOptionGet(body); ok {
     ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{WroteRequest: func(httptrace.WroteRequestInfo) { wroteOnce.Do(func() { close(wroteRequest) }) }})
   }
+  requestContext, cancelTransport := context.WithCancel(ctx)
   retained := false
   defer func() {
     if !retained {
+      cancelTransport()
       stopUpload()
       stop()
       handle.Close()
@@ -284,7 +286,7 @@ fn sendStream(method: String, url: String, headers: Headers, s: Scope, body: Opt
     })
     input = source.reader
   }
-  req, err := http.NewRequestWithContext(ctx, method, url, input)
+  req, err := http.NewRequestWithContext(requestContext, method, url, input)
   if err != nil { return IoError{path: url, message: err.Error()} }
   _borkMapEach(headers, func(name string, values []string) bool {
     for _, value := range values { req.Header.Add(name, value) }
@@ -336,10 +338,11 @@ fn sendStream(method: String, url: String, headers: Headers, s: Scope, body: Opt
     })
     stopUpload()
     source.end()
-    // Let the transport observe graceful EOF before closing its request body.
+    // A peer may reject an upload without reading it. Do not wait for socket
+    // writes: cancel that transport request, retaining the received metadata.
     select {
     case <-wroteRequest:
-    case <-ctx.Done(): resp.Body.Close(); Close(upload); return failure(ctx.Err())
+    default: cancelTransport()
     }
     Close(upload)
     uploadComplete = true
@@ -350,6 +353,7 @@ fn sendStream(method: String, url: String, headers: Headers, s: Scope, body: Opt
     once.Do(func() {
       if stopWatch != nil { stopWatch() }
       stopUpload()
+      cancelTransport()
       handle.Close()
       stop()
       if upload, ok := _borkOptionGet(body); ok { Close(upload) }

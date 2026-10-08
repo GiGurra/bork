@@ -3,11 +3,16 @@ import "bork/encoding"
 import "bork/fs"
 
 type Remote = resource
-fn remote(s: Scope) uses net + state: Remote unsafe go {
+fn remote(s: Scope) uses net + clock + state: Remote unsafe go {
   import "compress/gzip"
   import "io"
   import "net/http"
   import "net/http/httptest"
+  import "sync"
+  import "time"
+  release := make(chan struct{})
+  var releaseOnce sync.Once
+  finishReject := func() { releaseOnce.Do(func() { close(release) }) }
   srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
     switch r.URL.Path {
     case "/empty": return
@@ -24,6 +29,14 @@ fn remote(s: Scope) uses net + state: Remote unsafe go {
       w.WriteHeader(200)
       w.(http.Flusher).Flush()
       <-r.Context().Done()
+    case "/bufferedreject":
+      http.NewResponseController(w).EnableFullDuplex()
+      time.Sleep(200*time.Millisecond)
+      w.Header().Set("Content-Length", "6")
+      w.WriteHeader(413)
+      io.WriteString(w, "denied")
+      w.(http.Flusher).Flush()
+      <-release
     case "/reject":
       http.NewResponseController(w).EnableFullDuplex()
       w.WriteHeader(413)
@@ -46,9 +59,12 @@ fn remote(s: Scope) uses net + state: Remote unsafe go {
       w.Write([]byte{0, 255, 97, 98, 99})
     }
   }))
-  return Remote{handle: srv.URL, owner: s.Own(func() { srv.Close() })}
+  return Remote{handle: struct { url string; finishReject func() }{srv.URL, finishReject}, owner: s.Own(func() { finishReject(); srv.Close() })}
 }
-fn url(server: Remote): String unsafe go { return server.handle.(string) }
+fn url(server: Remote): String unsafe go { return server.handle.(struct { url string; finishReject func() }).url }
+fn finishReject(server: Remote) uses state unsafe go {
+  server.handle.(struct { url string; finishReject func() }).finishReject()
+}
 fn response(result: http.StreamResult): http.StreamResponse {
   match (result) { value: http.StreamResponse => value, error => panic(toString(error)) }
 }
@@ -159,6 +175,17 @@ fn main() {
       attach(body, app)
     }
     println("captured producer joined", kind(http.Read(captured)))
+    chunk = encoding.Utf8("x".repeat(1048576))
+    buffered = http.OpenBody(app, producer => chunk)
+    rejection = response(http.SendStream("POST", base + "/bufferedreject", {:}, app, body: .Some(buffered), timeoutMs: 1000))
+    println("buffered rejection", rejection.status)
+    finishReject(server)
+    println("early response body", match (http.Read(rejection.body)) {
+      bytes: Bytes => encoding.Hex(bytes) == "64656e696564"
+      _: Cancelled => true
+      _: IoError => true
+      _ => false
+    })
     attachedUpload = scope temporary {
       source = response(http.GetStream(base + "/wait", app))
       reply = response(http.SendStream("POST", base + "/reject", {:}, temporary, body: .Some(source.body), timeoutMs: 1000))
