@@ -1,0 +1,4 @@
+main.bork:9:81: need requires x to be positive, but that is not proven for b (check it first with if (positive(b)) { ... })
+main.bork:12:60: take requires hi to be atLeast(lo), but that is not proven for hi (check it first with if (atLeast(hi, lo)) { ... })
+main.bork:15:101: take requires hi to be atLeast(lo), but that is not proven for hi (check it first with if (atLeast(hi, lo)) { ... })
+main.bork:18:49: take requires hi to be atLeast(lo), but that is not proven for hi (check it first with if (atLeast(hi, other)) { ... })

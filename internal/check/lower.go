@@ -837,6 +837,10 @@ func constantSpan(x syntax.Expr) (diag.Pos, diag.Pos) {
 // patVars makes variables of the names pat binds, from the value
 // subject it matches.
 func (l *lowerer) patVars(p *Pat, subject Expr) {
+	l.patVarsOwned(p, subject, nil)
+}
+
+func (l *lowerer) patVarsOwned(p *Pat, subject, owner Expr) {
 	if p == nil {
 		return
 	}
@@ -844,6 +848,9 @@ func (l *lowerer) patVars(p *Pat, subject Expr) {
 		v := &Var{Label: l.info.assemblyNames[p.bindNode], Name: p.Bind, Pos: bindPos(p.bindNode), Type: p.BindType, Kind: VarPattern, Unused: l.info.unused[p.bindNode] || p.Bind == "_"}
 		if src := l.info.patSources[p.bindNode]; src != nil {
 			v.Source = &VarSource{Subject: subject, Member: src.Member, Path: src.Path, Field: src.Field, ElementsOnly: src.ElementsOnly}
+			if src.Field != nil {
+				v.Source.Owner = owner
+			}
 		}
 		if p.Bind == "_" {
 			v.GoName = fmt.Sprintf("_discard_%d_%d", v.Pos.Line, v.Pos.Col)
@@ -852,14 +859,28 @@ func (l *lowerer) patVars(p *Pat, subject Expr) {
 		l.vars[p.bindNode] = v
 		p.Var = v
 	}
+	var fieldOwner Expr
+	if src := p.source; len(p.Fields) > 0 && src != nil && strings.Contains(src.Path, ".[]") {
+		// Universal source paths project facts, but each matched record
+		// needs a distinct owner for its fields' identities and predicates.
+		v := p.Var
+		if v == nil {
+			source := &VarSource{Subject: subject, Member: src.Member, Path: src.Path, Field: src.Field}
+			if src.Field != nil {
+				source.Owner = owner
+			}
+			v = &Var{Name: "_patternOwner", Type: p.Type, Kind: VarPattern, Source: source}
+		}
+		fieldOwner = &VarRef{expr: expr{typ: v.Type}, Var: v}
+	}
 	for _, f := range p.Fields {
-		l.patVars(f.Pat, subject)
+		l.patVarsOwned(f.Pat, subject, fieldOwner)
 	}
 	for _, e := range p.Elems {
 		l.patVars(e, subject)
 	}
 	l.patVars(p.Rest, subject)
-	l.patVars(p.Sub, subject)
+	l.patVarsOwned(p.Sub, subject, owner)
 	if p.guard != nil {
 		p.Guard = l.expr(p.guard)
 	}

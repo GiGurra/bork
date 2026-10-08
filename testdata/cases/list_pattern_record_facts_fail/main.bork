@@ -1,0 +1,19 @@
+pred positive(x: Int) { x > 0 }
+pred atLeast(x: Int, lo: Int) { x >= lo }
+type Row = { value: Int }
+type Range = { lo: Int, hi: Int where atLeast(lo) }
+type Outer = { range: Range }
+fn need(x: Int where positive): Int { x }
+fn take(lo: Int, hi: Int where atLeast(lo)): Int { hi }
+fn siblings(xs: List[Row]): Int {
+  match xs { [Row { value: a }, Row { value: b }, ...] => if positive(a) { need(b) } else { 0 }, _ => 0 }
+}
+fn unrelated(xs: List[Range]): Int {
+  match xs { [Range { lo }, Range { hi }, ...] => take(lo, hi), _ => 0 }
+}
+fn nested(xs: List[List[Outer]]): Int {
+  match xs { [[Outer { range: Range { lo } }, Outer { range: Range { hi } }, ...], ...] => take(lo, hi), _ => 0 }
+}
+fn wrong(xs: List[Range], other: Int): Int {
+  match xs { [Range { hi }, ...] => take(other, hi), _ => 0 }
+}
