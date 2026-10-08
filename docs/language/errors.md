@@ -73,7 +73,7 @@ even when attached: `match value?{ _ => ... }` is a match on bare `value?`.
 Parenthesize the wrapped expression instead:
 `match (value?{ e => Wrapped { cause: e } }) { ... }`.
 
-See [Matching and errors](matching.md#the--operator) for bare `?` and
+See [Matching and errors](matching.md) for bare `?` and
 [an error-context example](../../examples/error_context/main.bork) you can run.
 
 ---
