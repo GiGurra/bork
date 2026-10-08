@@ -1656,6 +1656,12 @@ func (f *factChecker) proveCases(x Expr, ob obligation, e env, depth int) (bool,
 			if cs.take(f.proveMember(x.X, x.Kept, ob, e, depth+1)) {
 				return true, nil
 			}
+		} else {
+			inner := ob
+			inner.path = "." + x.Option.Variant("Some").Fields[0].Name + ob.path
+			if cs.take(f.prove(x.X, inner, e, depth+1)) {
+				return true, nil
+			}
 		}
 	case *Block:
 		if x.Tail != nil {
@@ -2584,6 +2590,9 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 	case *Try:
 		if x.Option == nil {
 			out = append(out, f.declaredMember(x.X, x.Kept)...)
+		} else if depth < maxDepth {
+			path := "." + x.Option.Variant("Some").Fields[0].Name
+			out = append(out, within(f.declared(x.X, e, depth+1), path)...)
 		}
 	case *Select:
 		if rec, ok := x.X.Type().(*Record); ok {

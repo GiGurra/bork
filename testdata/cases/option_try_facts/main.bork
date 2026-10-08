@@ -1,0 +1,21 @@
+import "example.com/optiontryfacts/api"
+fn direct(): Int | Option[Int] { api.Need(api.Checked(1)?) }
+fn bound(): Int | Option[Int] {
+  n = api.Checked(2)?
+  api.Need(n)
+}
+fn nested(): Int | Option[Int] {
+  xs = api.Nested([3])?
+  api.Need(xs.get(0)?)
+}
+fn dependent(threshold: Int, x: Int where api.Above(threshold)): Int | Option[Int] {
+  n = api.Dependent(x, threshold)?
+  api.NeedAbove(n, threshold)
+}
+fn absent(x: Option[api.Pos]): Int | Option[Int] {
+  n = x?
+  api.Need(n)
+}
+fn main() {
+  println(direct(), bound(), nested(), dependent(3, 4), absent(Option.None))
+}
