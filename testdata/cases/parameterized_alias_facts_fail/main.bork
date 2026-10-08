@@ -1,0 +1,12 @@
+pred positive(x: Int) { x > 0 }
+type Items[T] = List[T]
+type Identity[T] = T
+type Maybe[T] = Option[T]
+pred nonempty[T](xs: List[T]) { !xs.isEmpty() }
+type Nonempty[T] = List[T] where nonempty
+fn need(x: Int where positive): Int { x }
+fn unproven(xs: List[Int]): Items[Int where positive] { xs }
+fn direct(x: Identity[Int]): Int { need(x) }
+fn maybe(x: Maybe[Int]): Int | Option[Int] { need(x?) }
+fn nonemptyResult(xs: List[Int]): Nonempty[Int] { xs }
+fn main() {}

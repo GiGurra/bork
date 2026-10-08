@@ -1,0 +1,3 @@
+fn f() { x?{ e => Wrapped { cause: e } }.field }
+fn g() { match x? { _ => 1 } }
+fn h() { match (x?{ _ => Fallback {} }) { _ => 1 } }

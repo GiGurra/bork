@@ -303,16 +303,10 @@ func (g *gen) argsShown(s *check.Trust) ast.Expr {
 func (g *gen) checkedWrapper(fn *check.Func) ast.Decl {
 	decl := g.signature(fn.Decl)
 	var args []ast.Expr
-	for _, tp := range fn.TypeParams {
-		for _, b := range tp.Bounds {
-			args = append(args, dictParam(tp, b))
+	for _, field := range decl.Type.Params.List {
+		for _, param := range field.Names {
+			args = append(args, param)
 		}
-	}
-	for _, p := range fn.Decl.Params {
-		args = append(args, name(p.Name))
-	}
-	for _, v := range fn.NeedVars {
-		args = append(args, varIdent(v))
 	}
 	var impl ast.Expr = ast.NewIdent("_unchecked_" + g.funcName(fn).Name)
 	if len(fn.TypeParams) > 0 {
@@ -671,6 +665,7 @@ func (g *gen) constraintCond(con *check.Constraint, x ast.Expr, t check.Type) as
 			args = append(args, g.shapeCaptureArgument(a.Param))
 		}
 	}
+	args = append(args, g.membershipArgs(inst.Func.TypeParams, inst.TypeArgs)...)
 	return &ast.CallExpr{Fun: g.instance(inst), Args: args}
 }
 

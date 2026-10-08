@@ -8,7 +8,7 @@ type Config = { port: Pos }
 instance encodePos: codec.Encode[Pos] {
   fn encode(x: Pos): codec.Value { codec.Value.String { value: s":$x" } }
 }
-fn encodeParam(x: Pos): String { json.Encode(dbg(x)) }
+fn encodeParam(x: Pos): String | json.JsonError { json.Encode(dbg(x)) }
 fn main() {
   p: Pos = 1
   println(json.Encode(p))

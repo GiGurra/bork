@@ -45,7 +45,8 @@ What follows from this:
 - **Immutability is what makes it sound.** A fact about an immutable value can never become false, so facts are only ever added, never invalidated. There is no need to track writes or aliasing.
 - **More facts means a more specific type.** `Int where positive` can be used anywhere an `Int` is expected. Because nothing is mutable, `List[Int where positive]` is also safely usable as a `List[Int]`.
 - **Facts flow through generics.** Passing `x: Int where positive` through `identity[T]` keeps the fact, because `T` is `Int where positive`.
-- **Destructuring retains payload promises.** Matching a sealed member of a union preserves its declared payload facts, including fact aliases inside `Option[T]` returned by another package. The payload can be returned as the alias or bound to a constrained ambient with `with`.
+- **Loop elements have distinct proof identities.** Every element retains the source list's declared element facts. A guard on one element does not prove a fact about a separate loop element, even when both loops traverse the same list or an alias of it.
+- **Destructuring retains payload promises.** Matching a sealed member of a union preserves its declared payload facts, including fact aliases inside `Option[T]` returned by another package. The payload can be returned as the alias or bound to a constrained ambient with `with`. Unwrapping an `Option` with `?` retains the same payload facts, including nested facts and dependent predicate arguments.
 - **Facts live inside data.** Once `user.age` is known to satisfy `adult`, that is part of `user`'s type for as long as `user` exists.
 - **Branches merge by intersection.** After an `if`/`else`, only the facts that hold on every path remain.
 - **Zero runtime cost.** Facts are erased when compiling to Go. At runtime, `Int where positive` is just an `int`.
@@ -151,12 +152,17 @@ Element constraints must be checked at construction/boundaries and decoding, and
 tuples must preserve effects and scope lifetimes. Tuples lower to a single anonymous
 Go struct value with positional E0/E1 fields. See [design](design/tuples.md).
 
+Tuple facts in generic arguments stay local to their annotations. Cached record
+and sealed instances share erased shapes; a tuple constraint in one use must
+never become a guarantee of unrelated values with the same shape. Facts declared
+by the generic type itself still apply to every instance.
+
 ## 2. Type system
 
 ### Decided
 
 - **Records and sum types (ADTs) are the core data types.** Records are product types. Sum types are tagged unions whose variants can carry data.
-- **Generics in v0.1.** User code can declare generic types and functions, not just use built-in ones like `Option[T]` and `List[T]`.
+- **Generics in v0.1.** User code can declare generic types and functions, not just use built-in ones like `Option[T]` and `List[T]`. Transparent aliases can also take parameters (`type Index[T] = Map[String, List[T]]`), with explicit arguments at each use. Expansion preserves type identity, construction ownership, effects and union success order; cycles and incorrect arity are errors. Facts follow their expanded positions and retain the ordinary placement restrictions.
 - **Variance: planned, not in v0.1.** Scala-style declaration-site variance controls (covariant and contravariant type parameters) are planned for a later version. The syntax should leave room for them.
 - **Structural typing for interfaces and constraints.** A type satisfies an interface or generic constraint implicitly, by having the required shape (like Go). No `implements` declarations.
 - **Sealed types and traits are opt-in.** Marking a type sealed closes its set of variants to its own declaration. That is what makes exhaustive matching possible without a default case. Matching on an open (unsealed) type always needs a default case.
@@ -180,7 +186,7 @@ Go struct value with positional E0/E1 fields. See [design](design/tuples.md).
 - **Higher-kinded types (`Functor[List]`): room in the syntax, not implemented in v0.1.**
 - **No circular package dependencies**, as in Go. This keeps instance lookup, and compilation in general, bounded and predictable.
 
-Implemented: the prelude class `Show[T] { fn show(x: T): String }` customizes `toString`, `println`, interpolation, snapshots, and nested printing. Every type has a default renderer, so `Show` bounds always hold and `show(x)` equals `toString(x)`, even inside unbounded generic code. Custom Show instances follow a special coherence rule: one renderer for a record or sealed type, declared only in that type's own package, with no `use` needed. For a generic type, the instance must be universal (`Show[Box[T]]`) and may have only `Show` bounds. Specialized or fact-constrained instances cannot define a renderer; basic types, `List`, `Map` and `Option` must be wrapped in a declared type to customize their text. This differs from other classes' selectable instances because a value should print consistently everywhere. Other classes, including a user-defined class named Show, retain the ordinary instance rules. Custom text never changes equality or map-key hashing. Show cannot be derived; default rendering needs no derive.
+Implemented: the prelude class `Show[T] { fn show(x: T): String }` customizes `toString`, `println`, interpolation, snapshots, and nested printing. Every type has a default renderer, so `Show` bounds always hold and `show(x)` equals `toString(x)`, even inside unbounded generic code. Custom Show instances follow a special coherence rule: one renderer for a record or sealed type, declared only in that type's own package, with no `use` needed. For a generic type, the instance must be universal (`Show[Box[T]]`) and may have only `Show` bounds. Generic renderers cannot inspect type-parameter union membership, directly or through helpers/callbacks: implicit rendering cannot carry the required membership environment. This shape is rejected at check time; concrete-member patterns with a wildcard, or explicit sealed variants, remain supported. Specialized or fact-constrained instances cannot define a renderer; basic types, `List`, `Map` and `Option` must be wrapped in a declared type to customize their text. This differs from other classes' selectable instances because a value should print consistently everywhere. Other classes, including a user-defined class named Show, retain the ordinary instance rules. Custom text never changes equality or map-key hashing. Show cannot be derived; default rendering needs no derive.
 
 ```
 class Monoid[T] {
@@ -213,6 +219,7 @@ use api.Json
 ```
 - **What is in scope:** a package's own instances, the prelude's, and those it uses. Instances of other packages are never picked up without `use`. (A package's own instances being in scope is a pragmatic exception to "no automatic instances"; to offer alternatives, put them in packages and choose with `use`.)
 - **Class methods are called like functions** (`show(x)`, `money.show(x)`); the types decide the instance. (Methods of types, `xs.map(f)`, are another thing: see the grammar's Methods.) Methods of an exported class are visible with it. A method can also be passed as a value (`xs.map(show)`). Explicit type arguments decide what the arguments cannot: `empty[Int]()`. Type arguments are inferred locally, by unification: each call gives its type parameters unknowns, which the arguments (left to right, lambdas last), the expected type, and the lambdas' bodies decide. An empty `[]` or `{:}`, or `Option.None`, whose type is not known yet gets unknowns of its own: in `words.fold({:}, (m, w) => m.put(w, 1))`, `{:}` is a `Map` of two unknowns, and `m.put` in the body decides them. Inference stays within the outermost call: what is still unknown when it has been checked is reported where it came from (the `[]`, or the lambda parameter).
+- **String indexes compose.** `indexOf`, `substring`, `runeAt` and regex match `start`/`end` use zero-based Unicode code-point offsets, with exclusive ends for slices and matches. Code points are not grapheme clusters. UTF-8 byte operations use explicit `byteLength`, `byteIndexOf` and `byteSubstring` names; see [String indexing](std/strings.md).
 - **Methods can be function values** as `Type.method`, with the receiver first: `strings.map(String.byteLength)`, `lists.map(List.length)`, or `f: (List[Int]) => Int = List.length`. Generic method references infer their type arguments from the expected function type and fill class dictionaries as ordinary function values do. They retain their declared effects, close open callback parameters as pure, and reject `where` requirements. Sealed variants keep precedence over methods with the same name. An imported type's exported methods and visible exported extension methods can be referenced; a value's fields are not method references. Bound references use lambdas for now.
 - **Missing and ambiguous instances are errors,** with hints: which `use` would bring one into scope, or which bound a generic function lacks.
 - **Lowered to dictionary passing.** A call whose instance is known calls the instance's method directly; only generic code passes instances around.
@@ -221,6 +228,7 @@ use api.Json
 - **Standalone derivation:** `derive codec.Decode for Config` requests one class per declaration, in any file of the package and independently of declaration order. Inline derive keeps working. A standalone request must be in the package that owns the underlying record/sealed type or the class; aliases do not change ownership, and private representation rules still apply. `derive codec.Decode for Box` derives universally; `derive codec.Decode for Box[Int]` derives a concrete specialization. Repeated requests, including inline plus standalone, are errors. Constrained aliases retain their result validation. Derived instance names remain `ConfigDecode`; specialized heads have deterministic suffixes shown by the package API. GoStruct is derived for the record declaration, not a specialization. Ordinary selectable instances retain their existing scopes and ownership rules.
 - **`derive (codec.Decode, codec.Encode)`** on a record or sealed type asks the compiler to write the instances, named after the type (`CreateUserDecode`). They follow the same rules as written instances: in scope in their own package, used elsewhere with `use api.CreateUserDecode`. Each field needs an instance in scope. The `bork/codec` classes `codec.Decode` and `codec.Encode`, plus the prelude’s `GoStruct`, can be derived.
 - **JSON:** `bork/codec` has a `codec.Value` sealed type and the classes `codec.Decode` and `codec.Encode`; select `use codec.Defaults` for instances for the basic types, `Option`, `List`, `Map[String, V]`, and `codec.Value`, while `bork/json` provides `json.Parse`/`json.Render` and `json.Decode[T]`/`json.Encode[T]`. Records are objects, including empty records: their derived decoder accepts objects and rejects other JSON kinds, and their encoder produces `{}`. A sealed value is an object whose `"type"` names the variant (a variant without fields may be just its name, `"Free"`); a missing `Option` field is `None`. A `codec.DecodeError` says where (`.items[1].qty`) and what went wrong.
+- **JSON rendering:** JSON rendering and typed encoding return `String | json.JsonError`. A successful result is valid JSON; nonfinite floats and invalid manually constructed number tokens are rejected, including nested values. `http.JsonReply` accepts the result and turns an encoding error into a plain-text 500 response.
 - **JSON safety:** parsing rejects duplicate object keys (including escaped spellings of the same name) and invalid UTF-8, with line and column diagnostics. Encoding unordered maps sorts keys; insertion-order and sorted maps keep their traversal order. A named sealed payload field called `type` is a compile error when deriving Encode or Decode because it collides with the discriminator. A named field called `values` is allowed.
 - **Dynamic JSON and JSON Lines:** see [bork/json](std/json.md).
 - **YAML:** `bork/yaml` parses and renders YAML as `codec.Value` trees, and decodes and encodes typed values through the codec Decode/Encode instances (core schema only, duplicate keys and unknown tags rejected, alias expansion bounded); see [bork/yaml](std/yaml.md).
@@ -2801,12 +2809,14 @@ keeping private representations such as HTTP certificate keys inaccessible.
 - **No separate error concept.** Failures are ordinary types. There is no `error` kind, no `Error` base type, and no `Result` wrapper.
 - **Functions that can fail return union types.** For example: `fn loadUser(id: UserId): User | NotFound | DbError`. Matching on a union is exhaustive, and checking a member narrows the type, just like any other fact.
 - **Union match arms follow source order.** Overlapping type patterns are allowed: the first matching arm wins. A later arm completely covered by earlier unguarded arms is a compile error.
+- **Compile-time predicate execution is bounded.** Ordinary predicate evaluation uses the same 10-second execution limit as comptime work. Evaluators are terminated on timeout, normal/error completion, or catchable compiler termination signals, and their temporary directories are removed. On supported Unix systems, cleanup also terminates their process-group descendants. Panic diagnostics retain the message and bork position without the generated Go stack trace.
+
 - **`?` keeps the leftmost member and returns the rest.** `user = loadUser(id)?` binds `User`, and returns `NotFound` or `DbError` from the enclosing function. By convention, the leftmost member is the main result. What `?` does can be read from the callee's signature alone.
 - **Returned members must fit the enclosing function's return type.** This is checked, so nothing slips through unhandled.
-- **An annotation overrides the default.** `x: B = foo()?` keeps `B` and returns everything else, including what would otherwise be the main result. That is useful for early returns that are not errors (e.g. `miss: CacheMiss = cache.get(k)?` returns a cache hit early).
+- **A direct binding annotation can override the default.** When `B` names a member of the operand union, `x: B = foo()?` keeps `B` and returns everything else, including what would otherwise be the main result. The same selection applies to `x: B = foo()?{ e => value }`, whose mapper receives the other members. Ordinary return and argument expectations do not change the first-member rule. That is useful for early returns that are not errors (e.g. `miss: CacheMiss = cache.get(k)?` returns a cache hit early).
 - **`a?.b?.c` applies `?` at each step** (the Rust reading), not safe navigation.
 - **`?` also works on sealed types.** `Option[T]` is `Some[T] | None`, so `v = maybeUser?` keeps the value and returns `None`.
-- **Adding context (q's `Wrapf` semantics) is required.** Wrapping attaches to a single `?` and transforms what that `?` returns.
+- **Adding context:** `x?{ e => Wrapped { cause: e } }` attaches a failure mapper to a single `?`. The callback receives the remaining union members (one value at runtime); its trailing value is returned from the enclosing function, and must fit that function's result type and facts. The original failure need not fit. On `Option`, write `opt?{ _ => NotFound {} }`: `Some` keeps its payload, while `None` runs the mapper. The operand is evaluated once; only failure evaluates the mapper body, once. Captured facts, effects and lifetimes obey the ordinary rules. The mapper is checked as an ordinary lambda: explicit `return`, nested `?`, and outward loop control are rejected. A sole `Ok` failure can be discarded with `_`. The brace must attach as `?{`; a spaced `? {` outside control heads gets a diagnostic and fix. In an unparenthesized control head, a brace after `?` always starts the body; parenthesize a wrapped operand, as in `match (x?{ e => Wrapped { cause: e } }) { ... }`.
 - **Chaining is not a priority.** Clarity beats conciseness. Writing one step per line is fine.
 
 ```
@@ -2823,11 +2833,10 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 ### Consequences
 
 - **Union order has meaning for `?`.** For subtyping, `A | B` and `B | A` are still the same type. But reordering a published signature changes what callers' `?` keeps, so it is an API change. The formatter never reorders unions, and a future API-diff tool should flag it.
-- **Type parameters are not flattened.** In `fn retry[T, E](...): T | E | Timeout`, the leftmost member is `T` as a whole, even if `T` is itself a union at the call site.
+- **Type parameters are not flattened.** In `fn retry[T, E](...): T | E | Timeout`, the leftmost member is `T` as a whole, even if `T` is itself a union at the call site. Generated generic calls carry membership predicates where needed: a match on `T`, or `?` keeping `T`, accepts only its Bork members, including through function values and callbacks. Go `any` alone does not define membership.
 
 ### Open questions
 
-- **Wrap syntax**, e.g. `loadUser(id)?{ e => LoadFailed(id, e) }`, or something else?
 - **`?` inside lambdas** returns from the lambda, which makes the lambda's inferred return type a union. Is that what we want, or should `?` require a declared lambda return type?
 
 ## Language basics
@@ -3214,7 +3223,7 @@ imported = settings.Box[String] { value: "value" }
   each usable alternative independently and recheck it.
 
 Acceptance covers constructor kinds, fieldless/defaulted variants, nested
-shorthand, concrete aliases (and rejection of parameterized aliases), imported
+shorthand, concrete and explicitly parameterized aliases, imported
 types and alias-exposed inaccessible owners, constrained-alias fix fallbacks,
 argument arity/kinds,
 conflicting context, bounds/argument facts, defaults and invariants, private

@@ -39,13 +39,29 @@ invalid pattern
 | Field | Meaning |
 | --- | --- |
 | `value: String` | The whole matched substring. |
-| `start: Int`, `end: Int` | UTF-8 byte offsets into the input. |
+| `start: Int`, `end: Int` | Zero-based Unicode code-point offsets into the input; end is exclusive. |
 | `groups: List[Option[String]]` | Numbered captures, excluding the whole match. |
 | `named: Map[String, Option[String]]` | Named captures. |
 
 `ValidPattern(pattern: String): Bool` proves a pattern compiles.
 `Matches(text: String, re: Regex): Bool` proves a string matches the expression.
-All operations are pure.
+All operations are pure. Offsets use the same units as `String.substring`, `indexOf` and `runeAt`; they count code points rather than grapheme clusters.
+
+```bork
+import "bork/regex"
+
+fn main() {
+  text = "🙂åbc"
+  match (regex.Compile("b").Find(text)) {
+    Option.Some(found) => println(found.start, text.substring(found.start, found.end))
+    Option.None => {}
+  }
+}
+```
+
+```text
+2 b
+```
 
 ## Patterns and captures
 
@@ -56,7 +72,7 @@ Dynamic inputs use `Parse(pattern): Regex | ParseError`, or prove `ValidPattern`
 before calling Compile. All operations are pure, and compiled expressions are
 shared by their value's private callbacks without exposing mutable Go state.
 Matches searches anywhere; use anchors to require a whole-string match.
-Match contains `value`, UTF-8 byte offsets `start`/`end`, numbered `groups`
+Match contains `value`, Unicode code-point offsets `start`/`end`, numbered `groups`
 (excluding the whole match), and `named: Map[String, Option[String]]`.
 An unmatched group is None, while a matched empty group is Some(""). Duplicate
 capture names retain the last group's value. Replace expands `$name`, `${name}`,

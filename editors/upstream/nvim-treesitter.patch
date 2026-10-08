@@ -21,7 +21,7 @@ index fca90f6..39dfeb3 100644
 +  bork = {
 +    install_info = {
 +      location = 'editors/tree-sitter-bork',
-+      revision = '67e0597980446067703cda85c7120cb63b429fd1',
++      revision = 'b30b29ee23d4089c7e90ec2c8e323e389ea44db8',
 +      url = 'https://github.com/GiGurra/bork',
 +    },
 +    tier = 3,
@@ -34,7 +34,7 @@ new file mode 100644
 --- /dev/null
 +++ b/runtime/queries/bork/folds.scm
 @@ -0,0 +1,6 @@
-+[(block) (comprehension_expression) (record_type) (record_literal) (match_expression) (select_expression) (class_declaration)
++[(failure_mapper) (block) (comprehension_expression) (record_type) (record_literal) (match_expression) (select_expression) (class_declaration)
 + (instance_declaration) (instances_declaration)
 + (list_literal) (list_comprehension) (map_literal) (tuple_literal) (tuple_type) (tuple_pattern)
 + (go_body) (comment)] @fold
@@ -98,7 +98,7 @@ new file mode 100644
 --- /dev/null
 +++ b/runtime/queries/bork/indents.scm
 @@ -0,0 +1,9 @@
-+[(block) (comprehension_expression) (record_literal) (record_type) (list_literal) (list_comprehension) (map_literal)
++[(failure_mapper) (block) (comprehension_expression) (record_literal) (record_type) (list_literal) (list_comprehension) (map_literal)
 + (tuple_literal) (tuple_type) (tuple_pattern)
 + (parameters) (type_arguments) (match_expression) (select_expression) (class_declaration)
 + (instance_declaration) (instances_declaration)] @indent.begin

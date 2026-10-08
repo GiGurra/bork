@@ -227,6 +227,12 @@ Unions are how functions report failure. The result type lists the success value
 
 A union can be given a name: `type Lookup = String | NotFound`.
 
+A generic type parameter keeps its union membership. If `T` is `Int | String`,
+a `t: T` pattern in a function taking `T | NotFound` matches integers and
+strings; `NotFound` still reaches its own arm. The same applies to `?`: when
+`T` is the success member, it keeps either integer or string values and
+propagates `NotFound`.
+
 ## Option
 
 `Option[T]` is a value that may be missing. It is an ordinary sealed type with the variants `Some(T)` and `None`. There is no null.
@@ -365,6 +371,39 @@ fn main() {
   println(basket)
 }
 ```
+
+Aliases can take type parameters to name a repeated shape:
+
+```bork
+type Index[T] = Map[String, List[T]]
+type Missing = {}
+type Result[T] = T | Missing
+
+fn first[T](items: List[T]): Result[T] {
+  match items.get(0) {
+    Option.Some(value) => value
+    Option.None => Missing {}
+  }
+}
+
+fn main() {
+  index: Index[Int] = { "numbers": [1, 2] }
+  println(index, first([3]))
+}
+```
+
+Supply every type argument when using an alias: `Index[Int]`. An alias is
+transparent: it has the identity, construction rules and effects of the type
+it expands to, with no wrapper or conversion. Union members keep their order,
+so `Result[T]` keeps `T` as the success type for `?`. Alias cycles are errors.
+For an alias of a record or sealed type, write explicit arguments on its
+constructor head, such as `Alias[Int] { value: 1 }`, or use `.{ value: 1 }`
+with an expected type.
+
+Facts follow their positions in the expansion. For `type Items[T] = List[T]`,
+`Items[Int where positive]` requires positive elements, just like
+`List[Int where positive]`. Expanding a fact into an unsupported position,
+such as a `Map` key or value, is still an error.
 
 ## Records with rules
 

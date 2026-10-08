@@ -45,7 +45,7 @@ fn main() {
     text: String => { println(text.trim()); println(yaml.Decode[Color](text)) }
     error: yaml.Error => println(error)
   }
-  println(json.Decode[Color](json.Encode(Color.Other("紫-with spaces"))))
+  println(json.Decode[Color](match (json.Encode(Color.Other("紫-with spaces"))) { text: String => text; error: json.JsonError => { println(error); return } }))
   println(json.Decode[Color]("\"red\""))
   println(json.Decode[Color]("\"purple\""))
   println(json.Decode[Color]("{\"type\":\"purple\"}"))

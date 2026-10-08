@@ -49,6 +49,7 @@ func newGen(info *check.Info) *gen {
 			g.comptimeReads[capture] = true
 		}
 	}
+	g.membershipNeeds()
 	return g
 }
 
@@ -191,6 +192,7 @@ func (g *gen) query(q check.Query, roots *[]*check.Func, setup *[]ast.Stmt) ast.
 	for _, dict := range q.Dicts {
 		dicts = append(dicts, g.dict(dict))
 	}
+	args = append(args, g.membershipArgs(q.Pred.TypeParams, q.TypeArgs)...)
 	return &ast.CallExpr{Fun: fun, Args: append(dicts, args...)}
 }
 
@@ -574,13 +576,15 @@ type gen struct {
 	// mock's body found wrong.
 	typeParamNames   map[*check.TypeParam]string
 	typeParamGoTypes map[*check.TypeParam]ast.Expr
+	typeMembership   map[*check.TypeParam]bool
 	tupleConversions map[string]*tupleConversion
 	mockErrors       diag.List
 	usesMocks        bool
 	usesMockIn       bool
 	// carryStates are the latches that a loop's After values are
 	// assigned through (see carried.go).
-	carryStates map[*check.Var]*ast.Ident
+	carryStates    map[*check.Var]*ast.Ident
+	listReuseCalls map[*check.Call]bool
 	// usesAmbients is set when the program publishes or reads logged
 	// or propagated ambient values (ambientRuntime). labelGuard, while
 	// a Go function's body is generated, is set if a with in it
@@ -975,6 +979,7 @@ func (g *gen) signature(fd *syntax.FuncDecl) *ast.FuncDecl {
 	if fn.TrackCaller {
 		ftype.Params.List = append(ftype.Params.List, &ast.Field{Names: []*ast.Ident{ast.NewIdent("_callerAt")}, Type: ast.NewIdent("string")})
 	}
+	ftype.Params.List = append(ftype.Params.List, g.membershipParams(fn.TypeParams)...)
 	if fn.Result != check.Ok && fn.Result != check.Never {
 		ftype.Results = &ast.FieldList{List: []*ast.Field{{Type: g.goType(fn.Result)}}}
 	}
@@ -1125,7 +1130,7 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		if frame := g.passthrough(e.Inst.Func); frame != nil {
 			return stmts, g.nextRef(e.Inst, frame, needs)
 		}
-		if inst := e.Inst; inst.Func.Class != nil || len(inst.Dicts) > 0 || collapsedUnion(inst) || len(needs) > 0 || len(inst.TypeArgs) > 0 && hasTupleRepresentation(&check.FuncType{Params: inst.Params, Result: inst.Result}) {
+		if inst := e.Inst; inst.Func.Class != nil || len(inst.Dicts) > 0 || len(g.membershipParams(inst.Func.TypeParams)) > 0 || collapsedUnion(inst) || len(needs) > 0 || len(inst.TypeArgs) > 0 && hasTupleRepresentation(&check.FuncType{Params: inst.Params, Result: inst.Result}) {
 			return stmts, g.funcRef(inst, needs...)
 		}
 		return nil, g.instance(e.Inst)
@@ -1427,6 +1432,9 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		}
 		return stmts, g.builtinCall(e, xs)
 	case *check.Call:
+		if g.listReuseCalls[e] {
+			return g.reusedListCall(e)
+		}
 		if e.BuildRead != nil {
 			if !e.BuildRead.Captured {
 				panic("compiler bug: build input was not captured")
@@ -1527,6 +1535,7 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		if frame := g.passthrough(inst.Func); frame != nil {
 			return stmts, g.nextCall(inst, frame, append(xs, needs...))
 		}
+		needs = append(needs, g.membershipArgs(inst.Func.TypeParams, inst.TypeArgs)...)
 		var dicts []ast.Expr
 		for _, d := range inst.Dicts {
 			dicts = append(dicts, g.dict(d))

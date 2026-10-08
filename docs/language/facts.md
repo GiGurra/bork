@@ -181,6 +181,11 @@ fn main() {
 }
 ```
 
+Each loop element retains facts declared for every element of its source list.
+A guard on one loop variable proves a fact only about that variable; it does
+not prove the same fact about another element, including a nested loop over
+the same list.
+
 ## Relations between values
 
 A predicate with more than one parameter relates values to each other. The value being constrained is its first argument, and the rest are written in the `where`:
@@ -322,6 +327,10 @@ Tuple element facts are checked like record field facts. A parameter of type
 `(Int where positive, String)` requires the first element to satisfy positive;
 `.0` access and tuple destructuring preserve the proof. Decode validates constrained
 elements before returning success and reports JSON index paths.
+
+Tuple facts in a generic argument belong to the annotation that requires them.
+A parameter of type `Box[(Int where positive, Int)]` does not give the same
+fact to a separate value of type `Box[(Int, Int)]`.
 
 To see what the compiler knows at some point in your code, ask it with [`bork describe`](../cli.md#describe).
 

@@ -1,0 +1,5 @@
+type Direct[T] = Direct[T]
+type Grow[T] = List[Grow[List[T]]]
+type Left[T] = Right[List[T]]
+type Right[U] = Left[U]
+fn main() {}

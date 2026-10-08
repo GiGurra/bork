@@ -386,7 +386,9 @@ PADDED TEXT
 
 Only strings with the `s` prefix interpolate. `toString(x)` gives the same text as printing `x`.
 
-String methods include `byteLength`, `runeCount`, `contains`, `startsWith`, `endsWith`, `indexOf`, `toUpper`, `toLower`, `capitalize` (upper-cases the first character), `trim`, `replaceAll`, `repeat`, `substring`, `split`, `fields`, `lines`, and `runeAt`. The ones that may find nothing say so in their result: `indexOf` and `runeAt` return an `Option`, and `substring` returns the text or an `OutOfRange`. To turn text into a value, use `parseInt`, `parseFloat`, or `parseBool`, which return the value or a `ParseError`.
+String indexes count Unicode code points: `indexOf` returns an offset that can be passed to `substring` or `runeAt`. Regex match offsets use the same units. Code points are not grapheme clusters: a letter followed by a combining accent counts as two. Byte operations are explicit: `byteLength`, `byteIndexOf` and `byteSubstring` use UTF-8 bytes. See [String indexing](../std/strings.md).
+
+String methods include `byteLength`, `runeCount`, `contains`, `startsWith`, `endsWith`, `indexOf`, `byteIndexOf`, `toUpper`, `toLower`, `capitalize` (upper-cases the first character), `trim`, `replaceAll`, `repeat`, `substring`, `byteSubstring`, `split`, `fields`, `lines`, and `runeAt`. The ones that may find nothing say so in their result: `indexOf` and `runeAt` return an `Option`, and `substring` returns the text or an `OutOfRange`. To turn text into a value, use `parseInt`, `parseFloat`, or `parseBool`, which return the value or a `ParseError`.
 
 ### Printing
 

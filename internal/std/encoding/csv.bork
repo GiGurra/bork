@@ -161,10 +161,10 @@ fn EncodeCsv[T: codec.Encode + codec.Decode](values: List[T]): String | CsvError
   Csv(rows)
 }
 
-fn encodeCsvRows[T: codec.Decode](values: List[T], encodeRow: (T) => codec.Value, render: (codec.Value) => String): List[List[String]] | CsvError {
+fn encodeCsvRows[T: codec.Decode](values: List[T], encodeRow: (T) => codec.Value, render: (codec.Value) => String | codecs.JsonError): List[List[String]] | CsvError {
   encodeCsvRowsWithSchema[T](codec.Schema[T](), values, encodeRow, render)
 }
-fn encodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchema], values: List[T], encodeRow: (T) => codec.Value, render: (codec.Value) => String, recordEncoding: Option[codec.RecordEncoding[T]] = Option.None): List[List[String]] | CsvError unsafe go {
+fn encodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchema], values: List[T], encodeRow: (T) => codec.Value, render: (codec.Value) => String | codecs.JsonError, recordEncoding: Option[codec.RecordEncoding[T]] = Option.None): List[List[String]] | CsvError unsafe go {
   record, supported := _borkOptionGet(recordSchema)
   schema := record.fields
   if !supported { return CsvError{row: 1, column: "", message: "expected a derived record decoder"} }
@@ -208,7 +208,9 @@ fn encodeCsvRowsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSch
         if !valid { return CsvError{row: int64(index + 2), column: key, message: "expected an encoded string"} }
         row = append(row, text.value)
       } else {
-        row = append(row, render(json))
+        rendered := render(json)
+        if failure, failed := rendered.(codecs.JsonError); failed { return CsvError{row: int64(index + 2), column: key, message: failure.message} }
+        row = append(row, rendered.(string))
       }
     }
     if len(fields) != 0 { return CsvError{row: int64(index + 2), column: "", message: "encoded fields do not match the record schema"} }

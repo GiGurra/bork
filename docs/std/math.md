@@ -263,9 +263,9 @@ import "bork/json"
 import "bork/math"
 use math.Codecs
 
-fn demo() uses io: Ok | ParseError {
+fn demo() uses io: Ok | ParseError | json.JsonError {
   amount = math.ParseDecimal("123.4500")?
-  encoded = json.Encode(amount)
+  encoded = json.Encode(amount)?
   println(encoded)
   match (json.Decode[math.Decimal](encoded)) {
     decoded: math.Decimal => println(decoded.ToString())

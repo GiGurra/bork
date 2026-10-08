@@ -14,6 +14,12 @@ fn main() {
   // (?P<word>...) is a named capture group.
   words = regex.Compile("(?P<word>[a-z]+)")
   println(words.Find("123 hello"))
+  // Match offsets compose with String.substring, even after non-ASCII text.
+  text = "🙂å hello"
+  match (words.Find(text)) {
+    Option.Some(found) => println(text.substring(found.start, found.end))
+    Option.None => {}
+  }
   // "${word}!" is a plain string, not bork interpolation (that needs the s
   // prefix: s"..."). Replace expands ${word} to the named group, and the !
   // is a literal exclamation mark: "hello world" becomes "hello! world!".

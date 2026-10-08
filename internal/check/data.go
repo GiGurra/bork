@@ -460,11 +460,17 @@ func (c *checker) try(e *syntax.Try) Type {
 	result := c.fn.Result
 	if inDeferred {
 		result = ctx.want
+	}
+	if e.Wrap != nil {
+		return c.wrappedTry(e, xt, result, inDeferred)
+	}
+	if inDeferred {
 		if result == nil {
 			if u, ok := xt.(*Union); ok {
-				ctx.returns = append(ctx.returns, u.Members[1:]...)
-				c.info.tries[e] = &TryInfo{Kept: u.Members[0], Rest: u.Members[1:]}
-				return u.Members[0]
+				info := c.tryUnion(e, u)
+				ctx.returns = append(ctx.returns, info.Rest...)
+				c.info.tries[e] = info
+				return info.Kept
 			}
 			c.errorf(e.Pos, "? on an Option in a %s needs a result type annotation", ctx.name)
 			return Invalid
@@ -472,7 +478,7 @@ func (c *checker) try(e *syntax.Try) Type {
 	}
 	switch t := xt.(type) {
 	case *Union:
-		info := &TryInfo{Kept: t.Members[0], Rest: t.Members[1:]}
+		info := c.tryUnion(e, t)
 		var misfits []string
 		for _, m := range info.Rest {
 			if !assignable(m, result) {
@@ -500,6 +506,66 @@ func (c *checker) try(e *syntax.Try) Type {
 		c.errorf(e.Pos, "? needs a union or an Option, found %s", xt)
 	}
 	return Invalid
+}
+
+// tryUnion keeps the first member unless a direct binding annotation names
+// another member. Ordinary expected types do not change propagation.
+func (c *checker) tryUnion(e *syntax.Try, t *Union) *TryInfo {
+	kept := 0
+	for i, member := range t.Members {
+		if identical(member, c.tryAnnotations[e]) {
+			kept = i
+			break
+		}
+	}
+	rest := append([]Type{}, t.Members[:kept]...)
+	rest = append(rest, t.Members[kept+1:]...)
+	return &TryInfo{Kept: t.Members[kept], Rest: rest}
+}
+
+// wrappedTry checks the mapper as an ordinary lambda. Lowering turns its
+// body into the failure arm of a match, preserving all ordinary return checks.
+func (c *checker) wrappedTry(e *syntax.Try, xt, result Type, inDeferred bool) Type {
+	info := &TryInfo{}
+	var failure Type
+	switch t := xt.(type) {
+	case *Union:
+		info = c.tryUnion(e, t)
+		failure = newUnion(info.Rest)
+	case *Sealed:
+		if IsOption(t) {
+			info.Kept, info.Option = t.Args[0], t
+			failure = t
+		}
+	}
+	if failure == nil {
+		if xt != Invalid {
+			c.errorf(e.Pos, "? needs a union or an Option, found %s", xt)
+		}
+		return Invalid
+	}
+	if len(e.Wrap.Params) != 1 {
+		c.errorf(e.Wrap.Pos, "? failure mapper must take exactly one parameter")
+		return Invalid
+	}
+	want := result
+	if want == Ok {
+		// Unlike a callback argument, the mapper's value must not be dropped.
+		want = nil
+	}
+	ft, ok := c.record(e.Wrap, c.lambdaBody(e.Wrap, &FuncType{Params: []Type{failure}, Result: want}, true)).(*FuncType)
+	if !ok {
+		return Invalid
+	}
+	c.used |= ft.Effects
+	if result == nil && inDeferred {
+		c.initializerContext.returns = append(c.initializerContext.returns, ft.Result)
+	} else if !assignable(ft.Result, result) {
+		c.errorf(e.Wrap.Pos, "? failure mapper returns %s, but %s returns %s", ft.Result, c.fn.Decl.Name, result)
+		return Invalid
+	}
+	c.info.tries[e] = info
+	return info.Kept
 }
 
 // Reading and matching a private record stays public; only construction and

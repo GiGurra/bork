@@ -51,6 +51,14 @@ func (g *gen) showMethods(recv ast.Expr, t check.Type) []ast.Decl {
 		fun = idx
 	}
 	callArgs = append(callArgs, ast.NewIdent("v"))
+	// Implicit Go rendering methods have no Bork membership environment.
+	// Preserve their existing dispatch until values carry it (bork-3wln3c).
+	for _, tp := range ci.TypeParams {
+		if g.typeMembership[tp] {
+			g.usesIs = true
+			callArgs = append(callArgs, &ast.IndexExpr{X: ast.NewIdent("_is"), Index: g.goType(bound[tp])})
+		}
+	}
 	return []ast.Decl{&ast.FuncDecl{
 		Recv: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ast.NewIdent("v")}, Type: recv}}},
 		Name: ast.NewIdent("_borkShow"),

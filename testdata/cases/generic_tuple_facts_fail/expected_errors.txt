@@ -1,0 +1,7 @@
+main.bork:11:45: need requires x to be positive, but that is not proven for box.value.0 (check it first with if (positive(box.value.0)) { ... })
+main.bork:15:8: need requires x to be positive, but that is not proven for pair.0 (check it first with if (positive(pair.0)) { ... })
+main.bork:18:40: need requires x to be positive, but that is not proven for value.0 (check it first with if (positive(value.0)) { ... })
+main.bork:23:16: need requires x to be positive, but positive(-1) is false
+main.bork:23:35: direct requires the 0 of the value in x to be positive, but positive(-1) is false
+main.bork:23:44: need requires x to be positive, but positive(-2) is false
+main.bork:23:62: alias requires the 0 of the value in x to be positive, but positive(-2) is false

@@ -131,7 +131,14 @@ func (g *gen) mockFuncType(fn *check.Func, names []*ast.Ident) *ast.FuncType {
 	if fn.TrackCaller {
 		params = append(params, check.String)
 	}
-	return g.funcType(&check.FuncType{Params: params, Result: fn.Result}, names)
+	ft := g.funcType(&check.FuncType{Params: params, Result: fn.Result}, names)
+	for _, field := range g.membershipParams(fn.TypeParams) {
+		if names == nil {
+			field.Names = nil
+		}
+		ft.Params.List = append(ft.Params.List, field)
+	}
+	return ft
 }
 
 // dispatchers generates, for a function a test mocks, the dispatcher
@@ -174,6 +181,9 @@ func (g *gen) dispatchers(fn *check.Func) []ast.Decl {
 	if fn.TrackCaller {
 		params = append(params, ast.NewIdent("_callerAt"))
 		args = append(args, ast.NewIdent("_callerAt"))
+	}
+	for _, field := range g.membershipParams(fn.TypeParams) {
+		args = append(args, field.Names[0])
 	}
 	returns := fn.Result != check.Ok && fn.Result != check.Never
 	result := func(call ast.Expr) []ast.Stmt {
@@ -566,6 +576,7 @@ func (g *gen) nextCall(inst *check.Instance, frame *ast.Ident, args []ast.Expr) 
 		}
 		fun = idx
 	}
+	args = append(args, g.membershipArgs(inst.Func.TypeParams, inst.TypeArgs)...)
 	all := []ast.Expr{&ast.SelectorExpr{X: frame, Sel: ast.NewIdent("parent")}}
 	for _, d := range inst.Dicts {
 		all = append(all, g.dict(d))
