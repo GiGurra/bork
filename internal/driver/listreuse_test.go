@@ -17,6 +17,9 @@ func TestListCarryReuse(t *testing.T) {
 		reuse            bool
 	}{
 
+		{"nil_concat", `out = nilList(); for i in range(0, 1) { _ = i; out = out.concat([]) }; println(isNil(out))`, `false`, true},
+		{"nil_entry", `out = nilList(); for i in range(0, 0) { out = out.append(i) }; println(isNil(out))`, `true`, true},
+		{"empty_entry", `out: List[Int] = []; for i in range(0, 0) { out = out.append(i) }; println(isNil(out))`, `false`, true},
 		{"append_twice", `out: List[Int] = []; for i in range(0, 3) { out = out.append(i).append(i) }; println(out)`, `[0, 0, 1, 1, 2, 2]`, true},
 		{"break_after", `out: List[Int] = []; for i in range(0, 9) { out = out.append(i); if i == 2 { break } }; println(out)`, `[0, 1, 2]`, true},
 		{"two_branches", `out: List[Int] = []; for i in range(0, 4) { if i % 2 == 0 { out = out.append(i) } else { out = out.concat([9]) } }; println(out)`, `[0, 9, 2, 9]`, true},
@@ -49,7 +52,10 @@ func TestListCarryReuse(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte("fn main() uses io { "+tc.body+" }\n"), 0644); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, "bork.mod"), []byte("module example.com/listreuse\nunsafe \"example.com/listreuse\"\n"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte("fn nilList(): List[Int] unsafe go { return nil }\nfn isNil(xs: List[Int]): Bool unsafe go { return xs == nil }\nfn main() uses io { "+tc.body+" }\n"), 0644); err != nil {
 				t.Fatal(err)
 			}
 			src, err := Emit(dir)

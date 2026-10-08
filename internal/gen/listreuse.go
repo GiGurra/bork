@@ -2,6 +2,7 @@ package gen
 
 import (
 	"go/ast"
+	"go/token"
 	"maps"
 
 	"github.com/GiGurra/bork/internal/check"
@@ -245,6 +246,13 @@ func (g *gen) reusedListCall(e *check.Call) ([]ast.Stmt, ast.Expr) {
 	call := &ast.CallExpr{Fun: ast.NewIdent("append"), Args: xs}
 	if e.Func.Decl.Name == "concat" {
 		call.Ellipsis = 1
+		// Ordinary concat builds a nonnil slice even for two empty inputs.
+		result := g.newTmp()
+		stmts = append(stmts, define(result, call), &ast.IfStmt{
+			Cond: &ast.BinaryExpr{X: result, Op: token.EQL, Y: ast.NewIdent("nil")},
+			Body: &ast.BlockStmt{List: []ast.Stmt{assign(result, &ast.CompositeLit{Type: g.goType(e.Type())})}},
+		})
+		return stmts, result
 	}
 	return stmts, call
 }

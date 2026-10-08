@@ -41,7 +41,7 @@ func (g *gen) carryStart(e *check.For) (outer, header []ast.Stmt, ok bool) {
 		}
 		if g.reuseList(e, c) {
 			// Copy once: aliases outside this loop retain their backing array.
-			x = &ast.CallExpr{Fun: ast.NewIdent("append"), Args: []ast.Expr{&ast.CompositeLit{Type: g.goType(c.Head.Type)}, x}, Ellipsis: 1}
+			x = &ast.CallExpr{Fun: &ast.SelectorExpr{X: ast.NewIdent(g.goImport("slices")), Sel: ast.NewIdent("Clone")}, Args: []ast.Expr{x}}
 		}
 		*stmts = append(*stmts, typedVar(varIdent(c.Latch), g.goType(c.Head.Type), g.convert(x, from, c.Head.Type)))
 		if c.After != nil {
