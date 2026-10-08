@@ -43,7 +43,7 @@ fn main() {
  group = cli.Group("cluster", "Manage clusters", [leaf]).copy(aliases: ["k"])
  hidden = cli.Subcommand[Options]("secret", "Hidden command", (options, s) => {}).copy(hidden: true)
  match (cli.RunCommands("app", "Manage resources", [group, hidden])) {
-  error: cli.Error => { println(error); process.Exit(1) }
+  error: cli.Error => { println(error); process.ExitNow(1) }
   Ok => {}
  }
 }
