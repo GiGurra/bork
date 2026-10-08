@@ -1,0 +1,9 @@
+type Callback[T] = (T) => String
+type Forward[T] = Callback[T]
+type Identity[T] = T
+fn apply(x: Int, callback: Forward[Int]): String { callback(x) }
+fn applyIdentity(x: Int, callback: Identity[(Int) => String]): String { callback(x) }
+fn impure(x: Int) uses io: String { println(x); "value" }
+fn pure(): String { apply(1, impure) }
+fn pureIdentity(): String { applyIdentity(2, impure) }
+fn main() {}

@@ -1,0 +1,46 @@
+pred positive(x: Int) { x > 0 }
+pred above(x: Int, limit: Int) { x > limit }
+pred nonempty(xs: List[Int]) { xs.length() > 0 }
+type Positives = List[Int where positive]
+type Batch = { values: Positives }
+fn need(x: Int where positive): Int { x }
+fn needAll(xs: Positives): Int { xs.length() }
+fn needNested(xs: List[List[Int where positive]]): Int { xs.length() }
+fn needList(xs: List[Int] where nonempty): Int { xs.length() }
+fn whole(xs: List[Int] where nonempty): Int {
+  match xs { [...all] => needList(all) }
+}
+fn head(xs: Positives): Int {
+  match xs { [value, ...] => need(value), [] => 0 }
+}
+fn tail(xs: Positives): Int {
+  match xs { [_, ...rest] => needAll(rest), [] => 0 }
+}
+fn nested(xs: List[List[Int where positive]]): Int {
+  match xs { [[value, ...inner], ...rest] => need(value) + needAll(inner) + needNested(rest), _ => 0 }
+}
+fn payload(xs: Option[Positives]): Int {
+  match xs { .Some([value, ...rest]) => need(value) + needAll(rest), _ => 0 }
+}
+fn field(batch: Batch): Int {
+  match batch { Batch { values: [value, ...rest] } => need(value) + needAll(rest), _ => 0 }
+}
+fn dependent(limit: Int, xs: List[Int where above(limit)]): Int {
+  match xs {
+    [value, ...rest] => {
+      checked: Int where above(limit) = value
+      remaining: List[Int where above(limit)] = rest
+      checked + remaining.length()
+    }
+    [] => 0
+  }
+}
+fn guarded(xs: List[Int]): Int {
+  match xs { [value, ...] => if positive(value) { alias = value; need(alias) } else { 0 }, [] => 0 }
+}
+fn main() {
+  println(head([1, 2]), head([]), tail([1, 2, 3]), tail([1]))
+  println(nested([[2, 3], [4]]), payload(Option.Some([3, 4])), field(Batch { values: [4, 5] }))
+  println(dependent(10, [11, 12]), guarded([5]))
+  println(whole([1]))
+}

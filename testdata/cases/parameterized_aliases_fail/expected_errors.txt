@@ -1,0 +1,5 @@
+main.bork:3:29: T is a constrained type (where positive), and constrained types on a Map's values are not supported yet, so the fact would not be checked
+main.bork:6:28: facts on the type argument T of Container are not supported yet, so they would not be checked: its field items holds T inside List[T]
+main.bork:8:13: Items needs 1 type argument(s), as in Items[T]
+main.bork:9:15: Items needs 1 type argument(s), as in Items[T]
+main.bork:15:31: callback must be (Int) => String, found (Int) uses io => String (it uses io, where a function that uses nothing is expected)

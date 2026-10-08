@@ -49,6 +49,63 @@ The list methods:
 
 `range(start, end)` builds the list of integers from `start` up to, but not including, `end`.
 
+### List costs and accumulation
+
+Lists use contiguous storage, including when passed to Go as slices. With `n`
+input elements, `m` elements in another list, and constant-time callbacks and
+value comparisons:
+
+| Operation | Cost |
+| --- | --- |
+| `length`, `isEmpty`, `get`, `head`, `last`, `first` | O(1) |
+| `take`, `drop`, `toSeq` | O(1); share storage |
+| `append`, `prepend` | O(n); copy storage, except eligible carried appends below |
+| `concat` | O(n + m), except eligible carried concatenation below |
+| `map`, `filter`, `fold`, `reverse`, `indexed`, `count`, `forEach`, `toBytes` | O(n) |
+| `find`, `includes`, `any`, `all` | O(n) worst case; may stop early |
+| `flatMap` | O(n + total output elements) amortized |
+| `join` | O(n + output bytes) |
+| `sorted`, `sortBy`, `sortWith` | O(n log n) comparisons, O(n log² n) swaps; stable ordering |
+| `distinct` | O(n²) worst case |
+| `groupBy` | O(n²) worst case from appending within groups, plus map lookup/update costs |
+| `toMap` | Expected O(n) with well-distributed hashes; collisions can increase cost |
+| `range(start, end)` | O(max(0, end − start)) |
+| `parMap`, `parFilter`, `parFlatMap`, `parForEach` and their `In` forms | Same total element work as the sequential form, plus worker scheduling |
+
+Creating a literal takes O(n). Traversal takes O(n). Operations that build an
+output allocate space proportional to that output; slicing shares the original
+allocation and can keep it alive. Callback, comparison, hashing, and rendering
+costs add to the costs above.
+
+Accumulating a list through a loop can reuse storage internally while preserving
+immutability:
+
+```bork
+fn main() {
+  out: List[Int] = []
+  for i in range(0, 5) { out = out.append(i) }
+  println(out)
+}
+```
+
+This shape takes O(n) total time for n appended elements, with amortized O(1)
+per append. The compiler copies the initial list once, so aliases kept before
+the loop retain their values. It then reuses storage when each carried version
+flows only to its successor. Supported shapes include `for` and condition loops,
+`if`/`else` and `match` branches that append or pass the list through, and early
+`break` or `continue`. `out = if p { out.append(x) } else { out }` qualifies.
+`out = out.concat([x, y])` also qualifies: the total cost is linear in the initial
+list size plus all concatenated elements. `length()` and `isEmpty()` may inspect
+the current version, including in the loop condition.
+
+Saving intermediate versions, capturing them in closures, or passing them to
+other functions keeps ordinary copying behavior. Enclosing loops with nested loops, deferred
+bindings, generators, list updates in a loop's post clause, and expressions the
+compiler cannot prove safe also keep copying. Repeated appends in those shapes
+can take O(n²); use a lazy sequence and `toList()` to collect its output in linear
+time. `prepend` always copies. These rules change performance, not list values
+or the public API.
+
 ## Loops
 
 Most work on lists is done with methods. There is also a `for` loop, with `break` and `continue`:
@@ -280,4 +337,4 @@ For work that has effects, such as calling a service for each element, use the `
 
 ---
 
-Previous: [Matching and errors](matching.md) · Next: [Facts](facts.md) · [All pages](../README.md#the-language)
+Previous: [Adding error context](errors.md) · Next: [Facts](facts.md) · [All pages](../README.md#the-language)

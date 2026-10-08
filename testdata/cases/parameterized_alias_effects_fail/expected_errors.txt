@@ -1,0 +1,2 @@
+main.bork:7:30: pure uses io (it calls apply, with impure), but its signature allows no effects; declare it: uses io
+main.bork:8:46: pureIdentity uses io (it calls applyIdentity, with impure), but its signature allows no effects; declare it: uses io

@@ -1,0 +1,27 @@
+pred positive(x: Int) { x > 0 }
+pred nonempty(xs: List[Int]) { xs.length() > 0 }
+pred above(x: Int, limit: Int) { x > limit }
+fn need(x: Int where positive): Int { x }
+fn needList(xs: List[Int] where nonempty): Int { xs.length() }
+fn sibling(xs: List[Int]): Int {
+  match xs { [a, b, ...] => if positive(a) { need(b) } else { 0 }, _ => 0 }
+}
+fn nested(xs: List[List[Int]]): Int {
+  match xs { [[a, ...], [b, ...], ...] => if positive(a) { need(b) } else { 0 }, _ => 0 }
+}
+fn tail(xs: List[Int] where nonempty): Int {
+  match xs { [_, ...rest] => needList(rest), [] => 0 }
+}
+fn checkedTail(xs: List[Int]): Int {
+  if nonempty(xs) { match xs { [_, ...rest] => needList(rest), [] => 0 } } else { 0 }
+}
+fn missing(xs: List[Int]): Int {
+  match xs { [value, ...] => need(value), [] => 0 }
+}
+fn wrong(limit: Int, other: Int, xs: List[Int where above(limit)]): Int {
+  match xs { [value, ...] => { checked: Int where above(other) = value; checked }, [] => 0 }
+}
+type Row = { value: Int where positive }
+fn rows(xs: List[List[Row]]): Int {
+  match xs { [[Row { value }, ...], ...] => need(value), _ => 0 }
+}

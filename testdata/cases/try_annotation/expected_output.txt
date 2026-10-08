@@ -1,0 +1,23 @@
+Hit { value: 7 }
+kept miss
+Miss {}
+Note { value: 7 }
+Miss {}
+text
+107
+true
+Note { value: 4 }
+107
+Note { value: 1 }
+TEXT
+7
+7
+missing
+7
+Note { value: 7 }
+Miss {}
+Miss {}
+9
+Miss {}
+["ok"]
+[4]

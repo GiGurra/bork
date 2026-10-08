@@ -451,6 +451,13 @@ func (c *checker) try(e *syntax.Try) Type {
 	}
 	ctx := c.initializerContext
 	inDeferred := ctx != nil && ctx.depth == c.lambdaDepth
+	if inDeferred && ctx.rejectTry {
+		if xt != Invalid {
+			c.errorf(e.Pos, "? cannot be used in a %s (it would return from the enclosing function); use match", ctx.name)
+			c.deferredTryFix(e, xt)
+		}
+		return Invalid
+	}
 	if c.lambdaDepth > 0 && !inDeferred {
 		if xt != Invalid {
 			c.errorf(e.Pos, "? cannot be used in a lambda (it would return from the enclosing function); use match")
@@ -460,11 +467,17 @@ func (c *checker) try(e *syntax.Try) Type {
 	result := c.fn.Result
 	if inDeferred {
 		result = ctx.want
+	}
+	if e.Wrap != nil {
+		return c.wrappedTry(e, xt, result, inDeferred)
+	}
+	if inDeferred {
 		if result == nil {
 			if u, ok := xt.(*Union); ok {
-				ctx.returns = append(ctx.returns, u.Members[1:]...)
-				c.info.tries[e] = &TryInfo{Kept: u.Members[0], Rest: u.Members[1:]}
-				return u.Members[0]
+				info := c.tryUnion(e, u)
+				ctx.returns = append(ctx.returns, info.Rest...)
+				c.info.tries[e] = info
+				return info.Kept
 			}
 			c.errorf(e.Pos, "? on an Option in a %s needs a result type annotation", ctx.name)
 			return Invalid
@@ -472,7 +485,7 @@ func (c *checker) try(e *syntax.Try) Type {
 	}
 	switch t := xt.(type) {
 	case *Union:
-		info := &TryInfo{Kept: t.Members[0], Rest: t.Members[1:]}
+		info := c.tryUnion(e, t)
 		var misfits []string
 		for _, m := range info.Rest {
 			if !assignable(m, result) {
@@ -500,6 +513,123 @@ func (c *checker) try(e *syntax.Try) Type {
 		c.errorf(e.Pos, "? needs a union or an Option, found %s", xt)
 	}
 	return Invalid
+}
+
+// tryUnion keeps the first member unless a direct binding annotation names
+// another member. Ordinary expected types do not change propagation.
+func (c *checker) tryUnion(e *syntax.Try, t *Union) *TryInfo {
+	kept := 0
+	for i, member := range t.Members {
+		if identical(member, c.tryAnnotations[e]) {
+			kept = i
+			break
+		}
+	}
+	rest := append([]Type{}, t.Members[:kept]...)
+	rest = append(rest, t.Members[kept+1:]...)
+	return &TryInfo{Kept: t.Members[kept], Rest: rest}
+}
+
+// wrappedTry checks the mapper as an ordinary lambda. Lowering turns its
+// body into the failure arm of a match, preserving all ordinary return checks.
+func (c *checker) wrappedTry(e *syntax.Try, xt, result Type, inDeferred bool) Type {
+	info := &TryInfo{}
+	var failure Type
+	switch t := xt.(type) {
+	case *Union:
+		info = c.tryUnion(e, t)
+		failure = newUnion(info.Rest)
+	case *Sealed:
+		if IsOption(t) {
+			info.Kept, info.Option = t.Args[0], t
+			failure = t
+		}
+	}
+	if failure == nil {
+		if xt != Invalid {
+			c.errorf(e.Pos, "? needs a union or an Option, found %s", xt)
+		}
+		return Invalid
+	}
+	if len(e.Wrap.Params) != 1 {
+		c.errorf(e.Wrap.Pos, "? failure mapper must take exactly one parameter")
+		return Invalid
+	}
+	want := result
+	if want == Ok {
+		// Unlike a callback argument, the mapper's value must not be dropped.
+		want = nil
+	}
+	ft, ok := c.record(e.Wrap, c.lambdaBody(e.Wrap, &FuncType{Params: []Type{failure}, Result: want}, true)).(*FuncType)
+	if !ok {
+		return Invalid
+	}
+	c.used |= ft.Effects
+	if result == nil && inDeferred {
+		c.initializerContext.returns = append(c.initializerContext.returns, ft.Result)
+	} else if !assignable(ft.Result, result) {
+		c.errorf(e.Wrap.Pos, "? failure mapper returns %s, but %s returns %s", ft.Result, c.fn.Decl.Name, result)
+		return Invalid
+	}
+	c.info.tries[e] = info
+	return info.Kept
+}
+
+func (c *checker) deferredTryFix(e *syntax.Try, typ Type) {
+	for _, file := range c.files {
+		if file.Path != e.Pos.File {
+			continue
+		}
+		name := "value"
+		var sourceText strings.Builder
+		for _, source := range c.files {
+			sourceText.WriteString(source.Source)
+		}
+		for strings.Contains(sourceText.String(), name) {
+			name += "_"
+		}
+		arms := name + " => " + name
+		switch typ := typ.(type) {
+		case *Union:
+			if c.matchTypeVisible(typ.Members[0]) {
+				arms = name + ": " + TypeText(typ.Members[0], c.pkg) + " => " + name + "; _ => todo()"
+			}
+		case *Sealed:
+			if IsOption(typ) {
+				arms = "Option.Some(" + name + ") => " + name + "; Option.None => todo()"
+			}
+		}
+		var start diag.Pos
+		operand := e.X
+		// Field defaults are cloned before checking; locate their source node.
+		for _, span := range file.ExpressionSpans {
+			if original, ok := span.Expr.(*syntax.Try); ok && original.Pos == e.Pos {
+				operand = original.X
+				break
+			}
+		}
+		for _, span := range file.ExpressionSpans {
+			if span.Expr == operand && (start.File == "" || sourcePositionCompare(span.Start, start) < 0) {
+				start = span.Start
+			}
+		}
+		if start.File == "" {
+			return
+		}
+		end := e.Pos
+		end.Col++
+		if e.Wrap != nil {
+			end = e.End
+		}
+		c.diags.Suggest(e.Pos, "type.error", end, diag.Fix{
+			Message: "replace ? with match and handle each outcome", RequiresInput: true,
+			Edits: []diag.TextEdit{
+				{Start: start, End: start, Replacement: "match ("},
+				{Start: e.Pos, End: end, Replacement: ") { " + arms + " }"},
+			},
+		})
+		return
+	}
 }
 
 // Reading and matching a private record stays public; only construction and

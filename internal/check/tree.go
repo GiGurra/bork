@@ -151,6 +151,9 @@ type VarSource struct {
 	Member  Type
 	Path    string
 	Field   *Field
+	// ElementsOnly marks a list suffix, which keeps element facts but
+	// need not satisfy predicates on the original list itself.
+	ElementsOnly bool
 }
 
 // VarRef is a use of a variable.

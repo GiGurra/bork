@@ -144,6 +144,15 @@ func (c *checker) patSources(p *Pat, subject syntax.Expr, path string, field *Fi
 	for _, pf := range p.Fields {
 		c.patSources(pf.Pat, subject, path+"."+pf.Name, findField(fields, pf.Name), member)
 	}
+	for _, elem := range p.Elems {
+		c.patSources(elem, subject, path+".[]", nil, member)
+	}
+	if p.Rest != nil {
+		c.patSources(p.Rest, subject, path, nil, member)
+		if src := c.info.patSources[p.Rest.bindNode]; src != nil {
+			src.ElementsOnly = true
+		}
+	}
 	if p.Sub != nil {
 		c.patSources(p.Sub, subject, path, field, member)
 	}
@@ -597,6 +606,20 @@ func (c *checker) nestedPatternFacts(t *syntax.TypeExpr) bool {
 	seen := map[*syntax.TypeDecl]bool{}
 	var nested func(*syntax.TypeExpr) bool
 	nested = func(t *syntax.TypeExpr) bool {
+		if t.Union == nil && t.Func == nil && t.Tuple == nil && c.typeParams[t.Name] == nil {
+			if e := c.lookupType(t.Name); e != nil && e.decl.Kind == syntax.AliasType && len(e.params) > 0 {
+				typ := c.info.writtenTypes[t]
+				if typ == nil {
+					typ = c.resolveType(t)
+				}
+				for _, con := range c.genericAliasConstraints(e, t, typ, c.paramScope()) {
+					if con.Path != "" {
+						return true
+					}
+				}
+				return false
+			}
+		}
 		for _, m := range t.Union {
 			if nested(m) {
 				return true

@@ -1,0 +1,6 @@
+pred positive(x: Int) { x > 0 }
+type PositiveItems[T] = List[Int where positive]
+type Items[T] = List[T]
+fn hidden(xs: List[Int]): Int { match xs { n: PositiveItems[Int] => n.length(), _ => 0 } }
+fn explicit(xs: List[Int]): Int { match xs { n: Items[Int where positive] => n.length(), _ => 0 } }
+fn main() {}

@@ -174,6 +174,7 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 	}
 	f.defaultUse = diag.Pos{}
 	f.defaultDecl = diag.Pos{}
+	f.defaultInvariants()
 	f.evaluate(eval)
 }
 
@@ -1586,7 +1587,7 @@ func (f *factChecker) proveCases(x Expr, ob obligation, e env, depth int) (bool,
 				}
 			}
 		case VarPattern, VarLoop:
-			if src := d.Source; src != nil {
+			if src := d.Source; src != nil && (!src.ElementsOnly || strings.HasPrefix(ob.path, ".[]")) {
 				inner := ob
 				inner.path = src.Path + ob.path
 				var ok bool
@@ -1854,44 +1855,56 @@ func (f *factChecker) lambdaParam(la lambdaArg, ob obligation, e env, depth int)
 
 // typeParamPaths lists the paths at which values of the type parameter
 // tp occur in t. It fails if they occur where facts cannot follow them:
-// in a union, or as what a function value returns. (A function value's
-// parameters only take values of tp.)
+// in a union, a recursive or opaque record, or as what a function value
+// returns. (A function value's parameters only take values of tp.)
 func typeParamPaths(t Type, tp *TypeParam, path string) ([]string, bool) {
+	return typeParamPathsSeen(t, tp, path, map[*Record]bool{})
+}
+
+func typeParamPathsSeen(t Type, tp *TypeParam, path string, seen map[*Record]bool) ([]string, bool) {
+	follow := func(t Type, path string) ([]string, bool) {
+		return typeParamPathsSeen(t, tp, path, seen)
+	}
 	switch t := t.(type) {
 	case *TypeParam:
 		if t == tp {
 			return []string{path}, true
 		}
 	case *Seq:
-		return typeParamPaths(t.Elem, tp, path+".[]")
+		return follow(t.Elem, path+".[]")
 	case *List:
-		return typeParamPaths(t.Elem, tp, path+".[]")
+		return follow(t.Elem, path+".[]")
 	case *Map:
 		if mentions(t, tp) {
 			return nil, false // not followed into maps yet
 		}
 	case *Sealed:
 		if IsOption(t) {
-			return typeParamPaths(t.Args[0], tp, path+"."+t.Variant("Some").Fields[0].Name)
+			return follow(t.Args[0], path+"."+t.Variant("Some").Fields[0].Name)
 		}
 		if mentions(t, tp) {
 			return nil, false // not followed into other generic types yet
 		}
 	case *Record:
-		if t.Tuple {
-			var paths []string
-			for _, field := range t.Fields {
-				inner, ok := typeParamPaths(field.Type, tp, path+"."+field.Name)
-				if !ok {
-					return nil, false
-				}
-				paths = append(paths, inner...)
-			}
-			return paths, true
+		if !t.Tuple && !mentions(t, tp) {
+			return nil, true
 		}
-		if mentions(t, tp) {
+		if seen[t] || len(seen) >= maxDepth || t.Foreign != nil || t.GoMirror != nil {
 			return nil, false
 		}
+		seen[t] = true
+		defer delete(seen, t)
+		var paths []string
+		for _, field := range t.Fields {
+			inner, ok := follow(field.Type, path+"."+field.Name)
+			if !ok {
+				return nil, false
+			}
+			paths = append(paths, inner...)
+		}
+		// A nominal type can hide its values behind methods. No visible
+		// occurrences must not make it an absent source of this parameter.
+		return paths, t.Tuple || len(paths) > 0
 	case *Union:
 		if mentions(t, tp) {
 			return nil, false
@@ -2551,15 +2564,25 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 					owner := src.Subject
 					steps := strings.Split(strings.TrimPrefix(src.Path, "."), ".")
 					for _, step := range steps[:len(steps)-1] {
+						if owner == nil {
+							break
+						}
 						owner = f.project(owner, step)
 					}
 					if owner != nil {
 						add(src.Field.Constraints, f.recordFieldArgs(owner, src.Field))
 					}
 				}
-				out = append(out, within(f.declared(src.Subject, e, depth+1), src.Path)...)
+				project := func(facts []known) {
+					for _, k := range within(facts, src.Path) {
+						if !src.ElementsOnly || strings.HasPrefix(k.path, ".[]") {
+							out = append(out, k)
+						}
+					}
+				}
+				project(f.declared(src.Subject, e, depth+1))
 				if src.Member != nil {
-					out = append(out, within(f.declaredMember(src.Subject, src.Member), src.Path)...)
+					project(f.declaredMember(src.Subject, src.Member))
 				}
 			}
 		}
@@ -3158,7 +3181,8 @@ func (f *factChecker) key(x Expr) string {
 			}
 			return fmt.Sprintf("b:%p", d)
 		default:
-			if src := d.Source; src != nil && (src.Member == nil || src.Path != "") {
+			// Universal element paths carry facts, not value identities.
+			if src := d.Source; src != nil && !src.ElementsOnly && !strings.Contains(src.Path, ".[]") && (src.Member == nil || src.Path != "") {
 				if k := f.aliasKey(src.Subject); k != "" {
 					return k + src.Path
 				}

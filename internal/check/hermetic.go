@@ -42,7 +42,7 @@ func (c *checker) testCall(fn *Func, pos diag.Pos, value bool) {
 		return
 	}
 	site := testSite{fn: fn, pos: pos, inMock: c.fn.MockOf}
-	later := value || c.lambdaDepth > 0
+	later := value || c.lambdaDepth > c.mapperLambdas
 	for _, m := range c.inForce {
 		if m.whole || !later {
 			site.inForce = append(site.inForce, m.target)

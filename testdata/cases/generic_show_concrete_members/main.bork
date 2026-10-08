@@ -1,0 +1,44 @@
+type E = {}
+type Holder[T] = { value: T | E }
+instance showHolder[T]: Show[Holder[T]] {
+  fn show(value: Holder[T]): String {
+    match (value.value) {
+      _: E => "error"
+      _ => "success"
+    }
+  }
+}
+type Result[T] = sealed { Value(T), Failed }
+instance showResult[T]: Show[Result[T]] {
+  fn show(value: Result[T]): String {
+    match (value) {
+      Result.Value(x) => s"value $x"
+      Result.Failed => "failed"
+    }
+  }
+}
+fn main() {
+  println(Holder[Int | String] { value: E {} })
+  println(Holder[Int | String] { value: "ok" })
+  println(Result[Int | String].Value("ok"))
+  println(Result[Int | String].Failed)
+  println(Observed[String] { value: "ignored" })
+}
+
+type Concrete[T] = { value: T | E }
+pred accepts[U](box: Concrete[U]) {
+  match (box.value) {
+    _: U => true
+    _: E => false
+  }
+}
+fn concrete[T](value: T): Concrete[Int] where accepts unsafe go {
+  return Concrete[int64]{value: int64(1)}
+}
+type Observed[T] = { value: T }
+instance showObserved[T]: Show[Observed[T]] {
+  fn show(value: Observed[T]): String {
+    _ = concrete(value.value)
+    "ok"
+  }
+}

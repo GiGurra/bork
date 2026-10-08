@@ -76,6 +76,11 @@ bork check --json .     # one JSON object per diagnostic
 
 `check` is the quickest way to get the compiler's answer, because it stops before generating and building Go.
 
+Compile-time predicate execution has the same 10-second limit as `comptime`
+work. A timeout or predicate panic fails checking at the bork source position;
+panic diagnostics show the message without the generated Go stack trace.
+Interrupting the compiler stops the evaluator or its Go build and removes its temporary files. On supported Unix systems, cleanup also stops evaluator process-group descendants.
+
 It also warns about leftover development markers: `dbg(...)` calls and `todo()` placeholders. Warnings do not fail the check.
 
 `--json` is meant for editors, scripts, and coding agents. Each diagnostic has a stable code, a position, and, where the compiler knows the repair, the text edits that apply it. `build`, `install`, and `test` accept `--json` too, and write the diagnostics to standard error. See [JSON diagnostics](diagnostics.md) and [watch mode](watch.md).

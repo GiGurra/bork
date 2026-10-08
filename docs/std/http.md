@@ -89,6 +89,47 @@ The invalid URL takes the IoError branch:
 request construction failed
 ```
 
+## Streaming client bodies
+
+Use `GetStream` or `SendStream` to receive headers before the complete body arrives. `StreamResponse` has `status: Status`, `headers: Headers`, and `body: BodyReader`. All HTTP statuses, including 429/503, remain StreamResponse values; inspect status and use RetryAfter explicitly. Streaming calls do not retry uploads or buffer overload bodies.
+
+| Signature | Meaning |
+| --- | --- |
+| `GetStream(url: String, s: Scope, timeoutMs: TimeoutMs = 0, maxBodyBytes: Option[BodyLimit] = .None)` | GET; return `StreamResult`. |
+| `SendStream(method: String, url: String, headers: Headers, s: Scope, body: Option[BodyReader] in s = .None, timeoutMs: TimeoutMs = 0, maxBodyBytes: Option[BodyLimit] = .None)` | Send an optional binary upload stream; return `StreamResult`. |
+| `Read(body: BodyReader, size: ReadSize = 4096)` | Read up to size immutable bytes; return `ReadResult`. |
+| `Close(body: BodyReader)` | Abandon a stream early; safe more than once. |
+| `OpenBody(s: Scope, next: (Scope) => ReadResult in s)` | Create a producer-backed upload with no queued chunks. Adds the callback's effects. |
+
+These functions use `net + clock + state`, except Close uses `net + state`. `ReadSize` is an Int in `1..16777216`, checked with ValidReadSize. `ReadResult = Bytes | Eof | BodyTooLarge | DeadlineExceeded | Cancelled | IoError`; `StreamResult = StreamResponse | BodyTooLarge | DeadlineExceeded | Cancelled | IoError`.
+
+Read returns available bytes, which may be smaller than size. Concurrent reads serialize; chunk boundaries do not correspond to application messages. Eof and errors are terminal. Bytes are binary: use `encoding.Utf8` to encode text and `encoding.ParseUtf8` when a complete text value has been assembled. Individual chunks may split a UTF-8 character.
+
+The stream closes on Eof, failure, explicit Close, or last-owner scope cleanup. Scope cancellation interrupts blocked reads. A timeout covers headers and all subsequent body reads; returning headers does not reset it. Attach/move follow ordinary resource ownership, while the original total timeout continues. The optional maxBodyBytes bounds total decoded response bytes; no total limit is imposed by default, so long-lived event streams can continue. Read still bounds each allocation by size. At the configured limit, the next Read probes for overflow: exact-limit EOF succeeds and extra bytes return BodyTooLarge.
+
+OpenBody runs its callback sequentially in a child scope and blocks on consumer backpressure between chunks. Return Bytes for data, Eof to finish, or a typed failure. Closing the body cancels that child scope and waits for producer cleanup; callbacks must cooperate with that scope's cancellation. Producer work is anchored to s: ending s cancels and joins it before releasing captured resources, even if the body reader is attached to an outer scope. That attached producer body then reads Cancelled; attachment does not migrate its callback or captures. SendStream consumes and closes its supplied upload body, including on failure or abandonment, so a blocked source read cannot retain its forwarding worker. Before returning final response headers, SendStream finishes or cancels and joins the upload. An early server response stops unfinished production; the returned response reader has no active upload dependency and can be attached independently. There is no full-duplex client in this phase. If an early response arrives before the transport upload has completed, SendStream cancels that transport request and returns the received status/headers promptly; reading its body can report a typed cancellation or transport failure if the response was truncated. Nonreplayable upload bodies follow Go's redirect rules: 307/308 cannot replay them; eligible 301/302/303 redirects may change the method to GET.
+
+```bork
+import "bork/http"
+import "bork/encoding"
+
+fn chunks(url: String, app: Scope) uses io + net + clock + state: Ok | http.BodyTooLarge | http.DeadlineExceeded | Cancelled | IoError {
+  response = http.GetStream(url, app, maxBodyBytes: .Some(1048576))?
+  for {
+    match (http.Read(response.body)) {
+      bytes: Bytes => println(encoding.Hex(bytes))
+      _: http.Eof => break
+      error: http.BodyTooLarge => return error
+      error: http.DeadlineExceeded => return error
+      error: Cancelled => return error
+      error: IoError => return error
+    }
+  }
+}
+```
+
+See [http_stream_client](../../examples/http_stream_client/main.bork) for a runnable local download into an fs.File and incremental upload. A producer can adapt other resources, such as net.Read, by mapping their EOF/error results to ReadResult; no shared fs/net stream trait is required.
+
 ## Server API
 
 All listener functions return `Server | IoError`. Their final options share these types and defaults:
@@ -122,6 +163,52 @@ All listener functions return `Server | IoError`. Their final options share thes
 Listen routes every request to one handler. ListenRoutes and ListenTLS accept method/path patterns: `"GET /users/{id}"` captures `id` in `request.params`. GET also accepts HEAD; patterns support redirects, `{name...}` captures, and automatic 404/405 responses. Invalid or conflicting patterns return `IoError` before opening a socket.
 
 `http.Handler` permits all five effects. A function starting a routed listener therefore declares all five, even when its handlers are pure. Middleware is an ordinary `(http.Handler) => http.Handler` function.
+
+## Streaming server bodies
+
+ListenStream accepts a `(StreamRequest, BodyWriter, Scope) => StreamOutcome`
+handler with open effects. ListenStreamRoutes accepts `List[StreamRoute]`, where
+`StreamRoute` has `pattern: String` and `handler: StreamHandler`. ListenStreamTLS
+adds certificate/key paths, like ListenTLS. Routed handlers allow all five effects.
+All three listeners retain the eager listener options, admission, propagation,
+deadlines and shutdown behavior.
+
+StreamRequest has the same metadata fields as Request, with `body: BodyReader`
+instead of String. `Read(request.body, size)` reads bounded binary chunks. The
+listener's maxBodyBytes bounds the total incoming body (default 16 MiB); overflow
+returns BodyTooLarge. Responses have no total byte limit. Each Write accepts an
+existing Bytes value and waits for transport backpressure without queuing chunks.
+
+| Operation | Result and effects |
+| --- | --- |
+| `BeginResponse(writer: BodyWriter, status: FinalStatus, headers: Headers)` | `StreamOutcome`; `net + clock + state`. FinalStatus is 200..599. Commits status and repeated headers once. |
+| `Write(writer: BodyWriter, data: Bytes)` | `Int \| DeadlineExceeded \| Cancelled \| IoError`; `net + clock + state`. Returns bytes written; an error may follow a partial write. |
+| `Flush(writer: BodyWriter)` | `StreamOutcome`; `net + clock + state`. Sends buffered response data immediately. |
+
+StreamOutcome is `Ok | BodyTooLarge | DeadlineExceeded | Cancelled | IoError`.
+Write or Flush without BeginResponse starts a 200 response. A repeated
+BeginResponse returns IoError. Informational 1xx responses are not exposed.
+Concurrent reads serialize per reader, and writes/flushes serialize per writer.
+Read chunks can split or combine application messages.
+
+Both resources belong to the supplied request scope. They are closed when the
+handler and its request tasks finish, even if attached elsewhere; attachment
+cannot prolong an HTTP exchange. Cancellation and deadlines interrupt blocked
+reads and writes. Handlers and request tasks must still cooperate with scope
+cancellation. Returning Ok finishes the response. Before headers are committed,
+BodyTooLarge becomes 413, DeadlineExceeded becomes 504, and other failures become
+500 where the connection permits. After commitment a failed outcome aborts the
+response; status and headers cannot be replaced. An unfinished incoming body is
+closed rather than drained, and the connection is closed.
+
+HTTP/1 streaming handlers may read and write incrementally in the same exchange.
+The client streaming API still completes or cancels its upload at response headers;
+use a separate capable client for a full-duplex exchange.
+
+For SSE, set Content-Type to text/event-stream, write UTF-8 event framing, then
+Flush. The [http_stream_server example](../../examples/http_stream_server/README.md)
+writes `data: first\n\n` and flushes it while the handler is still running.
+No heartbeat, reconnect policy or SSE parser is provided.
 
 ## Routes and checked input
 

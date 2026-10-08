@@ -45,7 +45,8 @@ What follows from this:
 - **Immutability is what makes it sound.** A fact about an immutable value can never become false, so facts are only ever added, never invalidated. There is no need to track writes or aliasing.
 - **More facts means a more specific type.** `Int where positive` can be used anywhere an `Int` is expected. Because nothing is mutable, `List[Int where positive]` is also safely usable as a `List[Int]`.
 - **Facts flow through generics.** Passing `x: Int where positive` through `identity[T]` keeps the fact, because `T` is `Int where positive`.
-- **Destructuring retains payload promises.** Matching a sealed member of a union preserves its declared payload facts, including fact aliases inside `Option[T]` returned by another package. The payload can be returned as the alias or bound to a constrained ambient with `with`. Unwrapping an `Option` with `?` retains the same payload facts, including nested facts and dependent predicate arguments.
+- **Loop elements have distinct proof identities.** Every element retains the source list's declared element facts. A guard on one element does not prove a fact about a separate loop element, even when both loops traverse the same list or an alias of it.
+- **Destructuring retains payload promises.** Matching a sealed member of a union preserves its declared payload facts, including fact aliases inside `Option[T]` returned by another package. The payload can be returned as the alias or bound to a constrained ambient with `with`. Unwrapping an `Option` with `?` retains the same payload facts, including nested facts and dependent predicate arguments. List patterns retain element facts in individual bindings and the suffix list; suffixes inherit no predicates about the original whole list, and separately bound elements have distinct proof identities.
 - **Facts live inside data.** Once `user.age` is known to satisfy `adult`, that is part of `user`'s type for as long as `user` exists.
 - **Branches merge by intersection.** After an `if`/`else`, only the facts that hold on every path remain.
 - **Zero runtime cost.** Facts are erased when compiling to Go. At runtime, `Int where positive` is just an `int`.
@@ -151,12 +152,17 @@ Element constraints must be checked at construction/boundaries and decoding, and
 tuples must preserve effects and scope lifetimes. Tuples lower to a single anonymous
 Go struct value with positional E0/E1 fields. See [design](design/tuples.md).
 
+Tuple facts in generic arguments stay local to their annotations. Cached record
+and sealed instances share erased shapes; a tuple constraint in one use must
+never become a guarantee of unrelated values with the same shape. Facts declared
+by the generic type itself still apply to every instance.
+
 ## 2. Type system
 
 ### Decided
 
 - **Records and sum types (ADTs) are the core data types.** Records are product types. Sum types are tagged unions whose variants can carry data.
-- **Generics in v0.1.** User code can declare generic types and functions, not just use built-in ones like `Option[T]` and `List[T]`. Specializing a union can collapse duplicate members, including unions nested in callbacks and container elements. Direct calls, saved function values, and method references preserve the specialized signature.
+- **Generics in v0.1.** User code can declare generic types and functions, not just use built-in ones like `Option[T]` and `List[T]`. Transparent aliases can also take parameters (`type Index[T] = Map[String, List[T]]`), with explicit arguments at each use. Expansion preserves type identity, construction ownership, effects and union success order; cycles and incorrect arity are errors. Facts follow their expanded positions and retain the ordinary placement restrictions. Specializing a union can collapse duplicate members, including unions nested in callbacks and container elements. Direct calls, saved function values, and method references preserve the specialized signature.
 - **Variance: planned, not in v0.1.** Scala-style declaration-site variance controls (covariant and contravariant type parameters) are planned for a later version. The syntax should leave room for them.
 - **Structural typing for interfaces and constraints.** A type satisfies an interface or generic constraint implicitly, by having the required shape (like Go). No `implements` declarations.
 - **Sealed types and traits are opt-in.** Marking a type sealed closes its set of variants to its own declaration. That is what makes exhaustive matching possible without a default case. Matching on an open (unsealed) type always needs a default case.
@@ -180,7 +186,7 @@ Go struct value with positional E0/E1 fields. See [design](design/tuples.md).
 - **Higher-kinded types (`Functor[List]`): room in the syntax, not implemented in v0.1.**
 - **No circular package dependencies**, as in Go. This keeps instance lookup, and compilation in general, bounded and predictable.
 
-Implemented: the prelude class `Show[T] { fn show(x: T): String }` customizes `toString`, `println`, interpolation, snapshots, and nested printing. Every type has a default renderer, so `Show` bounds always hold and `show(x)` equals `toString(x)`, even inside unbounded generic code. Custom Show instances follow a special coherence rule: one renderer for a record or sealed type, declared only in that type's own package, with no `use` needed. For a generic type, the instance must be universal (`Show[Box[T]]`) and may have only `Show` bounds. Specialized or fact-constrained instances cannot define a renderer; basic types, `List`, `Map` and `Option` must be wrapped in a declared type to customize their text. This differs from other classes' selectable instances because a value should print consistently everywhere. Other classes, including a user-defined class named Show, retain the ordinary instance rules. Custom text never changes equality or map-key hashing. Show cannot be derived; default rendering needs no derive.
+Implemented: the prelude class `Show[T] { fn show(x: T): String }` customizes `toString`, `println`, interpolation, snapshots, and nested printing. Every type has a default renderer, so `Show` bounds always hold and `show(x)` equals `toString(x)`, even inside unbounded generic code. Custom Show instances follow a special coherence rule: one renderer for a record or sealed type, declared only in that type's own package, with no `use` needed. For a generic type, the instance must be universal (`Show[Box[T]]`) and may have only `Show` bounds. Generic renderers cannot inspect type-parameter union membership, directly or through helpers/callbacks: implicit rendering cannot carry the required membership environment. This shape is rejected at check time; concrete-member patterns with a wildcard, or explicit sealed variants, remain supported. Specialized or fact-constrained instances cannot define a renderer; basic types, `List`, `Map` and `Option` must be wrapped in a declared type to customize their text. This differs from other classes' selectable instances because a value should print consistently everywhere. Other classes, including a user-defined class named Show, retain the ordinary instance rules. Custom text never changes equality or map-key hashing. Show cannot be derived; default rendering needs no derive.
 
 ```
 class Monoid[T] {
@@ -259,7 +265,7 @@ r: SignUp | JsonError | DecodeError = json.Decode(line)   // DecodeError { path:
 - **`T where p and q(args)`** constrains parameters, results (also single members of a union result: `Int where positive | NotPositive`), record fields, constrained aliases (`type Port = Int where between(1, 65535)`), and typed bindings. Predicate arguments are constants or parameter names (`hi: Int where atLeast(lo)`).
 - **Fact sources:** a predicate call in an `if` condition (in the branch it guards), guards that end in `return` or `panic` (for the code after them), `&&` and `||` (for their right side), `!`, a function's own requirements, a callee's promised result (also through `?` and `match` on a validated union, where the fact holds only for the promising member), field declarations, typed bindings, successful bound type-pattern predicates, and `trust p(x)`.
 - **Facts are found by identity.** A fact about `x` also holds for `y = x`, and for field paths like `u.age`. Repeated pure calls and computed expressions share facts when their resolved operation, runtime types, and input identities match. This is structural identity, not an arithmetic theorem.
-- **Promised results are verified** against every reachable path of the body. Guards resolved from literal-backed eager bindings and independent record/copy fields prune impossible `if` arms and short-circuit operands. Unknown guards and runtime lazy/async cells retain all possible returns, including `?` failures; deciding a guard never executes a predicate or helper. Typed float rounding is preserved, and overflowing integer intermediates remain unknown (bork-m25mqh).
+- **Promised results are verified** against every reachable path of the body. Guards resolved from literal-backed eager bindings and independent record/copy fields prune impossible `if` arms and short-circuit operands. Unknown guards retain all possible returns, including ordinary function `?` failures; runtime lazy/async cells retain all possible initializer returns; deciding a guard never executes a predicate or helper. Typed float rounding is preserved, and overflowing integer intermediates remain unknown (bork-m25mqh).
 - **Requirements on constants are decided by running the predicate at compile time**, using the program's own code (including `unsafe go`): `transfer(0)` fails the build with "positive(0) is false". This works for any predicate, and for literals made of constants too: `xs: List[Int] = []; xs.first()` fails with "notEmpty([]) is false", `greet(User { name: "bob", age: 12 })` with "adult(User { name: "bob", age: 12 }) is false".
 - **Generic predicates:** `pred notEmpty[T](xs: List[T]) { !xs.isEmpty() }` applies to every list. The prelude has it, with `fn (xs: List[T] where notEmpty) first[T](): T`, which needs no `Option`; `prepend`, `append`, and `split` promise `notEmpty` results.
 - **OR:** `x: Int where positive or zero` needs one of the alternatives; `and` and `or` mix only with parentheses (`(positive or zero) and small`). A `||` condition gives an OR fact. An OR obligation may be proven by different alternatives on different branches, and a known OR fact is used by cases: a goal that follows from each alternative follows from the fact.
@@ -269,7 +275,7 @@ r: SignUp | JsonError | DecodeError = json.Decode(line)   // DecodeError { path:
 - **Implicit failure returns keep result promises.** Union `?` failures and `Option.None` returned by `?` must satisfy the enclosing function's result predicates, just like an explicit return. This also applies inside call arguments and blocks, and when deriving facts from an unannotated function's body. A predicate on the entire result union is checked for each returned member or smaller union; narrowing preserves already-proven facts about the same value.
 - **Facts inside type arguments:** `List[Int where positive]` constrains every element, `Option[String where nonEmpty]` the value if there is one. A fact written where it would not be checked (on Map keys or values, a member of a union that is not a result, a function type, a rule variable, a lambda parameter, a constrained bare/destructuring pattern or nested pattern type argument, a constructor name using a constrained alias, or a type argument held inside another type) is a compile error, never silently dropped. A list literal is checked element by element (`[1, 0]` fails with "positive(0) is false"), `Option.None` needs nothing, and a name bound by `Option.Some(v)` has the facts of the value. Rules apply to elements too. Bound type patterns (`n: Int where positive`, or `n: PosInt`) check the erased type first, then evaluate the predicates at runtime. The subject is evaluated once; arms and short-circuiting `and`/`or` clauses follow source order, and predicate panics propagate. Successful predicates establish arm-local facts, including for constrained calls and results; their own requirements must be proven before they run. Guarded arms never count toward exhaustiveness or make later arms unreachable, so an unguarded fallback is required. Earlier unguarded arms can make guarded arms unreachable. Only direct whole-value constraints are supported; constrained bare type names, constrained destructuring, and nested type-argument constraints remain compile errors. Generic and imported predicates use ordinary call checking; function-valued predicate parameters must declare `uses nothing`. To construct a constrained alias, use its base constructor in an annotated binding (`p: PosPoint = Point { x: 1 }`); the binding checks the predicate.
 - **Predicate parameters:** a function parameter can be the predicate: `fn (xs: List[T]) filter[T](keep: (T) => Bool): List[T where keep]`. What the argument checks is then known: `xs.filter(positive)` is a `List[Int where positive]`, and `xs.filter(x => positive(x) && small(x))` has both facts. `find` refines its `Option` the same way.
-- **Facts flow through generic functions.** A generic function cannot make values of its type parameters, so the ones in its result come from its arguments: what holds for all of those holds for them. `positives.head()` holds a positive number, and so do `reverse`, `take`, `positives.concat([5])`, and so on; a lambda's parameter gets the facts of the values the function can hand it (`positives.map(p => transfer(p))`). This holds for `unsafe go` generic functions by trust, like their signatures.
+- **Facts flow through generic functions.** A generic function cannot make values of its type parameters, so the ones in its result come from its arguments: what holds for all of those holds for them. `positives.head()` holds a positive number, and so do `reverse`, `take`, `positives.concat([5])`, and so on; a lambda's parameter gets the facts of the values the function can hand it (`positives.map(p => transfer(p))`). Ordinary nominal record fields are followed too, including tuple and nested container facts, but every possible source must satisfy the requirement. Recursive and opaque records, union fields, and producer callbacks remain conservative boundaries. This holds for `unsafe go` generic functions by trust, like their signatures.
 - **Test mode checks what is trusted.** `bork test` runs the tests with runtime checks of `trust` statements and of what `unsafe go` functions promise (through list elements, Option values, and fields), so trusted facts that drift from the truth are caught by tests: "validate promised a result that is positive, but returned 0".
 - **Property tests come from facts.** `where` clauses already say which inputs are valid, so `test "transfer scales" (amount: Int where positive) { ... }` runs on generated values that meet them (list elements' and record fields' facts too), shrinks a failing case to a simpler one with the same facts, and prints the seed that reproduces it. `bork test --auto-properties` property-tests the functions whose promises are trusted rather than proven (`unsafe go`, `trust`): their promises hold, and they don't panic, for generated arguments. It is opt-in until effects mark functions pure, which will then be tested by default.
 - **Snapshot tests** are cheap regression tests: `assertSnapshot(render(invoice))` compares the value's text with a file in the package's `snapshots` directory, and a failure shows a line diff. `bork test --update` writes the snapshots that are missing or different, as the compiler's own golden tests do with `-update`, so the change is reviewed in version control.
@@ -1280,6 +1286,14 @@ BodyTooLarge, DeadlineExceeded, Cancelled, or IoError, with safe Retry-After par
 Eager Get/Post/Send calls bound decoded response bytes with maxBodyBytes
 (default 16 MiB); exact-limit bodies succeed and oversized bodies are closed
 without returning a partial Response.
+GetStream/SendStream expose scope-owned binary response readers and optional
+total limits; Read bounds chunk allocations, and OpenBody supplies producer
+uploads with backpressure. Total timeouts continue through response consumption.
+See [streaming client bodies](std/http.md#streaming-client-bodies).
+Streaming server listeners expose request-scoped binary readers and response writers,
+with explicit final headers and Flush for SSE. They preserve admission, budgets,
+propagation and shutdown; cancellation interrupts blocked transport reads/writes.
+See [streaming server bodies](std/http.md#streaming-server-bodies).
 Shared HTTP retry budgets charge clock + state for creation and operation effects plus clock + random + state for explicit retries. Initial attempts are free; retries atomically consume a shared, lazily refilled token, preserve Retry-After minimums, and stop when waits cannot fit the scope deadline. Budgets and injected clocks have checked scope lifetimes, and last-owner closure cancels waits and active attempt scopes. See [HTTP documentation](std/http.md#shared-retries) and [the backpressure design](design/backpressure.md).
 
 ### Partially overlapping scopes: owned child scopes
@@ -2795,12 +2809,15 @@ keeping private representations such as HTTP certificate keys inaccessible.
 - **No separate error concept.** Failures are ordinary types. There is no `error` kind, no `Error` base type, and no `Result` wrapper.
 - **Functions that can fail return union types.** For example: `fn loadUser(id: UserId): User | NotFound | DbError`. Matching on a union is exhaustive, and checking a member narrows the type, just like any other fact.
 - **Union match arms follow source order.** Overlapping type patterns are allowed: the first matching arm wins. A later arm completely covered by earlier unguarded arms is a compile error.
+- **Compile-time predicate execution is bounded.** Ordinary predicate evaluation uses the same 10-second execution limit as comptime work. Evaluators are terminated on timeout, normal/error completion, or catchable compiler termination signals, and their temporary directories are removed. On supported Unix systems, cleanup also terminates their process-group descendants. Panic diagnostics retain the message and bork position without the generated Go stack trace.
+- **Complete closed defaults satisfy whole-value invariants.** A record or sealed variant with closed eager defaults for every field must satisfy its whole-value invariant at the declaration, including concrete generic specializations. Partial defaults and deferred/computed field recipes retain construction-time checking.
+
 - **`?` keeps the leftmost member and returns the rest.** `user = loadUser(id)?` binds `User`, and returns `NotFound` or `DbError` from the enclosing function. By convention, the leftmost member is the main result. What `?` does can be read from the callee's signature alone.
 - **Returned members must fit the enclosing function's return type.** This is checked, so nothing slips through unhandled.
-- **An annotation overrides the default.** `x: B = foo()?` keeps `B` and returns everything else, including what would otherwise be the main result. That is useful for early returns that are not errors (e.g. `miss: CacheMiss = cache.get(k)?` returns a cache hit early).
+- **A direct binding annotation can override the default.** When `B` names a member of the operand union, `x: B = foo()?` keeps `B` and returns everything else, including what would otherwise be the main result. The same selection applies to `x: B = foo()?{ e => value }`, whose mapper receives the other members. Ordinary return and argument expectations do not change the first-member rule. That is useful for early returns that are not errors (e.g. `miss: CacheMiss = cache.get(k)?` returns a cache hit early).
 - **`a?.b?.c` applies `?` at each step** (the Rust reading), not safe navigation.
 - **`?` also works on sealed types.** `Option[T]` is `Some[T] | None`, so `v = maybeUser?` keeps the value and returns `None`.
-- **Adding context (q's `Wrapf` semantics) is required.** Wrapping attaches to a single `?` and transforms what that `?` returns.
+- **Adding context:** `x?{ e => Wrapped { cause: e } }` attaches a failure mapper to a single `?`. The callback receives the remaining union members (one value at runtime); its trailing value is returned from the enclosing function, and must fit that function's result type and facts. The original failure need not fit. On `Option`, write `opt?{ _ => NotFound {} }`: `Some` keeps its payload, while `None` runs the mapper. The operand is evaluated once; only failure evaluates the mapper body, once. Captured facts, effects and lifetimes obey the ordinary rules. The mapper is checked as an ordinary lambda: explicit `return`, nested `?`, and outward loop control are rejected. A sole `Ok` failure can be discarded with `_`. The brace must attach as `?{`; a spaced `? {` outside control heads gets a diagnostic and fix. In an unparenthesized control head, a brace after `?` always starts the body; parenthesize a wrapped operand, as in `match (x?{ e => Wrapped { cause: e } }) { ... }`.
 - **Chaining is not a priority.** Clarity beats conciseness. Writing one step per line is fine.
 
 ```
@@ -2821,7 +2838,6 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 
 ### Open questions
 
-- **Wrap syntax**, e.g. `loadUser(id)?{ e => LoadFailed(id, e) }`, or something else?
 - **`?` inside lambdas** returns from the lambda, which makes the lambda's inferred return type a union. Is that what we want, or should `?` require a declared lambda return type?
 
 ## Language basics
@@ -3208,7 +3224,7 @@ imported = settings.Box[String] { value: "value" }
   each usable alternative independently and recheck it.
 
 Acceptance covers constructor kinds, fieldless/defaulted variants, nested
-shorthand, concrete aliases (and rejection of parameterized aliases), imported
+shorthand, concrete and explicitly parameterized aliases, imported
 types and alias-exposed inaccessible owners, constrained-alias fix fallbacks,
 argument arity/kinds,
 conflicting context, bounds/argument facts, defaults and invariants, private
@@ -3463,9 +3479,10 @@ watch and hover contexts, invalid operands and unsupported syntax.
 
 `lazy name = expr` defers one initializer until its first read, memoizes its
 result and keeps the static type T. Local bindings are implemented, including
-concurrent readers, cached panics, scoped captures and initializer-local return/?.
-An Option ? needs an annotated lazy result type; union ? and explicit return
-can contribute to an inferred result. Lazy record fields provide a passable lazy
+concurrent readers, cached panics, scoped captures and initializer-local returns.
+`?` is rejected inside lazy/async initializers, including lazy field recipes and package bindings;
+use `match` to handle outcomes explicitly. Explicit return can contribute to an
+inferred result. Lazy record fields provide a passable lazy
 value through `type Lazy[T] = { lazy value: T }`. Pure sibling-dependent defaults
 are computed fields: construction creates their cells, copies invalidate affected
 dependencies, and structural equality, Show, encoding and writable schemas omit
@@ -3483,7 +3500,7 @@ now, keeps type T, and awaits on read. Unread tasks follow ordinary scope
 cancellation, joining and panic reporting. The cell retains its owning scope
 and captured lifetimes, even for scalar results; eagerly resolved data follows
 its ordinary lifetime rules. Both lazy and async initializers are local result
-boundaries for return/?.
+boundaries for explicit return; `?` is rejected.
 
 ### Generators and lazy sequences (implemented)
 

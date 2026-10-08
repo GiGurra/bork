@@ -1,0 +1,4 @@
+type Failure = {}
+fn source(): Int | Failure { Failure {} }
+fn impure(): Int | Failure { source()?{ e => { println("failure"); e } } }
+fn main() {}

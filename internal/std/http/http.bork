@@ -110,7 +110,7 @@ fn HeaderOf(headers: Headers, name: String): Option[String] {
 // maxBodyBytes defaults to 16 MiB; oversized requests receive HTTP 413.
 // requestTimeoutMs caps incoming budgets; zero adds no server deadline.
 fn Listen(addr: String, s: Scope, handler: (Request, Scope) => Response, drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = Option.None, requestTimeoutMs: TimeoutMs = 0) uses net + clock + state: Server | IoError unsafe go {
-  return start(addr, s, []Route{{pattern: "/", handler: handler}}, _borkNone[Certificate](), drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs)
+  return start(addr, s, []Route{{pattern: "/", handler: handler}}, nil, _borkNone[Certificate](), drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs)
 }
 
 // ListenRoutes serves Go ServeMux patterns with their handlers. A GET
@@ -118,14 +118,14 @@ fn Listen(addr: String, s: Scope, handler: (Request, Scope) => Response, drainTi
 // Invalid or conflicting patterns return IoError before opening a socket.
 // Zero drain timeout inherits cleanupTimeout; with no policy, drain is unbounded.
 fn ListenRoutes(addr: String, s: Scope, routes: List[Route], drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = Option.None, requestTimeoutMs: TimeoutMs = 0) uses io + net + clock + random + state: Server | IoError unsafe go {
-  return start(addr, s, routes, _borkNone[Certificate](), drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs)
+  return start(addr, s, routes, nil, _borkNone[Certificate](), drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs)
 }
 
 // ListenTLS loads a certificate and private key before opening the listener.
 fn ListenTLS(addr: String, s: Scope, routes: List[Route], certFile: String, keyFile: String, drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = Option.None, requestTimeoutMs: TimeoutMs = 0) uses io + net + clock + random + state: Server | IoError unsafe go {
   pair := LoadCertificate(certFile, keyFile)
   if failure, failed := pair.(IoError); failed { return failure }
-  return start(addr, s, routes, _borkSome(pair.(Certificate)), drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs)
+  return start(addr, s, routes, nil, _borkSome(pair.(Certificate)), drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs)
 }
 
 // Certificate keeps validated immutable PEM bytes in a private variant.
@@ -156,7 +156,7 @@ fn LoadCertificate(certFile: String, keyFile: String) uses io: Certificate | IoE
   return pair
 }
 
-fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certificate], drainTimeoutMs: TimeoutMs, maxBodyBytes: BodyLimit, admission: Option[Admission], requestTimeoutMs: TimeoutMs) uses net + clock + state: Server | IoError unsafe go {
+fn start(addr: String, s: Scope, routes: List[Route], streamRoutes: List[StreamRoute], certificate: Option[Certificate], drainTimeoutMs: TimeoutMs, maxBodyBytes: BodyLimit, admission: Option[Admission], requestTimeoutMs: TimeoutMs) uses net + clock + state: Server | IoError unsafe go {
   import "context"
   import "crypto/tls"
   import "errors"
@@ -243,6 +243,13 @@ fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certif
         })
         w.WriteHeader(int(resp.status))
         io.WriteString(w, resp.body)
+      })
+    }
+    for _, route := range streamRoutes {
+      pattern := route.pattern
+      mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+        exchange := serverExchange{handle: struct { writer http.ResponseWriter; request *http.Request; pattern string }{w, r, pattern}}
+        serveStream(exchange, s, route.handler, maxBodyBytes)
       })
     }
     return nil
