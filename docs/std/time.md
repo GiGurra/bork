@@ -8,7 +8,7 @@ import "bork/time"
 fn main() {
   clock = time.FixedClock(time.Instant { unixNanos: 0 })
   println(time.Format(time.Read(clock), time.RFC3339()))
-  println(time.FormatDuration(1_500_000_000.nanos()))
+  println(time.FormatDuration(1500.millis()))
   match (time.ParseDuration("oops")) {
     _: ParseError => println("invalid duration")
     value: Duration => println(value)
@@ -110,7 +110,7 @@ import "bork/time"
 fn main() {
   scope app {
     cancel(app)
-    println(time.Sleep(app, 1_000_000.nanos()))
+    println(time.Sleep(app, 1.millis()))
   }
 }
 ```
@@ -135,8 +135,8 @@ import "bork/time"
 
 fn main() {
   scope app {
-    ticks = time.Tick(app, 1_000_000.nanos())
-    deadline = time.After(app, 5_000_000.nanos())
+    ticks = time.Tick(app, 1.millis())
+    deadline = time.After(app, 5.millis())
     match (ticks.receive(app)) {
       _: time.Instant => println("tick")
       other => println(other)

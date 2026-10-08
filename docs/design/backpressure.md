@@ -180,7 +180,7 @@ The helper takes an explicit operation and policy:
 
 ```bork fragment
 http.Retry(s, budget, operation, maxAttempts: 3,
-           baseDelay: 20.millis(), maxDelay: 1000.millis())
+           baseDelay: 20.millis(), maxDelay: 1.seconds())
 ```
 
 Operation returns Response | Overloaded | BodyTooLarge | DeadlineExceeded | Cancelled |

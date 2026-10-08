@@ -42,3 +42,24 @@ test "default jitter uses the standard random source and can be mocked" {
     assertEqual(draws.calls(), ["rand.IntBetween(0, 2000001)", "rand.IntBetween(0, 4000001)"])
   }
 }
+
+test "default jitter includes both endpoints at the maximum duration" {
+  high = atom(false)
+  calls = atom(0)
+  draws = mock rand.IntBetween(lo, hi) { if (current(high)) { hi - 1 } else { lo } }
+  scope s {
+    cancelAfter(s, 10.seconds())
+    budget = http.OpenRetryBudget(s, capacity: 2, refill: 1.hours())
+    _ = http.Retry(s, budget, attempt => { _ = update(calls, n => n + 1); busy() },
+      maxAttempts: 3, baseDelay: 9223372036854775807.nanos(), maxDelay: 9223372036854775807.nanos())
+    assertEqual(current(calls), 3)
+    assertEqual(draws.count(), 2)
+    _ = update(high, value => true)
+    other = http.OpenRetryBudget(s, capacity: 2, refill: 1.hours())
+    _ = http.Retry(s, other, attempt => { _ = update(calls, n => n + 1); busy() },
+      maxAttempts: 3, baseDelay: 9223372036854775807.nanos(), maxDelay: 9223372036854775807.nanos())
+    // Maximum jitter cannot fit the scope deadline, so no second attempt starts.
+    assertEqual(current(calls), 4)
+    assertEqual(draws.calls(), ["rand.IntBetween(-9223372036854775808, 0)", "rand.IntBetween(-9223372036854775808, 0)", "rand.IntBetween(-9223372036854775808, 0)"])
+  }
+}

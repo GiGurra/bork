@@ -251,9 +251,9 @@ import "bork/time"
 
 fn bounded() uses io + state + clock: process.Result | IoError | Cancelled {
   scope limited {
-    cancelAfter(limited, 2000.millis())
+    cancelAfter(limited, 2.seconds())
     process.Run(limited, "sleep", ["10"],
-      cancelGrace: 100_000_000.nanos())
+      cancelGrace: 100.millis())
   }
 }
 

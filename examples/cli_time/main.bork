@@ -34,7 +34,7 @@ test "duration codec round trips the signed nanosecond range" {
   })
   assertEqual(test.AssertIs[time.Duration](json.Decode[time.Duration]("\"1h2m3s\"")).nanos, 3723000000000)
   assertEqual(test.AssertIs[time.Duration](yaml.Decode[time.Duration]("250ms")).nanos, 250000000)
-  assertEqual(json.Encode(1500000000.nanos()), "\"1.5s\"")
+  assertEqual(json.Encode(1500.millis()), "\"1.5s\"")
 }
 
 test "instant wire strings normalize offsets and preserve fractions" {

@@ -147,7 +147,7 @@ bork:
 
 ```bork fragment
 result = scope limited {
-  cancelAfter(limited, 2000.millis())
+  cancelAfter(limited, 2.seconds())
   process.Run(limited, "slow-tool")
 }
 ```
@@ -157,7 +157,7 @@ When the deadline passes, the child's process group is killed and Run returns
 explicit `cancel`, SIGINT/SIGTERM shutdown of root scopes (bork/signal) and
 deadlines; there is no separate TimedOut type to forget in a union.
 
-`cancelGrace: Duration = 0.nanos()` on Run and Start makes cancellation graceful:
+`cancelGrace: Duration = 0.seconds()` on Run and Start makes cancellation graceful:
 the group first receives SIGTERM, and SIGKILL follows only if the child is
 still running after the grace period. Zero keeps today's immediate kill. Scope
 cleanup waits at most the grace period plus the existing one-second pipe bound,
@@ -174,7 +174,7 @@ fn (p: Process) Wait() uses io + state: Result | IoError | Cancelled
 fn (p: Process) TryWait() uses io + state: Option[Result | IoError | Cancelled]
 fn (p: Process) Pid(): Int
 fn (p: Process) Signal(signal: signal.Signal) uses io + state: Ok | IoError
-fn (p: Process) Stop(grace: Duration = 5_000_000_000.nanos()) uses io + state
+fn (p: Process) Stop(grace: Duration = 5.seconds()) uses io + state
 fn (p: Process) Kill() uses io + state
 fn (p: Process) Stdin(): Writer
 fn (p: Process) Stdout(): Reader

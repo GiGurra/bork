@@ -289,7 +289,7 @@ fn serve(app: Scope) uses io + net + clock + random + state: Ok | IoError {
 }
 
 fn main() {
-  scope app with cleanupTimeout(5000.millis()) {
+  scope app with cleanupTimeout(5.seconds()) {
     match (serve(app)) {
       _: Ok => {}
       error: IoError => eprintln(error.path + ": " + error.message)
@@ -370,14 +370,14 @@ import "bork/http"
 
 fn main() {
   scope app {
-    budget = http.OpenRetryBudget(app, capacity: 4, refill: 1000.millis())
+    budget = http.OpenRetryBudget(app, capacity: 4, refill: 1.seconds())
     attempts = atom(0)
     result = http.Retry(app, budget, operation: attempt => {
       count = update(attempts, n => n + 1)
       if (count == 1) {
         http.Overloaded { response: http.Text(503, "busy"), retryAfter: .None }
       } else { http.Text(200, "ok") }
-      }, baseDelay: 0.millis(), maxDelay: 0.millis())
+      }, baseDelay: 0.seconds(), maxDelay: 0.seconds())
     match (result) {
       response: http.Response => println(response.status, response.body)
       error => eprintln(toString(error))

@@ -75,7 +75,7 @@ import "bork/time"
 fn configure(app: Scope) uses io + state: signal.Policy | signal.Error {
   signal.Configure(app,
     cancel: [.Interrupt, .Terminate, .Hangup],
-    grace: .Some(5_000_000_000.nanos()))
+    grace: .Some(5.seconds()))
 }
 
 fn main() {

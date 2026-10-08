@@ -24,7 +24,7 @@ fn got(result: String | Closed | Cancelled): String {
   }
 }
 fn main() {
-  scope app with cleanupTimeout(5000.millis()) {
+  scope app with cleanupTimeout(5.seconds()) {
     started = channel[Bool](app, 4)
     finish = channel[Bool](app, 4)
     completed = channel[String](app, 6)
@@ -38,18 +38,18 @@ fn main() {
       _ = finish.receive(app)
       _ = update(active, n => n - 1)
       http.Text(200, "finished")
-      }, admission: .Some(http.Admission { maxInFlight: 2, maxQueued: 2, queueTimeout: 60000.millis(), retryAfter: 0.millis() }))
+      }, admission: .Some(http.Admission { maxInFlight: 2, maxQueued: 2, queueTimeout: 1.minutes(), retryAfter: 0.seconds() }))
     match (listener) {
       server: http.Server => {
         url = "http://" + http.Address(server) + "/work"
         pool = tasks.Open(app, maxTasks: 6)
-        budget = http.OpenRetryBudget(app, capacity: 4, refill: 60000.millis(),
+        budget = http.OpenRetryBudget(app, capacity: 4, refill: 1.minutes(),
           clock: .Some(time.FixedClock(.{ unixNanos: 0 })))
         callers = range(0, 6).map(i => task(tasks.TryFork(pool, app, () => {
           value = response(http.Retry(app, budget, operation: attempt => {
             _ = update(calls, n => n + 1)
             http.Get(url, attempt)
-            }, maxAttempts: 10, baseDelay: 0.millis(), maxDelay: 0.millis()))
+            }, maxAttempts: 10, baseDelay: 0.seconds(), maxDelay: 0.seconds()))
           _ = completed.send(app, value)
           value
         })))

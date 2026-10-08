@@ -27,7 +27,7 @@ fn listenAll(s: Scope, api: String, metrics: String, debug: String) uses io + ne
 }
 
 fn serve() uses io + net + clock + random + state: Ok | IoError {
-  scope app with cleanupTimeout(5000.millis()) {
+  scope app with cleanupTimeout(5.seconds()) {
     servers = listenAll(app, ":8080", "127.0.0.1:9090", "127.0.0.1:6060")?
     for (server in servers) { println(s"listening on ${http.Address(server)}") }
     // Returns on Ctrl+C, or as soon as any listener stops on its own;

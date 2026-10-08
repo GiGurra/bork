@@ -18,7 +18,7 @@ type Health = sealed {
 
 // check asks url how it is, and notes when it found it down.
 fn check(url: String, s: Scope) uses net + clock + state: Health {
-  match (http.Get(url, s, timeout: 2000.millis())) {
+  match (http.Get(url, s, timeout: 2.seconds())) {
     r: http.Response => if (r.status < 500) {
       Health.Up { url: url }
     } else {

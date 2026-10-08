@@ -220,7 +220,7 @@ fn main() {
 
 ## Sleep cooperatively
 
-`delay` takes milliseconds and returns `Ok | Cancelled`. A cancelled scope interrupts the wait.
+`delay` takes a `Duration` and returns `Ok | Cancelled`. A cancelled scope interrupts the wait.
 
 ```bork
 fn nap(s: Scope) uses clock + state: Ok | Cancelled { delay(s, 10.millis())? }
@@ -233,7 +233,7 @@ fn main() { scope s { println(nap(s)) } }
 
 ```bork
 fn answer(child: Scope) uses clock + state: Int | Cancelled {
-  delay(child, 1000.millis())?
+  delay(child, 1.seconds())?
   42
 }
 fn main() {
@@ -276,8 +276,8 @@ Replay only operations that your application considers safe. This GET uses one b
 import "bork/http"
 fn main() {
   scope s {
-    cancelAfter(s, 1000.millis())
-    budget = http.OpenRetryBudget(s, capacity: 2, refill: 1000.millis())
+    cancelAfter(s, 1.seconds())
+    budget = http.OpenRetryBudget(s, capacity: 2, refill: 1.seconds())
     println(http.Retry(s, budget, child => http.Get("https://example.com", child), maxAttempts: 3))
   }
 }

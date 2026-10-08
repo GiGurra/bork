@@ -123,7 +123,7 @@ fn main() {
   scope s {
     onClose(s, () => println("cleanup"))
     fork(s, () => {
-      println(delay(s, 60_000.millis()))
+      println(delay(s, 1.minutes()))
     })
   }
 }
@@ -148,7 +148,7 @@ A scope can be cancelled. Its tasks see this at their next cancellation point, s
 
 ```bork
 fn slowAnswer(s: Scope) uses clock + state: Int | Cancelled {
-  delay(s, 2000.millis())?
+  delay(s, 2.seconds())?
   42
 }
 

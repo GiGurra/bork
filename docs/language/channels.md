@@ -233,7 +233,7 @@ import "bork/time"
 type TimedOut = {}
 
 fn reply(s: Scope, replies: Channel[String]) uses clock + state: String | Closed | TimedOut | Cancelled {
-  deadline = time.After(s, 50_000_000.nanos())
+  deadline = time.After(s, 50.millis())
   select {
     r = replies.receive(s) => r
     _ = deadline.receive(s) => TimedOut {}

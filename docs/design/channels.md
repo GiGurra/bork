@@ -287,7 +287,7 @@ give up waiting on one source but keep the others) is a `time.After` or
 
 ```bork fragment
 scope s {
-  cancelAfter(s, 5000.millis())                  // the whole exchange: implicit Cancelled
+  cancelAfter(s, 5.seconds())                  // the whole exchange: implicit Cancelled
   replyBy = time.After(s, millis(200))  // this request: an arm
   match (select {
     r = replies.receive(s) => r          // Reply | Closed
