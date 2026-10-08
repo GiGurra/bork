@@ -20,6 +20,10 @@ func TestHTTPServerStreamRace(t *testing.T) {
 	testHTTPStreamRace(t, "http_server_stream")
 }
 
+func TestHTTPHandlerPanicRace(t *testing.T) {
+	testHTTPStreamRace(t, "http_handler_panic")
+}
+
 func testHTTPStreamRace(t *testing.T, fixture string) {
 	if !testRaceEnabled {
 		t.Skip("generated race executable is covered by go test -race")
@@ -48,6 +52,9 @@ func testHTTPStreamRace(t *testing.T, fixture string) {
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("generated HTTP streaming: %v\n%s\n%s", err, out, stderr.String())
+	}
+	if stderr.Len() > 0 {
+		t.Fatalf("unexpected server stderr: %s", stderr.String())
 	}
 	compare(t, filepath.Join(path, "expected_output.txt"), string(out))
 }

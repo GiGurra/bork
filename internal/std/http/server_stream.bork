@@ -57,6 +57,7 @@ type serverExchange = resource
 fn serveStream(exchange: serverExchange, listener: Scope, handler: StreamHandler, maxBodyBytes: BodyLimit) uses io + net + clock + random + state unsafe go {
   import "context"
   import "errors"
+  import "fmt"
   import "io"
   import "net/http"
   import "sort"
@@ -123,11 +124,24 @@ fn serveStream(exchange: serverExchange, listener: Scope, handler: StreamHandler
     controller.SetReadDeadline(time.Time{})
     controller.SetWriteDeadline(time.Time{})
   }
+  started := false
   defer func() {
-    _borkScopeAbort(rs)
+    original := recover()
+    var failures []any
+    if original != nil && original != http.ErrAbortHandler { failures = append(failures, original) }
+    func() {
+      defer func() { if failure := recover(); failure != nil { failures = append(failures, failure) } }()
+      _borkScopeAbort(rs)
+    }()
     closeReader()
     writerHandle.Close()
     reset()
+    for _, failure := range failures { logHandlerPanic(r.Method, r.URL.Path, fmt.Sprint(failure)) }
+    if original == http.ErrAbortHandler || (len(failures) > 0 && started) { panic(http.ErrAbortHandler) }
+    if len(failures) > 0 {
+      w.Header().Set("Connection", "close")
+      http.Error(w, "internal server error", 500)
+    }
   }()
   body := http.MaxBytesReader(w, r.Body, maxBodyBytes)
   readFailure := func(err error) any {
@@ -148,7 +162,6 @@ fn serveStream(exchange: serverExchange, listener: Scope, handler: StreamHandler
   }{body, readerHandle.Context(), readFailure, closeReader, func() { bodyDone.Store(true); closeReader() }, new(sync.Mutex), nil, maxBodyBytes, new(any)}
   reader := BodyReader{handle: readerHandle, owner: rs.Own(closeReader)}
   var mu sync.Mutex
-  started := false
   check := func() any {
     if expired() { return DeadlineExceeded{message: "request deadline exceeded"} }
     if ctx.Err() != nil { return Cancelled{reason: context.Cause(ctx).Error()} }

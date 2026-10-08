@@ -224,13 +224,26 @@ fn start(addr: String, s: Scope, routes: List[Route], streamRoutes: List[StreamR
         // Keep later listener-scope deadline updates visible, independently of
         // request ownership and the Go context's creation-time deadline.
         rs.deadlineParent = s
-        defer _borkScopeAbort(rs)
+        started := false
+        defer func() {
+          var failures []any
+          if failure := recover(); failure != nil { failures = append(failures, failure) }
+          func() {
+            defer func() { if failure := recover(); failure != nil { failures = append(failures, failure) } }()
+            _borkScopeAbort(rs)
+          }()
+          if len(failures) == 0 { return }
+          for _, failure := range failures { logHandlerPanic(r.Method, r.URL.Path, fmt.Sprint(failure)) }
+          if started { panic(http.ErrAbortHandler) }
+          reject(w, r, 500, "internal server error")
+        }()
         resp := route.handler(Request{method: r.Method, path: r.URL.Path, query: r.URL.RawQuery, params: _borkMapOf(names, params), headers: _borkMapOf(keys, values), body: string(body)}, rs)
         _borkScopeClose(rs)
         _borkMapEach(resp.headers, func(name string, values []string) bool {
           for _, value := range values { w.Header().Add(name, value) }
           return true
         })
+        started = true
         w.WriteHeader(int(resp.status))
         io.WriteString(w, resp.body)
       })

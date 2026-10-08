@@ -1,0 +1,82 @@
+import "bork/http"
+import "bork/log"
+import "bork/encoding"
+propagated("x-request-id") logged ambient requestId: String
+
+fn boom(path: String, rs: Scope, stopped: Atom[Bool] in rs) uses clock + state {
+  if (path == "/cleanup" || path == "/double") { onClose(rs, () => panic("cleanup exploded")) }
+  if (path == "/task") {
+    _ = fork(rs, () => panic("task exploded"))
+    return
+  }
+  if (path == "/cleanup") { return }
+  _ = fork(rs, () => {
+    match (delay(rs, 100000)) {
+      _: Cancelled => { _ = update(stopped, n => true) }
+      _: Ok => panic("task was not cancelled")
+    }
+  })
+  panic("handler exploded")
+}
+fn eager(req: http.Request, rs: Scope, stopped: Atom[Bool] in rs) uses clock + state: http.Response {
+  if (req.path != "/health") { boom(req.path, rs, stopped) }
+  http.Text(200, "healthy")
+}
+fn stream(req: http.StreamRequest, writer: http.BodyWriter, rs: Scope, stopped: Atom[Bool] in rs) uses net + clock + state: http.StreamOutcome {
+  if (req.path == "/committed" || req.path == "/committed-cleanup") {
+    _ = http.Write(writer, encoding.Utf8("partial"))?
+    http.Flush(writer)?
+    if (req.path == "/committed-cleanup") {
+      onClose(rs, () => panic("committed cleanup exploded"))
+      return http.Flush(writer)
+    }
+    panic("committed exploded")
+  }
+  if (req.path != "/health") { boom(req.path, rs, stopped) } else { http.BeginResponse(writer, 204, {:})? }
+}
+fn mustServer(result: http.Server | IoError): http.Server {
+  match (result) { server: http.Server => server, error: IoError => panic(error.message) }
+}
+fn check(url: String, path: String, expected: Int) uses io + net unsafe go {
+  import "fmt"
+  import "io"
+  import "net/http"
+  import "strings"
+  import "time"
+  request, err := http.NewRequest("GET", url+path, nil)
+  if err != nil { panic(err) }
+  request.Header.Set("X-Request-Id", "request-42")
+  response, err := (&http.Client{Timeout: 2*time.Second}).Do(request)
+  if err != nil { panic(err) }
+  body, err := io.ReadAll(response.Body)
+  response.Body.Close()
+  if response.StatusCode != int(expected) { panic(fmt.Sprintf("%s: expected %d got %d", path, expected, response.StatusCode)) }
+  if strings.HasPrefix(path, "/committed") {
+    if err == nil || string(body) != "partial" { panic("committed response was not aborted") }
+  } else if err != nil { panic(err) }
+  if expected == 500 && (strings.Contains(string(body), "exploded") || string(body) != "internal server error\n") { panic("panic details exposed") }
+  fmt.Println("response", path, expected)
+}
+fn idle(server: http.Server) uses state: Bool {
+  match (http.AdmissionState(server)) { .Some(load) => load.inFlight == 0 && load.queued == 0, .None => false }
+}
+fn main() {
+  log.Configure(log.Defaults().copy(output: .Stdout, timestamps: false, format: .Json))
+  scope app {
+    stopped = atom(false)
+    policy = http.Admission { maxInFlight: 1 }
+    server = mustServer(http.Listen("127.0.0.1:0", app, (req, rs) => eager(req, rs, stopped), admission: .Some(policy)))
+    url = "http://" + http.Address(server)
+    for (path in ["/boom", "/task", "/cleanup", "/double"]) { check(url, path, 500) }
+    check(url, "/health", 200)
+    println("eager cancelled and idle", current(stopped), idle(server))
+    _ = update(stopped, n => false)
+    streaming = mustServer(http.ListenStream("127.0.0.1:0", app, (req, writer, rs) => stream(req, writer, rs, stopped), admission: .Some(policy)))
+    base = "http://" + http.Address(streaming)
+    for (path in ["/boom", "/task", "/cleanup", "/double"]) { check(base, path, 500) }
+    check(base, "/committed", 200)
+    check(base, "/committed-cleanup", 200)
+    check(base, "/health", 204)
+    println("stream cancelled and idle", current(stopped), idle(streaming))
+  }
+}
