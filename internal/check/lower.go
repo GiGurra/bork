@@ -744,9 +744,53 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		if info := l.info.tries[x]; info != nil {
 			out.TryInfo = *info
 		}
+		if x.Wrap != nil {
+			return l.wrappedTry(x, out)
+		}
 		return out
 	}
 	panic(fmt.Sprintf("unhandled expression %T", x))
+}
+
+// wrappedTry shares match's failure returns, facts, effects and lifetimes.
+// The mapper was checked as a lambda, so its body cannot escape with return,
+// ?, break or continue. Its parameter becomes the failure pattern binding.
+func (l *lowerer) wrappedTry(x *syntax.Try, t *Try) Expr {
+	mapper := l.expr(x.Wrap).(*Lambda)
+	param := mapper.Params[0]
+	param.Kind = VarPattern
+	param.Unused = true
+	if param.Name == "_" {
+		param.GoName = fmt.Sprintf("_try_error_%d_%d", x.Pos.Line, x.Pos.Col)
+	}
+	param.Source = &VarSource{Subject: t.X}
+	kept := &Var{Name: "_try_kept", GoName: fmt.Sprintf("_try_kept_%d_%d", x.Pos.Line, x.Pos.Col), Pos: x.Pos, Type: t.Kept, Kind: VarPattern, Source: &VarSource{Subject: t.X}}
+	bind := func(v *Var, typ Type) *Pat {
+		return &Pat{Kind: PatWild, Type: typ, Bind: v.Name, BindType: v.Type, Var: v}
+	}
+	var success, failure *Pat
+	if t.Option != nil {
+		some := t.Option.Variant("Some")
+		kept.Source.Path = "." + some.Fields[0].Name
+		success = &Pat{Kind: PatVariant, Type: t.Option, Variant: some, Fields: []*PatField{{Name: some.Fields[0].Name, Pat: bind(kept, t.Kept)}}}
+		failure = bind(param, t.Option)
+		failure.Kind, failure.Variant = PatVariant, t.Option.Variant("None")
+	} else {
+		kept.Source.Member = t.Kept
+		param.Source.Member = newUnion(t.Rest)
+		success = bind(kept, t.X.Type())
+		success.Kind, success.Members = PatType, []Type{t.Kept}
+		failure = bind(param, t.X.Type())
+		failure.Kind, failure.Members = PatType, t.Rest
+	}
+	returned := &Return{expr: expr{pos: valuePos(mapper.Body), token: x.Pos, typ: Never}, Value: mapper.Body}
+	// Retain a block boundary so the generated return gets the mapper's
+	// source line even when its body is just a pure trailing expression.
+	body := &Block{expr: expr{pos: x.Wrap.Pos, typ: Never}, Stmts: []Stmt{&ExprStmt{X: returned}}}
+	return &Match{expr: t.expr, X: t.X, Arms: []*MatchArm{
+		{Pat: success, Body: &VarRef{expr: expr{pos: x.Pos, typ: t.Kept}, Var: kept}},
+		{Pat: failure, Body: body},
+	}}
 }
 
 func sourceTokenPos(x syntax.Expr) diag.Pos {

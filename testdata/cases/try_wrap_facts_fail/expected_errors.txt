@@ -1,0 +1,2 @@
+main.bork:7:23: badReturn promises a result that is approved, but that is not proven for this value (give it a name and check it first)
+main.bork:11:29: n must be positive, but source can return 0, and positive(0) is false

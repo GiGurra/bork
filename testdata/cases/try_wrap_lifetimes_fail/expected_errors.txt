@@ -1,0 +1,1 @@
+main.bork:8:21: function escapes cannot return this value: it belongs to scope s, which ends on line 9
