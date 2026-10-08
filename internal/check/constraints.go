@@ -343,7 +343,9 @@ func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]T
 	if base := genericBase(typ); base != nil && len(t.Args) == len(typeParamsOf(base)) {
 		args := TypeArgs(typ)
 		for i, tp := range typeParamsOf(base) {
-			cons := c.constraintsOf(t.Args[i], args[i], scope)
+			// Tuple annotations may record their field facts. Generic
+			// instances are shared, so annotate a copy of the argument.
+			cons := c.constraintsOf(t.Args[i], subst(args[i], nil), scope)
 			if len(cons) == 0 {
 				continue
 			}
