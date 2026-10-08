@@ -158,6 +158,7 @@ func (g *gen) jump(call *check.Call) []ast.Stmt {
 		}
 		needStmts, needs := g.values(call.Needs)
 		stmts = append(stmts, needStmts...)
+		needs = append(needs, g.membershipArgs(call.Inst.Func.TypeParams, call.Inst.TypeArgs)...)
 		ordinary := g.instanceResult(call.Inst, &ast.CallExpr{Fun: g.instance(call.Inst), Args: append(append(dicts, xs...), needs...)})
 		var answer []ast.Stmt
 		if g.fnResult == check.Ok || g.fnResult == check.Never {

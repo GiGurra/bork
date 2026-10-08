@@ -20,7 +20,7 @@ type NamedColor = sealed { DarkBlue codec { name: "navy" } } derive (codec.Decod
 fn main() {
   println(json.Encode(Color.Red))
   println(json.Encode(Color.DarkBlue))
-  println(json.Decode[Color](json.Encode(Color.DarkBlue)))
+  println(json.Decode[Color](match (json.Encode(Color.DarkBlue)) { text: String => text; error: json.JsonError => { println(error); return } }))
   println(json.Decode[Color]("\"RED\""))
   println(json.Decode[Color]("{\"type\":\"DARK_BLUE\"}"))
   println(json.Decode[Color]("\"purple\""))

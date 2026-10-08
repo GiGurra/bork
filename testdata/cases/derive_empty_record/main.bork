@@ -15,7 +15,7 @@ fn main() {
   println(json.Decode[Empty]("\"text\""))
   println(json.Decode[Empty]("true"))
   println(json.Encode(Empty {}))
-  println(json.Decode[Empty](json.Encode(Empty {})))
+  println(json.Decode[Empty](match (json.Encode(Empty {})) { text: String => text; error: json.JsonError => { println(error); return } }))
   println(json.Decode[Box]("{\"empty\": {}}"))
   println(json.Decode[Box]("{\"empty\": null}"))
   println(json.Decode[EmptyGeneric[Int]]("{}"))

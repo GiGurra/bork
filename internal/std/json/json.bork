@@ -1,7 +1,7 @@
 import codec "bork/codec"
 use codec.Defaults
 
-// JsonError is returned for text that is not valid JSON.
+// JsonError reports invalid JSON text or a value that cannot render as JSON.
 type JsonError = { message: String }
 
 // Package json queries dynamic JSON values and streams JSON Lines. Typed
@@ -41,8 +41,7 @@ type Indent = Int where ValidIndent
 // Pretty preserves field order and exact number text. Invalid manually
 // constructed number values give JsonError. Zero adds newlines with no indent.
 fn Pretty(value: codec.Value, spaces: Indent = 2): String | JsonError {
-  validateNumbers(value)?
-  indentJson(Render(value), spaces)
+  indentJson(Render(value)?, spaces)
 }
 fn indentJson(text: String, spaces: Indent): String | JsonError unsafe go {
   import "bytes"

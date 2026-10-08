@@ -246,7 +246,10 @@ The `?` operator passes a failure up to the caller. `find(id)?` means: if the re
 
 "Success" is the first member of the union. Every other member must be something the enclosing function is able to return, so `withdraw` has `NotFound` in its own result type.
 
-On an `Option`, `?` keeps the value inside `Some` and returns `Option.None`:
+On an `Option`, `?` keeps the value inside `Some` and returns `Option.None`.
+The unwrapped value keeps the payload's declared facts, just as a `Some(value)`
+pattern does. This includes facts on nested values and facts whose arguments
+refer to function parameters.
 
 ```bork
 fn secondWord(text: String): Option[String] {

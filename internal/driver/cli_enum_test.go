@@ -52,14 +52,14 @@ instance advertisedDecode: codec.Decode[Advertised] {
 type AdvertisedOptions = { value: Advertised } derive (codec.Decode, codec.Encode)
 fn suggest(request: cli.CompletionRequest, s: Scope): cli.Suggestions | cli.Error {
  match (request.partial.Get[Mode]("level")) {
-  value: Mode => cli.Suggestions { choices: [.{value: json.Encode(value)}] }
+  value: Mode => cli.Suggestions { choices: [.{value: match (json.Encode(value)) { text: String => text; error: json.JsonError => toString(error) }}] }
   _: cli.Missing => cli.Suggestions { choices: [.{value: "missing"}] }
   error: codec.DecodeError => cli.Error {errors: [error]}
  }
 }
 fn nestedSuggest(request: cli.CompletionRequest, s: Scope): cli.Suggestions | cli.Error {
  match (request.partial.Get[List[List[Mode]]]("groups")) {
-  value: List[List[Mode]] => cli.Suggestions {choices:[.{value:json.Encode(value)}]}
+  value: List[List[Mode]] => cli.Suggestions {choices:[.{value:match (json.Encode(value)) { text: String => text; error: json.JsonError => toString(error) }}]}
   _: cli.Missing => cli.Suggestions {choices:[.{value:"missing"}]}
   error: codec.DecodeError => cli.Error {errors:[error]}
  }

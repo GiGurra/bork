@@ -6,6 +6,8 @@ Operations on strings, lists, maps, options, and bytes need no import. They are 
 
 The [built-in API reference](builtins.md) lists functions and methods available without imports, with their signatures and comments.
 
+[String indexing](strings.md) explains code-point offsets and explicit byte methods.
+
 Run `bork doc bork/<package>` for generated package signatures and comments; for example, `bork doc bork/http`.
 
 | Package | Description |

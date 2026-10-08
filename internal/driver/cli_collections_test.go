@@ -43,7 +43,7 @@ fn ignore(request: cli.CompletionRequest, s: Scope): cli.Suggestions | cli.Error
 }
 fn suggest(request: cli.CompletionRequest, s: Scope): cli.Suggestions | cli.Error {
  tags = match (request.partial.Get[List[String]]("tags")) {
-  value: List[String] => json.Encode(value)
+  value: List[String] => match (json.Encode(value)) { text: String => text; error: json.JsonError => { return cli.Error { errors: [codec.DecodeError { path: "", message: error.message }] } } }
   _: cli.Missing => "missing"
   error: codec.DecodeError => { return cli.Error { errors: [error] } }
  }

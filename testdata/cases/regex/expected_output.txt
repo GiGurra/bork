@@ -1,7 +1,7 @@
 (?P<word>[a-z]+)([0-9]+)?
 true
 Option.None
-[Match { value: "abc123", start: 3, end: 9, groups: [Option.Some("abc"), Option.Some("123")], named: {"word": Option.Some("abc")} }, Match { value: "xyz", start: 10, end: 13, groups: [Option.Some("xyz"), Option.None], named: {"word": Option.Some("xyz")} }]
+[Match { value: "abc123", start: 2, end: 8, groups: [Option.Some("abc"), Option.Some("123")], named: {"word": Option.Some("abc")} }, Match { value: "xyz", start: 9, end: 12, groups: [Option.Some("xyz"), Option.None], named: {"word": Option.Some("xyz")} }]
 [Match { value: "abc", start: 0, end: 3, groups: [Option.Some("abc"), Option.None], named: {"word": Option.Some("abc")} }]
 []
 abc! xyz!
@@ -12,7 +12,7 @@ $word $word
 Option.Some(Match { value: "", start: 0, end: 0, groups: [Option.None, Option.Some("")], named: {"absent": Option.None, "empty": Option.Some("")} })
 Option.Some(Match { value: "ab", start: 0, end: 2, groups: [Option.Some("a"), Option.Some("b")], named: {"same": Option.Some("b")} })
 ba
-[Match { value: "", start: 0, end: 0, groups: [], named: {:} }, Match { value: "", start: 2, end: 2, groups: [], named: {:} }, Match { value: "", start: 3, end: 3, groups: [], named: {:} }]
+[Match { value: "", start: 0, end: 0, groups: [], named: {:} }, Match { value: "", start: 1, end: 1, groups: [], named: {:} }, Match { value: "", start: 2, end: 2, groups: [], named: {:} }]
 true
 true
 regex.Compile([a-z]+)

@@ -1,0 +1,10 @@
+pred Positive(x: Int) { x > 0 }
+type Pos = Int where Positive
+fn Checked(x: Pos): Option[Pos] { Option.Some(x) }
+fn Need(x: Pos): Int { x }
+fn Nested(xs: List[Pos]): Option[List[Pos]] { Option.Some(xs) }
+pred Above(x: Int, threshold: Int) { x > threshold }
+fn Dependent(x: Int where Above(threshold), threshold: Int): Option[Int where Above(threshold)] {
+  Option.Some(x)
+}
+fn NeedAbove(x: Int where Above(threshold), threshold: Int): Int { x }
