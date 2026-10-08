@@ -1,0 +1,25 @@
+pred positive(x: Int) { x > 0 }
+fn need(x: Int where positive): Int { x }
+fn guarded(xs: List[Int]): Int {
+  for a in xs {
+    if positive(a) {
+      alias = a
+      _ = need(alias)
+    }
+  }
+  0
+}
+fn universal(xs: List[Int where positive]): Int {
+  for a in xs {
+    _ = need(a)
+    for b in xs { _ = need(b) }
+  }
+  0
+}
+fn nested(xs: List[List[Int where positive]]): Int {
+  for inner in xs {
+    for value in inner { _ = need(value) }
+  }
+  0
+}
+fn main() { println(guarded([1, 0]), universal([1, 2]), nested([[3], [4]])) }

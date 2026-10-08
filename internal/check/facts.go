@@ -3158,7 +3158,9 @@ func (f *factChecker) key(x Expr) string {
 			}
 			return fmt.Sprintf("b:%p", d)
 		default:
-			if src := d.Source; src != nil && (src.Member == nil || src.Path != "") {
+			// A universal element path projects list facts, but does not
+			// identify the individual value bound by a loop.
+			if src := d.Source; src != nil && !strings.Contains(src.Path, ".[]") && (src.Member == nil || src.Path != "") {
 				if k := f.aliasKey(src.Subject); k != "" {
 					return k + src.Path
 				}
