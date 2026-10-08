@@ -24,6 +24,11 @@ fn main() {
 - `==` compares records by their contents.
 - Printing a record shows its type name and fields, much as it is written in code.
 
+When every field has a closed, eager default, the compiler checks the completed
+default value against the type's whole-value invariant at its declaration. This
+also applies to sealed variant defaults and concrete generic specializations.
+Partial defaults and lazy/computed recipes are checked when a value is built.
+
 Record fields and sealed variants can be separated by commas, newlines, or
 semicolons. Leading, repeated, and trailing semicolons are accepted, even in
 empty bodies. Blocks also accept these semicolons, but use newlines or

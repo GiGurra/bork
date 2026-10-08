@@ -1,5 +1,73 @@
 package check
 
+import (
+	"cmp"
+	"maps"
+	"slices"
+	"strings"
+
+	"github.com/GiGurra/bork/internal/std"
+	"github.com/GiGurra/bork/internal/syntax"
+)
+
+// A complete set of closed defaults describes one candidate even when no
+// source expression constructs it. Validate it at the type declaration.
+func (f *factChecker) defaultInvariants() {
+	seen := map[Type]bool{}
+	var visit func(Type)
+	visit = func(typ Type) {
+		if seen[typ] {
+			return
+		}
+		seen[typ] = true
+		var instances *instanceSet
+		switch typ := typ.(type) {
+		case *Record:
+			instances = typ.insts
+			if typ.Decl != nil && !typ.Prelude && !hasTypeParam(typ) {
+				f.defaultInvariant(typ, typ.Fields, nil, typ.Decl, typ.Pkg)
+			}
+		case *Sealed:
+			instances = typ.insts
+			if typ.Decl != nil && !typ.Prelude && !hasTypeParam(typ) {
+				for _, variant := range typ.Variants {
+					f.defaultInvariant(typ, variant.Fields, variant, typ.Decl, typ.Pkg)
+				}
+			}
+		}
+		if instances != nil {
+			for _, instance := range slices.SortedFunc(maps.Values(instances.byKey), func(a, b Type) int {
+				return cmp.Compare(TypeText(a, nil), TypeText(b, nil))
+			}) {
+				visit(instance)
+			}
+		}
+	}
+	for _, typ := range f.info.TypeOrder {
+		visit(typ)
+	}
+}
+
+func (f *factChecker) defaultInvariant(typ Type, fields []*Field, variant *Variant, decl *syntax.TypeDecl, pkg *Package) {
+	if len(fields) == 0 || len(TypeConstraints(typ)) == 0 && (variant == nil || len(variant.Constraints) == 0) {
+		return
+	}
+	if pkg != nil && !pkg.Root && strings.HasPrefix(pkg.Path, std.Prefix) {
+		return
+	}
+	candidate := &RecordLit{expr: expr{pos: decl.Pos, typ: typ}, Variant: variant}
+	candidate.Record, _ = typ.(*Record)
+	for _, field := range fields {
+		if field.Default == nil || field.Lazy || field.Computed || hasTypeParam(field.Type) {
+			return
+		}
+		candidate.Fields = append(candidate.Fields, &FieldValue{Name: field.Name, Field: field, Value: field.Default, IsDefault: true})
+	}
+	f.fn = &Func{Pkg: pkg}
+	f.recordObligations(candidate, env{})
+	f.nominalObligationsFor(candidate, variant, env{}, "defaults of "+TypeText(typ, pkg)+" require the completed value to be ")
+}
+
 // validationContexts removes a type's own guarantees while checking the
 // predicates that establish them, including their declared callees.
 func validationContexts(info *Info) map[*Func]map[Type]bool {
