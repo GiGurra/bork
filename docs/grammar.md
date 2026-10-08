@@ -362,8 +362,8 @@ Selection among channels is the `select` expression (see the grammar).
 Transparent async local bindings start a task immediately: `async(scopeExpression) name [ : T ] = expr`.
 The scope expression evaluates once, and every read awaits the shared result of
 type T. Initializer effects count at declaration; unread tasks follow scope
-cancellation, joining and panic policies. Initializer return/? stays inside its
-result boundary. See [the async design](design/async.md).
+cancellation, joining and panic policies. Explicit return stays inside the
+initializer result boundary; `?` is rejected. See [the async design](design/async.md).
 
 ## Compile-time computation
 
