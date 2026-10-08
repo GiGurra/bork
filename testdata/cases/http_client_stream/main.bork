@@ -191,7 +191,12 @@ fn main() {
       reply = response(http.SendStream("POST", base + "/reject", {:}, temporary, body: .Some(source.body), timeoutMs: 1000))
       attach(reply.body, app)
     }
-    println("upload response attached", kind(http.Read(attachedUpload)))
+    println("upload response attached", match (http.Read(attachedUpload)) {
+      _: http.Eof => true
+      _: Cancelled => true
+      _: IoError => true
+      _ => false
+    })
     http.Close(attachedProducer)
     outer = scope temporary {
       stream = response(http.GetStream(base, temporary))

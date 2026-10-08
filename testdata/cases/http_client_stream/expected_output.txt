@@ -28,5 +28,5 @@ capture ready 7265616479
 captured producer joined cancelled
 buffered rejection 413
 early response body true
-upload response attached eof
+upload response attached true
 attached 00ff616263
