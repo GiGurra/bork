@@ -171,7 +171,7 @@ func TestSignatureHelpQualifiedPackageRecovery(t *testing.T) {
 	src := "import \"bork/codec\"\nimport \"bork/json\"\nuse codec.Defaults\nfn main() { encoded = json.Encode(42); _ = encoded }\n"
 	s, path := newTestServer(t, src)
 	help := signatureAt(t, s, path, src+"fn other() { json.Encode[Int](|) }")
-	if help == nil || help.Signatures[0].Label != "Encode(x: Int): String" || help.ActiveParameter == nil || *help.ActiveParameter != 0 {
+	if help == nil || help.Signatures[0].Label != "Encode(x: Int): String | json.JsonError" || help.ActiveParameter == nil || *help.ActiveParameter != 0 {
 		t.Fatalf("qualified generic recovery: %+v", help)
 	}
 }

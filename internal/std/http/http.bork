@@ -76,8 +76,14 @@ fn Text(status: Status, body: String): Response {
 fn JsonReply(status: Status, body: String | codecs.JsonError): Response {
   match (body) {
     text: String => .{ status: status, headers: { "Content-Type": ["application/json"] }, body: text }
-    error: codecs.JsonError => Text(500, "JSON encoding failed: " + error.message)
+    error: codecs.JsonError => jsonEncodingFailure(error.message)
   }
+}
+
+// Keep the fixed error status in the trusted implementation so importing
+// HTTP does not need a Go toolchain to evaluate ValidStatus(500).
+fn jsonEncodingFailure(message: String): Response unsafe go {
+  return Text(500, "JSON encoding failed: " + message)
 }
 
 // Segments are the non-empty parts of a path: "/users/42/" gives
